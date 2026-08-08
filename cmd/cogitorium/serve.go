@@ -1,0 +1,66 @@
+package main
+
+import (
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/orkcom-tech/cogitorium/internal/config"
+	"github.com/orkcom-tech/cogitorium/internal/server"
+	"github.com/orkcom-tech/cogitorium/internal/store"
+	"github.com/spf13/cobra"
+)
+
+func newServeCmd() *cobra.Command {
+	var (
+		configPath string
+		listen     string
+		dataDir    string
+		logLevel   string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Start the Cogitorium server (API + web UI)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load(configPath)
+			if err != nil {
+				return err
+			}
+			// Flags win over env and file, but only when actually set.
+			if cmd.Flags().Changed("listen") {
+				cfg.Listen = listen
+			}
+			if cmd.Flags().Changed("data") {
+				cfg.DataDir = dataDir
+			}
+			if cmd.Flags().Changed("log-level") {
+				cfg.LogLevel = logLevel
+			}
+
+			slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+				Level: cfg.SlogLevel(),
+			})))
+			slog.Info("starting cogitorium", "listen", cfg.Listen, "data_dir", cfg.DataDir, "log_level", cfg.LogLevel)
+
+			db, err := store.Open(cfg.DataDir)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+
+			return server.New(cfg.Listen, db).Run(ctx)
+		},
+	}
+
+	def := config.Defaults()
+	cmd.Flags().StringVar(&configPath, "config", "", "path to config.yaml (default: $COGITORIUM_CONFIG, then <data-dir>/config.yaml)")
+	cmd.Flags().StringVar(&listen, "listen", def.Listen, "HTTP listen address")
+	cmd.Flags().StringVar(&dataDir, "data", def.DataDir, "data directory (SQLite DB and server-owned files)")
+	cmd.Flags().StringVar(&logLevel, "log-level", def.LogLevel, "log level: debug|info|warn|error")
+	return cmd
+}

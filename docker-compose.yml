@@ -1,0 +1,13 @@
+services:
+  cogitorium:
+    build: .
+    ports:
+      # Loopback only — this server will hold provider API keys and has no
+      # auth of its own. Change deliberately if you need LAN access.
+      - "127.0.0.1:8688:8688"
+    volumes:
+      - cogitorium-data:/data
+    restart: unless-stopped
+
+volumes:
+  cogitorium-data:
