@@ -1,89 +1,174 @@
+<div align="center">
+
 # Cogitorium
 
-A workbench for agentic development: model catalog (API + local), workspaces
-of dedicated agents behind an orchestrator chat, blueprint-style wiring
-between agents, Contextverse-backed context, and a persistent catalog of
-agent-forged tools (gears).
+**A workbench for agentic development.**
 
-The vision: a maximally modular, configurable, transparent AI OS. No
-telemetry, no tracking, no junk — every behavior local, inspectable, and
-explainable. From developers, for developers. Your models can live anywhere:
-a local process, your homelab, a provider API — Cogitorium doesn't care and
-doesn't phone home.
+One binary. Your models, your machine, your rules — and no telemetry, ever.
 
-> **Status: early development.** Nothing here is stable.
+[Documentation](https://orkcom-tech.github.io/cogitorium/) ·
+[Quick start](#quick-start) ·
+[What it does](#what-it-does) ·
+[Licence](#licence)
 
-## Run
+</div>
 
-Local (Go ≥1.25 and Node ≥22):
+---
+
+Most agent tooling asks you to accept a black box: one model, one vendor, a
+conversation that wanders, and a bill you cannot attribute. Cogitorium is the
+other shape. You define the agents, you choose a model **per agent**, you draw
+who may hand work to whom, and the workbench shows you what each one cost.
+
+It runs as a single Go binary with the interface embedded in it. Point it at a
+frontier API, at Ollama on your laptop, at a box in your homelab, or at all
+three at once — it does not care and it does not phone home.
+
+![The workspace: an orchestrator conversation with the blueprint beside it](docs/assets/02-workspace-wired.png)
+
+> **Status: early development.** The commands, the API and the on-disk layout
+> are not stable yet.
+
+---
+
+## What it does
+
+**A workspace is a group of agents behind one orchestrator chat.** You talk to
+the orchestrator. It creates the other agents, gives them roles and models,
+wires them together, and hands them work — and everything it does is a visible
+step on the timeline rather than something that happened inside a black box.
+
+**Every agent gets its own model.** That is what makes the economics
+expressible: an expensive frontier model does the reasoning while free local
+models write the docs and run the checks, all inside one topology. The token
+spend is shown per agent, so a cheap arrangement can be told apart from an
+expensive one that merely feels cheap.
+
+**The wiring is the capability, not a picture of one.** An agent can delegate
+only along an edge you drew. Change the canvas and you have changed what is
+possible, not just what is documented.
+
+**Agents build tools that outlive the conversation.** When an agent needs a
+capability that does not exist it can forge one — a script, a small program —
+which is registered in a catalog, versioned, and callable afterwards by other
+agents and by you. Nothing runs until you approve it, and it runs inside a
+container with no network and none of the server's files.
+
+**Context is a managed resource.** It is stored and versioned by
+[Contextverse](https://github.com/orkcom-tech/contextverse), with a branch per
+workspace and per agent. You can read exactly what reaches an agent's prompt,
+and edit or delete it — including the things it remembered that you would
+rather it forgot.
+
+---
+
+## Quick start
+
+Requires Go ≥1.25 and Node ≥22 to build; Docker if you want gears and the
+terminal sandboxed.
 
 ```sh
+git clone https://github.com/orkcom-tech/cogitorium
+cd cogitorium
 make build
 ./bin/cogitorium serve
 ```
 
-Docker:
+Or with Docker:
 
 ```sh
 docker compose up --build
 ```
 
-Then open <http://127.0.0.1:8688>.
+Then open <http://127.0.0.1:8688>. On a local install you are the admin and
+there is no login screen; the same binary asks for credentials the moment it
+listens on anything but loopback.
 
-Configuration precedence: flags > `COGITORIUM_*` env > `config.yaml` (in the
-data dir, default `~/.cogitorium`) > defaults. See `cogitorium serve --help`.
+Add a model under **Models**, then press **+ New workspace**.
+
+![The workspaces list, with a workspace shared across two teams](docs/assets/01-workspaces.png)
+
+---
+
+## The interface
+
+Panels, not tabs. Chat, blueprint, files, editor, terminal and the agent
+inspector are panels on a grid: put one at any edge, slide it out over the
+centre, float it, or hide it. Arrangements can be saved, and four are
+ready-made.
+
+![Files, chat and a terminal, arranged for building](docs/assets/03-build-layout.png)
+
+An agent's card shows what it is, what it knows, what it may call, and what it
+has spent.
+
+![The agent inspector beside the conversation](docs/assets/05-agent.png)
+
+The palette is yours: up to three colours make the gradient, with dials for
+grain, tint and where the light falls — or set your own picture or clip behind
+everything. Panels can be frosted glass or plain solid fill.
+
+![The appearance dialog](docs/assets/04-appearance.png)
+![The same workspace with solid panels](docs/assets/08-solid.png)
+
+Admins get a map of who can reach what — the same relationships the permission
+checks use, drawn rather than pieced together from three tables.
+
+![The access map of users, teams and workspaces](docs/assets/06-people-map.png)
+
+---
 
 ## Letting agents reach the web
 
-Off by default. Agents cannot reach the network at all until you switch it on,
-and switching it on is deliberately awkward: `egress: true` in `config.yaml`
-(or `COGITORIUM_EGRESS=1`) plus a restart. There is no route, no setting page
-and no database row behind it, so nothing running inside Cogitorium — no
-agent, no tool, no gear — has a code path to enable it.
+Off by default, and switching it on is deliberately awkward: a config key plus
+a restart. There is no route and no database row behind it, so nothing running
+inside Cogitorium — no agent, no tool, no gear — has a code path to enable it.
 
-That switch alone grants nothing. Each agent also needs a grant you draw
-yourself on the blueprint, by wiring it to the internet node. And even then,
-**every single search stops the turn and asks you** to approve that exact
-query before it leaves the machine. There is no "allow for this turn" and no
-"remember this agent": standing permission is what the wire on the canvas is
-for, and it grants only the right to ask.
+That switch alone grants nothing. Each agent additionally needs a grant you
+draw yourself on the blueprint, and **every single search stops the turn and
+asks you** to approve that exact query before it leaves the machine. There is
+no "allow for this turn" and no "remember this agent".
 
 Agents never choose a destination — they supply words, nothing else. Searches
-go first to **[echopage](https://echo-page.com)**, our own search engine, built
-so crawlers can find what they need faster, more accurately and far more
-cheaply than grinding through pages built for human eyes. When echopage has
-nothing on a query, or cannot be reached, the search falls through to a
-general engine so the agent is not left stuck.
-
-Everything is recorded before it is sent: the query verbatim, who approved it,
-how they authenticated, and which service answered. Read it under the
-workspace's search log.
+go first to [echopage](https://echo-page.com), our own engine built so crawlers
+can find what they need faster, more accurately and far more cheaply than
+grinding through pages built for human eyes; when it has nothing, the search
+falls through to a general engine so the agent is not left stuck.
 
 Worth being straight about: this bounds and records outbound traffic, it does
-not prevent exfiltration. Any egress at all is a channel, and a query string is
-a place to hide things. What you get is a hard cap (three searches per turn
-across the whole delegation tree, 256 characters each, 40 per agent per day), a
-full record, and a human in the loop for every one — a leak someone approved
-rather than a silent one.
+not prevent exfiltration. Any egress at all is a channel. What you get is a
+hard cap, a full record, and a human in the loop for every request — a leak
+someone approved rather than a silent one.
+
+---
+
+## No telemetry
+
+Not "telemetry you can disable". There is no analytics code, no crash
+reporting, no update ping, no phone-home of any kind. The binary talks to the
+model providers you configured and to nothing else. Your conversations, your
+context and your agents stay on your machine.
+
+---
+
+## Documentation
+
+Full documentation, including a guided tour and the security model, is at
+**<https://orkcom-tech.github.io/cogitorium/>**.
 
 ## Testing end to end
 
-`scripts/e2e.sh` exercises the whole pipeline against real components — a
-real local model, a real `contextd` space, the real binary. There are no
-mocks or stubs anywhere in this repository; when something cannot be
-verified (a model too small to drive a tool call, say) the script reports it
-as skipped rather than pretending it passed.
+`scripts/e2e.sh` exercises the pipeline against real components — a real local
+model, a real `contextd` space, the real binary. There are no mocks or stubs
+anywhere in this repository; when something cannot be verified the script says
+so and skips, rather than passing on a stand-in.
 
-```bash
-docker compose -f docker-compose.models.yml up -d
-docker compose -f docker-compose.models.yml exec ollama ollama pull qwen2.5:0.5b
-contextd init solo --name e2e   # once, if you have no context space yet
-make build && ./scripts/e2e.sh
-```
+## Licence
 
-## License
+[Business Source License 1.1](LICENSE). Production use is granted, including
+commercially and inside a company, provided you are not offering Cogitorium to
+third parties on a hosted or embedded basis competitive with our own products.
+On **2030-08-08** it converts to Apache 2.0, and each release converts on the
+fourth anniversary of its publication regardless.
 
-[BUSL-1.1](./LICENSE): free to use as a tool — including production use, solo
-or self-hosted for your team. What it forbids is offering Cogitorium itself
-to third parties as a hosted or embedded service competing with Cogitorium's
-products. Converts to Apache-2.0 on the change date.
+For other arrangements: `licensing@orkcom.tech`.
