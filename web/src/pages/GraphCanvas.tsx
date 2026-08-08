@@ -2,7 +2,6 @@ import { useEffect, useMemo } from 'react'
 import {
   Background,
   Controls,
-  MiniMap,
   ReactFlow,
   useEdgesState,
   useNodesState,
@@ -160,7 +159,6 @@ export default function GraphCanvas({
         >
           <Background />
           <Controls />
-          <MiniMap pannable zoomable />
         </ReactFlow>
       </div>
     </div>

@@ -1305,3 +1305,100 @@ th {
 .saved-row > button:first-child {
   flex: 1;
 }
+
+/* Palette control */
+
+.theme-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  display: inline-block;
+}
+
+.swatch.lg {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+
+.theme-menu {
+  min-width: 17rem;
+  left: 0;
+  right: auto;
+  bottom: calc(100% + 6px);
+  top: auto;
+}
+
+.theme-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1);
+}
+
+.theme-preset {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--t-chrome);
+}
+
+.theme-stops {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s1) var(--s2);
+}
+
+.stop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--t-micro);
+}
+
+.stop input[type='color'] {
+  width: 34px;
+  height: 26px;
+  padding: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  cursor: pointer;
+}
+
+.dial {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--t-chrome);
+  padding: var(--s1) var(--s2);
+}
+
+.dial input[type='range'] {
+  flex: 1;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+.mode-row {
+  padding: var(--s1) var(--s2);
+  gap: var(--s1);
+}
+
+.mode-row button {
+  font-size: var(--t-chrome);
+  padding: 0.15rem 0.5rem;
+  flex: 1;
+}
+
+.mode-row button.active {
+  background: var(--selected);
+  border-color: var(--accent);
+}

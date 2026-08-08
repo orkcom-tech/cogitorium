@@ -12,6 +12,8 @@ import GearsPage from './pages/GearsPage'
 import LibraryPage from './pages/LibraryPage'
 import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
+import ThemeMenu from './pages/ThemeMenu'
+import { applyTheme, loadTheme } from './styles/theme'
 
 type Health = { status: string; version: string }
 
@@ -56,6 +58,10 @@ export default function App() {
 
   useEffect(identify, [identify])
 
+  // The palette is applied before the first paint of the shell, so the app
+  // never flashes the default ground on its way to the operator's own.
+  useEffect(() => applyTheme(loadTheme()), [])
+
   useEffect(() => {
     fetch(session.url('/health'))
       .then((r) => r.json())
@@ -78,6 +84,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className={`layout ${navOpen ? '' : 'nav-collapsed'}`}>
+        <div className="shell-ground" aria-hidden />
+        <div className="shell-grain" aria-hidden />
         <aside className="sidebar">
           <button
             className="nav-toggle"
@@ -118,6 +126,7 @@ export default function App() {
               <span>People</span>
             </NavLink>}
           </nav>
+          <ThemeMenu />
           <footer className="sidebar-footer">
             <div>
               {user.name} · {user.role}

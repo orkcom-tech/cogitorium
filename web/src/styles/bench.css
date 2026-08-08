@@ -8,6 +8,8 @@
 .bn-bench {
   position: relative;
   display: grid;
+  gap: var(--s2);
+  padding: 0 var(--s3) var(--s3);
   min-height: 0;
   height: 100%;
   overflow: hidden; /* scroll is always owned by a panel body, never the bench */
@@ -34,6 +36,9 @@
   flex-direction: column;
   overflow: hidden;
   padding-top: var(--h-tabs);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r3);
 }
 
 /* Parked, not hidden.
@@ -57,13 +62,13 @@
   position: relative;
   z-index: 3;
   align-self: start;
+  border-radius: var(--r3) var(--r3) 0 0;
   display: flex;
   align-items: stretch;
   gap: var(--s1);
   height: var(--h-tabs);
   padding: 0 var(--s1);
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
+  background: transparent;
   font-size: var(--t-chrome);
 }
 
@@ -85,7 +90,22 @@
 
 .bn-tab.active {
   color: var(--text);
-  box-shadow: inset 0 -2px 0 var(--accent);
+  font-weight: 500;
+}
+
+.bn-tab.active::after {
+  content: '';
+  position: absolute;
+  left: var(--s3);
+  right: var(--s3);
+  bottom: 4px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.bn-tab {
+  position: relative;
 }
 
 .bn-tab:hover:not(.active) {
@@ -201,8 +221,13 @@
   padding: 0 var(--s2);
 }
 
-/* Panel bodies own their own scrolling and never inherit page padding. */
-.bn-panel > * {
+/* Panel BODIES own their own scrolling. This deliberately targets .bn-body
+   and not every child of .bn-panel: as `.bn-panel > *` it also caught the
+   float title bar and forced flex-direction: column onto it, which stacked the
+   window buttons vertically and pushed them out of the 30px strip, where the
+   panel's overflow:hidden clipped them. The controls were rendered and
+   reachable by script the whole time, and invisible to a human. */
+.bn-body {
   min-height: 0;
   flex: 1;
   display: flex;
@@ -305,6 +330,7 @@
 
 .bn-floatbar {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: var(--s2);
   height: var(--h-tabs);

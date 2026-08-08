@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Background,
   Controls,
-  MiniMap,
   ReactFlow,
   useEdgesState,
   useNodesState,
@@ -419,7 +418,6 @@ export default function BlueprintEditor({
         >
           <Background />
           <Controls />
-          <MiniMap pannable zoomable />
         </ReactFlow>
       </div>
     </div>

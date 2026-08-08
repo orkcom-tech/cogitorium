@@ -125,3 +125,45 @@ button.primary:hover:not(:disabled) {
     transition: opacity 90ms ease;
   }
 }
+
+/* The themed ground.
+ *
+ * The gradient and its grain live on ::before/::after of the shell, not on the
+ * body background, so they can never repaint under a scrolling panel. Cards
+ * sit ON this ground — which is the whole reason a different arrangement now
+ * reads as different rather than as the same flat rectangle rearranged. */
+:root {
+  --theme-a: #1a1a19;
+  --theme-b: #232326;
+  --theme-c: var(--theme-b);
+  --grain: 0.045;
+  --grain-img: none;
+  --surface-tint: 11%;
+}
+
+.shell-ground {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(1200px 800px at 12% 4%, var(--theme-c) 0%, transparent 55%),
+    linear-gradient(150deg, var(--theme-a) 0%, var(--theme-b) 55%, var(--theme-a) 100%);
+}
+
+.shell-grain {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--grain);
+  background-image: var(--grain-img);
+  background-repeat: repeat;
+}
+
+/* Surfaces borrow a little of the palette so a card belongs to its ground.
+   Capped in code well below the point where text contrast stops holding. */
+:root {
+  --surface: color-mix(in srgb, var(--theme-b) var(--surface-tint), light-dark(#ffffff, #212120));
+  --surface-2: color-mix(in srgb, var(--theme-b) var(--surface-tint), light-dark(#f4f4f2, #2a2a28));
+  --bg: transparent;
+}
