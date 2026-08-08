@@ -19,17 +19,50 @@ export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: stri
 
 export type TestResult = { ok: boolean; models?: string[]; error?: string }
 
+export class Unauthorized extends Error {}
+
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
+  const r = await fetch(session.url(url), {
     ...init,
+    headers: session.headers({ 'Content-Type': 'application/json', ...(init?.headers as object) }),
   })
+  if (r.status === 401) throw new Unauthorized('sign in required')
   if (r.status === 204) return undefined as T
   const body = await r.json().catch(() => null)
   if (!r.ok) {
     throw new Error(body?.error?.message ?? `${r.status} ${r.statusText}`)
   }
   return body as T
+}
+
+export type User = { id: number; name: string; role: 'admin' | 'team-lead' | 'member'; teams: number[] }
+export type Team = { id: number; name: string }
+
+export const auth = {
+  whoami: () => req<User>('/api/v1/whoami'),
+  login: (name: string, password: string) =>
+    req<{ user: User; token: string }>('/api/v1/login', {
+      method: 'POST',
+      body: JSON.stringify({ name, password }),
+    }),
+  logout: () => req<void>('/api/v1/logout', { method: 'POST' }),
+  setPassword: (id: number, password: string) =>
+    req<void>(`/api/v1/users/${id}/password`, { method: 'PUT', body: JSON.stringify({ password }) }),
+  users: () => req<User[]>('/api/v1/users'),
+  createUser: (u: { name: string; role: string; password?: string }) =>
+    req<{ user: User; token: string; notice: string }>('/api/v1/users', {
+      method: 'POST',
+      body: JSON.stringify(u),
+    }),
+  deleteUser: (id: number) => req<void>(`/api/v1/users/${id}`, { method: 'DELETE' }),
+  teams: () => req<Team[]>('/api/v1/teams'),
+  createTeam: (name: string) =>
+    req<Team>('/api/v1/teams', { method: 'POST', body: JSON.stringify({ name }) }),
+  deleteTeam: (id: number) => req<void>(`/api/v1/teams/${id}`, { method: 'DELETE' }),
+  addMember: (teamId: number, userId: number) =>
+    req<void>(`/api/v1/teams/${teamId}/members`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+  removeMember: (teamId: number, userId: number) =>
+    req<void>(`/api/v1/teams/${teamId}/members/${userId}`, { method: 'DELETE' }),
 }
 
 export const api = {
@@ -112,9 +145,9 @@ export const api = {
     files: () => req<ContextFile[]>('/api/v1/context/files'),
     get: (path: string) => req<{ path: string; content: string }>(`/api/v1/context/file?path=${encodeURIComponent(path)}`),
     put: (path: string, content: string) =>
-      fetch(`/api/v1/context/file?path=${encodeURIComponent(path)}`, {
+      fetch(session.url(`/api/v1/context/file?path=${encodeURIComponent(path)}`), {
         method: 'PUT',
-        headers: { 'Content-Type': 'text/plain' },
+        headers: session.headers({ 'Content-Type': 'text/plain' }),
         body: content,
       }).then(async (r) => {
         const body = await r.json().catch(() => null)
@@ -139,9 +172,9 @@ export async function wsChatStream(
   onEvent: (ev: WSEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const r = await fetch(`/api/v1/workspaces/${workspaceId}/chat`, {
+  const r = await fetch(session.url(`/api/v1/workspaces/${workspaceId}/chat`), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: session.headers({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ text }),
     signal,
   })
@@ -175,6 +208,8 @@ export async function wsChatStream(
     }
   }
 }
+
+import { session } from './session'
 
 export type Workspace = { id: number; name: string; description: string; shared_branch: string }
 
@@ -288,9 +323,9 @@ export async function chatStream(
   onDelta: (text: string) => void,
   signal?: AbortSignal,
 ): Promise<ChatStreamResult> {
-  const r = await fetch('/api/v1/chat', {
+  const r = await fetch(session.url('/api/v1/chat'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: session.headers({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ model_id: modelId, messages }),
     signal,
   })

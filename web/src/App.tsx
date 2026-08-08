@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { auth, Unauthorized, type User } from './api'
+import { session } from './session'
+import LoginPage from './pages/LoginPage'
 import ModelsPage from './pages/ModelsPage'
 import ChatPage from './pages/ChatPage'
 import WorkspacesPage from './pages/WorkspacesPage'
@@ -11,13 +14,42 @@ type Health = { status: string; version: string }
 
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [checking, setChecking] = useState(true)
+
+  // whoami decides the shell: on loopback it succeeds without credentials,
+  // which is why a single-operator install never sees a login screen.
+  const identify = useCallback(() => {
+    setChecking(true)
+    auth
+      .whoami()
+      .then(setUser)
+      .catch((e: unknown) => {
+        if (e instanceof Unauthorized) setUser(null)
+      })
+      .finally(() => setChecking(false))
+  }, [])
+
+  useEffect(identify, [identify])
 
   useEffect(() => {
-    fetch('/health')
+    fetch(session.url('/health'))
       .then((r) => r.json())
       .then(setHealth)
       .catch(() => setHealth(null))
-  }, [])
+  }, [user])
+
+  if (checking) return <main className="shell">connecting…</main>
+  if (!user) return <LoginPage onSignedIn={identify} />
+
+  const signOut = () =>
+    auth
+      .logout()
+      .catch(() => undefined)
+      .finally(() => {
+        session.setToken(null)
+        setUser(null)
+      })
 
   return (
     <BrowserRouter>
@@ -32,7 +64,13 @@ export default function App() {
             <NavLink to="/chat">Scratch chat</NavLink>
           </nav>
           <footer className="sidebar-footer">
-            {health ? `${health.version} · ${health.status}` : 'server unreachable'}
+            <div>
+              {user.name} · {user.role}
+            </div>
+            <div>{health ? `${health.version} · ${health.status}` : 'server unreachable'}</div>
+            <button className="linkish" onClick={signOut}>
+              sign out
+            </button>
           </footer>
         </aside>
         <main className="content">

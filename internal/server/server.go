@@ -115,7 +115,10 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string) *Server {
 		writeError(w, http.StatusNotFound, "no such API endpoint: "+r.Method+" "+r.URL.Path)
 	})
 
+	mux.HandleFunc("POST /api/v1/login", s.handleLogin)
+	mux.HandleFunc("POST /api/v1/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/v1/whoami", s.handleWhoami)
+	mux.HandleFunc("PUT /api/v1/users/{id}/password", s.handleSetPassword)
 	mux.HandleFunc("GET /api/v1/users", s.handleListUsers)
 	mux.HandleFunc("POST /api/v1/users", s.handleCreateUser)
 	mux.HandleFunc("DELETE /api/v1/users/{id}", s.handleDeleteUser)

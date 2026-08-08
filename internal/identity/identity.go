@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -190,6 +191,82 @@ func (s *Store) GetUserByName(ctx context.Context, name string) (User, error) {
 	return u, s.loadTeams(ctx, &u)
 }
 
+// SetPassword sets or clears a user's password. Clearing it leaves the
+// account reachable only by token, which is what the seeded admin on a
+// loopback install runs with.
+func (s *Store) SetPassword(ctx context.Context, id int64, password string) error {
+	hash := ""
+	if password != "" {
+		if len(password) < 8 {
+			return errors.New("password must be at least 8 characters")
+		}
+		h, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			return fmt.Errorf("hash password: %w", err)
+		}
+		hash = string(h)
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`, hash, now(), id)
+	if err != nil {
+		return fmt.Errorf("set password for user %d: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("user %d: %w", id, ErrNotFound)
+	}
+	slog.Info("password changed", "user_id", id, "cleared", password == "")
+	return nil
+}
+
+// Login exchanges a username and password for a fresh token — the flow the
+// web, desktop and TUI clients all share. The token is the credential from
+// then on; the password never travels again.
+func (s *Store) Login(ctx context.Context, name, password string) (User, string, error) {
+	var id int64
+	var hash string
+	err := s.db.QueryRowContext(ctx, `SELECT id, password_hash FROM users WHERE name = ?`, name).Scan(&id, &hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		// Same answer as a wrong password: whether an account exists is
+		// not something an unauthenticated caller gets to learn.
+		bcrypt.CompareHashAndPassword([]byte("$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidinv"), []byte(password))
+		return User{}, "", ErrUnauthorized
+	}
+	if err != nil {
+		return User{}, "", fmt.Errorf("login: %w", err)
+	}
+	if hash == "" {
+		return User{}, "", fmt.Errorf("%w: this account has no password set", ErrUnauthorized)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err != nil {
+		slog.Warn("failed login", "user", name)
+		return User{}, "", ErrUnauthorized
+	}
+
+	token, err := newToken(name)
+	if err != nil {
+		return User{}, "", err
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO tokens (user_id, name, token_hash, created_at) VALUES (?, 'login', ?, ?)`,
+		id, hashToken(token), now()); err != nil {
+		return User{}, "", fmt.Errorf("login: issue token: %w", err)
+	}
+	user, err := s.GetUser(ctx, id)
+	if err != nil {
+		return User{}, "", err
+	}
+	slog.Info("login", "user", name)
+	return user, token, nil
+}
+
+// Logout revokes the token presented, so signing out on one client does not
+// disturb the others.
+func (s *Store) Logout(ctx context.Context, token string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM tokens WHERE token_hash = ?`, hashToken(token)); err != nil {
+		return fmt.Errorf("logout: %w", err)
+	}
+	return nil
+}
+
 // Authenticate resolves a bearer token to its user and records the use.
 func (s *Store) Authenticate(ctx context.Context, token string) (User, error) {
 	var userID int64
@@ -231,8 +308,10 @@ func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
 	return out, nil
 }
 
-// CreateUser adds a user and returns their first token, shown once.
-func (s *Store) CreateUser(ctx context.Context, name, role string) (User, string, error) {
+// CreateUser adds a user and returns their first token, shown once. A
+// password may be set now or later; without one the account is reachable
+// only by token.
+func (s *Store) CreateUser(ctx context.Context, name, role, password string) (User, string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return User{}, "", errors.New("name is required")
@@ -249,8 +328,21 @@ func (s *Store) CreateUser(ctx context.Context, name, role string) (User, string
 	}
 	defer tx.Rollback()
 
+	hash := ""
+	if password != "" {
+		if len(password) < 8 {
+			return User{}, "", errors.New("password must be at least 8 characters")
+		}
+		h, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			return User{}, "", fmt.Errorf("hash password: %w", err)
+		}
+		hash = string(h)
+	}
+
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO users (name, role, created_at, updated_at) VALUES (?, ?, ?, ?)`, name, role, now(), now())
+		`INSERT INTO users (name, role, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+		name, role, hash, now(), now())
 	if err := asConflict(err, fmt.Sprintf("user %q", name)); err != nil {
 		return User{}, "", fmt.Errorf("create user: %w", err)
 	}

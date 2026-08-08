@@ -30,7 +30,9 @@ func callerFrom(ctx context.Context) identity.User {
 // who they are differs.
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" || !strings.HasPrefix(r.URL.Path, "/api/") {
+		// Login is the one API route that must be reachable without
+		// credentials — it is where credentials come from.
+		if r.URL.Path == "/health" || r.URL.Path == "/api/v1/login" || !strings.HasPrefix(r.URL.Path, "/api/") {
 			next.ServeHTTP(w, r)
 			return
 		}

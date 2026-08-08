@@ -12,6 +12,67 @@ func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, callerFrom(r.Context()))
 }
 
+// handleLogin exchanges a username and password for a token. This is the
+// door the web, desktop and TUI clients all come through; after it, the
+// token is the only credential on the wire.
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name     string `json:"name"`
+		Password string `json:"password"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	user, token, err := s.identity.Login(r.Context(), in.Name, in.Password)
+	if err != nil {
+		if isDomainError(err, identity.ErrUnauthorized) {
+			writeError(w, http.StatusUnauthorized, "invalid username or password")
+			return
+		}
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": user, "token": token})
+}
+
+// handleLogout revokes only the token presented, so signing out on one
+// client leaves the others alone.
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if token := bearerToken(r); token != "" {
+		if err := s.identity.Logout(r.Context(), token); err != nil {
+			fail(w, r, err)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSetPassword lets a user set their own password, and an admin set
+// anyone's — the flow that gives the seeded admin a password before the
+// server is exposed beyond loopback.
+func (s *Server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	caller := callerFrom(r.Context())
+	if !caller.IsAdmin() && caller.ID != id {
+		writeError(w, http.StatusForbidden, "you may only change your own password")
+		return
+	}
+	var in struct {
+		Password string `json:"password"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if err := s.identity.SetPassword(r.Context(), id, in.Password); err != nil {
+		failIdentity(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requireAdmin(w, r); !ok {
 		return
@@ -31,13 +92,14 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Name string `json:"name"`
-		Role string `json:"role"`
+		Name     string `json:"name"`
+		Role     string `json:"role"`
+		Password string `json:"password"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	user, token, err := s.identity.CreateUser(r.Context(), in.Name, in.Role)
+	user, token, err := s.identity.CreateUser(r.Context(), in.Name, in.Role, in.Password)
 	if err != nil {
 		failIdentity(w, r, err)
 		return
