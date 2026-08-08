@@ -1638,3 +1638,110 @@ th {
 .theme-body > * {
   flex: 0 0 auto;
 }
+
+/* Workspaces page */
+
+.page-head {
+  align-items: center;
+  gap: var(--s3);
+}
+
+button.big {
+  font-size: var(--t-ui);
+  padding: 0.5rem 1rem;
+  border-radius: var(--r1);
+  font-weight: 500;
+}
+
+.empty-state {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r3);
+  padding: var(--s6) var(--s5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s3);
+  text-align: center;
+}
+
+.empty-state h3 {
+  margin: 0;
+}
+
+.empty-state .hint {
+  max-width: 34rem;
+}
+
+.ws-card {
+  gap: var(--s2);
+}
+
+.ws-title {
+  color: inherit;
+  text-decoration: none;
+  font-size: 1rem;
+}
+
+.badge {
+  font-size: var(--t-micro);
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+}
+
+.share-row {
+  gap: var(--s2);
+  font-size: var(--t-chrome);
+  padding-top: var(--s2);
+  border-top: 1px solid var(--border);
+}
+
+.team-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  padding: 0.1rem 0.2rem 0.1rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.team-chip button {
+  border: 0;
+  background: transparent;
+  padding: 0 0.25rem;
+  line-height: 1;
+  color: var(--text-dim);
+}
+
+.team-chip button:hover {
+  color: var(--danger);
+  border-color: transparent;
+}
+
+.create-dialog {
+  background: var(--surface);
+  -webkit-backdrop-filter: var(--pane-blur);
+  backdrop-filter: var(--pane-blur);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r3);
+  box-shadow: var(--shadow);
+  width: min(30rem, calc(100vw - 2rem));
+}
+
+.create-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s3);
+}
+
+.create-body .field {
+  gap: var(--s1);
+  font-size: var(--t-ui);
+}
+
+.create-body .hint {
+  font-size: var(--t-chrome);
+}

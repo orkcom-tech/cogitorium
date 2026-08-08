@@ -83,7 +83,10 @@ type Workspace struct {
 	// OwnerID is the user who created it; TeamID, when set, shares it with
 	// every member of that team.
 	OwnerID *int64 `json:"owner_id"`
-	TeamID  *int64 `json:"team_id"`
+	// TeamIDs is every team the workspace is shared with. It replaced a single
+	// team_id column, which made "share it with the platform team as well"
+	// impossible without taking it away from research first.
+	TeamIDs []int64 `json:"team_ids"`
 }
 
 type Agent struct {
@@ -186,13 +189,19 @@ func (s *Store) CreateWorkspace(ctx context.Context, name, description string, o
 func (s *Store) GetWorkspace(ctx context.Context, id int64) (Workspace, error) {
 	var w Workspace
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, description, branch, owner_id, team_id FROM workspaces WHERE id = ?`, id).
-		Scan(&w.ID, &w.Name, &w.Description, &w.Branch, &w.OwnerID, &w.TeamID)
+		`SELECT id, name, description, branch, owner_id FROM workspaces WHERE id = ?`, id).
+		Scan(&w.ID, &w.Name, &w.Description, &w.Branch, &w.OwnerID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Workspace{}, fmt.Errorf("workspace %d: %w", id, ErrNotFound)
 	}
 	if err != nil {
 		return Workspace{}, fmt.Errorf("get workspace %d: %w", id, err)
+	}
+	// Read after the row is closed: holding a result set open while issuing
+	// another query would want a second connection, and there is only one.
+	w.TeamIDs, err = s.teamsOf(ctx, id)
+	if err != nil {
+		return Workspace{}, err
 	}
 	w.SharedBranchPath = w.SharedBranch()
 	return w, nil
@@ -200,21 +209,36 @@ func (s *Store) GetWorkspace(ctx context.Context, id int64) (Workspace, error) {
 
 func (s *Store) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, description, branch, owner_id, team_id FROM workspaces ORDER BY name`)
+		`SELECT id, name, description, branch, owner_id FROM workspaces ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list workspaces: %w", err)
 	}
-	defer rows.Close()
 	out := []Workspace{}
 	for rows.Next() {
 		var w Workspace
-		if err := rows.Scan(&w.ID, &w.Name, &w.Description, &w.Branch, &w.OwnerID, &w.TeamID); err != nil {
+		if err := rows.Scan(&w.ID, &w.Name, &w.Description, &w.Branch, &w.OwnerID); err != nil {
+			rows.Close()
 			return nil, fmt.Errorf("scan workspace: %w", err)
 		}
 		w.SharedBranchPath = w.SharedBranch()
 		out = append(out, w)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	// One query for every grant rather than one per workspace: the list is
+	// rendered on the landing page and N+1 there is felt.
+	grants, err := s.allTeamGrants(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].TeamIDs = grants[out[i].ID]
+	}
+	return out, nil
 }
 
 // Visible reports whether a user may see and act on a workspace: an admin
@@ -227,7 +251,12 @@ func Visible(w Workspace, u identity.User) bool {
 	if w.OwnerID != nil && *w.OwnerID == u.ID {
 		return true
 	}
-	return w.TeamID != nil && u.InTeam(*w.TeamID)
+	for _, t := range w.TeamIDs {
+		if u.InTeam(t) {
+			return true
+		}
+	}
+	return false
 }
 
 // ListWorkspacesFor returns only what this user may see.
@@ -285,16 +314,61 @@ func (s *Store) WorkspaceOfContextBinding(ctx context.Context, bindingID int64) 
 	return wsID, err
 }
 
-// SetTeam shares a workspace with a team, or withdraws it when teamID is nil.
-func (s *Store) SetTeam(ctx context.Context, wsID int64, teamID *int64) (Workspace, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE workspaces SET team_id = ?, updated_at = ? WHERE id = ?`, teamID, now(), wsID)
+func (s *Store) teamsOf(ctx context.Context, wsID int64) ([]int64, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT team_id FROM workspace_teams WHERE workspace_id = ? ORDER BY team_id`, wsID)
 	if err != nil {
-		return Workspace{}, fmt.Errorf("set workspace %d team: %w", wsID, err)
+		return nil, fmt.Errorf("workspace teams: %w", err)
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return Workspace{}, fmt.Errorf("workspace %d: %w", wsID, ErrNotFound)
+	defer rows.Close()
+	out := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
 	}
-	slog.Info("workspace team grant changed", "workspace_id", wsID, "team_id", teamID)
+	return out, rows.Err()
+}
+
+func (s *Store) allTeamGrants(ctx context.Context) (map[int64][]int64, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT workspace_id, team_id FROM workspace_teams ORDER BY workspace_id, team_id`)
+	if err != nil {
+		return nil, fmt.Errorf("team grants: %w", err)
+	}
+	defer rows.Close()
+	out := map[int64][]int64{}
+	for rows.Next() {
+		var ws, team int64
+		if err := rows.Scan(&ws, &team); err != nil {
+			return nil, err
+		}
+		out[ws] = append(out[ws], team)
+	}
+	return out, rows.Err()
+}
+
+// ShareWith adds a team. Idempotent, so clicking twice is not an error the
+// operator has to think about.
+func (s *Store) ShareWith(ctx context.Context, wsID, teamID int64) (Workspace, error) {
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO workspace_teams (workspace_id, team_id, created_at) VALUES (?, ?, ?)
+		 ON CONFLICT (workspace_id, team_id) DO NOTHING`, wsID, teamID, now()); err != nil {
+		return Workspace{}, fmt.Errorf("share workspace %d with team %d: %w", wsID, teamID, err)
+	}
+	slog.Info("workspace shared with a team", "workspace_id", wsID, "team_id", teamID)
+	return s.GetWorkspace(ctx, wsID)
+}
+
+// Unshare withdraws one team without touching the others.
+func (s *Store) Unshare(ctx context.Context, wsID, teamID int64) (Workspace, error) {
+	if _, err := s.db.ExecContext(ctx,
+		`DELETE FROM workspace_teams WHERE workspace_id = ? AND team_id = ?`, wsID, teamID); err != nil {
+		return Workspace{}, fmt.Errorf("unshare workspace %d from team %d: %w", wsID, teamID, err)
+	}
+	slog.Info("workspace unshared from a team", "workspace_id", wsID, "team_id", teamID)
 	return s.GetWorkspace(ctx, wsID)
 }
 

@@ -66,33 +66,47 @@ func (s *Server) handleCloneWorkspace(w http.ResponseWriter, r *http.Request) {
 
 // handleSetWorkspaceTeam shares a workspace with a team, or withdraws it.
 // Only the owner or an admin may change who else can reach their work.
-func (s *Server) handleSetWorkspaceTeam(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleShareWorkspace(w http.ResponseWriter, r *http.Request) {
 	id, ok := s.workspaceScoped(w, r)
 	if !ok {
 		return
 	}
-	ws, err := s.workspaces.GetWorkspace(r.Context(), id)
-	if err != nil {
-		fail(w, r, err)
-		return
-	}
-	caller := callerFrom(r.Context())
-	if !caller.IsAdmin() && (ws.OwnerID == nil || *ws.OwnerID != caller.ID) {
-		writeError(w, http.StatusForbidden, "only the owner can share this workspace")
+	if _, ok := requireAdmin(w, r); !ok {
 		return
 	}
 	var in struct {
-		TeamID *int64 `json:"team_id"`
+		TeamID int64 `json:"team_id"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	updated, err := s.workspaces.SetTeam(r.Context(), id, in.TeamID)
+	ws, err := s.workspaces.ShareWith(r.Context(), id, in.TeamID)
 	if err != nil {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, updated)
+	writeJSON(w, http.StatusOK, ws)
+}
+
+func (s *Server) handleUnshareWorkspace(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.workspaceScoped(w, r)
+	if !ok {
+		return
+	}
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+	teamID, err := strconv.ParseInt(r.PathValue("teamId"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "team id must be a number")
+		return
+	}
+	ws, err := s.workspaces.Unshare(r.Context(), id, teamID)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ws)
 }
 
 func (s *Server) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {

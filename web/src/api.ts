@@ -203,11 +203,13 @@ export const api = {
     remove: (id: number) => req<void>(`/api/v1/workspaces/${id}`, { method: 'DELETE' }),
     clone: (id: number, name: string) =>
       req<Workspace>(`/api/v1/workspaces/${id}/clone`, { method: 'POST', body: JSON.stringify({ name }) }),
-    setTeam: (id: number, teamId: number | null) =>
-      req<Workspace>(`/api/v1/workspaces/${id}/team`, {
-        method: 'PUT',
+    share: (id: number, teamId: number) =>
+      req<Workspace>(`/api/v1/workspaces/${id}/teams`, {
+        method: 'POST',
         body: JSON.stringify({ team_id: teamId }),
       }),
+    unshare: (id: number, teamId: number) =>
+      req<Workspace>(`/api/v1/workspaces/${id}/teams/${teamId}`, { method: 'DELETE' }),
     agents: (id: number) => req<Agent[]>(`/api/v1/workspaces/${id}/agents`),
     createAgent: (id: number, a: { name: string; role: string; model_id: number }) =>
       req<Agent>(`/api/v1/workspaces/${id}/agents`, { method: 'POST', body: JSON.stringify(a) }),
@@ -413,7 +415,7 @@ export type Workspace = {
   branch: string
   shared_branch: string
   owner_id: number | null
-  team_id: number | null
+  team_ids: number[]
 }
 
 export type Agent = {

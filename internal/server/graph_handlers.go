@@ -216,8 +216,10 @@ func (s *Server) handleAccessMap(w http.ResponseWriter, r *http.Request) {
 		if ws.OwnerID != nil {
 			g.Edges = append(g.Edges, graphEdge{From: userNodeID(*ws.OwnerID), To: workspaceNodeID(ws.ID), Kind: "owns"})
 		}
-		if ws.TeamID != nil {
-			g.Edges = append(g.Edges, graphEdge{From: teamNodeID(*ws.TeamID), To: workspaceNodeID(ws.ID), Kind: "shared"})
+		// One edge per team, so the map shows every path in rather than only
+		// the first one granted.
+		for _, t := range ws.TeamIDs {
+			g.Edges = append(g.Edges, graphEdge{From: teamNodeID(t), To: workspaceNodeID(ws.ID), Kind: "shared"})
 		}
 	}
 	for _, u := range users {
