@@ -116,23 +116,24 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 	// Every agent can forge a gear when a capability it needs doesn't exist.
 	tools = append(tools, llm.Tool{
 		Name: "forge_gear",
-		Description: "Build a reusable tool (a gear) when you need a capability that doesn't exist. It is registered in the global gear catalog and bound to you automatically, but stays inert until the operator approves it — so tell the operator you forged it and what it does. The entrypoint receives its arguments as a JSON object on stdin and should print its result to stdout.",
+		Description: "Build a reusable tool (a gear) when you need a capability that doesn't exist. Put the whole program in `code`; it receives its arguments as a JSON object on stdin and must print its result to stdout. Example: name=\"sum_numbers\", runtime=\"python\", description=\"Adds a list of numbers.\", code=\"import sys, json\\nargs = json.load(sys.stdin)\\nprint(sum(args['numbers']))\". The gear enters the global catalog bound to you, but stays inert until the operator approves it — so tell the operator what you forged and what it does.",
 		InputSchema: obj(map[string]any{
 			"name":        str("lowercase identifier, e.g. 'csv_summarize' (letters, digits, underscores)"),
 			"description": str("what the gear does and when to use it — this is what other agents will read"),
+			"runtime":     map[string]any{"type": "string", "enum": []string{"python", "node", "bash"}, "description": "interpreter to run the code with"},
+			"code":        str("the complete program, as one string. Reads a JSON object from stdin, prints its result to stdout."),
 			"tags":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "classification tags, e.g. ['data', 'csv']"},
-			"runtime":     map[string]any{"type": "string", "enum": []string{"python", "node", "bash"}, "description": "interpreter to run the entrypoint with"},
-			"entrypoint":  str("which of the files to execute, e.g. 'main.py'"),
-			"args_schema": str("JSON Schema (as a JSON string) describing the arguments the gear accepts on stdin"),
+			"args_schema": str("optional JSON Schema describing the arguments the gear accepts on stdin"),
+			"entrypoint":  str("optional; only when supplying `files` instead of `code`"),
 			"files": map[string]any{
 				"type":        "array",
-				"description": "the gear's source files",
+				"description": "optional; use instead of `code` only for a multi-file gear",
 				"items": obj(map[string]any{
-					"path":    str("relative file path, e.g. 'main.py'"),
+					"path":    str("relative file path, e.g. 'helper.py'"),
 					"content": str("full file content"),
 				}, "path", "content"),
 			},
-		}, "name", "description", "runtime", "entrypoint", "files"),
+		}, "name", "description", "runtime", "code"),
 	})
 
 	if agent.IsOrchestrator {
@@ -397,10 +398,6 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 		if err != nil {
 			return "", err
 		}
-		entrypoint, err := args.reqStr("entrypoint")
-		if err != nil {
-			return "", err
-		}
 		tags, err := args.strSlice("tags")
 		if err != nil {
 			return "", err
@@ -410,9 +407,24 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 		if err != nil {
 			return "", err
 		}
+		entrypoint, err := args.str("entrypoint")
+		if err != nil {
+			return "", err
+		}
 		var files []gear.File
 		if err := args.decode("files", &files); err != nil {
 			return "", err
+		}
+		// The single-file form: one `code` string, entrypoint derived from
+		// the runtime. This is what models actually manage to produce.
+		if code, err := args.str("code"); err != nil {
+			return "", err
+		} else if code != "" && len(files) == 0 {
+			entrypoint = gear.DefaultEntrypoint(runtime)
+			files = []gear.File{{Path: entrypoint, Content: code}}
+		}
+		if entrypoint == "" && len(files) == 1 {
+			entrypoint = files[0].Path
 		}
 		g, err := e.gears.Forge(ctx, name, description, tags, runtime, entrypoint, schema, files, wsID, agent.ID)
 		if err != nil {
@@ -479,7 +491,7 @@ func (e *Engine) runGear(ctx context.Context, wsID int64, agent workspace.Agent,
 		if g.Name != name {
 			continue
 		}
-		res, err := e.gearExec.Run(ctx, g, argsJSON)
+		res, err := e.gearExec.Run(ctx, g, argsJSON, gear.Caller{AgentID: &agent.ID, WorkspaceID: &wsID})
 		if err != nil {
 			return "", err
 		}

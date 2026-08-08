@@ -3,6 +3,7 @@ package gear
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,8 +14,8 @@ import (
 )
 
 const (
-	execTimeout   = 60 * time.Second
-	maxOutputSize = 64 * 1024
+	defaultTimeout = 60 * time.Second
+	maxOutputSize  = 64 * 1024
 )
 
 // Executor materializes a gear's approved source into the data dir and runs
@@ -52,11 +53,27 @@ func interpreter(runtime string) (string, []string) {
 	}
 }
 
-// Run executes a gear with argsJSON delivered on stdin. It refuses anything
-// the operator has not approved.
-func (e *Executor) Run(ctx context.Context, g Gear, argsJSON string) (Result, error) {
-	if g.Status != StatusApproved {
+// Caller identifies who a run is on behalf of. A nil AgentID means the
+// operator running a dry run from the catalog.
+type Caller struct {
+	AgentID     *int64
+	WorkspaceID *int64
+	// DryRun lets the operator execute a gear that is not yet approved —
+	// so that approval is an informed decision rather than a leap of faith.
+	// Agents never set this.
+	DryRun bool
+}
+
+// Run executes a gear with argsJSON delivered on stdin, records the
+// execution, and refuses anything the operator has not approved (except an
+// operator's own dry run).
+func (e *Executor) Run(ctx context.Context, g Gear, argsJSON string, caller Caller) (Result, error) {
+	if g.Status != StatusApproved && !caller.DryRun {
 		return Result{}, fmt.Errorf("gear %q (status %s): %w — the operator must approve it in the gear catalog first", g.Name, g.Status, ErrNotApproved)
+	}
+	if caller.DryRun && caller.AgentID != nil {
+		// Defence in depth: a dry run is an operator act by definition.
+		return Result{}, errors.New("a dry run cannot be performed on behalf of an agent")
 	}
 
 	dir, err := e.materialize(ctx, g)
@@ -69,7 +86,11 @@ func (e *Executor) Run(ctx context.Context, g Gear, argsJSON string) (Result, er
 		return Result{}, fmt.Errorf("gear %q needs %s, which is not installed on this machine", g.Name, bin)
 	}
 
-	runCtx, cancel := context.WithTimeout(ctx, execTimeout)
+	timeout := defaultTimeout
+	if g.TimeoutSeconds > 0 {
+		timeout = time.Duration(g.TimeoutSeconds) * time.Second
+	}
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	args := append(append([]string{}, preArgs...), g.Entrypoint)
@@ -92,6 +113,7 @@ func (e *Executor) Run(ctx context.Context, g Gear, argsJSON string) (Result, er
 
 	start := time.Now()
 	runErr := cmd.Run()
+	elapsed := time.Since(start)
 	res := Result{
 		Stdout:   truncate(stdout.String()),
 		Stderr:   truncate(stderr.String()),
@@ -99,10 +121,20 @@ func (e *Executor) Run(ctx context.Context, g Gear, argsJSON string) (Result, er
 		TimedOut: runCtx.Err() == context.DeadlineExceeded,
 	}
 	slog.Info("gear executed", "gear", g.Name, "version", g.Version, "exit_code", res.ExitCode,
-		"timed_out", res.TimedOut, "duration_ms", time.Since(start).Milliseconds())
+		"timed_out", res.TimedOut, "dry_run", caller.DryRun, "duration_ms", elapsed.Milliseconds())
+
+	// Recorded even when the caller's context is done: an execution that
+	// happened must appear in the operator's audit trail.
+	if err := e.store.RecordRun(context.WithoutCancel(ctx), Run{
+		GearID: g.ID, Version: g.Version, AgentID: caller.AgentID, WorkspaceID: caller.WorkspaceID,
+		Args: argsJSON, ExitCode: res.ExitCode, TimedOut: res.TimedOut,
+		DurationMs: elapsed.Milliseconds(), Stdout: res.Stdout, Stderr: res.Stderr,
+	}); err != nil {
+		slog.Error("could not record gear run", "gear", g.Name, "err", err)
+	}
 
 	if res.TimedOut {
-		return res, fmt.Errorf("gear %q timed out after %s", g.Name, execTimeout)
+		return res, fmt.Errorf("gear %q timed out after %s", g.Name, timeout)
 	}
 	if runErr != nil && res.ExitCode == 0 {
 		// Failed to start at all (not a non-zero exit).

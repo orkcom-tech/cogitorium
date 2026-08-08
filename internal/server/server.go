@@ -28,6 +28,7 @@ type Server struct {
 	workspaces *workspace.Store
 	context    *contextstore.Store
 	gears      *gear.Store
+	gearExec   *gear.Executor
 	engine     *engine.Engine
 	http       *http.Server
 }
@@ -37,13 +38,15 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string) *Server {
 	ws := workspace.NewStore(db)
 	cs := contextstore.New(contextdPath)
 	gears := gear.NewStore(db)
+	gearExec := gear.NewExecutor(gears, dataDir)
 	s := &Server{
 		db:         db,
 		catalog:    cat,
 		workspaces: ws,
 		context:    cs,
 		gears:      gears,
-		engine:     engine.New(ws, cat, cs, gears, gear.NewExecutor(gears, dataDir)),
+		gearExec:   gearExec,
+		engine:     engine.New(ws, cat, cs, gears, gearExec),
 	}
 
 	mux := http.NewServeMux()
@@ -86,7 +89,10 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string) *Server {
 	mux.HandleFunc("GET /api/v1/agents/{id}/prompt", s.handleAgentPrompt)
 
 	mux.HandleFunc("GET /api/v1/gears", s.handleListGears)
+	mux.HandleFunc("POST /api/v1/gears", s.handleCreateGear)
 	mux.HandleFunc("GET /api/v1/gears/{id}", s.handleGetGear)
+	mux.HandleFunc("POST /api/v1/gears/{id}/run", s.handleRunGear)
+	mux.HandleFunc("GET /api/v1/gears/{id}/runs", s.handleListGearRuns)
 	mux.HandleFunc("PATCH /api/v1/gears/{id}", s.handleSetGearStatus)
 	mux.HandleFunc("DELETE /api/v1/gears/{id}", s.handleDeleteGear)
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/gears", s.handleListGearBindings)

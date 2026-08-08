@@ -83,8 +83,21 @@ export const api = {
       return req<Gear[]>(`/api/v1/gears${qs ? `?${qs}` : ''}`)
     },
     get: (id: number) => req<{ gear: Gear; files: GearFile[] }>(`/api/v1/gears/${id}`),
+    create: (g: {
+      name: string
+      description: string
+      runtime: string
+      code: string
+      tags?: string[]
+      args_schema?: string
+    }) => req<Gear>('/api/v1/gears', { method: 'POST', body: JSON.stringify(g) }),
     setStatus: (id: number, status: 'pending' | 'approved' | 'disabled') =>
       req<Gear>(`/api/v1/gears/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    setTimeout: (id: number, timeout_seconds: number) =>
+      req<Gear>(`/api/v1/gears/${id}`, { method: 'PATCH', body: JSON.stringify({ timeout_seconds }) }),
+    run: (id: number, args: unknown) =>
+      req<GearRunResult>(`/api/v1/gears/${id}/run`, { method: 'POST', body: JSON.stringify({ args }) }),
+    runs: (id: number) => req<GearRun[]>(`/api/v1/gears/${id}/runs`),
     remove: (id: number) => req<void>(`/api/v1/gears/${id}`, { method: 'DELETE' }),
     bindings: (wsId: number) => req<GearBinding[]>(`/api/v1/workspaces/${wsId}/gears`),
     bind: (wsId: number, gearId: number, agentId: number | null) =>
@@ -217,7 +230,31 @@ export type Gear = {
   entrypoint: string
   args_schema: string
   status: 'pending' | 'approved' | 'disabled'
+  timeout_seconds: number
   updated_at: string
+}
+
+export type GearRun = {
+  id: number
+  gear_id: number
+  version: number
+  agent_id: number | null
+  agent_name: string
+  args: string
+  exit_code: number
+  timed_out: boolean
+  duration_ms: number
+  stdout: string
+  stderr: string
+  created_at: string
+}
+
+export type GearRunResult = {
+  stdout: string
+  stderr: string
+  exit_code: number
+  timed_out: boolean
+  error?: string
 }
 
 export type GearFile = { path: string; content: string }

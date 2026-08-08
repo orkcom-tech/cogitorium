@@ -433,6 +433,16 @@ th {
   font-size: 0.9rem;
 }
 
+.prompt-preview.run-failed {
+  border-color: var(--danger);
+}
+
+.card textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  resize: vertical;
+}
+
 /* Blueprint */
 
 .tabs {
@@ -497,6 +507,30 @@ th {
 .bp-state {
   font-size: 0.7rem;
   color: var(--accent);
+}
+
+/* Gears are visually distinct from agents: a tool, not an actor. */
+.react-flow__node.bp-gear {
+  border-style: dashed;
+  border-radius: 4px;
+}
+
+.react-flow__node.bp-gear-approved {
+  border-color: #5aa86a;
+}
+
+.react-flow__node.bp-gear-pending {
+  border-color: #d0a050;
+}
+
+.react-flow__node.bp-gear-disabled {
+  border-color: var(--danger);
+  opacity: 0.6;
+}
+
+.react-flow__edge.bp-binding-edge .react-flow__edge-path {
+  stroke-dasharray: 4 3;
+  opacity: 0.7;
 }
 
 .react-flow__attribution {

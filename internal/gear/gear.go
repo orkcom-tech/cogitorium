@@ -49,7 +49,25 @@ type Gear struct {
 	Entrypoint        string   `json:"entrypoint"`
 	ArgsSchema        string   `json:"args_schema"`
 	Status            string   `json:"status"`
+	TimeoutSeconds    int      `json:"timeout_seconds"`
 	UpdatedAt         string   `json:"updated_at"`
+}
+
+// Run is one recorded execution of a gear.
+type Run struct {
+	ID          int64  `json:"id"`
+	GearID      int64  `json:"gear_id"`
+	Version     int    `json:"version"`
+	AgentID     *int64 `json:"agent_id"` // nil = the operator (dry run)
+	AgentName   string `json:"agent_name"`
+	WorkspaceID *int64 `json:"workspace_id"`
+	Args        string `json:"args"`
+	ExitCode    int    `json:"exit_code"`
+	TimedOut    bool   `json:"timed_out"`
+	DurationMs  int64  `json:"duration_ms"`
+	Stdout      string `json:"stdout"`
+	Stderr      string `json:"stderr"`
+	CreatedAt   string `json:"created_at"`
 }
 
 type File struct {
@@ -84,9 +102,23 @@ func validRuntime(rt string) bool {
 	return rt == "python" || rt == "node" || rt == "bash"
 }
 
+// DefaultEntrypoint names the single file of a one-file gear, so the forging
+// agent does not have to supply a filename it has no opinion about.
+func DefaultEntrypoint(runtime string) string {
+	switch runtime {
+	case "python":
+		return "main.py"
+	case "node":
+		return "main.js"
+	default:
+		return "main.sh"
+	}
+}
+
 // Forge registers a new gear, or supersedes an existing one with a new
 // version. A new version always returns to pending: approval covers exact
-// content, never a moving target.
+// content, never a moving target. wsID/agentID of 0 mean the operator
+// authored it directly rather than an agent forging it.
 func (s *Store) Forge(ctx context.Context, name, description string, tags []string, runtime, entrypoint, argsSchema string, files []File, wsID, agentID int64) (Gear, error) {
 	name = strings.TrimSpace(name)
 	if !nameRe.MatchString(name) {
@@ -134,6 +166,15 @@ func (s *Store) Forge(ctx context.Context, name, description string, tags []stri
 	}
 	defer tx.Rollback()
 
+	// Operator-authored gears (wsID/agentID 0) have no provenance agent.
+	var originWS, originAgent any
+	if wsID != 0 {
+		originWS = wsID
+	}
+	if agentID != 0 {
+		originAgent = agentID
+	}
+
 	var id int64
 	var version int
 	err = tx.QueryRowContext(ctx, `SELECT id, version FROM gears WHERE name = ?`, name).Scan(&id, &version)
@@ -144,7 +185,7 @@ func (s *Store) Forge(ctx context.Context, name, description string, tags []stri
 			INSERT INTO gears (name, description, tags, origin_workspace_id, created_by_agent_id,
 			                   version, runtime, entrypoint, args_schema, status, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, 'pending', ?, ?)`,
-			name, description, string(tagsJSON), wsID, agentID, runtime, entrypoint, argsSchema, now(), now())
+			name, description, string(tagsJSON), originWS, originAgent, runtime, entrypoint, argsSchema, now(), now())
 		if err := asConflict(err, fmt.Sprintf("gear %q", name)); err != nil {
 			return Gear{}, fmt.Errorf("forge gear: %w", err)
 		}
@@ -170,11 +211,15 @@ func (s *Store) Forge(ctx context.Context, name, description string, tags []stri
 		}
 	}
 
-	// The forging agent binds the gear to itself automatically.
-	if _, err := tx.ExecContext(ctx,
-		`INSERT OR IGNORE INTO gear_bindings (gear_id, workspace_id, agent_id, created_at) VALUES (?, ?, ?, ?)`,
-		id, wsID, agentID, now()); err != nil {
-		return Gear{}, fmt.Errorf("forge gear: self-bind: %w", err)
+	// The forging agent binds the gear to itself automatically. An
+	// operator-authored gear has no agent to bind to — it is granted from
+	// the catalog instead.
+	if agentID != 0 {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO gear_bindings (gear_id, workspace_id, agent_id, created_at) VALUES (?, ?, ?, ?)`,
+			id, wsID, agentID, now()); err != nil {
+			return Gear{}, fmt.Errorf("forge gear: self-bind: %w", err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -198,7 +243,8 @@ func validFilePath(p string) error {
 const gearSelect = `
 	SELECT g.id, g.name, g.description, g.tags, g.origin_workspace_id,
 	       COALESCE(w.name, ''), g.created_by_agent_id, COALESCE(a.name, ''),
-	       g.version, g.runtime, g.entrypoint, g.args_schema, g.status, g.updated_at
+	       g.version, g.runtime, g.entrypoint, g.args_schema, g.status,
+	       g.timeout_seconds, g.updated_at
 	FROM gears g
 	LEFT JOIN workspaces w ON w.id = g.origin_workspace_id
 	LEFT JOIN agents a ON a.id = g.created_by_agent_id`
@@ -208,7 +254,7 @@ func scanGear(row interface{ Scan(...any) error }) (Gear, error) {
 	var tags string
 	if err := row.Scan(&g.ID, &g.Name, &g.Description, &tags, &g.OriginWorkspaceID, &g.OriginWorkspace,
 		&g.CreatedByAgentID, &g.CreatedByAgent, &g.Version, &g.Runtime, &g.Entrypoint,
-		&g.ArgsSchema, &g.Status, &g.UpdatedAt); err != nil {
+		&g.ArgsSchema, &g.Status, &g.TimeoutSeconds, &g.UpdatedAt); err != nil {
 		return Gear{}, err
 	}
 	if err := json.Unmarshal([]byte(tags), &g.Tags); err != nil {
@@ -311,6 +357,84 @@ func (s *Store) SetStatus(ctx context.Context, id int64, status string) (Gear, e
 	}
 	slog.Info("gear status changed by operator", "gear_id", id, "status", status)
 	return s.Get(ctx, id)
+}
+
+// SetTimeout changes how long a gear may run before it is killed.
+func (s *Store) SetTimeout(ctx context.Context, id int64, seconds int) (Gear, error) {
+	if seconds < 1 || seconds > 3600 {
+		return Gear{}, fmt.Errorf("timeout must be between 1 and 3600 seconds (got %d)", seconds)
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE gears SET timeout_seconds = ?, updated_at = ? WHERE id = ?`, seconds, now(), id)
+	if err != nil {
+		return Gear{}, fmt.Errorf("set gear %d timeout: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Gear{}, fmt.Errorf("gear %d: %w", id, ErrNotFound)
+	}
+	slog.Info("gear timeout changed", "gear_id", id, "timeout_seconds", seconds)
+	return s.Get(ctx, id)
+}
+
+// RecordRun persists one execution. Every gear run is recorded — this is
+// the operator's audit trail for code running on their machine.
+func (s *Store) RecordRun(ctx context.Context, r Run) error {
+	var agentID, wsID any
+	if r.AgentID != nil {
+		agentID = *r.AgentID
+	}
+	if r.WorkspaceID != nil {
+		wsID = *r.WorkspaceID
+	}
+	timedOut := 0
+	if r.TimedOut {
+		timedOut = 1
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO gear_runs (gear_id, version, agent_id, workspace_id, args, exit_code,
+		                       timed_out, duration_ms, stdout, stderr, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.GearID, r.Version, agentID, wsID, r.Args, r.ExitCode, timedOut, r.DurationMs,
+		truncateForLog(r.Stdout), truncateForLog(r.Stderr), now())
+	if err != nil {
+		return fmt.Errorf("record gear run: %w", err)
+	}
+	return nil
+}
+
+// truncateForLog bounds what a single run can add to the database.
+func truncateForLog(s string) string {
+	const max = 8 << 10
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "\n…[truncated]"
+}
+
+func (s *Store) ListRuns(ctx context.Context, gearID int64, limit int) ([]Run, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 20
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT r.id, r.gear_id, r.version, r.agent_id, COALESCE(a.name, ''), r.workspace_id,
+		       r.args, r.exit_code, r.timed_out, r.duration_ms, r.stdout, r.stderr, r.created_at
+		FROM gear_runs r LEFT JOIN agents a ON a.id = r.agent_id
+		WHERE r.gear_id = ? ORDER BY r.id DESC LIMIT ?`, gearID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list gear runs: %w", err)
+	}
+	defer rows.Close()
+	out := []Run{}
+	for rows.Next() {
+		var r Run
+		var timedOut int
+		if err := rows.Scan(&r.ID, &r.GearID, &r.Version, &r.AgentID, &r.AgentName, &r.WorkspaceID,
+			&r.Args, &r.ExitCode, &timedOut, &r.DurationMs, &r.Stdout, &r.Stderr, &r.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan gear run: %w", err)
+		}
+		r.TimedOut = timedOut == 1
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {
