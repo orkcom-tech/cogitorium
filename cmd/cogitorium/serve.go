@@ -57,7 +57,11 @@ func newServeCmd() *cobra.Command {
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			return server.New(cfg.Listen, db, cfg.ContextdPath, cfg.DataDir).Run(ctx)
+			srv := server.New(cfg.Listen, db, cfg.ContextdPath, cfg.DataDir)
+			if err := srv.Bootstrap(ctx); err != nil {
+				return err
+			}
+			return srv.Run(ctx)
 		},
 	}
 

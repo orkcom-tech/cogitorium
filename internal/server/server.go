@@ -17,6 +17,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
 	"github.com/orkcom-tech/cogitorium/internal/engine"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
+	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/version"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 	"github.com/orkcom-tech/cogitorium/web"
@@ -29,8 +30,13 @@ type Server struct {
 	context    *contextstore.Store
 	gears      *gear.Store
 	gearExec   *gear.Executor
+	identity   *identity.Store
 	engine     *engine.Engine
 	http       *http.Server
+	// trustLoopback lets an unauthenticated local request act as the admin,
+	// which is what makes a single-operator install feel accountless while
+	// running the same model as a team install.
+	trustLoopback bool
 }
 
 func New(listen string, db *sql.DB, contextdPath, dataDir string) *Server {
@@ -46,7 +52,11 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string) *Server {
 		context:    cs,
 		gears:      gears,
 		gearExec:   gearExec,
+		identity:   identity.NewStore(db),
 		engine:     engine.New(ws, cat, cs, gears, gearExec),
+		// A server reachable beyond this machine must not hand out admin
+		// to anyone who can open a socket to it.
+		trustLoopback: isLoopbackListen(listen),
 	}
 
 	mux := http.NewServeMux()
@@ -105,14 +115,57 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string) *Server {
 		writeError(w, http.StatusNotFound, "no such API endpoint: "+r.Method+" "+r.URL.Path)
 	})
 
+	mux.HandleFunc("GET /api/v1/whoami", s.handleWhoami)
+	mux.HandleFunc("GET /api/v1/users", s.handleListUsers)
+	mux.HandleFunc("POST /api/v1/users", s.handleCreateUser)
+	mux.HandleFunc("DELETE /api/v1/users/{id}", s.handleDeleteUser)
+	mux.HandleFunc("GET /api/v1/teams", s.handleListTeams)
+	mux.HandleFunc("POST /api/v1/teams", s.handleCreateTeam)
+	mux.HandleFunc("DELETE /api/v1/teams/{id}", s.handleDeleteTeam)
+	mux.HandleFunc("POST /api/v1/teams/{id}/members", s.handleAddTeamMember)
+	mux.HandleFunc("DELETE /api/v1/teams/{id}/members/{userId}", s.handleRemoveTeamMember)
+
 	mux.Handle("/", uiHandler())
 
 	s.http = &http.Server{
 		Addr:              listen,
-		Handler:           logRequests(mux),
+		Handler:           logRequests(s.authenticate(mux)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	return s
+}
+
+// isLoopbackListen reports whether the server is only reachable from this
+// machine. A listener on 0.0.0.0 or a routable address is not, so it must
+// demand a token from everyone.
+func isLoopbackListen(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// Bootstrap seeds the admin on first start. The returned token is shown to
+// the operator once and never recoverable afterwards.
+func (s *Server) Bootstrap(ctx context.Context) error {
+	_, token, err := s.identity.Bootstrap(ctx)
+	if err != nil {
+		return err
+	}
+	if token == "" {
+		return nil
+	}
+	if s.trustLoopback {
+		slog.Info("admin token created; local requests are admin automatically", "token", token)
+	} else {
+		slog.Warn("admin token created — copy it now, it cannot be shown again", "token", token)
+	}
+	return nil
 }
 
 // Run serves until ctx is cancelled, then shuts down gracefully. Request

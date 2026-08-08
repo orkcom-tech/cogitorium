@@ -45,10 +45,16 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 }
 
 func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	id, err := parseID(r.PathValue("id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid id in path")
 		return 0, false
 	}
 	return id, true
 }
+
+func parseID(s string) (int64, error) { return strconv.ParseInt(s, 10, 64) }
+
+// isDomainError reports whether err is one of the shared sentinel errors,
+// which the fail() mapping already turns into the right status.
+func isDomainError(err, sentinel error) bool { return errors.Is(err, sentinel) }
