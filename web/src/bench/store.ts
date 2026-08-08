@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { session } from '../session'
-import { SLOT_ORDER, defaultLayout, parseLayout, type Layout, type PanelId, type SlotId } from './types'
+import { MAX_FLOATS, SLOT_ORDER, defaultLayout, parseLayout, type Layout, type PanelId, type SlotId } from './types'
 
 // Layout persistence, split by lifetime.
 //
@@ -163,6 +163,37 @@ export function useLayout(userId: number, known: (id: PanelId) => boolean) {
         }
         return { ...l, slots, maximized: l.maximized === id ? null : l.maximized }
       }),
+
+    /** Float a panel out of its dock, or dock it back where it belongs. */
+    float: (id: PanelId, home: SlotId) =>
+      mutate((l) => {
+        if (l.floats[id]) {
+          const floats = { ...l.floats }
+          delete floats[id]
+          const slots = { ...l.slots }
+          if (!SLOT_ORDER.some((s) => slots[s].panels.includes(id))) {
+            slots[home] = { ...slots[home], panels: [...slots[home].panels, id], active: id, open: true }
+          }
+          return { ...l, floats, slots }
+        }
+        if (Object.keys(l.floats).length >= MAX_FLOATS) return l
+        const slots = { ...l.slots }
+        for (const s of SLOT_ORDER) {
+          if (!slots[s].panels.includes(id)) continue
+          const panels = slots[s].panels.filter((p) => p !== id)
+          slots[s] = { ...slots[s], panels, active: slots[s].active === id ? (panels[0] ?? null) : slots[s].active }
+        }
+        const n = Object.keys(l.floats).length
+        return {
+          ...l,
+          slots,
+          maximized: l.maximized === id ? null : l.maximized,
+          floats: { ...l.floats, [id]: { x: 120 + n * 28, y: 100 + n * 28, w: 560, h: 420 } },
+        }
+      }),
+
+    moveFloat: (id: PanelId, rect: { x: number; y: number; w: number; h: number }) =>
+      setLayout((l) => (l.floats[id] ? { ...l, floats: { ...l.floats, [id]: rect } } : l)),
 
     maximize: (id: PanelId | null) => mutate((l) => ({ ...l, maximized: l.maximized === id ? null : id })),
 

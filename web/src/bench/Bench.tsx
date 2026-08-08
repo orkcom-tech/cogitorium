@@ -116,12 +116,13 @@ export default function Bench({ panels, layout }: { panels: PanelDef[]; layout: 
       })}
 
       {ordered.map((p) => {
+        const floating = l.floats[p.id]
         const slot = SLOT_ORDER.find((s) => l.slots[s].panels.includes(p.id))
         const dock = slot ? l.slots[slot] : null
         // live = the active tab of an open dock, or the maximized panel.
         // Everything else is PARKED: still mounted, sized, and holding its
         // sockets and buffers, just moved off screen.
-        const live = max ? max === p.id : !!dock && dock.open && dock.active === p.id
+        const live = floating ? !max : max ? max === p.id : !!dock && dock.open && dock.active === p.id
         const gated = p.restore === 'onDemand' && !started.has(p.id)
         const box = slot && live ? overlayBox(slot) : null
         const overlay = !!box
@@ -130,15 +131,35 @@ export default function Bench({ panels, layout }: { panels: PanelDef[]; layout: 
           <div
             key={p.id}
             data-panel={p.id}
-            className={`bn-panel ${live ? '' : 'bn-parked'} ${overlay ? 'bn-overlay' : ''}`}
+            className={`bn-panel ${live ? '' : 'bn-parked'} ${overlay ? 'bn-overlay' : ''} ${floating ? 'bn-float' : ''}`}
             style={
-              live
-                ? max
-                  ? { gridArea: 'main', zIndex: 2 }
-                  : (overlayStyle ?? { gridArea: slot })
-                : undefined
+              !live
+                ? undefined
+                : floating
+                  ? {
+                      position: 'fixed',
+                      left: floating.x,
+                      top: floating.y,
+                      width: floating.w,
+                      height: floating.h,
+                      // z from array index, never a stored counter: a counter
+                      // drifts upward forever and eventually puts a panel above
+                      // the approval dialog.
+                      zIndex: 40 + Object.keys(l.floats).indexOf(p.id),
+                    }
+                  : max
+                    ? { gridArea: 'main', zIndex: 2 }
+                    : (overlayStyle ?? { gridArea: slot })
             }
           >
+            {floating && (
+              <FloatBar
+                title={p.title}
+                rect={floating}
+                onMove={(r) => layout.moveFloat(p.id, r)}
+                onDock={() => layout.float(p.id, p.home)}
+              />
+            )}
             {gated ? (
               <div className="bn-gate">
                 <p className="hint">
@@ -181,6 +202,52 @@ export default function Bench({ panels, layout }: { panels: PanelDef[]; layout: 
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n))
+}
+
+/** The title bar of a floating panel: drag handle, and the way back to a dock. */
+function FloatBar({
+  title,
+  rect,
+  onMove,
+  onDock,
+}: {
+  title: string
+  rect: { x: number; y: number; w: number; h: number }
+  onMove: (r: { x: number; y: number; w: number; h: number }) => void
+  onDock: () => void
+}) {
+  const from = useRef<{ x: number; y: number; rx: number; ry: number } | null>(null)
+  return (
+    <div
+      className="bn-floatbar"
+      onPointerDown={(e) => {
+        if ((e.target as HTMLElement).tagName === 'BUTTON') return
+        e.currentTarget.setPointerCapture(e.pointerId)
+        from.current = { x: e.clientX, y: e.clientY, rx: rect.x, ry: rect.y }
+      }}
+      onPointerMove={(e) => {
+        if (!from.current || !e.currentTarget.hasPointerCapture(e.pointerId)) return
+        const f = from.current
+        // Re-clamped into the viewport so a float can never be dragged
+        // somewhere it cannot be dragged back from.
+        onMove({
+          ...rect,
+          x: clamp(f.rx + (e.clientX - f.x), 0, window.innerWidth - 120),
+          y: clamp(f.ry + (e.clientY - f.y), 0, window.innerHeight - 40),
+        })
+      }}
+      onPointerUp={(e) => {
+        from.current = null
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }}
+    >
+      <strong>{title}</strong>
+      <span className="bn-spacer" />
+      <button className="bn-icon" onClick={onDock} title="Put it back in a dock">
+        ⤓
+      </button>
+    </div>
+  )
 }
 
 /**
@@ -317,6 +384,14 @@ function PlaceMenu({
           {layout.layout.slots[slot].mode === 'overlay' ? '✓ slide out over the centre' : '  slide out over the centre'}
         </button>
       )}
+      <button
+        onClick={() => {
+          layout.float(id, def?.home ?? 'aux')
+          onDone()
+        }}
+      >
+        {'  float it'}
+      </button>
       <button
         onClick={() => {
           layout.maximize(id)

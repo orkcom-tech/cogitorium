@@ -290,3 +290,34 @@
   border-bottom: 0;
   border-radius: var(--r2) var(--r2) 0 0;
 }
+
+/* A float is the same panel, fixed to the viewport. Border, radius and shadow
+   appear here for the same reason they appear on an overlay: an edge is
+   genuinely needed only when something sits above something else. */
+.bn-panel.bn-float {
+  padding-top: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r2);
+  box-shadow: var(--shadow);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.bn-floatbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  height: var(--h-tabs);
+  flex: 0 0 auto;
+  padding: 0 var(--s2);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--t-chrome);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.bn-floatbar:active {
+  cursor: grabbing;
+}

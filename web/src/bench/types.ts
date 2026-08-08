@@ -32,10 +32,24 @@ export type Dock = {
   mode: 'push' | 'overlay'
 }
 
+/** A floating panel: fixed to the viewport at a remembered rectangle. */
+export type Float = { x: number; y: number; w: number; h: number }
+
 export type Layout = {
   v: 1
   slots: Record<SlotId, Dock>
   maximized: PanelId | null
+  /**
+   * Floats are entered only from the ⋯ menu. There is deliberately no "drag
+   * outside the dock root" gesture: in a maximised browser the root IS the
+   * viewport, so that drop zone is unreachable and the feature would appear
+   * broken exactly where it is most used.
+   *
+   * Capped at four. z-order is the array index rather than a stored counter —
+   * a persisted counter drifts upward forever and eventually renders a panel
+   * above the approval dialog.
+   */
+  floats: Record<PanelId, Float>
 }
 
 export const DEFAULTS: Record<SlotId, Dock> = {
@@ -64,8 +78,11 @@ export function defaultLayout(): Layout {
       right: { ...DEFAULTS.right, panels: [...DEFAULTS.right.panels] },
     },
     maximized: null,
+    floats: {},
   }
 }
+
+export const MAX_FLOATS = 4
 
 /**
  * parseLayout is total: it rejects rather than repairs, and falls back
@@ -118,6 +135,16 @@ export function parseLayout(raw: unknown, known: (id: PanelId) => boolean): Layo
   }
 
   if (typeof src.maximized === 'string' && known(src.maximized)) out.maximized = src.maximized
+
+  if (src.floats && typeof src.floats === 'object') {
+    for (const [id, r] of Object.entries(src.floats as Record<string, unknown>)) {
+      if (!known(id) || !r || typeof r !== 'object') continue
+      const rect = r as Record<string, unknown>
+      const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d)
+      if (Object.keys(out.floats).length >= MAX_FLOATS) break
+      out.floats[id] = { x: num(rect.x, 80), y: num(rect.y, 80), w: num(rect.w, 520), h: num(rect.h, 380) }
+    }
+  }
   return out
 }
 
