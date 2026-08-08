@@ -26,7 +26,17 @@ export default function ChatPage() {
   // Abort any in-flight stream when the page unmounts.
   useEffect(() => () => abortRef.current?.abort(), [])
 
-  useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [transcript])
+  // Scroll the transcript itself, never scrollIntoView: that walks UP the tree
+  // and scrolls every scrollable ancestor, which drags the workspace header
+  // off screen. Only follow when the operator is already at the bottom —
+  // yanking them away from something they scrolled back to read is worse than
+  // missing the newest line.
+  useEffect(() => {
+    const el = bottom.current?.parentElement
+    if (!el) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    if (nearBottom) el.scrollTop = el.scrollHeight
+  }, [transcript])
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault()

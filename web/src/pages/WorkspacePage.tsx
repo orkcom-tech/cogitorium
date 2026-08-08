@@ -402,7 +402,17 @@ function Timeline({
   onForget: (m: WSMessage) => void
 }) {
   const bottom = useRef<HTMLDivElement>(null)
-  useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [messages, streams])
+  // Scroll the transcript itself, never scrollIntoView: that walks UP the tree
+  // and scrolls every scrollable ancestor, which drags the workspace header
+  // off screen. Only follow when the operator is already at the bottom —
+  // yanking them away from something they scrolled back to read is worse than
+  // missing the newest line.
+  useEffect(() => {
+    const el = bottom.current?.parentElement
+    if (!el) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    if (nearBottom) el.scrollTop = el.scrollHeight
+  }, [messages, streams])
 
   return (
     <div className="transcript">

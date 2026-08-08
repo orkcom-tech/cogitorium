@@ -19,6 +19,27 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [checking, setChecking] = useState(true)
+  // The sidebar is 200px the two most space-starved views cannot spare. It
+  // collapses to a rail of icons and remembers the choice per device.
+  const [navOpen, setNavOpen] = useState(() => localStorage.getItem('cogitorium.nav') !== 'collapsed')
+
+  useEffect(() => {
+    localStorage.setItem('cogitorium.nav', navOpen ? 'open' : 'collapsed')
+  }, [navOpen])
+
+  // The ONLY global key binding in the app. Escape is deliberately absent:
+  // the approval dialog owns it, scoped to itself, so one keypress can never
+  // both dismiss some chrome and silently refuse a pending web search.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        setNavOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // whoami decides the shell: on loopback it succeeds without credentials,
   // which is why a single-operator install never sees a login screen.
@@ -56,22 +77,46 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div className="layout">
+      <div className={`layout ${navOpen ? '' : 'nav-collapsed'}`}>
         <aside className="sidebar">
+          <button
+            className="nav-toggle"
+            onClick={() => setNavOpen((v) => !v)}
+            title={navOpen ? 'Collapse the sidebar (⌘B)' : 'Expand the sidebar (⌘B)'}
+            aria-label={navOpen ? 'Collapse the sidebar' : 'Expand the sidebar'}
+          >
+            {navOpen ? '⟨' : '⟩'}
+          </button>
           <h1 className="brand">Cogitorium</h1>
           <nav>
-            <NavLink to="/workspaces">Workspaces</NavLink>
+            <NavLink to="/workspaces" title="Workspaces">
+              <span>Workspaces</span>
+            </NavLink>
             {/* The Context page browses the whole space — every workspace's
                 memory and every agent's private branch — so it follows the
                 Terminal's rule and is admin-only. Members reach context
                 through their own workspace's bindings. */}
-            {user.role === 'admin' && <NavLink to="/context">Context</NavLink>}
-            <NavLink to="/gears">Gears</NavLink>
-            <NavLink to="/instructions">Instructions</NavLink>
-            <NavLink to="/models">Models</NavLink>
-            <NavLink to="/chat">Scratch chat</NavLink>
-            {user.role === 'admin' && <NavLink to="/terminal">Terminal</NavLink>}
-            {user.role === 'admin' && <NavLink to="/people">People</NavLink>}
+            {user.role === 'admin' && <NavLink to="/context" title="Context">
+              <span>Context</span>
+            </NavLink>}
+            <NavLink to="/gears" title="Gears">
+              <span>Gears</span>
+            </NavLink>
+            <NavLink to="/instructions" title="Instructions">
+              <span>Instructions</span>
+            </NavLink>
+            <NavLink to="/models" title="Models">
+              <span>Models</span>
+            </NavLink>
+            <NavLink to="/chat" title="Scratch chat">
+              <span>Scratch chat</span>
+            </NavLink>
+            {user.role === 'admin' && <NavLink to="/terminal" title="Terminal">
+              <span>Terminal</span>
+            </NavLink>}
+            {user.role === 'admin' && <NavLink to="/people" title="People">
+              <span>People</span>
+            </NavLink>}
           </nav>
           <footer className="sidebar-footer">
             <div>

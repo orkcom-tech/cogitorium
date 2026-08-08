@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { ApprovalRequest } from '../api'
 
 // The last control before data leaves the machine.
@@ -37,20 +37,31 @@ export default function ApprovalDialog({
 
   // Esc refuses, and so does any dismissal: the safe answer must be the one
   // that happens when the operator does nothing deliberate.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onAnswer(false)
+  //
+  // Bound to the dialog element and stopped here, NOT to window. A second
+  // global Escape handler anywhere in the app would mean one keypress both
+  // closed a panel and refused a pending web search — the operator would see
+  // the panel shut, learn nothing about the security decision made on their
+  // behalf, and the turn would stop asking.
+  const onKeyDown = (e: ReactKeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation()
+      onAnswer(false)
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onAnswer])
+  }
 
   const f = request.facts
   const delegated = request.chain.length > 1
 
   return (
     <div className="modal-backdrop" onClick={() => onAnswer(false)}>
-      <div className="modal approval" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+      <div
+        className="modal approval"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+        role="dialog"
+        aria-modal="true"
+      >
         <h3>A search is about to leave this machine.</h3>
 
         <div className="approval-who">
@@ -83,6 +94,7 @@ export default function ApprovalDialog({
           {request.query}
         </div>
 
+        <div className="approval-scroll">
         <div className="approval-facts">
           <span>
             {f.runes} runes · {f.bytes} bytes · {f.non_ascii} non-ASCII
@@ -111,6 +123,8 @@ export default function ApprovalDialog({
             </ul>
           </details>
         )}
+
+        </div>
 
         <p className="approval-warning">
           These exact words leave this machine when you allow — whether or not anything is found.

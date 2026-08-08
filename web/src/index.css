@@ -1,9 +1,7 @@
+@import './styles/tokens.css';
+
 :root {
-  color-scheme: light dark;
   font-family: system-ui, -apple-system, sans-serif;
-  --border: color-mix(in srgb, currentColor 18%, transparent);
-  --accent: #6c8cff;
-  --danger: #d05050;
 }
 
 * {
@@ -15,14 +13,34 @@ body {
   min-height: 100vh;
 }
 
-#root,
+#root {
+  height: 100dvh;
+}
+
 .layout {
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 0;
 }
 
 .layout {
   display: grid;
-  grid-template-columns: 200px 1fr;
+  grid-template-columns: var(--nav-w) 1fr;
+}
+
+.layout.nav-collapsed {
+  --nav-w: var(--nav-w-min);
+}
+
+.layout.nav-collapsed .sidebar nav a span,
+.layout.nav-collapsed .brand,
+.layout.nav-collapsed .sidebar-footer {
+  display: none;
+}
+
+.nav-toggle {
+  align-self: flex-start;
+  font-size: var(--t-chrome);
+  padding: 0.15rem 0.4rem;
 }
 
 .sidebar {
@@ -81,8 +99,17 @@ body {
 
 /* Terminal */
 
-.terminal-page, .terminal-embedded {
-  height: calc(100vh - 3rem);
+.terminal-page,
+.terminal-embedded {
+  /* Both need to BE a flex column, not merely sit in one: .terminal-embedded
+     was a block box, so .terminal-holder's flex:1 was ignored and the terminal
+     collapsed to its min-height floor — a permanent 19-row letterbox inside a
+     full-height panel. .page happened to carry the rule, which is the only
+     reason the standalone terminal looked right. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
 }
 
 .terminal-holder {
@@ -115,6 +142,8 @@ body {
 .content {
   padding: 1.25rem 1.5rem;
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
 }
 
 .page {
@@ -227,7 +256,7 @@ th {
 }
 
 .muted {
-  opacity: 0.6;
+  color: var(--text-dim);
   font-size: 0.85em;
 }
 
@@ -244,7 +273,8 @@ th {
 }
 
 .chat-page {
-  height: calc(100vh - 3rem);
+  min-height: 0;
+  height: 100%;
 }
 
 .transcript {
@@ -287,7 +317,8 @@ th {
   display: grid;
   grid-template-columns: 1fr 240px;
   gap: 1rem;
-  height: calc(100vh - 2.5rem);
+  min-height: 0;
+  height: 100%;
 }
 
 .ws-main {
@@ -922,7 +953,10 @@ th {
   display: grid;
   grid-template-columns: 260px 1fr;
   gap: 1rem;
-  height: calc(100vh - 11rem);
+  /* 11rem assumed no notice line, and save() adds one — so the editor
+     overflowed the viewport on every successful save. */
+  min-height: 0;
+  flex: 1;
 }
 
 .context-files {
@@ -1116,4 +1150,40 @@ th {
 .approval-foot {
   font-size: 0.72rem;
   margin: 0;
+}
+
+/* The approval dialog's head, the query and the buttons must never scroll
+   away: the guarantee it makes is that the operator READ what leaves, and
+   "Allow once" has to stay reachable. Only the facts strip scrolls. */
+.approval-scroll {
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.modal.approval {
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+/* An orchestrator-authored name could shove the spend figure out of the rail. */
+.agent-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-row.selected,
+.agent-row.selected,
+.sidebar nav a.active {
+  background: var(--selected);
+}
+
+.card,
+.transcript,
+.canvas,
+.terminal-holder {
+  background: var(--surface);
 }

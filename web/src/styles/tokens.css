@@ -1,0 +1,127 @@
+/* Design tokens.
+ *
+ * This is not cosmetics, it is a prerequisite. Before this file, --bg was
+ * referenced twice and defined nowhere: the approval dialog — the one
+ * security-critical surface in the product — rendered with NO background, as
+ * text floating over a 55%-black backdrop, and the sticky file-tree header let
+ * rows scroll visibly through it. Nothing that overlays anything else can be
+ * built without an opaque surface to build it on.
+ *
+ * Colour uses light-dark() and nothing else. The [data-theme] overrides below
+ * set color-scheme rather than redeclaring a palette, because light-dark()
+ * resolves against the element's used color-scheme — a block that redeclared
+ * only custom properties would change nothing and look like it worked.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: light-dark(#fbfbfa, #191918);
+  --surface: light-dark(#ffffff, #212120); /* panel bodies, cards, floats */
+  --surface-2: light-dark(#f4f4f2, #2a2a28); /* tab strips, rails, hover */
+  --text: light-dark(#1a1a19, #ededeb);
+  --text-dim: color-mix(in srgb, var(--text) 58%, transparent);
+
+  --border: color-mix(in srgb, var(--text) 14%, transparent);
+  --border-strong: color-mix(in srgb, var(--text) 30%, transparent);
+
+  --accent: #6c8cff;
+  --danger: #d05050;
+  /* These three were hardcoded at fifteen call sites between them, which is
+     how a palette drifts: one gets adjusted and the others quietly do not. */
+  --warn: #d0a050;
+  --ok: #5aa86a;
+  --outward: #c85a5a;
+
+  --memory: #9a86d0;
+  --shared: #6aa8c8;
+  --instruction: #c87a9a;
+
+  /* 18% matches the recipe already used at four call sites, so extracting it
+     is a pure refactor with no visual delta — worth caring about when the only
+     build gate is tsc, which knows nothing about CSS. */
+  --selected: color-mix(in srgb, var(--accent) 18%, transparent);
+  --focus: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+  --shadow: light-dark(0 8px 28px rgb(0 0 0 / 0.16), 0 8px 28px rgb(0 0 0 / 0.55));
+
+  /* Space and type. Chrome is in px and content in rem: dock chrome must not
+     grow with content zoom, and the existing rem-based rules must keep meaning
+     what they mean. Prose goes UP and chrome goes DOWN — that asymmetry is
+     what reads as a modern client rather than a control panel. */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+
+  --t-micro: 11px;
+  --t-chrome: 12px;
+  --t-ui: 13px;
+  --t-prose: 15px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --t-mono: 12.5px;
+
+  --r1: 6px;
+  --r2: 10px;
+  --r3: 14px;
+
+  --h-topbar: 32px;
+  --h-tabs: 30px;
+  --rail: 32px;
+  --seam: 1px;
+  --nav-w: 200px;
+  --nav-w-min: 48px;
+  --row-h: 26px;
+  --min-main: 320px;
+  --role-gutter: 4.6rem;
+
+  --z-overlay: 30;
+  --z-float: 40;
+  --z-menu: 90;
+  --z-modal: 100;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* The cheapest accessibility win available: before this rule there was not a
+   single :focus, :focus-visible, outline or tabIndex anywhere in the app. */
+:focus-visible {
+  box-shadow: var(--focus);
+  outline: none;
+}
+
+/* The two most consequential buttons in the product — "save" in the editor and
+   "Allow once" in the approval dialog — rendered identically to every other
+   button, including the ones that do nothing irreversible. */
+button.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+button.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 85%, black);
+  border-color: transparent;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Exactly two motions in the whole product. A transition on anything
+     dragged reads as lag, so seams are deliberately excluded. */
+  .bn-overlay {
+    transition: transform 140ms ease;
+  }
+  .bn-tab {
+    transition: opacity 90ms ease;
+  }
+}
