@@ -143,7 +143,7 @@ func (s *Store) Forge(ctx context.Context, name, description string, tags []stri
 		return Gear{}, fmt.Errorf("gear name %q is invalid: use lowercase letters, digits and underscores (2-49 chars), starting with a letter", name)
 	}
 	if !validRuntime(runtime) {
-		return Gear{}, fmt.Errorf("runtime must be python, node or bash (got %q)", runtime)
+		return Gear{}, fmt.Errorf("runtime must be python, node, bash or %s (got %q)", RuntimeBinary, runtime)
 	}
 	if len(files) == 0 {
 		return Gear{}, errors.New("a gear needs at least one file")
