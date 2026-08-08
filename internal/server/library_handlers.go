@@ -52,6 +52,12 @@ func (s *Server) handleSaveInstruction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "text must not be empty")
 		return
 	}
+	// Check the name before the write: otherwise a rejected save still leaves
+	// the text sitting in Contextverse under a path nothing indexes.
+	if err := library.ValidateName(in.Name); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := s.context.Put(r.Context(), library.PathFor(in.Name), in.Text); err != nil {
 		failContext(w, r, err)
 		return

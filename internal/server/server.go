@@ -128,6 +128,9 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Run
 	mux.HandleFunc("GET /api/v1/terminal", s.handleTerminal)
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/terminal", s.handleWorkspaceTerminal)
 
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/graph", s.handleWorkspaceGraph)
+	mux.HandleFunc("GET /api/v1/map", s.handleAccessMap)
+
 	mux.HandleFunc("GET /api/v1/instructions", s.handleListInstructions)
 	mux.HandleFunc("POST /api/v1/instructions", s.handleSaveInstruction)
 	mux.HandleFunc("GET /api/v1/instructions/{id}", s.handleGetInstruction)

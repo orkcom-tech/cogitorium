@@ -62,6 +62,16 @@ func now() string { return time.Now().UTC().Format(time.RFC3339) }
 // PathFor names an instruction's file in the space.
 func PathFor(name string) string { return Root + "/" + name + ".md" }
 
+// ValidateName is exported so a caller can check the name *before* writing
+// the text: the index row and the file are two stores, and rejecting the name
+// only at the index leaves an orphaned file behind in Contextverse.
+func ValidateName(name string) error {
+	if !nameRe.MatchString(strings.TrimSpace(name)) {
+		return fmt.Errorf("instruction name %q is invalid: lowercase letters, digits, dashes and underscores (2-61 chars), starting with a letter", name)
+	}
+	return nil
+}
+
 func asConflict(err error, what string) error {
 	if err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed") {
 		return fmt.Errorf("%s: %w", what, ErrConflict)
@@ -75,8 +85,8 @@ func asConflict(err error, what string) error {
 // itself is versioned by Contextverse, not here.
 func (s *Store) Save(ctx context.Context, name, description string, tags []string, wsID, agentID int64) (Instruction, error) {
 	name = strings.TrimSpace(name)
-	if !nameRe.MatchString(name) {
-		return Instruction{}, fmt.Errorf("instruction name %q is invalid: lowercase letters, digits, dashes and underscores (2-61 chars), starting with a letter", name)
+	if err := ValidateName(name); err != nil {
+		return Instruction{}, err
 	}
 	if tags == nil {
 		tags = []string{}

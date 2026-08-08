@@ -36,6 +36,35 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export type User = { id: number; name: string; role: 'admin' | 'team-lead' | 'member'; teams: number[] }
+
+// The server assembles relationships into one graph because it is the only
+// place that knows all of them; the client only draws what it is given.
+export type GraphNodeKind =
+  | 'agent'
+  | 'gear'
+  | 'shared'
+  | 'private'
+  | 'document'
+  | 'instruction'
+  | 'user'
+  | 'team'
+  | 'workspace'
+export type GraphNode = {
+  id: string
+  kind: GraphNodeKind
+  label: string
+  detail?: string
+  status?: string
+  agent_id?: number
+}
+export type GraphEdge = {
+  from: string
+  to: string
+  kind: 'delegates' | 'tool' | 'knows' | 'owns' | 'shared' | 'member'
+  label?: string
+  id?: number
+}
+export type GraphData = { nodes: GraphNode[]; edges: GraphEdge[] }
 export type Team = { id: number; name: string }
 
 export const auth = {
@@ -168,6 +197,10 @@ export const api = {
   },
   terminal: {
     status: () => req<TerminalStatus>('/api/v1/terminal/status'),
+  },
+  graph: {
+    workspace: (wsId: number) => req<GraphData>(`/api/v1/workspaces/${wsId}/graph`),
+    map: () => req<GraphData>('/api/v1/map'),
   },
   context: {
     status: () => req<ContextStatus>('/api/v1/context/status'),

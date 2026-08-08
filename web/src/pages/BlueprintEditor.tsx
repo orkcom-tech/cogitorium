@@ -12,7 +12,17 @@ import {
   type NodeChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { api, type Agent, type AgentStatus, type Gear, type GearBinding, type Wire } from '../api'
+import {
+  api,
+  type Agent,
+  type AgentStatus,
+  type Gear,
+  type GearBinding,
+  type GraphData,
+  type GraphNode,
+  type Wire,
+} from '../api'
+import { KINDS } from './GraphCanvas'
 
 // Node and edge ids are namespaced because the canvas mixes two kinds of
 // each: agents and gears, delegation wires and gear bindings.
@@ -23,11 +33,23 @@ const bindingEdge = (id: number) => `b-${id}`
 const idOf = (nodeOrEdgeId: string) => Number(nodeOrEdgeId.slice(2))
 
 type NodeData = {
-  kind: 'agent' | 'gear'
+  kind: 'agent' | 'gear' | 'memory'
   agent?: Agent
   gear?: Gear
+  memory?: GraphNode
   workspaceWide?: boolean
   state: string
+}
+
+// The memory layer answers a different question from the wiring layer — not
+// "who may call whom" but "what does this agent know" — so it is a layer on
+// the same canvas rather than a second graph to cross-reference.
+const MEMORY_KINDS = new Set(['shared', 'private', 'document', 'instruction'])
+
+const LAYER_HINT = {
+  delegation: 'Wires: which agent may hand work to which',
+  tools: 'Gears: which tools each agent may call',
+  memory: 'Memory and context: what each agent knows',
 }
 
 // Agents keep their stored positions; gears are laid out beneath them.
@@ -67,16 +89,26 @@ export default function BlueprintEditor({
   const [wires, setWires] = useState<Wire[]>([])
   const [bindings, setBindings] = useState<GearBinding[]>([])
   const [catalog, setCatalog] = useState<Gear[]>([])
+  const [graph, setGraph] = useState<GraphData | null>(null)
+  // Wiring is what the operator came here to edit, so it starts visible;
+  // memory is context for that work and is opened when it is wanted.
+  const [layers, setLayers] = useState({ delegation: true, tools: true, memory: false })
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<NodeData>>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
 
   const reloadGraph = useCallback(
     () =>
-      Promise.all([api.wires.list(wsId), api.gears.bindings(wsId), api.gears.list()])
-        .then(([w, b, c]) => {
+      Promise.all([
+        api.wires.list(wsId),
+        api.gears.bindings(wsId),
+        api.gears.list(),
+        api.graph.workspace(wsId),
+      ])
+        .then(([w, b, c, g]) => {
           setWires(w)
           setBindings(b)
           setCatalog(c)
+          setGraph(g)
         })
         .catch((e: Error) => onError(e.message)),
     [wsId, onError],
@@ -103,7 +135,7 @@ export default function BlueprintEditor({
 
     // One node per distinct gear present in this workspace, regardless of
     // how many agents it is bound to.
-    const gearIds = [...new Set(bindings.map((b) => b.gear_id))]
+    const gearIds = layers.tools ? [...new Set(bindings.map((b) => b.gear_id))] : []
     const gearNodes: Node<NodeData>[] = gearIds.map((gid, i) => {
       const g = gearById.get(gid)
       const wide = bindings.some((b) => b.gear_id === gid && b.agent_id === null)
@@ -115,8 +147,21 @@ export default function BlueprintEditor({
       }
     })
 
-    setNodes([...agentNodes, ...gearNodes])
-  }, [agents, positions, bindings, gearById, setNodes])
+    // Memory sits above the agents it feeds, on the opposite side of the
+    // canvas from the gears, so the two layers never fight for the same space.
+    const memoryNodes: Node<NodeData>[] = !layers.memory
+      ? []
+      : (graph?.nodes ?? [])
+          .filter((n) => MEMORY_KINDS.has(n.kind))
+          .map((n, i, all) => ({
+            id: n.id,
+            position: { x: (i - (all.length - 1) / 2) * 230, y: -260 },
+            data: { kind: 'memory', memory: n, state: 'idle' },
+            className: `bp-node bp-memory ${KINDS[n.kind]?.className ?? ''}`,
+          }))
+
+    setNodes([...agentNodes, ...gearNodes, ...memoryNodes])
+  }, [agents, positions, bindings, gearById, graph, layers.tools, layers.memory, setNodes])
 
   useEffect(() => {
     setNodes((prev) =>
@@ -135,25 +180,42 @@ export default function BlueprintEditor({
   }, [statuses, setNodes])
 
   useEffect(() => {
-    const wireEdges: Edge[] = wires.map((w) => ({
-      id: wireEdge(w.id),
-      source: agentNode(w.from_agent_id),
-      target: agentNode(w.to_agent_id),
-      label: w.label || undefined,
-      animated: true,
-    }))
+    const wireEdges: Edge[] = !layers.delegation
+      ? []
+      : wires.map((w) => ({
+          id: wireEdge(w.id),
+          source: agentNode(w.from_agent_id),
+          target: agentNode(w.to_agent_id),
+          label: w.label || undefined,
+          animated: true,
+        }))
     // Only agent-scoped bindings become edges; a workspace-wide gear would
     // otherwise draw an edge to every agent and drown the graph.
-    const bindingEdges: Edge[] = bindings
-      .filter((b) => b.agent_id !== null)
-      .map((b) => ({
-        id: bindingEdge(b.id),
-        source: gearNode(b.gear_id),
-        target: agentNode(b.agent_id as number),
-        className: 'bp-binding-edge',
-      }))
-    setEdges([...wireEdges, ...bindingEdges])
-  }, [wires, bindings, setEdges])
+    const bindingEdges: Edge[] = !layers.tools
+      ? []
+      : bindings
+          .filter((b) => b.agent_id !== null)
+          .map((b) => ({
+            id: bindingEdge(b.id),
+            source: gearNode(b.gear_id),
+            target: agentNode(b.agent_id as number),
+            className: 'bp-binding-edge',
+          }))
+    const memoryEdges: Edge[] = !layers.memory
+      ? []
+      : (graph?.edges ?? [])
+          .filter((e) => e.kind === 'knows')
+          .map((e, i) => ({
+            id: `k-${e.from}-${e.to}-${i}`,
+            source: e.from,
+            target: e.to,
+            className: 'bp-memory-edge',
+            // Memory reaches an agent by binding, not by dragging a wire, so
+            // these edges are shown but not deletable from the canvas.
+            deletable: false,
+          }))
+    setEdges([...wireEdges, ...bindingEdges, ...memoryEdges])
+  }, [wires, bindings, graph, layers, setEdges])
 
   const onConnect = useCallback(
     (c: Connection) => {
@@ -162,6 +224,10 @@ export default function BlueprintEditor({
       const to = nodes.find((n) => n.id === c.target)
       if (!from || !to) return
 
+      if (from.data.kind === 'memory' || to.data.kind === 'memory') {
+        onError('Memory is attached in the Context tab, not by dragging: bind a document to the workspace or to one agent.')
+        return
+      }
       if (to.data.kind !== 'agent') {
         onError('Connections must end at an agent: wires grant delegation, gear links grant a tool.')
         return
@@ -187,9 +253,11 @@ export default function BlueprintEditor({
   const onEdgesDelete = useCallback(
     (deleted: Edge[]) => {
       Promise.all(
-        deleted.map((e) =>
-          e.id.startsWith('b-') ? api.gears.unbind(idOf(e.id)) : api.wires.remove(idOf(e.id)),
-        ),
+        deleted
+          .filter((e) => e.id.startsWith('b-') || e.id.startsWith('w-'))
+          .map((e) =>
+            e.id.startsWith('b-') ? api.gears.unbind(idOf(e.id)) : api.wires.remove(idOf(e.id)),
+          ),
       )
         .then(() => {
           onChanged()
@@ -226,6 +294,24 @@ export default function BlueprintEditor({
         A gear linked to an agent is a tool that agent may call. Drag between nodes to connect, select a link and
         press Delete to revoke it. Double-click an agent to open it.
       </p>
+      <div className="row legend">
+        {(['delegation', 'tools', 'memory'] as const).map((layer) => (
+          <button
+            key={layer}
+            className={`legend-item ${layers[layer] ? '' : 'off'}`}
+            onClick={() => setLayers((p) => ({ ...p, [layer]: !p[layer] }))}
+            title={LAYER_HINT[layer]}
+          >
+            <span className={`legend-dot layer-${layer}`} />
+            {layer}
+          </button>
+        ))}
+        {layers.memory && (
+          <span className="hint inline">
+            🧠 memory branches · 📄 bound documents · 📘 instructions — dotted links show what each agent knows
+          </span>
+        )}
+      </div>
       <div className="row">
         <select
           className="grow"
@@ -271,6 +357,18 @@ export default function BlueprintEditor({
 }
 
 function nodeLabel(data: NodeData) {
+  if (data.kind === 'memory') {
+    const m = data.memory
+    return (
+      <div className="bp-label">
+        <strong>
+          {m?.kind === 'instruction' ? '📘' : m?.kind === 'document' ? '📄' : '🧠'} {m?.label}
+        </strong>
+        <span className="muted">{m?.detail}</span>
+        <span className="bp-state">{KINDS[m?.kind ?? '']?.label ?? m?.kind}</span>
+      </div>
+    )
+  }
   if (data.kind === 'gear') {
     const g = data.gear
     return (

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { auth, type Team, type User } from '../api'
+import { api, auth, type GraphData, type Team, type User } from '../api'
+import GraphCanvas from './GraphCanvas'
 
 // Users and teams. A single-operator install never needs this page — the
 // seeded admin is the only account — so it exists for the moment an install
@@ -9,12 +10,15 @@ export default function AdminPage() {
   const [teams, setTeams] = useState<Team[]>([])
   const [issued, setIssued] = useState<{ name: string; token: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [map, setMap] = useState<GraphData | null>(null)
+  const [mapLayers, setMapLayers] = useState<Record<string, boolean>>({})
 
   const reload = useCallback(() => {
-    Promise.all([auth.users(), auth.teams()])
-      .then(([u, t]) => {
+    Promise.all([auth.users(), auth.teams(), api.graph.map()])
+      .then(([u, t, m]) => {
         setUsers(u)
         setTeams(t)
+        setMap(m)
         setError(null)
       })
       .catch((e: Error) => setError(e.message))
@@ -37,6 +41,22 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      <section>
+        <h3>Access map</h3>
+        <p className="hint">
+          Who owns what and who can reach it — the same relationships the permission checks use, drawn instead of
+          pieced together from the tables below. Click a colour in the legend to hide that layer.
+        </p>
+        <div className="map-canvas">
+          <GraphCanvas
+            data={map}
+            layers={mapLayers}
+            onToggleLayer={(kind) => setMapLayers((p) => ({ ...p, [kind]: p[kind] === false }))}
+            emptyHint="Nothing to draw yet — create a workspace or a second user."
+          />
+        </div>
+      </section>
 
       <section>
         <h3>Users</h3>

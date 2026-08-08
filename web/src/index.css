@@ -623,6 +623,148 @@ th {
   display: none;
 }
 
+/* The graph layers. Each node kind gets its own colour and border so the
+   canvas says what a thing is before you read its label; the legend below
+   names every colour it uses rather than assuming the code is memorised. */
+.react-flow__node.bp-memory {
+  border-style: dotted;
+  max-width: 13rem;
+}
+
+/* Graph nodes stack label over detail; without this they run together into
+   one word ("adminadmin") and the node stops being readable. */
+.gn-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  text-align: left;
+  max-width: 12rem;
+}
+
+.gn-label .status {
+  font-size: 0.7rem;
+  color: var(--kind, var(--accent));
+}
+
+/* The kind caption takes the node's own colour, so the word and the colour
+   teach each other rather than competing. */
+.bp-memory .bp-state {
+  color: var(--kind, var(--accent));
+}
+
+.react-flow__node.gn-agent,
+.legend-dot.gn-agent {
+  --kind: var(--accent);
+}
+.react-flow__node.gn-gear,
+.legend-dot.gn-gear {
+  --kind: #d0a050;
+}
+.react-flow__node.gn-shared,
+.legend-dot.gn-shared {
+  --kind: #6aa8c8;
+}
+.react-flow__node.gn-private,
+.legend-dot.gn-private {
+  --kind: #9a86d0;
+}
+.react-flow__node.gn-document,
+.legend-dot.gn-document {
+  --kind: #5aa86a;
+}
+.react-flow__node.gn-instruction,
+.legend-dot.gn-instruction {
+  --kind: #c87a9a;
+}
+.react-flow__node.gn-user,
+.legend-dot.gn-user {
+  --kind: var(--accent);
+}
+.react-flow__node.gn-team,
+.legend-dot.gn-team {
+  --kind: #9a86d0;
+}
+.react-flow__node.gn-workspace,
+.legend-dot.gn-workspace {
+  --kind: #d0a050;
+}
+
+.react-flow__node[class*='gn-'] {
+  border-color: var(--kind);
+  background: color-mix(in srgb, var(--kind) 12%, transparent);
+}
+
+/* Relationships differ in kind, so they differ in line: memory is dotted and
+   quiet, ownership is solid, membership is dashed. */
+.react-flow__edge.bp-memory-edge .react-flow__edge-path,
+.react-flow__edge.ge-knows .react-flow__edge-path {
+  stroke-dasharray: 2 4;
+  opacity: 0.55;
+}
+
+.react-flow__edge.ge-member .react-flow__edge-path,
+.react-flow__edge.ge-shared .react-flow__edge-path {
+  stroke-dasharray: 6 4;
+  opacity: 0.75;
+}
+
+.react-flow__edge.ge-tool .react-flow__edge-path {
+  stroke-dasharray: 4 3;
+  opacity: 0.7;
+}
+
+.legend {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.legend-item.off {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.legend-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 3px;
+  background: var(--kind, var(--border));
+}
+
+.legend-dot.layer-delegation {
+  --kind: var(--accent);
+}
+.legend-dot.layer-tools {
+  --kind: #d0a050;
+}
+.legend-dot.layer-memory {
+  --kind: #9a86d0;
+}
+
+.hint.inline {
+  margin: 0;
+  font-size: 0.72rem;
+}
+
+.map-canvas {
+  display: flex;
+  flex-direction: column;
+  height: 26rem;
+}
+
 /* React Flow's controls and minimap ship a light-only palette. */
 .react-flow__controls-button {
   background: color-mix(in srgb, currentColor 10%, transparent);
