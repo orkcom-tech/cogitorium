@@ -60,10 +60,19 @@ export const api = {
     status: (id: number) => req<AgentStatus[]>(`/api/v1/workspaces/${id}/status`),
   },
   agents: {
-    update: (id: number, patch: { name?: string; role?: string; model_id?: number }) =>
+    update: (id: number, patch: { name?: string; role?: string; model_id?: number; pos_x?: number; pos_y?: number }) =>
       req<Agent>(`/api/v1/agents/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
     remove: (id: number) => req<void>(`/api/v1/agents/${id}`, { method: 'DELETE' }),
     prompt: (id: number) => req<{ prompt: string }>(`/api/v1/agents/${id}/prompt`),
+  },
+  wires: {
+    list: (wsId: number) => req<Wire[]>(`/api/v1/workspaces/${wsId}/wires`),
+    create: (wsId: number, from: number, to: number, label = '') =>
+      req<Wire>(`/api/v1/workspaces/${wsId}/wires`, {
+        method: 'POST',
+        body: JSON.stringify({ from_agent_id: from, to_agent_id: to, label }),
+      }),
+    remove: (id: number) => req<void>(`/api/v1/wires/${id}`, { method: 'DELETE' }),
   },
   context: {
     status: () => req<ContextStatus>('/api/v1/context/status'),
@@ -145,6 +154,8 @@ export type Agent = {
   model_id: number | null
   model_label: string
   is_orchestrator: boolean
+  pos_x: number | null
+  pos_y: number | null
 }
 
 export type Wire = { id: number; workspace_id: number; from_agent_id: number; to_agent_id: number; label: string }

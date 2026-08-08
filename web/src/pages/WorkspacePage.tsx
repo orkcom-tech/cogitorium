@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import BlueprintEditor from './BlueprintEditor'
 import {
   api,
   wsChatStream,
@@ -23,6 +24,7 @@ export default function WorkspacePage() {
   const [statuses, setStatuses] = useState<Map<number, AgentStatus>>(new Map())
   const [streams, setStreams] = useState<Map<number, string>>(new Map())
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
+  const [view, setView] = useState<'chat' | 'blueprint'>('chat')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -122,6 +124,27 @@ export default function WorkspacePage() {
           </Link>
           <h2>{workspace.name}</h2>
           <span className="muted">{workspace.description}</span>
+          <span className="spacer" />
+          <div className="tabs">
+            <button
+              className={view === 'chat' && !selectedAgent ? 'active' : ''}
+              onClick={() => {
+                setView('chat')
+                setSelectedAgent(null)
+              }}
+            >
+              chat
+            </button>
+            <button
+              className={view === 'blueprint' && !selectedAgent ? 'active' : ''}
+              onClick={() => {
+                setView('blueprint')
+                setSelectedAgent(null)
+              }}
+            >
+              blueprint
+            </button>
+          </div>
         </div>
         {selectedAgent ? (
           <AgentPanel
@@ -136,11 +159,22 @@ export default function WorkspacePage() {
             }}
             onError={setError}
           />
+        ) : view === 'blueprint' ? (
+          <BlueprintEditor
+            wsId={wsId}
+            agents={agents}
+            statuses={statuses}
+            onChanged={reloadAgents}
+            onSelectAgent={setSelectedAgent}
+            onError={setError}
+          />
         ) : (
           <Timeline messages={messages} streams={streams} agentName={agentName} busy={busy} />
         )}
         {error && <p className="error">{error}</p>}
-        {!selectedAgent && <Composer busy={busy} onSend={send} onStop={() => abortRef.current?.abort()} />}
+        {!selectedAgent && view === 'chat' && (
+          <Composer busy={busy} onSend={send} onStop={() => abortRef.current?.abort()} />
+        )}
       </div>
       <aside className="ws-agents">
         <h3>Agents</h3>

@@ -108,15 +108,23 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Name    *string `json:"name"`
-		Role    *string `json:"role"`
-		ModelID *int64  `json:"model_id"`
+		Name    *string  `json:"name"`
+		Role    *string  `json:"role"`
+		ModelID *int64   `json:"model_id"`
+		PosX    *float64 `json:"pos_x"`
+		PosY    *float64 `json:"pos_y"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
 	if in.ModelID != nil {
 		if _, err := s.catalog.GetModel(r.Context(), *in.ModelID); err != nil {
+			fail(w, r, err)
+			return
+		}
+	}
+	if in.PosX != nil && in.PosY != nil {
+		if err := s.workspaces.SetAgentPosition(r.Context(), id, *in.PosX, *in.PosY); err != nil {
 			fail(w, r, err)
 			return
 		}

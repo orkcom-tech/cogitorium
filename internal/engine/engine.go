@@ -19,7 +19,12 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
 
-const maxToolIterations = 16
+const (
+	maxToolIterations = 16
+	// maxDelegationDepth bounds how deep the blueprint graph is walked in
+	// one turn. Cycles are additionally blocked by the visited chain.
+	maxDelegationDepth = 4
+)
 
 type AgentStatus struct {
 	AgentID int64  `json:"agent_id"`
@@ -146,7 +151,7 @@ func (e *Engine) HandleUserMessage(ctx context.Context, wsID int64, text string,
 		// Execute the tools and feed results back.
 		var results []llm.ToolResult
 		for _, call := range res.ToolCalls {
-			out, isErr := e.execTool(ctx, wsID, orch, call, emit)
+			out, isErr := e.execToolAs(ctx, wsID, orch, nil, call, emit)
 			results = append(results, llm.ToolResult{CallID: call.ID, Name: call.Name, Content: out, IsError: isErr})
 
 			meta, _ := json.Marshal(map[string]any{"call_id": call.ID, "name": call.Name, "is_error": isErr})
@@ -199,13 +204,17 @@ func (e *Engine) modelTurn(ctx context.Context, wsID int64, agent workspace.Agen
 	if err != nil {
 		return llm.Result{}, err
 	}
+	targets, err := e.ws.DelegationTargets(ctx, wsID, agent.ID)
+	if err != nil {
+		return llm.Result{}, err
+	}
 
 	e.setStatus(agent.ID, "thinking", "", emit)
 	res, err := client.Chat(ctx, llm.Request{
 		Model:    model.ModelName,
 		System:   system,
 		Messages: history,
-		Tools:    toolDefs(),
+		Tools:    e.toolsFor(agent, targets),
 	}, func(text string) error {
 		emit(Event{Type: "delta", AgentID: agent.ID, Text: text})
 		return ctx.Err()
@@ -364,19 +373,60 @@ func (e *Engine) buildHistory(ctx context.Context, wsID, orchID int64) ([]llm.Tu
 	return turns, nil
 }
 
-// delegate runs a one-shot task on another agent and returns its answer.
-func (e *Engine) delegate(ctx context.Context, wsID int64, orch workspace.Agent, agentName, task string, emit func(Event)) (string, error) {
+// delegate runs a task on another agent and returns its answer. The wire
+// graph is the capability: without an edge from caller to target there is
+// no delegation. chain carries the agents already on this delegation path
+// so cycles terminate.
+func (e *Engine) delegate(ctx context.Context, wsID int64, caller workspace.Agent, chain []int64, agentName, task string, emit func(Event)) (string, error) {
 	target, err := e.ws.GetAgentByName(ctx, wsID, agentName)
 	if err != nil {
 		return "", err
 	}
-	if target.ID == orch.ID {
-		return "", errors.New("the orchestrator cannot delegate to itself")
+	if target.ID == caller.ID {
+		return "", errors.New("an agent cannot delegate to itself")
+	}
+	allowed, err := e.ws.CanDelegate(ctx, wsID, caller.ID, target.ID)
+	if err != nil {
+		return "", err
+	}
+	if !allowed {
+		return "", fmt.Errorf("no wire from %q to %q — draw one in the blueprint to grant this delegation", caller.Name, target.Name)
+	}
+	for _, id := range chain {
+		if id == target.ID {
+			return "", fmt.Errorf("delegation cycle: %q is already working on this chain", target.Name)
+		}
+	}
+	if len(chain) >= maxDelegationDepth {
+		return "", fmt.Errorf("delegation depth limit (%d) reached", maxDelegationDepth)
 	}
 	if target.ModelID == nil {
 		return "", fmt.Errorf("agent %q has no model bound", target.Name)
 	}
-	model, err := e.cat.GetModel(ctx, *target.ModelID)
+
+	e.setStatus(target.ID, "working", task, emit)
+	defer e.setStatus(target.ID, "idle", "", emit)
+
+	slog.Info("delegation started", "workspace_id", wsID, "from", caller.Name, "to", target.Name, "depth", len(chain), "task_len", len(task))
+	answer, err := e.runAgent(ctx, wsID, target, append(chain, caller.ID), task, emit)
+	if err != nil {
+		return "", fmt.Errorf("delegation to %q failed: %w", target.Name, err)
+	}
+
+	meta, _ := json.Marshal(map[string]any{"task": task, "delegated_by": caller.Name})
+	msg, err := e.ws.AppendMessage(ctx, wsID, &target.ID, "delegation", answer, string(meta))
+	if err != nil {
+		return "", err
+	}
+	emit(Event{Type: "message", Message: &msg})
+	slog.Info("delegation finished", "workspace_id", wsID, "to", target.Name)
+	return answer, nil
+}
+
+// runAgent executes a delegated agent's turn, including its own tool loop
+// when the blueprint wires it to further agents. Returns its final text.
+func (e *Engine) runAgent(ctx context.Context, wsID int64, agent workspace.Agent, chain []int64, task string, emit func(Event)) (string, error) {
+	model, err := e.cat.GetModel(ctx, *agent.ModelID)
 	if err != nil {
 		return "", err
 	}
@@ -384,34 +434,43 @@ func (e *Engine) delegate(ctx context.Context, wsID int64, orch workspace.Agent,
 	if err != nil {
 		return "", err
 	}
-
-	e.setStatus(target.ID, "working", task, emit)
-	defer e.setStatus(target.ID, "idle", "", emit)
-
-	system, err := e.systemPrompt(ctx, wsID, target)
+	system, err := e.systemPrompt(ctx, wsID, agent)
 	if err != nil {
 		return "", err
 	}
-
-	slog.Info("delegation started", "workspace_id", wsID, "to", target.Name, "task_len", len(task))
-	res, err := client.Chat(ctx, llm.Request{
-		Model:    model.ModelName,
-		System:   system,
-		Messages: []llm.Turn{{Role: "user", Text: task}},
-	}, func(text string) error {
-		emit(Event{Type: "delta", AgentID: target.ID, Text: text})
-		return ctx.Err()
-	})
-	if err != nil {
-		return "", fmt.Errorf("delegation to %q failed: %w", target.Name, err)
-	}
-
-	meta, _ := json.Marshal(map[string]any{"task": task, "delegated_by": orch.Name, "stop_reason": res.StopReason})
-	msg, err := e.ws.AppendMessage(ctx, wsID, &target.ID, "delegation", res.Text, string(meta))
+	targets, err := e.ws.DelegationTargets(ctx, wsID, agent.ID)
 	if err != nil {
 		return "", err
 	}
-	emit(Event{Type: "message", Message: &msg})
-	slog.Info("delegation finished", "workspace_id", wsID, "to", target.Name, "stop_reason", res.StopReason)
-	return res.Text, nil
+	tools := e.toolsFor(agent, targets)
+
+	history := []llm.Turn{{Role: "user", Text: task}}
+	for iter := 0; iter < maxToolIterations; iter++ {
+		res, err := client.Chat(ctx, llm.Request{
+			Model:    model.ModelName,
+			System:   system,
+			Messages: history,
+			Tools:    tools,
+		}, func(text string) error {
+			emit(Event{Type: "delta", AgentID: agent.ID, Text: text})
+			return ctx.Err()
+		})
+		if err != nil {
+			return "", err
+		}
+		if res.StopReason != llm.StopToolUse || len(res.ToolCalls) == 0 {
+			return res.Text, nil
+		}
+
+		var results []llm.ToolResult
+		for _, call := range res.ToolCalls {
+			out, isErr := e.execToolAs(ctx, wsID, agent, chain, call, emit)
+			results = append(results, llm.ToolResult{CallID: call.ID, Name: call.Name, Content: out, IsError: isErr})
+		}
+		history = append(history,
+			llm.Turn{Role: "assistant", Text: res.Text, ToolCalls: res.ToolCalls},
+			llm.Turn{Role: "user", ToolResults: results},
+		)
+	}
+	return "", fmt.Errorf("agent %q stopped after %d tool iterations without an answer", agent.Name, maxToolIterations)
 }

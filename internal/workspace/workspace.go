@@ -34,14 +34,16 @@ type Workspace struct {
 }
 
 type Agent struct {
-	ID             int64  `json:"id"`
-	WorkspaceID    int64  `json:"workspace_id"`
-	Name           string `json:"name"`
-	Kind           string `json:"kind"`
-	Role           string `json:"role"`
-	ModelID        *int64 `json:"model_id"`
-	ModelLabel     string `json:"model_label"` // "provider / model" for display; empty if unbound
-	IsOrchestrator bool   `json:"is_orchestrator"`
+	ID             int64    `json:"id"`
+	WorkspaceID    int64    `json:"workspace_id"`
+	Name           string   `json:"name"`
+	Kind           string   `json:"kind"`
+	Role           string   `json:"role"`
+	ModelID        *int64   `json:"model_id"`
+	ModelLabel     string   `json:"model_label"` // "provider / model" for display; empty if unbound
+	IsOrchestrator bool     `json:"is_orchestrator"`
+	PosX           *float64 `json:"pos_x"` // blueprint canvas position; nil = unplaced
+	PosY           *float64 `json:"pos_y"`
 }
 
 type Wire struct {
@@ -158,7 +160,8 @@ func (s *Store) DeleteWorkspace(ctx context.Context, id int64) error {
 
 const agentSelect = `
 	SELECT a.id, a.workspace_id, a.name, a.kind, a.role, a.model_id, a.is_orchestrator,
-	       COALESCE(p.name || ' / ' || COALESCE(NULLIF(m.label, ''), m.model_name), '')
+	       COALESCE(p.name || ' / ' || COALESCE(NULLIF(m.label, ''), m.model_name), ''),
+	       a.pos_x, a.pos_y
 	FROM agents a
 	LEFT JOIN models m ON m.id = a.model_id
 	LEFT JOIN providers p ON p.id = m.provider_id`
@@ -166,11 +169,56 @@ const agentSelect = `
 func scanAgent(row interface{ Scan(...any) error }) (Agent, error) {
 	var a Agent
 	var orch int
-	if err := row.Scan(&a.ID, &a.WorkspaceID, &a.Name, &a.Kind, &a.Role, &a.ModelID, &orch, &a.ModelLabel); err != nil {
+	if err := row.Scan(&a.ID, &a.WorkspaceID, &a.Name, &a.Kind, &a.Role, &a.ModelID, &orch, &a.ModelLabel, &a.PosX, &a.PosY); err != nil {
 		return Agent{}, err
 	}
 	a.IsOrchestrator = orch == 1
 	return a, nil
+}
+
+// SetAgentPosition stores a blueprint canvas position.
+func (s *Store) SetAgentPosition(ctx context.Context, id int64, x, y float64) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE agents SET pos_x = ?, pos_y = ?, updated_at = ? WHERE id = ?`, x, y, now(), id)
+	if err != nil {
+		return fmt.Errorf("set agent %d position: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("agent %d: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
+// CanDelegate reports whether a wire grants from -> to. The blueprint graph
+// is the capability: no edge, no delegation.
+func (s *Store) CanDelegate(ctx context.Context, wsID, fromAgentID, toAgentID int64) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM wires WHERE workspace_id = ? AND from_agent_id = ? AND to_agent_id = ?`,
+		wsID, fromAgentID, toAgentID).Scan(&n)
+	if err != nil {
+		return false, fmt.Errorf("check wire %d->%d: %w", fromAgentID, toAgentID, err)
+	}
+	return n > 0, nil
+}
+
+// DelegationTargets lists the agents a given agent is wired to.
+func (s *Store) DelegationTargets(ctx context.Context, wsID, fromAgentID int64) ([]Agent, error) {
+	rows, err := s.db.QueryContext(ctx,
+		agentSelect+` JOIN wires w ON w.to_agent_id = a.id
+		 WHERE w.workspace_id = ? AND w.from_agent_id = ? ORDER BY a.name`, wsID, fromAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("delegation targets for %d: %w", fromAgentID, err)
+	}
+	defer rows.Close()
+	out := []Agent{}
+	for rows.Next() {
+		a, err := scanAgent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan delegation target: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) CreateAgent(ctx context.Context, wsID int64, name, role string, modelID int64) (Agent, error) {
