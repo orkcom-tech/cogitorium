@@ -21,6 +21,9 @@ var (
 	ErrConflict = errors.New("version conflict — the file changed since it was read")
 	// ErrUnavailable means contextd itself can't be run or has no space.
 	ErrUnavailable = errors.New("contextd is not available")
+	// ErrNoSuchPath means the space has no such file — a bad request, not a
+	// server fault.
+	ErrNoSuchPath = errors.New("no such path in the context space")
 )
 
 type File struct {
@@ -81,7 +84,11 @@ func (s *Store) run(ctx context.Context, stdin []byte, args ...string) ([]byte, 
 		if exitErr.ExitCode() == 3 {
 			return nil, fmt.Errorf("contextd %s: %w", args[0], ErrConflict)
 		}
-		return nil, fmt.Errorf("contextd %s failed: %s", strings.Join(args, " "), reason(raw))
+		why := reason(raw)
+		if strings.Contains(why, "not found") {
+			return nil, fmt.Errorf("contextd %s: %w", strings.Join(args, " "), ErrNoSuchPath)
+		}
+		return nil, fmt.Errorf("contextd %s failed: %s", strings.Join(args, " "), why)
 	}
 	slog.Warn("contextd could not run", "bin", s.bin, "err", err)
 	return nil, fmt.Errorf("%w: %s (configure contextd_path in config.yaml or put contextd on PATH)", ErrUnavailable, err)

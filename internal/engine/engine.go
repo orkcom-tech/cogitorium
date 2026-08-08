@@ -15,6 +15,7 @@ import (
 
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
+	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
@@ -44,22 +45,26 @@ type Event struct {
 }
 
 type Engine struct {
-	ws  *workspace.Store
-	cat *catalog.Store
-	ctx *contextstore.Store
+	ws       *workspace.Store
+	cat      *catalog.Store
+	ctx      *contextstore.Store
+	gears    *gear.Store
+	gearExec *gear.Executor
 
 	mu      sync.Mutex
 	status  map[int64]AgentStatus
 	running map[int64]bool // workspace_id -> a turn is in flight
 }
 
-func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store) *Engine {
+func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears *gear.Store, gearExec *gear.Executor) *Engine {
 	return &Engine{
-		ws:      ws,
-		cat:     cat,
-		ctx:     cs,
-		status:  map[int64]AgentStatus{},
-		running: map[int64]bool{},
+		ws:       ws,
+		cat:      cat,
+		ctx:      cs,
+		gears:    gears,
+		gearExec: gearExec,
+		status:   map[int64]AgentStatus{},
+		running:  map[int64]bool{},
 	}
 }
 
@@ -208,13 +213,17 @@ func (e *Engine) modelTurn(ctx context.Context, wsID int64, agent workspace.Agen
 	if err != nil {
 		return llm.Result{}, err
 	}
+	gears, err := e.gears.ForAgent(ctx, wsID, agent.ID)
+	if err != nil {
+		return llm.Result{}, err
+	}
 
 	e.setStatus(agent.ID, "thinking", "", emit)
 	res, err := client.Chat(ctx, llm.Request{
 		Model:    model.ModelName,
 		System:   system,
 		Messages: history,
-		Tools:    e.toolsFor(agent, targets),
+		Tools:    e.toolsFor(agent, targets, gears),
 	}, func(text string) error {
 		emit(Event{Type: "delta", AgentID: agent.ID, Text: text})
 		return ctx.Err()
@@ -442,7 +451,11 @@ func (e *Engine) runAgent(ctx context.Context, wsID int64, agent workspace.Agent
 	if err != nil {
 		return "", err
 	}
-	tools := e.toolsFor(agent, targets)
+	gears, err := e.gears.ForAgent(ctx, wsID, agent.ID)
+	if err != nil {
+		return "", err
+	}
+	tools := e.toolsFor(agent, targets, gears)
 
 	history := []llm.Turn{{Role: "user", Text: task}}
 	for iter := 0; iter < maxToolIterations; iter++ {

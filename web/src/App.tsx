@@ -5,6 +5,7 @@ import ChatPage from './pages/ChatPage'
 import WorkspacesPage from './pages/WorkspacesPage'
 import WorkspacePage from './pages/WorkspacePage'
 import ContextPage from './pages/ContextPage'
+import GearsPage from './pages/GearsPage'
 
 type Health = { status: string; version: string }
 
@@ -26,6 +27,7 @@ export default function App() {
           <nav>
             <NavLink to="/workspaces">Workspaces</NavLink>
             <NavLink to="/context">Context</NavLink>
+            <NavLink to="/gears">Gears</NavLink>
             <NavLink to="/models">Models</NavLink>
             <NavLink to="/chat">Scratch chat</NavLink>
           </nav>
@@ -39,6 +41,7 @@ export default function App() {
             <Route path="/workspaces" element={<WorkspacesPage />} />
             <Route path="/workspaces/:id" element={<WorkspacePage />} />
             <Route path="/context" element={<ContextPage />} />
+            <Route path="/gears" element={<GearsPage />} />
             <Route path="/models" element={<ModelsPage />} />
             <Route path="/chat" element={<ChatPage />} />
           </Routes>

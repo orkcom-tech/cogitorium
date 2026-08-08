@@ -74,6 +74,26 @@ export const api = {
       }),
     remove: (id: number) => req<void>(`/api/v1/wires/${id}`, { method: 'DELETE' }),
   },
+  gears: {
+    list: (q = '', tag = '') => {
+      const p = new URLSearchParams()
+      if (q) p.set('q', q)
+      if (tag) p.set('tag', tag)
+      const qs = p.toString()
+      return req<Gear[]>(`/api/v1/gears${qs ? `?${qs}` : ''}`)
+    },
+    get: (id: number) => req<{ gear: Gear; files: GearFile[] }>(`/api/v1/gears/${id}`),
+    setStatus: (id: number, status: 'pending' | 'approved' | 'disabled') =>
+      req<Gear>(`/api/v1/gears/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    remove: (id: number) => req<void>(`/api/v1/gears/${id}`, { method: 'DELETE' }),
+    bindings: (wsId: number) => req<GearBinding[]>(`/api/v1/workspaces/${wsId}/gears`),
+    bind: (wsId: number, gearId: number, agentId: number | null) =>
+      req<GearBinding>(`/api/v1/workspaces/${wsId}/gears`, {
+        method: 'POST',
+        body: JSON.stringify({ gear_id: gearId, agent_id: agentId }),
+      }),
+    unbind: (bindingId: number) => req<void>(`/api/v1/gear-bindings/${bindingId}`, { method: 'DELETE' }),
+  },
   context: {
     status: () => req<ContextStatus>('/api/v1/context/status'),
     files: () => req<ContextFile[]>('/api/v1/context/files'),
@@ -182,6 +202,33 @@ export type ContextStatus = {
 }
 
 export type ContextBinding = { id: number; workspace_id: number; path: string; agent_id: number | null }
+
+export type Gear = {
+  id: number
+  name: string
+  description: string
+  tags: string[]
+  origin_workspace_id: number | null
+  origin_workspace: string
+  created_by_agent_id: number | null
+  created_by_agent: string
+  version: number
+  runtime: string
+  entrypoint: string
+  args_schema: string
+  status: 'pending' | 'approved' | 'disabled'
+  updated_at: string
+}
+
+export type GearFile = { path: string; content: string }
+
+export type GearBinding = {
+  id: number
+  gear_id: number
+  gear_name: string
+  workspace_id: number
+  agent_id: number | null
+}
 
 export type WSEvent = {
   type: 'message' | 'delta' | 'status' | 'done' | 'error'

@@ -54,6 +54,8 @@ func failContext(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, contextstore.ErrUnavailable):
 		writeError(w, http.StatusServiceUnavailable, err.Error())
+	case errors.Is(err, contextstore.ErrNoSuchPath):
+		writeError(w, http.StatusNotFound, err.Error())
 	default:
 		fail(w, r, err)
 	}

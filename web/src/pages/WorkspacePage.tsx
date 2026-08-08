@@ -8,6 +8,8 @@ import {
   type AgentStatus,
   type ContextBinding,
   type ContextFile,
+  type Gear,
+  type GearBinding,
   type Model,
   type WSMessage,
   type Workspace,
@@ -363,9 +365,22 @@ function AgentPanel({
   const [spaceFiles, setSpaceFiles] = useState<ContextFile[]>([])
   const [contextUnavailable, setContextUnavailable] = useState(false)
   const [prompt, setPrompt] = useState<string | null>(null)
+  const [gearBindings, setGearBindings] = useState<GearBinding[]>([])
+  const [catalogGears, setCatalogGears] = useState<Gear[]>([])
 
   const reloadBindings = useCallback(
     () => api.context.bindings(wsId).then(setBindings).catch((e: Error) => onError(e.message)),
+    [wsId, onError],
+  )
+
+  const reloadGears = useCallback(
+    () =>
+      Promise.all([api.gears.bindings(wsId), api.gears.list()])
+        .then(([b, c]) => {
+          setGearBindings(b)
+          setCatalogGears(c)
+        })
+        .catch((e: Error) => onError(e.message)),
     [wsId, onError],
   )
 
@@ -378,6 +393,7 @@ function AgentPanel({
       .then(setActivity)
       .catch((e: Error) => onError(e.message))
     void reloadBindings()
+    void reloadGears()
     api.context
       .files()
       .then((f) => {
@@ -385,7 +401,7 @@ function AgentPanel({
         setContextUnavailable(false)
       })
       .catch(() => setContextUnavailable(true))
-  }, [agent, wsId, onError, reloadBindings])
+  }, [agent, wsId, onError, reloadBindings, reloadGears])
 
   // Bindings this agent actually sees: workspace-wide plus its own.
   const visible = bindings.filter((b) => b.agent_id === null || b.agent_id === agent.id)
@@ -499,6 +515,48 @@ function AgentPanel({
         </>
       )}
 
+      <h3>Gears</h3>
+      {(() => {
+        const mine = gearBindings.filter((b) => b.agent_id === null || b.agent_id === agent.id)
+        const boundIds = new Set(mine.map((b) => b.gear_id))
+        const byId = new Map(catalogGears.map((g) => [g.id, g]))
+        return (
+          <>
+            {mine.length === 0 && <p className="hint">No gears bound — this agent has no forged tools.</p>}
+            {mine.map((b) => {
+              const g = byId.get(b.gear_id)
+              return (
+                <div key={b.id} className="row binding">
+                  <code>{b.gear_name || g?.name}</code>
+                  {g && <span className={`status ${g.status}`}>{g.status}</span>}
+                  <span className="muted">{b.agent_id === null ? 'whole workspace' : 'this agent'}</span>
+                  <span className="spacer" />
+                  <button
+                    onClick={() =>
+                      api.gears
+                        .unbind(b.id)
+                        .then(reloadGears)
+                        .catch((e: Error) => onError(e.message))
+                    }
+                  >
+                    unbind
+                  </button>
+                </div>
+              )
+            })}
+            <GrantGearForm
+              gears={catalogGears.filter((g) => !boundIds.has(g.id))}
+              onGrant={(gearId, scope) =>
+                api.gears
+                  .bind(wsId, gearId, scope === 'agent' ? agent.id : null)
+                  .then(reloadGears)
+                  .catch((e: Error) => onError(e.message))
+              }
+            />
+          </>
+        )
+      })()}
+
       <h3>Assembled prompt</h3>
       {prompt === null ? (
         <div className="row">
@@ -535,6 +593,46 @@ function AgentPanel({
         </div>
       )}
     </div>
+  )
+}
+
+function GrantGearForm({
+  gears,
+  onGrant,
+}: {
+  gears: Gear[]
+  onGrant: (gearId: number, scope: 'agent' | 'workspace') => void
+}) {
+  const [gearId, setGearId] = useState<number | ''>('')
+  const [scope, setScope] = useState<'agent' | 'workspace'>('agent')
+
+  if (gears.length === 0) return null
+  return (
+    <form
+      className="row"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (gearId === '') return
+        onGrant(gearId, scope)
+        setGearId('')
+      }}
+    >
+      <select className="grow" value={gearId} onChange={(e) => setGearId(e.target.value ? Number(e.target.value) : '')}>
+        <option value="">grant a gear from the catalog…</option>
+        {gears.map((g) => (
+          <option key={g.id} value={g.id}>
+            {g.name} ({g.status})
+          </option>
+        ))}
+      </select>
+      <select value={scope} onChange={(e) => setScope(e.target.value as 'agent' | 'workspace')}>
+        <option value="agent">this agent only</option>
+        <option value="workspace">whole workspace</option>
+      </select>
+      <button type="submit" disabled={gearId === ''}>
+        grant
+      </button>
+    </form>
   )
 }
 

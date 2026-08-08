@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
@@ -23,10 +24,13 @@ func str(desc string) map[string]any {
 	return map[string]any{"type": "string", "description": desc}
 }
 
-// toolsFor returns the tools an agent may use. The orchestrator manages the
-// workspace; any agent wired to others may delegate to exactly those. Gears
-// (agent-forged tools) join this list in Phase 5.
-func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent) []llm.Tool {
+// gearToolPrefix namespaces forged gears so they can never collide with a
+// built-in tool (built-ins are verb-first: forge_gear, grant_gear, …).
+const gearToolPrefix = "gear_"
+
+// toolsFor returns the tools an agent may use: built-ins by role, delegation
+// along its outgoing wires, and every approved gear bound to it.
+func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gears []gear.Gear) []llm.Tool {
 	var tools []llm.Tool
 
 	if agent.IsOrchestrator {
@@ -108,7 +112,74 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent) []ll
 			}, "agent", "task"),
 		})
 	}
+
+	// Every agent can forge a gear when a capability it needs doesn't exist.
+	tools = append(tools, llm.Tool{
+		Name: "forge_gear",
+		Description: "Build a reusable tool (a gear) when you need a capability that doesn't exist. It is registered in the global gear catalog and bound to you automatically, but stays inert until the operator approves it — so tell the operator you forged it and what it does. The entrypoint receives its arguments as a JSON object on stdin and should print its result to stdout.",
+		InputSchema: obj(map[string]any{
+			"name":        str("lowercase identifier, e.g. 'csv_summarize' (letters, digits, underscores)"),
+			"description": str("what the gear does and when to use it — this is what other agents will read"),
+			"tags":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "classification tags, e.g. ['data', 'csv']"},
+			"runtime":     map[string]any{"type": "string", "enum": []string{"python", "node", "bash"}, "description": "interpreter to run the entrypoint with"},
+			"entrypoint":  str("which of the files to execute, e.g. 'main.py'"),
+			"args_schema": str("JSON Schema (as a JSON string) describing the arguments the gear accepts on stdin"),
+			"files": map[string]any{
+				"type":        "array",
+				"description": "the gear's source files",
+				"items": obj(map[string]any{
+					"path":    str("relative file path, e.g. 'main.py'"),
+					"content": str("full file content"),
+				}, "path", "content"),
+			},
+		}, "name", "description", "runtime", "entrypoint", "files"),
+	})
+
+	if agent.IsOrchestrator {
+		tools = append(tools,
+			llm.Tool{
+				Name:        "list_gears",
+				Description: "Search the global gear catalog — tools forged in this or any other workspace. Use it before forging something that may already exist.",
+				InputSchema: obj(map[string]any{
+					"query": str("optional free-text filter over name and description"),
+					"tag":   str("optional tag filter"),
+				}),
+			},
+			llm.Tool{
+				Name:        "grant_gear",
+				Description: "Grant an approved gear to another agent in this workspace, or to every agent in it (omit agent).",
+				InputSchema: obj(map[string]any{
+					"gear":  str("gear name from the catalog"),
+					"agent": str("agent name to grant it to; omit to grant to the whole workspace"),
+				}, "gear"),
+			},
+		)
+	}
+
+	for _, g := range gears {
+		schema := map[string]any{"type": "object", "properties": map[string]any{}}
+		if g.ArgsSchema != "" && g.ArgsSchema != "{}" {
+			var parsed map[string]any
+			if err := json.Unmarshal([]byte(g.ArgsSchema), &parsed); err == nil {
+				schema = parsed
+			} else {
+				slog.Warn("gear has unparseable args_schema; offering it with an empty schema", "gear", g.Name, "err", err)
+			}
+		}
+		tools = append(tools, llm.Tool{
+			Name:        gearToolPrefix + g.Name,
+			Description: fmt.Sprintf("%s (gear v%d, forged in %s)", g.Description, g.Version, originLabel(g)),
+			InputSchema: schema,
+		})
+	}
 	return tools
+}
+
+func originLabel(g gear.Gear) string {
+	if g.OriginWorkspace == "" {
+		return "an unknown workspace"
+	}
+	return "workspace " + g.OriginWorkspace
 }
 
 // execToolAs runs one tool call on behalf of an agent and returns
@@ -127,26 +198,20 @@ func (e *Engine) execToolAs(ctx context.Context, wsID int64, agent workspace.Age
 }
 
 func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.Agent, chain []int64, call llm.ToolCall, emit func(Event)) (string, error) {
-	var args struct {
-		Name  string `json:"name"`
-		Role  string `json:"role"`
-		Model string `json:"model"`
-		Agent string `json:"agent"`
-		Task  string `json:"task"`
-		Path  string `json:"path"`
-		From  string `json:"from"`
-		To    string `json:"to"`
-		Label string `json:"label"`
+	// A forged gear is invoked with its own schema; hand its raw arguments
+	// straight through.
+	if gearName, ok := strings.CutPrefix(call.Name, gearToolPrefix); ok {
+		return e.runGear(ctx, wsID, agent, gearName, call.InputJSON)
 	}
-	if call.InputJSON != "" {
-		if err := json.Unmarshal([]byte(call.InputJSON), &args); err != nil {
-			return "", fmt.Errorf("tool %s: arguments are not valid JSON: %w", call.Name, err)
-		}
+
+	args, err := parseArgs(call.Name, call.InputJSON)
+	if err != nil {
+		return "", err
 	}
 
 	// Only the orchestrator manages the workspace; a worker that somehow
 	// asks for a management tool gets a clear refusal.
-	if !agent.IsOrchestrator && call.Name != "delegate" {
+	if !agent.IsOrchestrator && call.Name != "delegate" && call.Name != "forge_gear" {
 		return "", fmt.Errorf("tool %q is only available to the orchestrator", call.Name)
 	}
 
@@ -166,11 +231,23 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 		return marshal(agents)
 
 	case "agent_create":
-		modelID, err := e.resolveModel(ctx, args.Model)
+		name, err := args.reqStr("name")
 		if err != nil {
 			return "", err
 		}
-		created, err := e.ws.CreateAgent(ctx, wsID, args.Name, args.Role, modelID)
+		role, err := args.str("role")
+		if err != nil {
+			return "", err
+		}
+		modelRef, err := args.reqStr("model")
+		if err != nil {
+			return "", err
+		}
+		modelID, err := e.resolveModel(ctx, modelRef)
+		if err != nil {
+			return "", err
+		}
+		created, err := e.ws.CreateAgent(ctx, wsID, name, role, modelID)
 		if err != nil {
 			return "", err
 		}
@@ -181,21 +258,35 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 		return marshal(created)
 
 	case "agent_update":
-		target, err := e.ws.GetAgentByName(ctx, wsID, args.Name)
+		name, err := args.reqStr("name")
+		if err != nil {
+			return "", err
+		}
+		target, err := e.ws.GetAgentByName(ctx, wsID, name)
 		if err != nil {
 			return "", err
 		}
 		var rolePtr *string
-		if args.Role != "" {
-			rolePtr = &args.Role
-		}
-		var modelPtr *int64
-		if args.Model != "" {
-			id, err := e.resolveModel(ctx, args.Model)
+		if args.has("role") {
+			role, err := args.str("role")
 			if err != nil {
 				return "", err
 			}
-			modelPtr = &id
+			rolePtr = &role
+		}
+		var modelPtr *int64
+		if args.has("model") {
+			modelRef, err := args.str("model")
+			if err != nil {
+				return "", err
+			}
+			if modelRef != "" {
+				id, err := e.resolveModel(ctx, modelRef)
+				if err != nil {
+					return "", err
+				}
+				modelPtr = &id
+			}
 		}
 		updated, err := e.ws.UpdateAgent(ctx, target.ID, nil, rolePtr, modelPtr)
 		if err != nil {
@@ -204,25 +295,42 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 		return marshal(updated)
 
 	case "wire_create":
-		from, err := e.ws.GetAgentByName(ctx, wsID, args.From)
+		fromName, err := args.reqStr("from")
 		if err != nil {
 			return "", err
 		}
-		to, err := e.ws.GetAgentByName(ctx, wsID, args.To)
+		toName, err := args.reqStr("to")
 		if err != nil {
 			return "", err
 		}
-		wire, err := e.ws.CreateWire(ctx, wsID, from.ID, to.ID, args.Label)
+		label, err := args.str("label")
+		if err != nil {
+			return "", err
+		}
+		from, err := e.ws.GetAgentByName(ctx, wsID, fromName)
+		if err != nil {
+			return "", err
+		}
+		to, err := e.ws.GetAgentByName(ctx, wsID, toName)
+		if err != nil {
+			return "", err
+		}
+		wire, err := e.ws.CreateWire(ctx, wsID, from.ID, to.ID, label)
 		if err != nil {
 			return "", err
 		}
 		return marshal(wire)
 
 	case "delegate":
-		if strings.TrimSpace(args.Task) == "" {
-			return "", fmt.Errorf("delegate: task must not be empty")
+		agentName, err := args.reqStr("agent")
+		if err != nil {
+			return "", err
 		}
-		return e.delegate(ctx, wsID, agent, chain, args.Agent, args.Task, emit)
+		task, err := args.reqStr("task")
+		if err != nil {
+			return "", err
+		}
+		return e.delegate(ctx, wsID, agent, chain, agentName, task, emit)
 
 	case "context_list":
 		files, err := e.ctx.List(ctx)
@@ -236,33 +344,154 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 		return marshal(map[string]any{"space_files": files, "bindings": bindings})
 
 	case "context_bind":
-		agentID, err := e.bindScope(ctx, wsID, args.Agent)
+		path, err := args.reqStr("path")
+		if err != nil {
+			return "", err
+		}
+		scopeName, err := args.str("agent")
+		if err != nil {
+			return "", err
+		}
+		agentID, err := e.bindScope(ctx, wsID, scopeName)
 		if err != nil {
 			return "", err
 		}
 		// Verify the path actually exists in the space before binding.
-		if _, err := e.ctx.Get(ctx, args.Path); err != nil {
+		if _, err := e.ctx.Get(ctx, path); err != nil {
 			return "", err
 		}
-		b, err := e.ws.CreateContextBinding(ctx, wsID, args.Path, agentID)
+		b, err := e.ws.CreateContextBinding(ctx, wsID, path, agentID)
 		if err != nil {
 			return "", err
 		}
 		return marshal(b)
 
 	case "context_unbind":
-		agentID, err := e.bindScope(ctx, wsID, args.Agent)
+		path, err := args.reqStr("path")
 		if err != nil {
 			return "", err
 		}
-		if err := e.ws.DeleteContextBindingByPath(ctx, wsID, args.Path, agentID); err != nil {
+		scopeName, err := args.str("agent")
+		if err != nil {
+			return "", err
+		}
+		agentID, err := e.bindScope(ctx, wsID, scopeName)
+		if err != nil {
+			return "", err
+		}
+		if err := e.ws.DeleteContextBindingByPath(ctx, wsID, path, agentID); err != nil {
 			return "", err
 		}
 		return `{"unbound": true}`, nil
 
+	case "forge_gear":
+		name, err := args.reqStr("name")
+		if err != nil {
+			return "", err
+		}
+		description, err := args.str("description")
+		if err != nil {
+			return "", err
+		}
+		runtime, err := args.reqStr("runtime")
+		if err != nil {
+			return "", err
+		}
+		entrypoint, err := args.reqStr("entrypoint")
+		if err != nil {
+			return "", err
+		}
+		tags, err := args.strSlice("tags")
+		if err != nil {
+			return "", err
+		}
+		// args_schema may arrive as a JSON string or an inline object.
+		schema, err := args.jsonString("args_schema")
+		if err != nil {
+			return "", err
+		}
+		var files []gear.File
+		if err := args.decode("files", &files); err != nil {
+			return "", err
+		}
+		g, err := e.gears.Forge(ctx, name, description, tags, runtime, entrypoint, schema, files, wsID, agent.ID)
+		if err != nil {
+			return "", err
+		}
+		return marshal(map[string]any{
+			"gear":  g,
+			"notice": "Registered in the gear catalog and bound to you, but it cannot run until the operator approves it. " +
+				"Tell the operator what it does so they can review and approve it.",
+		})
+
+	case "list_gears":
+		tag, err := args.str("tag")
+		if err != nil {
+			return "", err
+		}
+		query, err := args.str("query")
+		if err != nil {
+			return "", err
+		}
+		gears, err := e.gears.List(ctx, tag, query)
+		if err != nil {
+			return "", err
+		}
+		return marshal(gears)
+
+	case "grant_gear":
+		gearName, err := args.reqStr("gear")
+		if err != nil {
+			return "", err
+		}
+		scopeName, err := args.str("agent")
+		if err != nil {
+			return "", err
+		}
+		g, err := e.gears.GetByName(ctx, gearName)
+		if err != nil {
+			return "", err
+		}
+		agentID, err := e.bindScope(ctx, wsID, scopeName)
+		if err != nil {
+			return "", err
+		}
+		b, err := e.gears.Bind(ctx, g.ID, wsID, agentID)
+		if err != nil {
+			return "", err
+		}
+		return marshal(b)
+
 	default:
 		return "", fmt.Errorf("unknown tool %q", call.Name)
 	}
+}
+
+// runGear executes a forged gear on behalf of an agent. Binding is checked
+// against what this agent may actually call, so a stale tool name from an
+// earlier turn cannot reach a gear that was since unbound or unapproved.
+func (e *Engine) runGear(ctx context.Context, wsID int64, agent workspace.Agent, name, argsJSON string) (string, error) {
+	allowed, err := e.gears.ForAgent(ctx, wsID, agent.ID)
+	if err != nil {
+		return "", err
+	}
+	for _, g := range allowed {
+		if g.Name != name {
+			continue
+		}
+		res, err := e.gearExec.Run(ctx, g, argsJSON)
+		if err != nil {
+			return "", err
+		}
+		if res.ExitCode != 0 {
+			return "", fmt.Errorf("gear %q exited %d: %s", name, res.ExitCode, strings.TrimSpace(res.Stderr))
+		}
+		if strings.TrimSpace(res.Stderr) != "" {
+			return marshal(map[string]any{"output": res.Stdout, "stderr": res.Stderr})
+		}
+		return res.Stdout, nil
+	}
+	return "", fmt.Errorf("gear %q is not available to you — it is unbound, or awaiting operator approval", name)
 }
 
 // bindScope resolves an optional agent name to a binding scope (nil =

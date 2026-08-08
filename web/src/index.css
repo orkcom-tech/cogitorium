@@ -396,6 +396,43 @@ th {
   gap: 0.5rem;
 }
 
+/* Gears */
+
+.status {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+}
+
+.status.pending {
+  color: #d0a050;
+  border-color: currentColor;
+}
+
+.status.approved {
+  color: #5aa86a;
+  border-color: currentColor;
+}
+
+.status.disabled {
+  color: var(--danger);
+  border-color: currentColor;
+}
+
+.notice {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #d0a050;
+}
+
+.gear-desc {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
 /* Blueprint */
 
 .tabs {

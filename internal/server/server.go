@@ -16,6 +16,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
 	"github.com/orkcom-tech/cogitorium/internal/engine"
+	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/version"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 	"github.com/orkcom-tech/cogitorium/web"
@@ -26,20 +27,23 @@ type Server struct {
 	catalog    *catalog.Store
 	workspaces *workspace.Store
 	context    *contextstore.Store
+	gears      *gear.Store
 	engine     *engine.Engine
 	http       *http.Server
 }
 
-func New(listen string, db *sql.DB, contextdPath string) *Server {
+func New(listen string, db *sql.DB, contextdPath, dataDir string) *Server {
 	cat := catalog.NewStore(db)
 	ws := workspace.NewStore(db)
 	cs := contextstore.New(contextdPath)
+	gears := gear.NewStore(db)
 	s := &Server{
 		db:         db,
 		catalog:    cat,
 		workspaces: ws,
 		context:    cs,
-		engine:     engine.New(ws, cat, cs),
+		gears:      gears,
+		engine:     engine.New(ws, cat, cs, gears, gear.NewExecutor(gears, dataDir)),
 	}
 
 	mux := http.NewServeMux()

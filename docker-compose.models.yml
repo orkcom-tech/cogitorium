@@ -1,0 +1,23 @@
+# Local models for development and end-to-end testing: a real inference
+# server, not a stand-in. Start it, then add it in the UI as an
+# openai-compatible provider with base URL http://localhost:11434/v1
+#
+#   docker compose -f docker-compose.models.yml up -d
+#   docker compose -f docker-compose.models.yml exec ollama ollama pull qwen2.5:0.5b
+#
+# qwen2.5:0.5b is ~400 MB and supports tool calling, which is what the
+# orchestrator, delegation and gears all depend on. It is deliberately the
+# smallest model that can drive the pipeline: enough to prove wiring works,
+# light enough to run on a laptop without cooking it. Bigger models are for
+# real work, not for the test loop.
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  ollama-models:
