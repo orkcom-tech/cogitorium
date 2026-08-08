@@ -63,6 +63,29 @@ export const api = {
     update: (id: number, patch: { name?: string; role?: string; model_id?: number }) =>
       req<Agent>(`/api/v1/agents/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
     remove: (id: number) => req<void>(`/api/v1/agents/${id}`, { method: 'DELETE' }),
+    prompt: (id: number) => req<{ prompt: string }>(`/api/v1/agents/${id}/prompt`),
+  },
+  context: {
+    status: () => req<ContextStatus>('/api/v1/context/status'),
+    files: () => req<ContextFile[]>('/api/v1/context/files'),
+    get: (path: string) => req<{ path: string; content: string }>(`/api/v1/context/file?path=${encodeURIComponent(path)}`),
+    put: (path: string, content: string) =>
+      fetch(`/api/v1/context/file?path=${encodeURIComponent(path)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'text/plain' },
+        body: content,
+      }).then(async (r) => {
+        const body = await r.json().catch(() => null)
+        if (!r.ok) throw new Error(body?.error?.message ?? `${r.status} ${r.statusText}`)
+        return body as { path: string; status: string }
+      }),
+    bindings: (wsId: number) => req<ContextBinding[]>(`/api/v1/workspaces/${wsId}/context`),
+    bind: (wsId: number, path: string, agentId: number | null) =>
+      req<ContextBinding>(`/api/v1/workspaces/${wsId}/context`, {
+        method: 'POST',
+        body: JSON.stringify({ path, agent_id: agentId }),
+      }),
+    unbind: (bindingId: number) => req<void>(`/api/v1/context-bindings/${bindingId}`, { method: 'DELETE' }),
   },
 }
 
@@ -137,6 +160,17 @@ export type WSMessage = {
 }
 
 export type AgentStatus = { agent_id: number; state: string; detail: string; since?: string }
+
+export type ContextFile = { path: string; version: string }
+
+export type ContextStatus = {
+  available: boolean
+  space_root?: string
+  mode?: string
+  error?: string
+}
+
+export type ContextBinding = { id: number; workspace_id: number; path: string; agent_id: number | null }
 
 export type WSEvent = {
   type: 'message' | 'delta' | 'status' | 'done' | 'error'

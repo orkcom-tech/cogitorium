@@ -5,6 +5,8 @@ import {
   wsChatStream,
   type Agent,
   type AgentStatus,
+  type ContextBinding,
+  type ContextFile,
   type Model,
   type WSMessage,
   type Workspace,
@@ -302,7 +304,7 @@ function Composer({ busy, onSend, onStop }: { busy: boolean; onSend: (text: stri
 }
 
 // AgentPanel is the per-agent view: identity, role editor, model binding,
-// and this agent's own activity trail.
+// bound context, the assembled prompt preview, and its own activity trail.
 function AgentPanel({
   agent,
   models,
@@ -323,15 +325,37 @@ function AgentPanel({
   const [role, setRole] = useState(agent.role)
   const [modelId, setModelId] = useState<number | ''>(agent.model_id ?? '')
   const [activity, setActivity] = useState<WSMessage[]>([])
+  const [bindings, setBindings] = useState<ContextBinding[]>([])
+  const [spaceFiles, setSpaceFiles] = useState<ContextFile[]>([])
+  const [contextUnavailable, setContextUnavailable] = useState(false)
+  const [prompt, setPrompt] = useState<string | null>(null)
+
+  const reloadBindings = useCallback(
+    () => api.context.bindings(wsId).then(setBindings).catch((e: Error) => onError(e.message)),
+    [wsId, onError],
+  )
 
   useEffect(() => {
     setRole(agent.role)
     setModelId(agent.model_id ?? '')
+    setPrompt(null)
     api.workspaces
       .messages(wsId, agent.id)
       .then(setActivity)
       .catch((e: Error) => onError(e.message))
-  }, [agent, wsId, onError])
+    void reloadBindings()
+    api.context
+      .files()
+      .then((f) => {
+        setSpaceFiles(f)
+        setContextUnavailable(false)
+      })
+      .catch(() => setContextUnavailable(true))
+  }, [agent, wsId, onError, reloadBindings])
+
+  // Bindings this agent actually sees: workspace-wide plus its own.
+  const visible = bindings.filter((b) => b.agent_id === null || b.agent_id === agent.id)
+  const boundPaths = new Set(visible.map((b) => b.path))
 
   const dirty = role !== agent.role || modelId !== (agent.model_id ?? '')
 
@@ -398,6 +422,74 @@ function AgentPanel({
         </button>
       </div>
 
+      <h3>Context</h3>
+      {contextUnavailable ? (
+        <p className="hint">
+          Contextverse is not reachable — see the Context page. Agents run on their role alone until it is.
+        </p>
+      ) : (
+        <>
+          {visible.length === 0 && <p className="hint">No context bound — this agent sees only its role.</p>}
+          {visible.map((b) => (
+            <div key={b.id} className="row binding">
+              <code>{b.path}</code>
+              <span className="muted">{b.agent_id === null ? 'whole workspace' : 'this agent'}</span>
+              <span className="spacer" />
+              <button
+                onClick={() =>
+                  api.context
+                    .unbind(b.id)
+                    .then(() => {
+                      setPrompt(null)
+                      return reloadBindings()
+                    })
+                    .catch((e: Error) => onError(e.message))
+                }
+              >
+                unbind
+              </button>
+            </div>
+          ))}
+          <BindForm
+            files={spaceFiles.filter((f) => !boundPaths.has(f.path))}
+            onBind={(path, scope) =>
+              api.context
+                .bind(wsId, path, scope === 'agent' ? agent.id : null)
+                .then(() => {
+                  setPrompt(null)
+                  return reloadBindings()
+                })
+                .catch((e: Error) => onError(e.message))
+            }
+          />
+        </>
+      )}
+
+      <h3>Assembled prompt</h3>
+      {prompt === null ? (
+        <div className="row">
+          <button
+            onClick={() =>
+              api.agents
+                .prompt(agent.id)
+                .then((p) => setPrompt(p.prompt))
+                .catch((e: Error) => onError(e.message))
+            }
+          >
+            show what this agent sees
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="row">
+            <span className="muted">{prompt.length} characters sent as the system prompt</span>
+            <span className="spacer" />
+            <button onClick={() => setPrompt(null)}>hide</button>
+          </div>
+          <pre className="prompt-preview">{prompt}</pre>
+        </>
+      )}
+
       <h3>Activity</h3>
       {activity.length === 0 ? (
         <p className="hint">Nothing yet — this agent hasn't produced or done anything.</p>
@@ -409,5 +501,44 @@ function AgentPanel({
         </div>
       )}
     </div>
+  )
+}
+
+function BindForm({
+  files,
+  onBind,
+}: {
+  files: ContextFile[]
+  onBind: (path: string, scope: 'agent' | 'workspace') => void
+}) {
+  const [path, setPath] = useState('')
+  const [scope, setScope] = useState<'agent' | 'workspace'>('agent')
+
+  return (
+    <form
+      className="row"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (!path) return
+        onBind(path, scope)
+        setPath('')
+      }}
+    >
+      <select className="grow" value={path} onChange={(e) => setPath(e.target.value)}>
+        <option value="">bind a context file…</option>
+        {files.map((f) => (
+          <option key={f.path} value={f.path}>
+            {f.path}
+          </option>
+        ))}
+      </select>
+      <select value={scope} onChange={(e) => setScope(e.target.value as 'agent' | 'workspace')}>
+        <option value="agent">this agent only</option>
+        <option value="workspace">whole workspace</option>
+      </select>
+      <button type="submit" disabled={!path}>
+        bind
+      </button>
+    </form>
   )
 }

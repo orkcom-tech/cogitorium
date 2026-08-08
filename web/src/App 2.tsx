@@ -2,9 +2,6 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import ModelsPage from './pages/ModelsPage'
 import ChatPage from './pages/ChatPage'
-import WorkspacesPage from './pages/WorkspacesPage'
-import WorkspacePage from './pages/WorkspacePage'
-import ContextPage from './pages/ContextPage'
 
 type Health = { status: string; version: string }
 
@@ -24,10 +21,8 @@ export default function App() {
         <aside className="sidebar">
           <h1 className="brand">Cogitorium</h1>
           <nav>
-            <NavLink to="/workspaces">Workspaces</NavLink>
-            <NavLink to="/context">Context</NavLink>
             <NavLink to="/models">Models</NavLink>
-            <NavLink to="/chat">Scratch chat</NavLink>
+            <NavLink to="/chat">Chat</NavLink>
           </nav>
           <footer className="sidebar-footer">
             {health ? `${health.version} · ${health.status}` : 'server unreachable'}
@@ -35,10 +30,7 @@ export default function App() {
         </aside>
         <main className="content">
           <Routes>
-            <Route path="/" element={<Navigate to="/workspaces" replace />} />
-            <Route path="/workspaces" element={<WorkspacesPage />} />
-            <Route path="/workspaces/:id" element={<WorkspacePage />} />
-            <Route path="/context" element={<ContextPage />} />
+            <Route path="/" element={<Navigate to="/models" replace />} />
             <Route path="/models" element={<ModelsPage />} />
             <Route path="/chat" element={<ChatPage />} />
           </Routes>

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
+	"github.com/orkcom-tech/cogitorium/internal/contextstore"
 	"github.com/orkcom-tech/cogitorium/internal/engine"
 	"github.com/orkcom-tech/cogitorium/internal/version"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
@@ -24,18 +25,21 @@ type Server struct {
 	db         *sql.DB
 	catalog    *catalog.Store
 	workspaces *workspace.Store
+	context    *contextstore.Store
 	engine     *engine.Engine
 	http       *http.Server
 }
 
-func New(listen string, db *sql.DB) *Server {
+func New(listen string, db *sql.DB, contextdPath string) *Server {
 	cat := catalog.NewStore(db)
 	ws := workspace.NewStore(db)
+	cs := contextstore.New(contextdPath)
 	s := &Server{
 		db:         db,
 		catalog:    cat,
 		workspaces: ws,
-		engine:     engine.New(ws, cat),
+		context:    cs,
+		engine:     engine.New(ws, cat, cs),
 	}
 
 	mux := http.NewServeMux()
@@ -67,6 +71,15 @@ func New(listen string, db *sql.DB) *Server {
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/messages", s.handleListWSMessages)
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/status", s.handleWorkspaceStatus)
 	mux.HandleFunc("POST /api/v1/workspaces/{id}/chat", s.handleWorkspaceChat)
+
+	mux.HandleFunc("GET /api/v1/context/status", s.handleContextStatus)
+	mux.HandleFunc("GET /api/v1/context/files", s.handleContextList)
+	mux.HandleFunc("GET /api/v1/context/file", s.handleContextGet)
+	mux.HandleFunc("PUT /api/v1/context/file", s.handleContextPut)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/context", s.handleListContextBindings)
+	mux.HandleFunc("POST /api/v1/workspaces/{id}/context", s.handleCreateContextBinding)
+	mux.HandleFunc("DELETE /api/v1/context-bindings/{id}", s.handleDeleteContextBinding)
+	mux.HandleFunc("GET /api/v1/agents/{id}/prompt", s.handleAgentPrompt)
 
 	// Unmatched /api/* must answer JSON, not fall through to the SPA —
 	// otherwise wrong-method or typo'd API calls get 200 + index.html.

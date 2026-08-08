@@ -56,11 +56,32 @@ func toolDefs() []llm.Tool {
 		},
 		{
 			Name:        "delegate",
-			Description: "Delegate a task to another agent in this workspace and get its answer back. Give the full task context — the agent sees only its role and your task text.",
+			Description: "Delegate a task to another agent in this workspace and get its answer back. Give the full task context — the agent sees only its role, its bound context documents, and your task text.",
 			InputSchema: obj(map[string]any{
 				"agent": str("name of the agent to delegate to"),
 				"task":  str("the complete task, self-contained"),
 			}, "agent", "task"),
+		},
+		{
+			Name:        "context_list",
+			Description: "List the files in the Contextverse space and this workspace's current context bindings (which file feeds which agent).",
+			InputSchema: obj(map[string]any{}),
+		},
+		{
+			Name:        "context_bind",
+			Description: "Bind a Contextverse file into this workspace's context: to every agent (omit agent) or to one agent. Bound files are injected into the agent's system prompt.",
+			InputSchema: obj(map[string]any{
+				"path":  str("file path inside the context space, e.g. 'projects/foo/project.md'"),
+				"agent": str("agent name to bind to; omit for workspace-wide"),
+			}, "path"),
+		},
+		{
+			Name:        "context_unbind",
+			Description: "Remove a context binding (same path and scope as it was bound with).",
+			InputSchema: obj(map[string]any{
+				"path":  str("bound file path"),
+				"agent": str("agent name the binding is scoped to; omit for the workspace-wide binding"),
+			}, "path"),
 		},
 	}
 }
@@ -86,6 +107,7 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, orch workspace.Ag
 		Model string `json:"model"`
 		Agent string `json:"agent"`
 		Task  string `json:"task"`
+		Path  string `json:"path"`
 	}
 	if call.InputJSON != "" {
 		if err := json.Unmarshal([]byte(call.InputJSON), &args); err != nil {
@@ -148,9 +170,58 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, orch workspace.Ag
 		}
 		return e.delegate(ctx, wsID, orch, args.Agent, args.Task, emit)
 
+	case "context_list":
+		files, err := e.ctx.List(ctx)
+		if err != nil {
+			return "", err
+		}
+		bindings, err := e.ws.ListContextBindings(ctx, wsID)
+		if err != nil {
+			return "", err
+		}
+		return marshal(map[string]any{"space_files": files, "bindings": bindings})
+
+	case "context_bind":
+		agentID, err := e.bindScope(ctx, wsID, args.Agent)
+		if err != nil {
+			return "", err
+		}
+		// Verify the path actually exists in the space before binding.
+		if _, err := e.ctx.Get(ctx, args.Path); err != nil {
+			return "", err
+		}
+		b, err := e.ws.CreateContextBinding(ctx, wsID, args.Path, agentID)
+		if err != nil {
+			return "", err
+		}
+		return marshal(b)
+
+	case "context_unbind":
+		agentID, err := e.bindScope(ctx, wsID, args.Agent)
+		if err != nil {
+			return "", err
+		}
+		if err := e.ws.DeleteContextBindingByPath(ctx, wsID, args.Path, agentID); err != nil {
+			return "", err
+		}
+		return `{"unbound": true}`, nil
+
 	default:
 		return "", fmt.Errorf("unknown tool %q", call.Name)
 	}
+}
+
+// bindScope resolves an optional agent name to a binding scope (nil =
+// workspace-wide).
+func (e *Engine) bindScope(ctx context.Context, wsID int64, agentName string) (*int64, error) {
+	if strings.TrimSpace(agentName) == "" {
+		return nil, nil
+	}
+	a, err := e.ws.GetAgentByName(ctx, wsID, agentName)
+	if err != nil {
+		return nil, err
+	}
+	return &a.ID, nil
 }
 
 // resolveModel maps a model reference the orchestrator gives (model_name,

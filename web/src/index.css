@@ -395,3 +395,72 @@ th {
   flex-direction: column;
   gap: 0.5rem;
 }
+
+/* Context */
+
+.context-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 1rem;
+  height: calc(100vh - 11rem);
+}
+
+.context-files {
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem;
+}
+
+.context-file {
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  border: none;
+  padding: 0.3rem 0.4rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.context-file.selected {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.context-file .path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.context-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.context-editor textarea {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  resize: none;
+}
+
+.binding code {
+  font-size: 0.85rem;
+}
+
+.prompt-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem;
+  max-height: 24rem;
+  overflow-y: auto;
+  font-size: 0.8rem;
+  margin: 0;
+}

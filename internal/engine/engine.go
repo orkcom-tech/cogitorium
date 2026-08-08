@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
+	"github.com/orkcom-tech/cogitorium/internal/contextstore"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
@@ -40,16 +41,18 @@ type Event struct {
 type Engine struct {
 	ws  *workspace.Store
 	cat *catalog.Store
+	ctx *contextstore.Store
 
 	mu      sync.Mutex
 	status  map[int64]AgentStatus
 	running map[int64]bool // workspace_id -> a turn is in flight
 }
 
-func New(ws *workspace.Store, cat *catalog.Store) *Engine {
+func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store) *Engine {
 	return &Engine{
 		ws:      ws,
 		cat:     cat,
+		ctx:     cs,
 		status:  map[int64]AgentStatus{},
 		running: map[int64]bool{},
 	}
@@ -214,42 +217,69 @@ func (e *Engine) modelTurn(ctx context.Context, wsID int64, agent workspace.Agen
 	return res, nil
 }
 
-// systemPrompt is the agent's role plus a snapshot of the workspace so the
-// orchestrator doesn't need a tool call just to know who exists.
+// systemPrompt assembles an agent's effective system prompt: its role, the
+// workspace snapshot (orchestrator only), and its bound context documents
+// fetched live from Contextverse.
 func (e *Engine) systemPrompt(ctx context.Context, wsID int64, agent workspace.Agent) (string, error) {
-	if !agent.IsOrchestrator {
-		return agent.Role, nil
-	}
-	ws, err := e.ws.GetWorkspace(ctx, wsID)
-	if err != nil {
-		return "", err
-	}
-	agents, err := e.ws.ListAgents(ctx, wsID)
-	if err != nil {
-		return "", err
-	}
 	var b []byte
-	b = fmt.Appendf(b, "%s\n\n## Workspace snapshot\nWorkspace: %s", agent.Role, ws.Name)
-	if ws.Description != "" {
-		b = fmt.Appendf(b, " — %s", ws.Description)
+	b = append(b, agent.Role...)
+
+	if agent.IsOrchestrator {
+		ws, err := e.ws.GetWorkspace(ctx, wsID)
+		if err != nil {
+			return "", err
+		}
+		agents, err := e.ws.ListAgents(ctx, wsID)
+		if err != nil {
+			return "", err
+		}
+		b = fmt.Appendf(b, "\n\n## Workspace snapshot\nWorkspace: %s", ws.Name)
+		if ws.Description != "" {
+			b = fmt.Appendf(b, " — %s", ws.Description)
+		}
+		b = fmt.Appendf(b, "\nAgents:\n")
+		for _, a := range agents {
+			kind := ""
+			if a.IsOrchestrator {
+				kind = " (you)"
+			}
+			model := a.ModelLabel
+			if model == "" {
+				model = "no model bound"
+			}
+			role := a.Role
+			if len(role) > 200 {
+				role = role[:200] + "…"
+			}
+			b = fmt.Appendf(b, "- %s%s — model: %s — role: %s\n", a.Name, kind, model, role)
+		}
 	}
-	b = fmt.Appendf(b, "\nAgents:\n")
-	for _, a := range agents {
-		kind := ""
-		if a.IsOrchestrator {
-			kind = " (you)"
+
+	paths, err := e.ws.BindingsForAgent(ctx, wsID, agent.ID)
+	if err != nil {
+		return "", err
+	}
+	if len(paths) > 0 {
+		b = fmt.Appendf(b, "\n\n## Context (from Contextverse)\n")
+		for _, p := range paths {
+			content, err := e.ctx.Get(ctx, p)
+			if err != nil {
+				return "", fmt.Errorf("context doc %q for agent %q: %w", p, agent.Name, err)
+			}
+			b = fmt.Appendf(b, "\n### %s\n%s\n", p, content)
 		}
-		model := a.ModelLabel
-		if model == "" {
-			model = "no model bound"
-		}
-		role := a.Role
-		if len(role) > 200 {
-			role = role[:200] + "…"
-		}
-		b = fmt.Appendf(b, "- %s%s — model: %s — role: %s\n", a.Name, kind, model, role)
 	}
 	return string(b), nil
+}
+
+// AssembledPrompt exposes the effective system prompt for the UI's
+// "what does this agent see" preview.
+func (e *Engine) AssembledPrompt(ctx context.Context, agentID int64) (string, error) {
+	agent, err := e.ws.GetAgent(ctx, agentID)
+	if err != nil {
+		return "", err
+	}
+	return e.systemPrompt(ctx, agent.WorkspaceID, agent)
 }
 
 func (e *Engine) persistAssistant(ctx context.Context, wsID, agentID int64, res llm.Result, emit func(Event)) (workspace.Message, error) {
@@ -358,10 +388,15 @@ func (e *Engine) delegate(ctx context.Context, wsID int64, orch workspace.Agent,
 	e.setStatus(target.ID, "working", task, emit)
 	defer e.setStatus(target.ID, "idle", "", emit)
 
+	system, err := e.systemPrompt(ctx, wsID, target)
+	if err != nil {
+		return "", err
+	}
+
 	slog.Info("delegation started", "workspace_id", wsID, "to", target.Name, "task_len", len(task))
 	res, err := client.Chat(ctx, llm.Request{
 		Model:    model.ModelName,
-		System:   target.Role,
+		System:   system,
 		Messages: []llm.Turn{{Role: "user", Text: task}},
 	}, func(text string) error {
 		emit(Event{Type: "delta", AgentID: target.ID, Text: text})

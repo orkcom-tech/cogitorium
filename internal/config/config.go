@@ -18,6 +18,9 @@ type Config struct {
 	DataDir string `yaml:"data_dir"`
 	// LogLevel is one of debug|info|warn|error.
 	LogLevel string `yaml:"log_level"`
+	// ContextdPath is the contextd binary (Contextverse CLI) used for the
+	// context layer. Default: "contextd" resolved from PATH.
+	ContextdPath string `yaml:"contextd_path"`
 }
 
 func Defaults() Config {
@@ -27,9 +30,10 @@ func Defaults() Config {
 		home = "."
 	}
 	return Config{
-		Listen:   "127.0.0.1:8688",
-		DataDir:  filepath.Join(home, ".cogitorium"),
-		LogLevel: "info",
+		Listen:       "127.0.0.1:8688",
+		DataDir:      filepath.Join(home, ".cogitorium"),
+		LogLevel:     "info",
+		ContextdPath: "contextd",
 	}
 }
 
@@ -79,6 +83,9 @@ func Load(path, dataDirOverride string) (Config, error) {
 	}
 	if v := os.Getenv("COGITORIUM_LOG_LEVEL"); v != "" {
 		cfg.LogLevel = v
+	}
+	if v := os.Getenv("COGITORIUM_CONTEXTD"); v != "" {
+		cfg.ContextdPath = v
 	}
 	return cfg, nil
 }

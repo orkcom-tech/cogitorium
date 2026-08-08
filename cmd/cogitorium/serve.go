@@ -57,7 +57,7 @@ func newServeCmd() *cobra.Command {
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			return server.New(cfg.Listen, db).Run(ctx)
+			return server.New(cfg.Listen, db, cfg.ContextdPath).Run(ctx)
 		},
 	}
 

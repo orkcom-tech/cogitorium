@@ -338,6 +338,115 @@ func (s *Store) DeleteWire(ctx context.Context, id int64) error {
 	return nil
 }
 
+type ContextBinding struct {
+	ID          int64  `json:"id"`
+	WorkspaceID int64  `json:"workspace_id"`
+	Path        string `json:"path"`
+	AgentID     *int64 `json:"agent_id"` // nil = workspace-wide
+}
+
+func (s *Store) CreateContextBinding(ctx context.Context, wsID int64, path string, agentID *int64) (ContextBinding, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ContextBinding{}, errors.New("path is required")
+	}
+	if _, err := s.GetWorkspace(ctx, wsID); err != nil {
+		return ContextBinding{}, err
+	}
+	if agentID != nil {
+		a, err := s.GetAgent(ctx, *agentID)
+		if err != nil {
+			return ContextBinding{}, err
+		}
+		if a.WorkspaceID != wsID {
+			return ContextBinding{}, fmt.Errorf("agent %d belongs to another workspace", *agentID)
+		}
+	}
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO context_bindings (workspace_id, path, agent_id, created_at) VALUES (?, ?, ?, ?)`,
+		wsID, path, agentID, now())
+	if err := asConflict(err, fmt.Sprintf("context binding %q", path)); err != nil {
+		return ContextBinding{}, fmt.Errorf("create context binding: %w", err)
+	}
+	id, _ := res.LastInsertId()
+	slog.Info("context binding created", "id", id, "workspace_id", wsID, "path", path, "agent_id", agentID)
+	return ContextBinding{ID: id, WorkspaceID: wsID, Path: path, AgentID: agentID}, nil
+}
+
+func (s *Store) ListContextBindings(ctx context.Context, wsID int64) ([]ContextBinding, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, workspace_id, path, agent_id FROM context_bindings WHERE workspace_id = ? ORDER BY path`, wsID)
+	if err != nil {
+		return nil, fmt.Errorf("list context bindings: %w", err)
+	}
+	defer rows.Close()
+	out := []ContextBinding{}
+	for rows.Next() {
+		var b ContextBinding
+		if err := rows.Scan(&b.ID, &b.WorkspaceID, &b.Path, &b.AgentID); err != nil {
+			return nil, fmt.Errorf("scan context binding: %w", err)
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// BindingsForAgent returns the paths an agent sees: workspace-wide plus its
+// own, deduplicated, stable order.
+func (s *Store) BindingsForAgent(ctx context.Context, wsID, agentID int64) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT path FROM context_bindings
+		 WHERE workspace_id = ? AND (agent_id IS NULL OR agent_id = ?)
+		 ORDER BY path`, wsID, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("bindings for agent %d: %w", agentID, err)
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, fmt.Errorf("scan binding path: %w", err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DeleteContextBinding(ctx context.Context, id int64) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM context_bindings WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete context binding %d: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("context binding %d: %w", id, ErrNotFound)
+	}
+	slog.Info("context binding deleted", "id", id)
+	return nil
+}
+
+// DeleteContextBindingByPath removes a binding by its (path, scope) pair —
+// the handle the orchestrator's tools use.
+func (s *Store) DeleteContextBindingByPath(ctx context.Context, wsID int64, path string, agentID *int64) error {
+	q := `DELETE FROM context_bindings WHERE workspace_id = ? AND path = ? AND agent_id `
+	args := []any{wsID, path}
+	if agentID == nil {
+		q += `IS NULL`
+	} else {
+		q += `= ?`
+		args = append(args, *agentID)
+	}
+	res, err := s.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return fmt.Errorf("delete context binding %q: %w", path, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("context binding %q: %w", path, ErrNotFound)
+	}
+	slog.Info("context binding deleted", "workspace_id", wsID, "path", path, "agent_id", agentID)
+	return nil
+}
+
 // AppendMessage persists one timeline entry and returns it.
 func (s *Store) AppendMessage(ctx context.Context, wsID int64, agentID *int64, kind, content, meta string) (Message, error) {
 	if meta == "" {
