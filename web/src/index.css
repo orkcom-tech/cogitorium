@@ -1,4 +1,5 @@
 @import './styles/tokens.css';
+@import './styles/bench.css';
 
 :root {
   font-family: system-ui, -apple-system, sans-serif;
@@ -1186,4 +1187,64 @@ th {
 .canvas,
 .terminal-holder {
   background: var(--surface);
+}
+
+
+/* The workspace is a header plus a bench, and the bench owns the rest. */
+.ws-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  gap: var(--s2);
+}
+
+.ws-head {
+  flex: 0 0 auto;
+  align-items: baseline;
+  gap: var(--s3);
+}
+
+.ws-head h2 {
+  font-size: 1.05rem;
+}
+
+/* A panel body fills its slot and owns its own scrolling. Panels must never
+   inherit the page's viewport maths — that is what the bench replaced. */
+.bn-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  padding: var(--s2);
+}
+
+.bn-scroll {
+  overflow-y: auto;
+}
+
+.chat-body {
+  gap: var(--s2);
+}
+
+.chat-body .transcript {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Inside a panel these already sit in a sized box, so their own floors would
+   only fight the slot they were given. */
+.bn-body .canvas,
+.bn-body .code-edit,
+.bn-body .terminal-holder,
+.bn-body .transcript {
+  min-height: 0;
+}
+
+.bn-body .page,
+.bn-body .blueprint,
+.bn-body .files {
+  max-width: none;
+  flex: 1;
+  min-height: 0;
 }

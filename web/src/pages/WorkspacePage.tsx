@@ -5,6 +5,12 @@ import TerminalPage from './TerminalPage'
 import AgentMemory from './AgentMemory'
 import FilesPage from './FilesPage'
 import ApprovalDialog from './ApprovalDialog'
+import Bench, { type PanelDef } from '../bench/Bench'
+import { useLayout } from '../bench/store'
+
+// The set of ids the layout parser will accept. A restored layout naming a
+// panel nothing can render would otherwise be a permanent white screen.
+const PANEL_IDS = new Set(['chat', 'blueprint', 'files', 'terminal', 'agents', 'agent'])
 import {
   api,
   wsChatStream,
@@ -38,7 +44,6 @@ export default function WorkspacePage() {
   // proxy that swallows the stream costs a second rather than the feature.
   const [approval, setApproval] = useState<ApprovalRequest | null>(null)
   const [answering, setAnswering] = useState(false)
-  const [view, setView] = useState<'chat' | 'blueprint' | 'files' | 'terminal'>('chat')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -192,6 +197,22 @@ export default function WorkspacePage() {
       .catch((e: Error) => setError(e.message))
   }
 
+  const layout = useLayout(1, (id) => PANEL_IDS.has(id))
+
+  // ⌘↵ maximizes the focused panel; Escape is deliberately NOT bound here —
+  // the approval dialog owns it, so one keypress can never both dismiss chrome
+  // and silently refuse a pending web search.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault()
+        layout.maximize(layout.layout.slots.main.active)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [layout])
+
   if (!workspace) {
     return (
       <div className="page">
@@ -206,123 +227,157 @@ export default function WorkspacePage() {
   const agentName = (id: number | null) =>
     id == null ? '(deleted agent)' : agents.find((a) => a.id === id)?.name ?? `agent #${id}`
 
-  return (
-    <div className="ws-layout">
-      {approval && <ApprovalDialog request={approval} onAnswer={answerApproval} busy={answering} />}
-      <div className="ws-main">
-        <div className="ws-head">
-          <Link to="/workspaces" className="muted">
-            ← workspaces
-          </Link>
-          <h2>{workspace.name}</h2>
-          <span className="muted">{workspace.description}</span>
-          <span className="spacer" />
-          <div className="tabs">
-            <button
-              className={view === 'chat' && !selectedAgent ? 'active' : ''}
-              onClick={() => {
-                setView('chat')
-                setSelectedAgent(null)
-              }}
-            >
-              chat
-            </button>
-            <button
-              className={view === 'blueprint' && !selectedAgent ? 'active' : ''}
-              onClick={() => {
-                setView('blueprint')
-                setSelectedAgent(null)
-              }}
-            >
-              blueprint
-            </button>
-            <button
-              className={view === 'files' && !selectedAgent ? 'active' : ''}
-              onClick={() => {
-                setView('files')
-                setSelectedAgent(null)
-              }}
-            >
-              files
-            </button>
-            <button
-              className={view === 'terminal' && !selectedAgent ? 'active' : ''}
-              onClick={() => {
-                setView('terminal')
-                setSelectedAgent(null)
-              }}
-            >
-              terminal
-            </button>
-          </div>
+  // Panel nodes are rebuilt on every render, which is exactly what happened
+  // before the bench existed. What matters is that the ARRAY is stable and
+  // keyed by id: React keeps each subtree alive, so the terminal's socket and
+  // the blueprint's canvas survive being moved between slots.
+  const panels: PanelDef[] = [
+    {
+      id: 'chat',
+      title: 'Chat',
+      home: 'main',
+      canClose: false,
+      node: (
+        <div className="bn-body chat-body">
+          <Timeline messages={messages} streams={streams} agentName={agentName} busy={busy} onForget={forget} />
+          <Composer busy={busy} onSend={send} onStop={() => abortRef.current?.abort()} />
         </div>
-        {selectedAgent ? (
-          <AgentPanel
-            agent={selectedAgent}
-            models={models}
-            wsId={wsId}
-            status={statuses.get(selectedAgent.id)}
-            onClose={() => setSelectedAgent(null)}
-            onChanged={(a) => {
-              setSelectedAgent(a)
-              void reloadAgents()
-            }}
-            onError={setError}
-          />
-        ) : view === 'terminal' ? (
-          <TerminalPage workspaceId={wsId} />
-        ) : view === 'files' ? (
-          <FilesPage wsId={wsId} onError={setError} />
-        ) : view === 'blueprint' ? (
+      ),
+    },
+    {
+      id: 'blueprint',
+      title: 'Blueprint',
+      home: 'aux',
+      node: (
+        <div className="bn-body">
           <BlueprintEditor
             wsId={wsId}
             agents={agents}
             statuses={statuses}
             onChanged={reloadAgents}
-            onSelectAgent={setSelectedAgent}
+            onSelectAgent={(a) => {
+              setSelectedAgent(a)
+              layout.show('agent', 'aux')
+            }}
             onError={setError}
           />
-        ) : (
-          <Timeline
-            messages={messages}
-            streams={streams}
-            agentName={agentName}
-            busy={busy}
-            onForget={forget}
-          />
-        )}
-        {error && <p className="error">{error}</p>}
-        {!selectedAgent && view === 'chat' && (
-          <Composer busy={busy} onSend={send} onStop={() => abortRef.current?.abort()} />
-        )}
-      </div>
-      <aside className="ws-agents">
-        <h3>Agents</h3>
-        {agents.map((a) => {
-          const st = statuses.get(a.id)
-          const state = st?.state ?? 'idle'
-          return (
-            <button key={a.id} className={`agent-row ${selectedAgent?.id === a.id ? 'selected' : ''}`} onClick={() => setSelectedAgent(a)}>
-              <span className={`dot ${state}`} title={state + (st?.detail ? `: ${st.detail}` : '')} />
-              <span className="agent-name">
-                {a.name}
-                {a.is_orchestrator && <span className="muted"> ★</span>}
-              </span>
-              <span className="muted agent-model">{a.model_label || 'no model'}</span>
-              <span className="muted agent-spend" title={spendTitle(usage.get(a.id))}>
-                {spendLabel(usage.get(a.id))}
-              </span>
+        </div>
+      ),
+    },
+    {
+      id: 'files',
+      title: 'Files',
+      home: 'aux',
+      node: (
+        <div className="bn-body">
+          <FilesPage wsId={wsId} onError={setError} />
+        </div>
+      ),
+    },
+    {
+      id: 'terminal',
+      title: 'Terminal',
+      home: 'bottom',
+      restore: 'onDemand',
+      node: (
+        <div className="bn-body">
+          <TerminalPage workspaceId={wsId} />
+        </div>
+      ),
+    },
+    {
+      id: 'agents',
+      title: 'Agents',
+      home: 'right',
+      node: (
+        <div className="bn-body bn-scroll">
+          {agents.map((a) => {
+            const st = statuses.get(a.id)
+            const state = st?.state ?? 'idle'
+            return (
+              <button
+                key={a.id}
+                className={`agent-row ${selectedAgent?.id === a.id ? 'selected' : ''}`}
+                onClick={() => {
+                  setSelectedAgent(a)
+                  layout.show('agent', 'aux')
+                }}
+              >
+                <span className={`dot ${state}`} title={state + (st?.detail ? `: ${st.detail}` : '')} />
+                <span className="agent-name">
+                  {a.name}
+                  {a.is_orchestrator && <span className="muted"> ★</span>}
+                </span>
+                <span className="muted agent-model">{a.model_label || 'no model'}</span>
+                <span className="muted agent-spend" title={spendTitle(usage.get(a.id))}>
+                  {spendLabel(usage.get(a.id))}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      ),
+    },
+    {
+      id: 'agent',
+      title: selectedAgent ? selectedAgent.name : 'Agent',
+      home: 'aux',
+      node: (
+        <div className="bn-body bn-scroll">
+          {selectedAgent ? (
+            <AgentPanel
+              agent={selectedAgent}
+              models={models}
+              wsId={wsId}
+              status={statuses.get(selectedAgent.id)}
+              onClose={() => layout.close('agent')}
+              onChanged={(a) => {
+                setSelectedAgent(a)
+                void reloadAgents()
+              }}
+              onError={setError}
+            />
+          ) : (
+            <p className="hint">Pick an agent from the roster to inspect it.</p>
+          )}
+        </div>
+      ),
+    },
+  ]
+
+  return (
+    <div className="ws-shell">
+      {approval && <ApprovalDialog request={approval} onAnswer={answerApproval} busy={answering} />}
+      <div className="ws-head">
+        <Link to="/workspaces" className="muted">
+          ←
+        </Link>
+        <h2>{workspace.name}</h2>
+        <span className="muted">{workspace.description}</span>
+        <span className="spacer" />
+        <div className="tabs">
+          {panels.map((p) => (
+            <button
+              key={p.id}
+              className={layout.slotOf(p.id) ? 'active' : ''}
+              onClick={() => (layout.slotOf(p.id) ? layout.close(p.id) : layout.show(p.id, p.home))}
+              title={layout.slotOf(p.id) ? `Hide ${p.title}` : `Show ${p.title}`}
+            >
+              {p.title}
             </button>
-          )
-        })}
-      </aside>
+          ))}
+        </div>
+      </div>
+      {error && (
+        <p className="error" onClick={() => setError(null)} title="dismiss">
+          {error}
+        </p>
+      )}
+      <Bench panels={panels} layout={layout} />
     </div>
   )
 }
 
-// Spend on the agent's own card, spelled out rather than abbreviated: this is
-// the view an operator opens precisely to answer "what is this one costing
-// me", so the split between input and output is the answer, not a detail.
 function Spend({ agentId }: { agentId: number }) {
   const [u, setU] = useState<AgentUsage | null>(null)
   useEffect(() => {

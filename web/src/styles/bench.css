@@ -1,0 +1,209 @@
+/* The bench grid.
+ *
+ * Slot tracks are variables, so moving or resizing a panel writes a value —
+ * never a different DOM parent. min-height: 0 everywhere is the reason there
+ * is no calc(100vh - Xrem) left anywhere in the product.
+ */
+
+.bn-bench {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden; /* scroll is always owned by a panel body, never the bench */
+  grid-template-areas:
+    'main aux    right'
+    'bottom bottom right';
+  grid-template-columns:
+    minmax(var(--min-main), 1fr)
+    var(--w-aux, 0px)
+    var(--w-right, 0px);
+  grid-template-rows:
+    minmax(120px, 1fr)
+    var(--h-bottom, 0px);
+}
+
+.bn-panel {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-top: var(--h-tabs);
+}
+
+/* Parked, not hidden.
+ *
+ * display:none makes xterm's FitAddon measure zero and React Flow's fitView
+ * produce NaN. A small-but-real box is worse still: refitting xterm to a 32px
+ * rail rewraps and permanently destroys scrollback structure, which expanding
+ * again does not undo. So a parked panel keeps its last live size and simply
+ * sits off screen. */
+.bn-parked {
+  position: fixed;
+  left: -100000px;
+  top: 0;
+  width: 800px;
+  height: 600px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.bn-chrome {
+  position: relative;
+  z-index: 3;
+  align-self: start;
+  display: flex;
+  align-items: stretch;
+  gap: var(--s1);
+  height: var(--h-tabs);
+  padding: 0 var(--s1);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--t-chrome);
+}
+
+.bn-tabs {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.bn-tab {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 0 var(--s3);
+  font-size: var(--t-chrome);
+  white-space: nowrap;
+}
+
+.bn-tab.active {
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.bn-tab:hover:not(.active) {
+  color: var(--text);
+  border-color: transparent;
+}
+
+.bn-spacer {
+  flex: 1;
+}
+
+.bn-icon {
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 0 var(--s2);
+  font-size: var(--t-chrome);
+}
+
+.bn-icon:hover {
+  color: var(--text);
+  border-color: transparent;
+}
+
+.bn-menu-holder {
+  position: relative;
+  display: flex;
+}
+
+.bn-menu {
+  position: absolute;
+  top: calc(var(--h-tabs) - 2px);
+  right: 0;
+  z-index: var(--z-menu);
+  min-width: 13rem;
+  display: flex;
+  flex-direction: column;
+  padding: var(--s1);
+  gap: 1px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r1);
+  box-shadow: var(--shadow);
+}
+
+.bn-menu button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: var(--t-ui);
+  padding: var(--s1) var(--s2);
+  border-radius: var(--r1);
+  white-space: pre;
+}
+
+.bn-menu button:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: transparent;
+}
+
+.bn-menu hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: var(--s1) 0;
+  width: 100%;
+}
+
+.bn-menu .hint {
+  font-size: var(--t-micro);
+  padding: var(--s1) var(--s2);
+}
+
+/* 1px of ink, 8px of hit area. No transition: a transition on something being
+   dragged reads as lag. */
+.bn-seam {
+  position: absolute;
+  z-index: 4;
+  background: transparent;
+}
+
+.bn-seam:hover,
+.bn-seam:focus-visible {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.bn-seam-x {
+  top: 0;
+  bottom: 0;
+  right: var(--w-right, 0px);
+  width: 8px;
+  margin-right: calc(var(--w-aux, 0px) - 4px);
+  cursor: col-resize;
+}
+
+.bn-seam-y {
+  left: 0;
+  right: 0;
+  bottom: var(--h-bottom, 0px);
+  height: 8px;
+  margin-bottom: -4px;
+  cursor: row-resize;
+}
+
+/* A rail is the collapsed form: labels only, no body. */
+.bn-rail .bn-tab {
+  padding: 0 var(--s2);
+}
+
+/* Panel bodies own their own scrolling and never inherit page padding. */
+.bn-panel > * {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.bn-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s4);
+  max-width: 34rem;
+}
