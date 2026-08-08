@@ -8,7 +8,6 @@ import ApprovalDialog from './ApprovalDialog'
 import Bench, { type PanelDef } from '../bench/Bench'
 import { useLayout } from '../bench/store'
 import LayoutMenu from '../bench/LayoutMenu'
-import ThemeMenu from './ThemeMenu'
 
 // The set of ids the layout parser will accept. A restored layout naming a
 // panel nothing can render would otherwise be a permanent white screen.
@@ -382,7 +381,6 @@ export default function WorkspacePage() {
         <span className="spacer" />
         <div className="row appearance">
           <LayoutMenu layout={layout} />
-          <ThemeMenu />
         </div>
         <div className="tabs">
           {panels
@@ -519,8 +517,11 @@ function Timeline({
       {[...streams.entries()].map(([agentId, text]) =>
         text ? (
           <div key={`stream-${agentId}`} className="msg assistant">
-            <span className="msg-role">{agentName(agentId)}</span>
-            <div className="msg-body">{text}▍</div>
+            <div className="msg-body">
+              {agentName(agentId) !== 'orchestrator' && <span className="who">{agentName(agentId)}</span>}
+              {text}
+              <span className="caret">▍</span>
+            </div>
           </div>
         ) : null,
       )}
@@ -534,7 +535,6 @@ function MessageRow({ m, agentName }: { m: WSMessage; agentName: (id: number | n
     case 'user':
       return (
         <div className="msg user">
-          <span className="msg-role">you</span>
           <div className="msg-body">{m.content}</div>
         </div>
       )
@@ -550,8 +550,11 @@ function MessageRow({ m, agentName }: { m: WSMessage; agentName: (id: number | n
       if (!m.content && calls.length === 0) return null
       return (
         <div className="msg assistant">
-          <span className="msg-role">{agentName(m.agent_id)}</span>
           <div className="msg-body">
+            {/* Only a delegate is named. The orchestrator is the voice of the
+                workspace, so labelling every one of its replies is the same
+                noise as labelling your own. */}
+            {agentName(m.agent_id) !== 'orchestrator' && <span className="who">{agentName(m.agent_id)}</span>}
             {m.content}
             {calls.length > 0 && (
               <span className="tool-chips">
@@ -588,8 +591,10 @@ function MessageRow({ m, agentName }: { m: WSMessage; agentName: (id: number | n
     case 'delegation':
       return (
         <div className="msg delegation">
-          <span className="msg-role">{agentName(m.agent_id)}</span>
-          <div className="msg-body">{m.content}</div>
+          <div className="msg-body">
+            <span className="who">{agentName(m.agent_id)}</span>
+            {m.content}
+          </div>
         </div>
       )
     case 'error':

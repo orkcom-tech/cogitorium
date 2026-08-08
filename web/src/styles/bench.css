@@ -269,16 +269,6 @@
 @container panel (max-width: 560px) {
   /* Role above the message rather than beside it: below this width the gutter
      costs more than it explains. */
-  .msg {
-    flex-direction: column;
-    gap: 0.15rem;
-  }
-
-  .msg-role {
-    min-width: 0;
-    padding-top: 0;
-  }
-
   .msg-tool {
     margin-left: 0;
   }

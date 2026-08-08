@@ -54,7 +54,7 @@ export default function ThemeMenu() {
                 key={p.name}
                 className="theme-preset"
                 title={p.name}
-                onClick={() => setTheme({ ...p.theme, mode: theme.mode })}
+                onClick={() => setTheme({ ...theme, ...p.theme })}
               >
                 <span
                   className="swatch lg"
@@ -88,6 +88,36 @@ export default function ThemeMenu() {
               </button>
             )}
           </div>
+
+          <span className="menu-head">Light source</span>
+          <GlowPad
+            glow={theme.glow}
+            disabled={theme.drift}
+            onMove={(glow) => setTheme({ ...theme, glow })}
+          />
+          <label className="dial">
+            <input
+              type="checkbox"
+              checked={theme.drift}
+              onChange={(e) => setTheme({ ...theme, drift: e.target.checked })}
+            />
+            drift it around
+          </label>
+          {theme.drift && (
+            <label className="dial">
+              speed
+              <input
+                type="range"
+                min={20}
+                max={300}
+                step={10}
+                // Inverted: dragging right should mean faster, and faster is a
+                // SHORTER circuit.
+                value={320 - theme.driftSpeed}
+                onChange={(e) => setTheme({ ...theme, driftSpeed: 320 - Number(e.target.value) })}
+              />
+            </label>
+          )}
 
           <label className="dial">
             grain
@@ -125,6 +155,48 @@ export default function ThemeMenu() {
           <span className="hint">the palette is saved on this device</span>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * A miniature of the screen: drag inside it to put the light where you want.
+ *
+ * Disabled while the drift is on, because two authorities over one position is
+ * how a control ends up fighting an animation and losing.
+ */
+function GlowPad({
+  glow,
+  disabled,
+  onMove,
+}: {
+  glow: { x: number; y: number }
+  disabled: boolean
+  onMove: (g: { x: number; y: number }) => void
+}) {
+  const set = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    onMove({
+      x: Math.round(Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100))),
+      y: Math.round(Math.max(0, Math.min(100, ((e.clientY - r.top) / r.height) * 100))),
+    })
+  }
+  return (
+    <div
+      className={`glow-pad ${disabled ? 'off' : ''}`}
+      title={disabled ? 'Turn the drift off to place it by hand' : 'Drag to move the light'}
+      onPointerDown={(e) => {
+        if (disabled) return
+        e.currentTarget.setPointerCapture(e.pointerId)
+        set(e)
+      }}
+      onPointerMove={(e) => {
+        if (disabled || !e.currentTarget.hasPointerCapture(e.pointerId)) return
+        set(e)
+      }}
+      onPointerUp={(e) => e.currentTarget.releasePointerCapture(e.pointerId)}
+    >
+      <span className="glow-dot" style={{ left: `${glow.x}%`, top: `${glow.y}%` }} />
     </div>
   )
 }

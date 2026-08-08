@@ -290,11 +290,6 @@ th {
   min-height: 10rem;
 }
 
-.msg {
-  display: flex;
-  gap: 0.6rem;
-}
-
 .msg-role {
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -1330,10 +1325,12 @@ th {
 
 .theme-menu {
   min-width: 17rem;
-  left: 0;
-  right: auto;
-  bottom: calc(100% + 6px);
-  top: auto;
+  left: auto;
+  right: 0;
+  top: calc(100% + 6px);
+  bottom: auto;
+  max-height: 78vh;
+  overflow-y: auto;
 }
 
 .theme-presets {
@@ -1406,4 +1403,52 @@ th {
 .appearance {
   gap: var(--s1);
   flex: 0 0 auto;
+}
+
+.glow-pad {
+  position: relative;
+  height: 68px;
+  margin: var(--s1) var(--s2);
+  border: 1px solid var(--border);
+  border-radius: var(--r1);
+  background: linear-gradient(150deg, var(--theme-a), var(--theme-b));
+  cursor: crosshair;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.glow-pad.off {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.glow-dot {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--theme-c) 0%, transparent 70%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-c) 45%, transparent);
+}
+
+.dial input[type='checkbox'] {
+  width: auto;
+  accent-color: var(--accent);
+}
+
+/* The appearance cluster: fixed top-right, so the palette control sits beside
+   the workspace's layout control instead of being stranded inside one page. */
+.app-controls {
+  position: fixed;
+  top: var(--s2);
+  right: var(--s3);
+  z-index: var(--z-menu);
+  display: flex;
+  gap: var(--s1);
+}
+
+/* Keep the workspace's own chips clear of it. */
+.ws-head {
+  padding-right: 6.5rem;
 }

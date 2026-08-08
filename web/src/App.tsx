@@ -11,6 +11,7 @@ import GearsPage from './pages/GearsPage'
 import LibraryPage from './pages/LibraryPage'
 import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
+import ThemeMenu from './pages/ThemeMenu'
 import { applyTheme, loadTheme } from './styles/theme'
 
 type Health = { status: string; version: string }
@@ -83,6 +84,7 @@ export default function App() {
     <BrowserRouter>
       <div className={`layout ${navOpen ? '' : 'nav-collapsed'}`}>
         <div className="shell-ground" aria-hidden />
+        <div className="shell-glow" aria-hidden />
         <div className="shell-grain" aria-hidden />
         <aside className="sidebar">
           <button
@@ -131,6 +133,9 @@ export default function App() {
             </button>
           </footer>
         </aside>
+        <div className="app-controls">
+          <ThemeMenu />
+        </div>
         <main className="content">
           <Routes>
             <Route path="/" element={<Navigate to="/workspaces" replace />} />

@@ -145,9 +145,44 @@ button.primary:hover:not(:disabled) {
   position: fixed;
   inset: 0;
   z-index: -2;
-  background:
-    radial-gradient(1200px 800px at 12% 4%, var(--theme-c) 0%, transparent 55%),
-    linear-gradient(150deg, var(--theme-a) 0%, var(--theme-b) 55%, var(--theme-a) 100%);
+  background: linear-gradient(150deg, var(--theme-a) 0%, var(--theme-b) 55%, var(--theme-a) 100%);
+}
+
+/* The glow is its own layer so it can be moved or animated without repainting
+   the gradient underneath it. */
+.shell-glow {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background: radial-gradient(1100px 760px at var(--glow-x, 12%) var(--glow-y, 4%), var(--theme-c) 0%, transparent 58%);
+}
+
+/* Drift: the DVD-logo idea, as a keyframe path rather than a rAF loop, so it
+   never keeps a core awake. The corners are deliberately not hit at the same
+   time on both axes — that is what stops the path reading as a diagonal
+   bouncing between two corners forever. */
+@keyframes glow-drift {
+  0%   { background-position: 8% 6%; }
+  17%  { background-position: 82% 22%; }
+  34%  { background-position: 30% 78%; }
+  51%  { background-position: 92% 62%; }
+  68%  { background-position: 14% 38%; }
+  85%  { background-position: 66% 88%; }
+  100% { background-position: 8% 6%; }
+}
+
+:root.drifting .shell-glow {
+  background: radial-gradient(1100px 760px at 50% 50%, var(--theme-c) 0%, transparent 58%);
+  background-repeat: no-repeat;
+  background-size: 180% 180%;
+  animation: glow-drift var(--drift-speed, 90s) linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root.drifting .shell-glow {
+    animation: none;
+  }
 }
 
 .shell-grain {
@@ -166,4 +201,60 @@ button.primary:hover:not(:disabled) {
   --surface: color-mix(in srgb, var(--theme-b) var(--surface-tint), light-dark(#ffffff, #212120));
   --surface-2: color-mix(in srgb, var(--theme-b) var(--surface-tint), light-dark(#f4f4f2, #2a2a28));
   --bg: transparent;
+}
+
+
+/* The transcript.
+ *
+ * Who said what is carried by side and shape, the way every chat client does
+ * it — your words in a tinted bubble on the right, the workspace's answer as
+ * plain prose on the left. The old gutter label repeated "YOU" beside every
+ * line, which said nothing the position had not already said and, in a narrow
+ * panel, ate the width the text needed. */
+.msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+}
+
+.msg.user {
+  align-items: flex-end;
+}
+
+.msg.user .msg-body {
+  max-width: min(78%, 44rem);
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r2) var(--r2) 4px var(--r2);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.msg.assistant .msg-body,
+.msg.delegation .msg-body {
+  max-width: min(92%, 52rem);
+  padding: 0 var(--s1);
+}
+
+.msg.delegation .msg-body {
+  border-left: 2px solid var(--accent);
+  padding-left: var(--s3);
+}
+
+/* A delegate is named because it is not the voice you were talking to. The
+   orchestrator is never labelled — it IS the workspace answering. */
+.who {
+  display: block;
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.caret {
+  opacity: 0.6;
+}
+
+.transcript {
+  gap: var(--s4);
 }
