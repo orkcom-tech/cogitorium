@@ -293,6 +293,41 @@ func (e *Engine) systemPrompt(ctx context.Context, wsID int64, agent workspace.A
 			b = fmt.Appendf(b, "\n### %s\n%s\n", p, content)
 		}
 	}
+
+	gearSection, err := e.gearSection(ctx, wsID, agent)
+	if err != nil {
+		return "", err
+	}
+	b = append(b, gearSection...)
+	return string(b), nil
+}
+
+// gearSection spells out the agent's forged tools in the prompt itself.
+// Listing them among the tool definitions is not enough: models skim tool
+// lists and rebuild what already exists, and duplicate gears are how the
+// catalog turns into noise. Naming each one, with what it does, is what
+// keeps the environment consistent across turns and sessions.
+func (e *Engine) gearSection(ctx context.Context, wsID int64, agent workspace.Agent) (string, error) {
+	gears, err := e.gears.ForAgent(ctx, wsID, agent.ID)
+	if err != nil {
+		return "", err
+	}
+
+	var b []byte
+	b = fmt.Appendf(b, "\n\n## Your gears\n")
+	if len(gears) == 0 {
+		b = fmt.Appendf(b, "None are bound to you yet.\n\nBefore building anything with forge_gear, call list_gears first: a gear that already exists — forged here or in another workspace — can be granted to you instead of reinvented. Only forge when the catalog genuinely has nothing that fits.\n")
+		return string(b), nil
+	}
+
+	b = fmt.Appendf(b, "These tools were forged for reuse. Use them instead of writing the same work again — that is what they are for.\n\n")
+	for _, g := range gears {
+		b = fmt.Appendf(b, "- **%s%s** — %s\n", gearToolPrefix, g.Name, g.Description)
+		if g.ArgsSchema != "" && g.ArgsSchema != "{}" {
+			b = fmt.Appendf(b, "  arguments: %s\n", g.ArgsSchema)
+		}
+	}
+	b = fmt.Appendf(b, "\nIf none of them fits the task, call list_gears to check the wider catalog before forging a new one.\n")
 	return string(b), nil
 }
 
@@ -549,8 +584,10 @@ func (e *Engine) runAgent(ctx context.Context, wsID int64, agent workspace.Agent
 		return "", err
 	}
 	// Small models offered tools tend to answer through them instead of in
-	// text; the delegation contract has to be explicit.
-	system += "\n\n## Delegation contract\nYou were delegated a task. Deliver your answer as plain text — your final text IS the result returned to the delegating agent. Use tools only when the task genuinely requires them."
+	// text; the delegation contract has to be explicit. The gear reminder
+	// belongs here too — a delegated task is exactly the moment an agent is
+	// tempted to rebuild work that a forged tool already does.
+	system += "\n\n## Delegation contract\nYou were delegated a task. Deliver your answer as plain text — your final text IS the result returned to the delegating agent. Use tools only when the task genuinely requires them. If one of your gears does part of this work, use it rather than redoing it by hand; if none fits, check list_gears before forging anything new."
 	targets, err := e.ws.DelegationTargets(ctx, wsID, agent.ID)
 	if err != nil {
 		return "", err

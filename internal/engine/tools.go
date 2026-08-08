@@ -104,7 +104,7 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 		tools = append(tools, llm.Tool{
 			Name: "delegate",
 			Description: fmt.Sprintf(
-				"Delegate a task to an agent you are wired to and get its answer back. Available: %s. Give the full task context — the agent sees only its role, its bound context, and your task text.",
+				"Delegate a task to an agent you are wired to and get its answer back. Available: %s. Give the full task context — the agent sees only its role, its bound context, its gears, and your task text. If an existing gear would do the job, name it in the task so the agent uses it instead of rebuilding it.",
 				strings.Join(names, ", ")),
 			InputSchema: obj(map[string]any{
 				"agent": map[string]any{"type": "string", "description": "name of the agent to delegate to", "enum": names},
@@ -136,25 +136,27 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 		}, "name", "description", "runtime", "code"),
 	})
 
+	// Every agent can search the catalog. A worker that cannot see what
+	// already exists has no choice but to reinvent it, which is exactly how
+	// the catalog fills with near-duplicates.
+	tools = append(tools, llm.Tool{
+		Name:        "list_gears",
+		Description: "Search the global gear catalog — tools forged in this or any other workspace. Call this before forging anything: if a gear already does the job, use it, or say that it exists and should be granted to you.",
+		InputSchema: obj(map[string]any{
+			"query": str("optional free-text filter over name and description"),
+			"tag":   str("optional tag filter"),
+		}),
+	})
+
 	if agent.IsOrchestrator {
-		tools = append(tools,
-			llm.Tool{
-				Name:        "list_gears",
-				Description: "Search the global gear catalog — tools forged in this or any other workspace. Use it before forging something that may already exist.",
-				InputSchema: obj(map[string]any{
-					"query": str("optional free-text filter over name and description"),
-					"tag":   str("optional tag filter"),
-				}),
-			},
-			llm.Tool{
-				Name:        "grant_gear",
-				Description: "Grant an approved gear to another agent in this workspace, or to every agent in it (omit agent).",
-				InputSchema: obj(map[string]any{
-					"gear":  str("gear name from the catalog"),
-					"agent": str("agent name to grant it to; omit to grant to the whole workspace"),
-				}, "gear"),
-			},
-		)
+		tools = append(tools, llm.Tool{
+			Name:        "grant_gear",
+			Description: "Grant an approved gear to another agent in this workspace, or to every agent in it (omit agent). Use this when an agent reports that an existing gear would do its job.",
+			InputSchema: obj(map[string]any{
+				"gear":  str("gear name from the catalog"),
+				"agent": str("agent name to grant it to; omit to grant to the whole workspace"),
+			}, "gear"),
+		})
 	}
 
 	for _, g := range gears {
@@ -212,8 +214,13 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 
 	// Only the orchestrator manages the workspace; a worker that somehow
 	// asks for a management tool gets a clear refusal.
-	if !agent.IsOrchestrator && call.Name != "delegate" && call.Name != "forge_gear" {
-		return "", fmt.Errorf("tool %q is only available to the orchestrator", call.Name)
+	switch call.Name {
+	case "delegate", "forge_gear", "list_gears":
+		// Available to every agent.
+	default:
+		if !agent.IsOrchestrator {
+			return "", fmt.Errorf("tool %q is only available to the orchestrator", call.Name)
+		}
 	}
 
 	switch call.Name {
