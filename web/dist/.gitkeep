@@ -1,0 +1,11 @@
+This placeholder is committed on purpose.
+
+web/embed.go carries //go:embed all:dist, and a Go embed pattern that matches
+nothing is a compile error — not a warning. Without a tracked file here, a
+fresh clone fails `go build ./...`, `go test ./...`, `go install`, and every
+editor running gopls, with:
+
+    web/embed.go:8:12: pattern all:dist: no matching files found
+
+`make build` hides this because it builds the UI first. Everything else does
+not.
