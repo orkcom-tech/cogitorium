@@ -180,12 +180,24 @@ function GearCard({
       {open && (
         <>
           {source.map((f) => (
-            <details key={f.path} open={f.path === g.entrypoint}>
+            <details key={f.path} open={f.path === g.entrypoint && f.encoding !== 'base64'}>
               <summary>
                 <code>{f.path}</code>
                 {f.path === g.entrypoint && <span className="muted"> — entrypoint</span>}
+                {f.encoding === 'base64' && <span className="muted"> — binary</span>}
               </summary>
-              <pre className="prompt-preview">{f.content}</pre>
+              {f.encoding === 'base64' ? (
+                // Showing megabytes of base64 helps nobody, and pretending a
+                // blob is reviewable source would be worse: say plainly that
+                // this one cannot be read before approving it.
+                <p className="hint">
+                  {Math.round((f.content.length * 3) / 4 / 1024).toLocaleString()} KB of compiled code — it cannot
+                  be read here. Approve it only if you trust where it came from, and use the dry run below to see
+                  what it does.
+                </p>
+              ) : (
+                <pre className="prompt-preview">{f.content}</pre>
+              )}
             </details>
           ))}
           <details>
@@ -283,31 +295,65 @@ function GearCard({
   )
 }
 
+// A gear can be written here or brought in from disk — a single script, a
+// set of files, or a compiled executable. All three land pending and go
+// through the same review as anything an agent forged.
 function AuthorGearForm({ onDone, onError }: { onDone: () => void; onError: (m: string) => void }) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [runtime, setRuntime] = useState('python')
   const [tags, setTags] = useState('')
-  const [code, setCode] = useState(
-    'import sys, json\nargs = json.load(sys.stdin)\nprint(args)\n',
-  )
+  const [source, setSource] = useState<'write' | 'upload'>('write')
+  const [code, setCode] = useState('import sys, json\nargs = json.load(sys.stdin)\nprint(args)\n')
+  const [files, setFiles] = useState<GearFile[]>([])
+  const [entrypoint, setEntrypoint] = useState('')
+
+  const readFiles = async (list: FileList) => {
+    const read = await Promise.all(
+      Array.from(list).map(
+        (f) =>
+          new Promise<GearFile>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onerror = () => reject(new Error(`could not read ${f.name}`))
+            reader.onload = () => {
+              const buf = new Uint8Array(reader.result as ArrayBuffer)
+              // Anything with a NUL byte is not source; carry it as base64
+              // so it survives the round trip intact.
+              const binary = buf.includes(0)
+              if (binary) {
+                let s = ''
+                buf.forEach((b) => (s += String.fromCharCode(b)))
+                resolve({ path: f.name, content: btoa(s), encoding: 'base64' })
+              } else {
+                resolve({ path: f.name, content: new TextDecoder().decode(buf), encoding: 'utf8' })
+              }
+            }
+            reader.readAsArrayBuffer(f)
+          }),
+      ),
+    ).catch((e: Error) => {
+      onError(e.message)
+      return [] as GearFile[]
+    })
+    setFiles(read)
+    if (read.length === 1) setEntrypoint(read[0].path)
+    if (read.some((f) => f.encoding === 'base64')) setRuntime('binary')
+  }
 
   return (
     <form
       className="card"
       onSubmit={(e) => {
         e.preventDefault()
+        const payload = {
+          name,
+          description,
+          runtime,
+          tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+          ...(source === 'write' ? { code } : { files, entrypoint }),
+        }
         api.gears
-          .create({
-            name,
-            description,
-            runtime,
-            code,
-            tags: tags
-              .split(',')
-              .map((t) => t.trim())
-              .filter(Boolean),
-          })
+          .create(payload)
           .then(onDone)
           .catch((err: Error) => onError(err.message))
       }}
@@ -318,6 +364,7 @@ function AuthorGearForm({ onDone, onError }: { onDone: () => void; onError: (m: 
           <option value="python">python</option>
           <option value="node">node</option>
           <option value="bash">bash</option>
+          <option value="binary">executable</option>
         </select>
         <input
           className="grow"
@@ -327,12 +374,69 @@ function AuthorGearForm({ onDone, onError }: { onDone: () => void; onError: (m: 
         />
         <input placeholder="tags, comma separated" value={tags} onChange={(e) => setTags(e.target.value)} />
       </div>
-      <label className="field">
-        <span className="muted">the program — reads JSON arguments on stdin, prints its result to stdout</span>
-        <textarea rows={10} value={code} onChange={(e) => setCode(e.target.value)} spellCheck={false} />
-      </label>
+
+      <div className="tabs">
+        <button type="button" className={source === 'write' ? 'active' : ''} onClick={() => setSource('write')}>
+          write it
+        </button>
+        <button type="button" className={source === 'upload' ? 'active' : ''} onClick={() => setSource('upload')}>
+          bring files
+        </button>
+      </div>
+
+      {source === 'write' ? (
+        <label className="field">
+          <span className="muted">the program — reads JSON arguments on stdin, prints its result to stdout</span>
+          <textarea rows={10} value={code} onChange={(e) => setCode(e.target.value)} spellCheck={false} />
+        </label>
+      ) : (
+        <>
+          <label className="field">
+            <span className="muted">files from disk — scripts, data, or a compiled executable</span>
+            <input
+              type="file"
+              multiple
+              onChange={(e) => {
+                if (e.target.files?.length) void readFiles(e.target.files)
+              }}
+            />
+          </label>
+          {files.length > 0 && (
+            <>
+              {files.map((f) => (
+                <div key={f.path} className="row binding">
+                  <code>{f.path}</code>
+                  <span className="muted">
+                    {f.encoding === 'base64' ? 'binary' : `${f.content.length} chars`}
+                  </span>
+                </div>
+              ))}
+              <label className="field">
+                <span className="muted">which of them runs</span>
+                <select value={entrypoint} onChange={(e) => setEntrypoint(e.target.value)}>
+                  <option value="">pick the entrypoint…</option>
+                  {files.map((f) => (
+                    <option key={f.path} value={f.path}>
+                      {f.path}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+          {runtime === 'binary' && (
+            <p className="hint">
+              An executable runs inside the sandbox container, so it must be built for Linux and the container's
+              architecture — a build for this Mac will not start there.
+            </p>
+          )}
+        </>
+      )}
+
       <div className="row">
-        <button type="submit">create (lands pending, like a forged one)</button>
+        <button type="submit" disabled={source === 'upload' && (files.length === 0 || !entrypoint)}>
+          create (lands pending, like a forged one)
+        </button>
       </div>
     </form>
   )

@@ -3,6 +3,7 @@ package gear
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -68,15 +69,29 @@ type Result struct {
 	TimedOut bool   `json:"timed_out"`
 }
 
+// interpreter returns the command that runs a gear's entrypoint. A binary
+// gear has none — it is executed directly.
 func interpreter(runtime string) (string, []string) {
 	switch runtime {
 	case "python":
 		return "python3", nil
 	case "node":
 		return "node", nil
+	case RuntimeBinary:
+		return "", nil
 	default:
 		return "bash", nil
 	}
+}
+
+// command builds the argv for a gear: interpreter plus entrypoint, or the
+// entrypoint alone when it is an executable.
+func command(g Gear) (string, []string) {
+	bin, preArgs := interpreter(g.Runtime)
+	if bin == "" {
+		return "./" + g.Entrypoint, nil
+	}
+	return bin, append(append([]string{}, preArgs...), g.Entrypoint)
 }
 
 // Caller identifies who a run is on behalf of. A nil AgentID means the
@@ -180,12 +195,12 @@ func (e *Executor) Run(ctx context.Context, g Gear, argsJSON string, caller Call
 // runSandboxed executes the gear in isolation and records it exactly as the
 // subprocess path does, so the audit trail does not depend on the backend.
 func (e *Executor) runSandboxed(ctx context.Context, g Gear, dir, argsJSON string, timeout time.Duration, caller Caller) (Result, error) {
-	bin, preArgs := interpreter(g.Runtime)
+	bin, args := command(g)
 	start := time.Now()
 	out, runErr := e.sandbox.Run(ctx, sandbox.Spec{
 		Dir:            dir,
 		Command:        bin,
-		Args:           append(append([]string{}, preArgs...), g.Entrypoint),
+		Args:           args,
 		Stdin:          strings.NewReader(argsJSON),
 		Env:            map[string]string{"COGITORIUM_GEAR": g.Name, "HOME": "/tmp"},
 		TimeoutSeconds: int(timeout.Seconds()),
@@ -242,11 +257,24 @@ func (e *Executor) materialize(ctx context.Context, g Gear) (string, error) {
 		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 			return "", fmt.Errorf("create gear subdir for %q: %w", f.Path, err)
 		}
+		content := []byte(f.Content)
+		if f.IsBinary() {
+			decoded, err := base64.StdEncoding.DecodeString(f.Content)
+			if err != nil {
+				return "", fmt.Errorf("gear file %q is not valid base64: %w", f.Path, err)
+			}
+			content = decoded
+		}
 		// 0644, not 0600: the enclosing directory is 0700, which is what
 		// keeps other host users out. Inside the sandbox the process runs
 		// as an unprivileged user that owns nothing, and it still has to
-		// read its own code.
-		if err := os.WriteFile(target, []byte(f.Content), 0o644); err != nil {
+		// read its own code. The entrypoint of a binary gear also has to
+		// be executable.
+		mode := os.FileMode(0o644)
+		if g.Runtime == RuntimeBinary && f.Path == g.Entrypoint {
+			mode = 0o755
+		}
+		if err := os.WriteFile(target, content, mode); err != nil {
 			return "", fmt.Errorf("write gear file %q: %w", f.Path, err)
 		}
 	}

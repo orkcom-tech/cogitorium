@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -61,8 +62,9 @@ func (s *Server) handleCreateGear(w http.ResponseWriter, r *http.Request) {
 		Entrypoint  string   `json:"entrypoint"`
 		ArgsSchema  string   `json:"args_schema"`
 		Files       []struct {
-			Path    string `json:"path"`
-			Content string `json:"content"`
+			Path     string `json:"path"`
+			Content  string `json:"content"`
+			Encoding string `json:"encoding"`
 		} `json:"files"`
 	}
 	if !decodeJSON(w, r, &in) {
@@ -71,15 +73,34 @@ func (s *Server) handleCreateGear(w http.ResponseWriter, r *http.Request) {
 
 	files := make([]gear.File, 0, len(in.Files))
 	for _, f := range in.Files {
-		files = append(files, gear.File{Path: f.Path, Content: f.Content})
+		encoding := f.Encoding
+		if encoding == "" {
+			encoding = gear.EncodingUTF8
+		}
+		if encoding != gear.EncodingUTF8 && encoding != gear.EncodingBase64 {
+			writeError(w, http.StatusBadRequest, "file encoding must be utf8 or base64")
+			return
+		}
+		if encoding == gear.EncodingBase64 {
+			if _, err := base64.StdEncoding.DecodeString(f.Content); err != nil {
+				writeError(w, http.StatusBadRequest, "file "+f.Path+" is not valid base64")
+				return
+			}
+		}
+		files = append(files, gear.File{Path: f.Path, Content: f.Content, Encoding: encoding})
 	}
 	entrypoint := in.Entrypoint
 	if in.Code != "" && len(files) == 0 {
 		entrypoint = gear.DefaultEntrypoint(in.Runtime)
-		files = []gear.File{{Path: entrypoint, Content: in.Code}}
+		files = []gear.File{{Path: entrypoint, Content: in.Code, Encoding: gear.EncodingUTF8}}
 	}
 	if entrypoint == "" && len(files) == 1 {
 		entrypoint = files[0].Path
+	}
+	if in.Runtime == gear.RuntimeBinary && entrypoint == "" {
+		writeError(w, http.StatusBadRequest,
+			"a binary gear must say which uploaded file is the executable")
+		return
 	}
 
 	// wsID/agentID 0: authored by the operator, not forged by an agent.

@@ -127,7 +127,9 @@ export const api = {
       name: string
       description: string
       runtime: string
-      code: string
+      code?: string
+      entrypoint?: string
+      files?: GearFile[]
       tags?: string[]
       args_schema?: string
     }) => req<Gear>('/api/v1/gears', { method: 'POST', body: JSON.stringify(g) }),
@@ -319,7 +321,7 @@ export type GearRunResult = {
   error?: string
 }
 
-export type GearFile = { path: string; content: string }
+export type GearFile = { path: string; content: string; encoding?: 'utf8' | 'base64' }
 
 export type GearBinding = {
   id: number

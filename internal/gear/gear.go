@@ -73,7 +73,19 @@ type Run struct {
 type File struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
+	// Encoding is "utf8" for source and "base64" for uploaded binaries.
+	// Review shows source as source and refuses to render a blob as code.
+	Encoding string `json:"encoding"`
 }
+
+const (
+	EncodingUTF8   = "utf8"
+	EncodingBase64 = "base64"
+)
+
+// IsBinary reports whether the file's content is base64-encoded bytes
+// rather than readable source.
+func (f File) IsBinary() bool { return f.Encoding == EncodingBase64 }
 
 type Binding struct {
 	ID          int64  `json:"id"`
@@ -99,8 +111,14 @@ func asConflict(err error, what string) error {
 }
 
 func validRuntime(rt string) bool {
-	return rt == "python" || rt == "node" || rt == "bash"
+	return rt == "python" || rt == "node" || rt == "bash" || rt == RuntimeBinary
 }
+
+// RuntimeBinary executes the entrypoint directly instead of handing it to
+// an interpreter. The binary must be built for the sandbox container's OS
+// and architecture — a macOS build will not run in a Linux container, and
+// that is worth saying before someone waits for a confusing exec error.
+const RuntimeBinary = "binary"
 
 // DefaultEntrypoint names the single file of a one-file gear, so the forging
 // agent does not have to supply a filename it has no opinion about.
@@ -204,9 +222,13 @@ func (s *Store) Forge(ctx context.Context, name, description string, tags []stri
 	}
 
 	for _, f := range files {
+		encoding := f.Encoding
+		if encoding == "" {
+			encoding = EncodingUTF8
+		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO gear_files (gear_id, version, path, content) VALUES (?, ?, ?, ?)`,
-			id, version, f.Path, f.Content); err != nil {
+			`INSERT INTO gear_files (gear_id, version, path, content, encoding) VALUES (?, ?, ?, ?, ?)`,
+			id, version, f.Path, f.Content, encoding); err != nil {
 			return Gear{}, fmt.Errorf("forge gear: store file %q: %w", f.Path, err)
 		}
 	}
@@ -326,7 +348,8 @@ func slicesContainsFold(haystack []string, needle string) bool {
 
 func (s *Store) Files(ctx context.Context, gearID int64, version int) ([]File, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT path, content FROM gear_files WHERE gear_id = ? AND version = ? ORDER BY path`, gearID, version)
+		`SELECT path, content, encoding FROM gear_files WHERE gear_id = ? AND version = ? ORDER BY path`,
+		gearID, version)
 	if err != nil {
 		return nil, fmt.Errorf("gear %d files: %w", gearID, err)
 	}
@@ -334,7 +357,7 @@ func (s *Store) Files(ctx context.Context, gearID int64, version int) ([]File, e
 	out := []File{}
 	for rows.Next() {
 		var f File
-		if err := rows.Scan(&f.Path, &f.Content); err != nil {
+		if err := rows.Scan(&f.Path, &f.Content, &f.Encoding); err != nil {
 			return nil, fmt.Errorf("scan gear file: %w", err)
 		}
 		out = append(out, f)
