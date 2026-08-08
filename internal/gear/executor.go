@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 )
 
 const (
@@ -29,10 +31,29 @@ const (
 type Executor struct {
 	store   *Store
 	baseDir string
+	// sandbox, when set, runs gears isolated from the server's files. It is
+	// what stops a gear from reading the database and lifting the provider
+	// API keys out of it — a subprocess cannot be stopped from that, since
+	// it holds the server's own filesystem access.
+	sandbox sandbox.Runner
 }
 
-func NewExecutor(store *Store, dataDir string) *Executor {
-	return &Executor{store: store, baseDir: filepath.Join(dataDir, "gears")}
+func NewExecutor(store *Store, dataDir string, sb sandbox.Runner) *Executor {
+	if sb == nil {
+		slog.Warn("gears will run as unsandboxed subprocesses with this server's file access — " +
+			"an approved gear can read the database, including provider API keys; " +
+			"install Docker or set sandbox: docker to isolate them")
+	}
+	return &Executor{store: store, baseDir: filepath.Join(dataDir, "gears"), sandbox: sb}
+}
+
+// Backend names how gears are currently executed, so the operator can see
+// whether approval is their only protection.
+func (e *Executor) Backend() string {
+	if e.sandbox == nil {
+		return "subprocess (not isolated)"
+	}
+	return e.sandbox.Name()
 }
 
 type Result struct {
@@ -81,15 +102,23 @@ func (e *Executor) Run(ctx context.Context, g Gear, argsJSON string, caller Call
 		return Result{}, err
 	}
 
+	timeout := defaultTimeout
+	if g.TimeoutSeconds > 0 {
+		timeout = time.Duration(g.TimeoutSeconds) * time.Second
+	}
+	if argsJSON == "" {
+		argsJSON = "{}"
+	}
+
+	if e.sandbox != nil {
+		return e.runSandboxed(ctx, g, dir, argsJSON, timeout, caller)
+	}
+
 	bin, preArgs := interpreter(g.Runtime)
 	if _, err := exec.LookPath(bin); err != nil {
 		return Result{}, fmt.Errorf("gear %q needs %s, which is not installed on this machine", g.Name, bin)
 	}
 
-	timeout := defaultTimeout
-	if g.TimeoutSeconds > 0 {
-		timeout = time.Duration(g.TimeoutSeconds) * time.Second
-	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -143,6 +172,44 @@ func (e *Executor) Run(ctx context.Context, g Gear, argsJSON string, caller Call
 	return res, nil
 }
 
+// runSandboxed executes the gear in isolation and records it exactly as the
+// subprocess path does, so the audit trail does not depend on the backend.
+func (e *Executor) runSandboxed(ctx context.Context, g Gear, dir, argsJSON string, timeout time.Duration, caller Caller) (Result, error) {
+	bin, preArgs := interpreter(g.Runtime)
+	start := time.Now()
+	out, runErr := e.sandbox.Run(ctx, sandbox.Spec{
+		Dir:            dir,
+		Command:        bin,
+		Args:           append(append([]string{}, preArgs...), g.Entrypoint),
+		Stdin:          strings.NewReader(argsJSON),
+		Env:            map[string]string{"COGITORIUM_GEAR": g.Name, "HOME": "/tmp"},
+		TimeoutSeconds: int(timeout.Seconds()),
+	})
+	elapsed := time.Since(start)
+
+	res := Result{
+		Stdout:   truncate(out.Stdout),
+		Stderr:   truncate(out.Stderr),
+		ExitCode: out.ExitCode,
+		TimedOut: out.TimedOut,
+	}
+	slog.Info("gear executed", "gear", g.Name, "version", g.Version, "backend", e.sandbox.Name(),
+		"exit_code", res.ExitCode, "timed_out", res.TimedOut, "dry_run", caller.DryRun,
+		"duration_ms", elapsed.Milliseconds())
+
+	if err := e.store.RecordRun(context.WithoutCancel(ctx), Run{
+		GearID: g.ID, Version: g.Version, AgentID: caller.AgentID, WorkspaceID: caller.WorkspaceID,
+		Args: argsJSON, ExitCode: res.ExitCode, TimedOut: res.TimedOut,
+		DurationMs: elapsed.Milliseconds(), Stdout: res.Stdout, Stderr: res.Stderr,
+	}); err != nil {
+		slog.Error("could not record gear run", "gear", g.Name, "err", err)
+	}
+	if runErr != nil {
+		return res, fmt.Errorf("gear %q: %w", g.Name, runErr)
+	}
+	return res, nil
+}
+
 // materialize writes the approved version's files into
 // <data-dir>/gears/<name>/v<version>/. The directory is rebuilt from the
 // database on every run: a deleted-and-reforged gear reuses name and
@@ -170,7 +237,11 @@ func (e *Executor) materialize(ctx context.Context, g Gear) (string, error) {
 		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 			return "", fmt.Errorf("create gear subdir for %q: %w", f.Path, err)
 		}
-		if err := os.WriteFile(target, []byte(f.Content), 0o600); err != nil {
+		// 0644, not 0600: the enclosing directory is 0700, which is what
+		// keeps other host users out. Inside the sandbox the process runs
+		// as an unprivileged user that owns nothing, and it still has to
+		// read its own code.
+		if err := os.WriteFile(target, []byte(f.Content), 0o644); err != nil {
 			return "", fmt.Errorf("write gear file %q: %w", f.Path, err)
 		}
 	}

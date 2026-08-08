@@ -18,6 +18,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/engine"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
+	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/version"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 	"github.com/orkcom-tech/cogitorium/web"
@@ -39,12 +40,12 @@ type Server struct {
 	trustLoopback bool
 }
 
-func New(listen string, db *sql.DB, contextdPath, dataDir string) *Server {
+func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Runner) *Server {
 	cat := catalog.NewStore(db)
 	ws := workspace.NewStore(db)
 	cs := contextstore.New(contextdPath)
 	gears := gear.NewStore(db)
-	gearExec := gear.NewExecutor(gears, dataDir)
+	gearExec := gear.NewExecutor(gears, dataDir, sb)
 	s := &Server{
 		db:         db,
 		catalog:    cat,

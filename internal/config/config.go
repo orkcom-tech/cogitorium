@@ -21,6 +21,12 @@ type Config struct {
 	// ContextdPath is the contextd binary (Contextverse CLI) used for the
 	// context layer. Default: "contextd" resolved from PATH.
 	ContextdPath string `yaml:"contextd_path"`
+	// Sandbox selects how gears and the terminal execute: "docker" isolates
+	// them from the server's files, "subprocess" does not. Default "auto"
+	// uses Docker when it answers and says so plainly when it does not.
+	Sandbox string `yaml:"sandbox"`
+	// SandboxImage is the container image gears run in.
+	SandboxImage string `yaml:"sandbox_image"`
 }
 
 func Defaults() Config {
@@ -34,6 +40,7 @@ func Defaults() Config {
 		DataDir:      filepath.Join(home, ".cogitorium"),
 		LogLevel:     "info",
 		ContextdPath: "contextd",
+		Sandbox:      "auto",
 	}
 }
 
@@ -86,6 +93,12 @@ func Load(path, dataDirOverride string) (Config, error) {
 	}
 	if v := os.Getenv("COGITORIUM_CONTEXTD"); v != "" {
 		cfg.ContextdPath = v
+	}
+	if v := os.Getenv("COGITORIUM_SANDBOX"); v != "" {
+		cfg.Sandbox = v
+	}
+	if v := os.Getenv("COGITORIUM_SANDBOX_IMAGE"); v != "" {
+		cfg.SandboxImage = v
 	}
 	return cfg, nil
 }

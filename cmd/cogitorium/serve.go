@@ -1,16 +1,44 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/orkcom-tech/cogitorium/internal/config"
+	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/server"
 	"github.com/orkcom-tech/cogitorium/internal/store"
 	"github.com/spf13/cobra"
 )
+
+// selectSandbox decides how gears and the terminal execute. "auto" prefers
+// isolation and says plainly when it cannot get it — it never pretends. A
+// gear running unsandboxed holds the server's own file access, which is
+// enough to read the database and the provider API keys in it.
+func selectSandbox(ctx context.Context, mode, image string) (sandbox.Runner, error) {
+	switch mode {
+	case "subprocess":
+		slog.Warn("sandbox disabled by configuration: gears run with this server's file access")
+		return nil, nil
+	case "docker", "auto", "":
+		d := sandbox.NewDocker(image)
+		if d != nil && d.Available(ctx) {
+			slog.Info("gears run sandboxed", "backend", d.Name())
+			return d, nil
+		}
+		if mode == "docker" {
+			return nil, errors.New("sandbox: docker was requested but the daemon does not answer")
+		}
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("sandbox must be auto, docker or subprocess (got %q)", mode)
+	}
+}
 
 func newServeCmd() *cobra.Command {
 	var (
@@ -57,7 +85,12 @@ func newServeCmd() *cobra.Command {
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			srv := server.New(cfg.Listen, db, cfg.ContextdPath, cfg.DataDir)
+			sb, err := selectSandbox(ctx, cfg.Sandbox, cfg.SandboxImage)
+			if err != nil {
+				return err
+			}
+
+			srv := server.New(cfg.Listen, db, cfg.ContextdPath, cfg.DataDir, sb)
 			if err := srv.Bootstrap(ctx); err != nil {
 				return err
 			}
