@@ -1448,18 +1448,91 @@ th {
   accent-color: var(--accent);
 }
 
-/* The appearance cluster: fixed top-right, so the palette control sits beside
-   the workspace's layout control instead of being stranded inside one page. */
-.app-controls {
-  position: fixed;
-  top: var(--s2);
-  right: var(--s3);
-  z-index: var(--z-menu);
+
+
+/* The account block. It holds who you are, what the server is, how the place
+   looks, and the way out — so it is a block, not a line of small print. */
+.account {
+  margin-top: auto;
   display: flex;
-  gap: var(--s1);
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
 }
 
-/* Keep the workspace's own chips clear of it. */
-.ws-head {
-  padding-right: 6.5rem;
+.account-who {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: var(--t-ui);
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(140deg, var(--accent), color-mix(in srgb, var(--accent) 40%, var(--theme-c)));
+}
+
+.account-id {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.account-id strong {
+  font-size: var(--t-ui);
+}
+
+.account-server {
+  font-size: var(--t-micro);
+  color: var(--text-dim);
+}
+
+.account-out {
+  border: 1px solid var(--border);
+  border-radius: var(--r1);
+  padding: var(--s1);
+}
+
+.account-out button {
+  width: 100%;
+  font-size: var(--t-chrome);
+}
+
+.account .theme-chip {
+  width: 100%;
+  justify-content: center;
+}
+
+/* The palette menu now opens from the bottom-left corner of the screen. */
+.account .theme-menu {
+  left: 0;
+  right: auto;
+  bottom: calc(100% + 6px);
+  top: auto;
+}
+
+.file-btn {
+  display: inline-block;
+  font-size: var(--t-ui);
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r1);
+  cursor: pointer;
+}
+
+.file-btn input {
+  display: none;
+}
+
+.backdrop-row {
+  padding: var(--s1) var(--s2);
+  gap: var(--s2);
 }

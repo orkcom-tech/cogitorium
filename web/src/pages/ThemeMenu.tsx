@@ -12,11 +12,14 @@ import { DEFAULT_THEME, PRESET_THEMES, applyTheme, loadTheme, saveTheme, type Th
 export default function ThemeMenu() {
   const [theme, setTheme] = useState<Theme>(() => loadTheme())
   const [open, setOpen] = useState(false)
+  const [bgError, setBgError] = useState<string | null>(null)
   const box = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     applyTheme(theme)
-    saveTheme(theme)
+    if (!saveTheme(theme)) {
+      setBgError('this backdrop is too large to keep — it will be gone after a reload')
+    }
   }, [theme])
 
   useEffect(() => {
@@ -88,6 +91,53 @@ export default function ThemeMenu() {
               </button>
             )}
           </div>
+
+          <span className="menu-head">Backdrop</span>
+          <div className="row backdrop-row">
+            <label className="file-btn">
+              picture or clip…
+              <input
+                type="file"
+                accept="image/*,video/mp4,video/webm"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  e.target.value = ''
+                  if (!f) return
+                  // Read locally and store as a data URL. Nothing is uploaded
+                  // and nothing is ever fetched from a remote address.
+                  const r = new FileReader()
+                  r.onload = () => {
+                    const data = String(r.result)
+                    const kind = f.type.startsWith('video') ? 'video' : 'image'
+                    try {
+                      setTheme({ ...theme, bg: { ...theme.bg, kind, data } })
+                      setBgError(null)
+                    } catch {
+                      setBgError('too large to keep')
+                    }
+                  }
+                  r.readAsDataURL(f)
+                }}
+              />
+            </label>
+            {theme.bg.kind !== 'none' && (
+              <button onClick={() => setTheme({ ...theme, bg: { ...theme.bg, kind: 'none', data: '' } })}>clear</button>
+            )}
+          </div>
+          {bgError && <span className="hint warn">{bgError}</span>}
+          {theme.bg.kind !== 'none' && (
+            <label className="dial">
+              dim it
+              <input
+                type="range"
+                min={0}
+                max={0.9}
+                step={0.05}
+                value={theme.bg.dim}
+                onChange={(e) => setTheme({ ...theme, bg: { ...theme.bg, dim: Number(e.target.value) } })}
+              />
+            </label>
+          )}
 
           <span className="menu-head">Panels</span>
           <div className="row mode-row">

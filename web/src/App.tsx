@@ -83,6 +83,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className={`layout ${navOpen ? '' : 'nav-collapsed'}`}>
+        <div className="shell-backdrop" aria-hidden>
+          <Backdrop />
+        </div>
+        <div className="shell-scrim" aria-hidden />
         <div className="shell-ground" aria-hidden />
         <div className="shell-glow" aria-hidden />
         <div className="shell-grain" aria-hidden />
@@ -123,19 +127,32 @@ export default function App() {
               <span>People</span>
             </NavLink>}
           </nav>
-          <footer className="pane side-pane sidebar-footer">
-            <div>
-              {user.name} · {user.role}
+          <footer className="pane side-pane account">
+            <div className="account-who">
+              <span className="avatar" aria-hidden>
+                {user.name.slice(0, 1).toUpperCase()}
+              </span>
+              <div className="account-id">
+                <strong>{user.name}</strong>
+                <span className="muted">{user.role}</span>
+              </div>
             </div>
-            <div>{health ? `${health.version} · ${health.status}` : 'server unreachable'}</div>
-            <button className="linkish" onClick={signOut}>
-              sign out
-            </button>
+
+            <ThemeMenu />
+
+            <div className="account-server">
+              {health ? `${health.version} · ${health.status}` : 'server unreachable'}
+            </div>
+
+            {/* Signing out gets its own bordered block: it is the one control
+                here that ends the session, and it read as a footnote. */}
+            <div className="account-out">
+              <button className="danger" onClick={signOut}>
+                sign out
+              </button>
+            </div>
           </footer>
         </aside>
-        <div className="app-controls">
-          <ThemeMenu />
-        </div>
         <main className="content">
           <Routes>
             <Route path="/" element={<Navigate to="/workspaces" replace />} />
@@ -152,4 +169,13 @@ export default function App() {
       </div>
     </BrowserRouter>
   )
+}
+
+/** The operator's own clip, when they set one. An image is a CSS background;
+ *  a video needs a real element, muted and inline so a browser will autoplay
+ *  it at all. */
+function Backdrop() {
+  const t = loadTheme()
+  if (t.bg.kind !== 'video' || !t.bg.data) return null
+  return <video src={t.bg.data} autoPlay loop muted playsInline />
 }

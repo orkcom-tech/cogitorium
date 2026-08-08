@@ -26,6 +26,8 @@ export type Theme = {
   blur: number
   /** how dark the fill is, 0…1 */
   dim: number
+  /** the operator's own backdrop: a picture or a looping clip */
+  bg: { kind: 'none' | 'image' | 'video'; data: string; dim: number }
 }
 
 export type Palette = Pick<Theme, 'colors' | 'grain' | 'tint'>
@@ -47,6 +49,7 @@ export const DEFAULT_THEME: Theme = {
   surface: 'glass',
   blur: 14,
   dim: 0.62,
+  bg: { kind: 'none', data: '', dim: 0.55 },
 }
 
 const KEY = 'cogitorium.theme'
@@ -73,17 +76,29 @@ export function loadTheme(): Theme {
       surface: t.surface === 'solid' ? 'solid' : 'glass',
       blur: typeof t.blur === 'number' && t.blur >= 0 && t.blur <= 40 ? t.blur : DEFAULT_THEME.blur,
       dim: clamp01(typeof t.dim === 'number' ? t.dim : DEFAULT_THEME.dim),
+      bg: {
+        kind: t.bg?.kind === 'image' || t.bg?.kind === 'video' ? t.bg.kind : 'none',
+        // Only a data: URL is ever accepted. A remote address here would make
+        // the interface fetch from somewhere on every load, which this project
+        // does not do — and would leak that it was loaded, to whoever hosts it.
+        data: typeof t.bg?.data === 'string' && t.bg.data.startsWith('data:') ? t.bg.data : '',
+        dim: clamp01(typeof t.bg?.dim === 'number' ? t.bg.dim : 0.55),
+      },
     }
   } catch {
     return DEFAULT_THEME
   }
 }
 
-export function saveTheme(t: Theme) {
+/** Returns false when the browser refused to keep it — a picture can be
+ *  bigger than the storage quota, and the operator has to be told rather than
+ *  discovering it after a reload. */
+export function saveTheme(t: Theme): boolean {
   try {
     localStorage.setItem(KEY, JSON.stringify(t))
+    return true
   } catch {
-    /* private mode: the theme simply does not persist */
+    return false
   }
 }
 
@@ -145,6 +160,11 @@ export function applyTheme(t: Theme) {
   root.classList.toggle('solid-surfaces', t.surface === 'solid')
   root.style.setProperty('--surface-blur', `${t.blur}px`)
   root.style.setProperty('--surface-dim', String(t.dim))
+
+  const hasBg = t.bg.kind !== 'none' && !!t.bg.data
+  root.classList.toggle('has-backdrop', hasBg)
+  root.style.setProperty('--backdrop-dim', String(t.bg.dim))
+  root.style.setProperty('--backdrop-img', t.bg.kind === 'image' && t.bg.data ? `url("${t.bg.data}")` : 'none')
 
   if (t.mode === 'system') root.removeAttribute('data-theme')
   else root.setAttribute('data-theme', t.mode)

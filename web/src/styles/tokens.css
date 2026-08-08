@@ -284,3 +284,44 @@ button.primary:hover:not(:disabled) {
 .transcript {
   gap: var(--s4);
 }
+
+
+/* The operator's own backdrop.
+ *
+ * It sits under the gradient, and a scrim sits over it, because a photograph
+ * behind live text is unreadable without one. The scrim is on a dial rather
+ * than a fixed value: how much a picture needs depends entirely on the
+ * picture. */
+.shell-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -3;
+  background-image: var(--backdrop-img, none);
+  background-size: cover;
+  background-position: center;
+}
+
+.shell-backdrop video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.shell-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: -3;
+  pointer-events: none;
+  background: light-dark(rgb(255 255 255 / var(--backdrop-dim, 0.55)), rgb(0 0 0 / var(--backdrop-dim, 0.55)));
+}
+
+/* With a backdrop, the palette gradient becomes a tint over it rather than
+   the ground itself — otherwise it would simply cover the picture. */
+:root.has-backdrop .shell-ground {
+  opacity: 0.35;
+}
+
+:root:not(.has-backdrop) .shell-backdrop,
+:root:not(.has-backdrop) .shell-scrim {
+  display: none;
+}
