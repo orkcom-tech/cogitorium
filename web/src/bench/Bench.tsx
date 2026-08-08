@@ -8,6 +8,8 @@ export type PanelDef = {
   /** where this panel goes when it is opened and has no remembered slot */
   home: SlotId
   canClose?: boolean
+  /** the width below which this panel stops being usable, in px */
+  minW?: number
   /**
    * onDemand panels restore their POSITION but not their contents.
    *
@@ -33,12 +35,20 @@ export type PanelDef = {
  */
 export default function Bench({ panels, layout }: { panels: PanelDef[]; layout: LayoutApi }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [vp, setVp] = useState({ w: window.innerWidth, h: window.innerHeight })
+  // The BENCH's own box, not the window's. Clamping a slot against window
+  // width lets main + aux exceed the container, and the whole application
+  // scrolls sideways — which is exactly how the chat ended up three words wide.
+  const [vp, setVp] = useState({ w: 0, h: 0 })
 
   useEffect(() => {
-    const onResize = () => setVp({ w: window.innerWidth, h: window.innerHeight })
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver(([e]) => {
+      const r = e.contentRect
+      setVp({ w: Math.round(r.width), h: Math.round(r.height) })
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
   }, [])
 
   const byId = useMemo(() => new Map(panels.map((p) => [p.id, p])), [panels])
@@ -52,18 +62,39 @@ export default function Bench({ panels, layout }: { panels: PanelDef[]; layout: 
   const l = useMemo(() => fit(layout.layout, vp.w, vp.h), [layout.layout, vp])
   const max = l.maximized
 
+  const overlayBox = (slot: SlotId): React.CSSProperties | null => {
+    const d = l.slots[slot]
+    if (max || d.mode !== 'overlay' || !d.open || d.panels.length === 0) return null
+    if (slot === 'main' || slot === 'aux') return null
+    const base: React.CSSProperties = { position: 'absolute', zIndex: 30 }
+    if (slot === 'left') return { ...base, left: 0, top: 0, bottom: 0, width: d.size }
+    if (slot === 'right') return { ...base, right: 0, top: 0, bottom: 0, width: d.size }
+    if (slot === 'top') return { ...base, left: 0, right: 0, top: 0, height: d.size }
+    return { ...base, left: 0, right: 0, bottom: 0, height: d.size }
+  }
+
   const track = (slot: SlotId) => {
     const d = l.slots[slot]
     if (d.panels.length === 0) return 0 // no chrome and no seam for an empty slot
     if (max) return 0
-    return d.open ? d.size : RAIL
+    if (!d.open) return RAIL
+    // An overlay keeps only its rail of tabs in the grid; the body floats above
+    // the centre. Without this the track stays full width and the "overlay"
+    // sits politely beside the thing it is supposed to cover.
+    if (d.mode === 'overlay' && slot !== 'main' && slot !== 'aux') return RAIL
+    return d.size
   }
 
+  const mainActive = l.slots.main.active
+  const minMain = Math.max(MIN_MAIN, (mainActive && byId.get(mainActive)?.minW) || 0)
+
   const style = {
+    '--w-left': px(track('left'), 0),
+    '--h-top': px(track('top'), 0),
     '--w-aux': px(track('aux'), 0),
     '--w-right': px(track('right'), 0),
     '--h-bottom': px(track('bottom'), 0),
-    '--min-main': `${MIN_MAIN}px`,
+    '--min-main': `${minMain}px`,
   } as React.CSSProperties
 
   // Sorted by fixed slot rank so DOM order matches reading order for tab
@@ -81,7 +112,7 @@ export default function Bench({ panels, layout }: { panels: PanelDef[]; layout: 
       {SLOT_ORDER.map((slot) => {
         const d = l.slots[slot]
         if (d.panels.length === 0 || max) return null
-        return <DockChrome key={slot} slot={slot} layout={layout} byId={byId} />
+        return <DockChrome key={slot} slot={slot} layout={layout} byId={byId} overlay={overlayBox(slot)} />
       })}
 
       {ordered.map((p) => {
@@ -92,16 +123,19 @@ export default function Bench({ panels, layout }: { panels: PanelDef[]; layout: 
         // sockets and buffers, just moved off screen.
         const live = max ? max === p.id : !!dock && dock.open && dock.active === p.id
         const gated = p.restore === 'onDemand' && !started.has(p.id)
+        const box = slot && live ? overlayBox(slot) : null
+        const overlay = !!box
+        const overlayStyle = box ?? undefined
         return (
           <div
             key={p.id}
             data-panel={p.id}
-            className={`bn-panel ${live ? '' : 'bn-parked'}`}
+            className={`bn-panel ${live ? '' : 'bn-parked'} ${overlay ? 'bn-overlay' : ''}`}
             style={
               live
                 ? max
                   ? { gridArea: 'main', zIndex: 2 }
-                  : { gridArea: slot }
+                  : (overlayStyle ?? { gridArea: slot })
                 : undefined
             }
           >
@@ -122,8 +156,24 @@ export default function Bench({ panels, layout }: { panels: PanelDef[]; layout: 
         )
       })}
 
-      {!max && l.slots.aux.panels.length > 0 && l.slots.aux.open && (
-        <Splitter axis="x" invert onResize={(d) => layout.resize('aux', clamp(l.slots.aux.size - d, 240, vp.w - MIN_MAIN))} />
+      {!max && l.slots.aux.panels.length > 0 && l.slots.aux.open && vp.w > 0 && (
+        <Splitter
+          axis="x"
+          invert
+          onResize={(d) => {
+            const auxActive = l.slots.aux.active
+            const minAux = Math.max(240, (auxActive && byId.get(auxActive)?.minW) || 0)
+            const room = vp.w - track('right') - minMain
+            layout.resize('aux', clamp(l.slots.aux.size - d, minAux, Math.max(minAux, room)))
+          }}
+        />
+      )}
+      {!max && l.slots.bottom.panels.length > 0 && l.slots.bottom.open && vp.h > 0 && (
+        <Splitter
+          axis="y"
+          invert
+          onResize={(d) => layout.resize('bottom', clamp(l.slots.bottom.size - d, 120, Math.max(120, vp.h - 200)))}
+        />
       )}
     </div>
   )
@@ -142,16 +192,24 @@ function DockChrome({
   slot,
   layout,
   byId,
+  overlay,
 }: {
   slot: SlotId
   layout: LayoutApi
   byId: Map<PanelId, PanelDef>
+  overlay: React.CSSProperties | null
 }) {
   const d = layout.layout.slots[slot]
   const [menuFor, setMenuFor] = useState<PanelId | null>(null)
 
   return (
-    <div className={`bn-chrome bn-chrome-${slot} ${d.open ? '' : 'bn-rail'}`} style={{ gridArea: slot }}>
+    <div
+      className={`bn-chrome bn-chrome-${slot} ${d.open ? '' : 'bn-rail'} ${overlay ? 'bn-chrome-overlay' : ''}`}
+      // The tab strip travels WITH its panel. Computing the two separately is
+      // how an overlaid panel ends up with its tabs stranded in the rail it
+      // just left.
+      style={overlay ? { ...overlay, bottom: 'auto', height: 'var(--h-tabs)', zIndex: 31 } : { gridArea: slot }}
+    >
       <div className="bn-tabs">
         {d.panels.map((id) => {
           const p = byId.get(id)
@@ -193,6 +251,8 @@ function DockChrome({
 }
 
 const SLOT_LABEL: Record<SlotId, string> = {
+  left: 'to left',
+  top: 'to top',
   main: 'to centre',
   aux: 'beside centre',
   bottom: 'to bottom',
@@ -247,6 +307,16 @@ function PlaceMenu({
         </button>
       ))}
       <hr />
+      {slot !== 'main' && slot !== 'aux' && (
+        <button
+          onClick={() => {
+            layout.setMode(slot, layout.layout.slots[slot].mode === 'overlay' ? 'push' : 'overlay')
+            onDone()
+          }}
+        >
+          {layout.layout.slots[slot].mode === 'overlay' ? '✓ slide out over the centre' : '  slide out over the centre'}
+        </button>
+      )}
       <button
         onClick={() => {
           layout.maximize(id)

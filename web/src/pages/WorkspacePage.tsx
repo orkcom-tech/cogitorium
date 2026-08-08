@@ -208,6 +208,11 @@ export default function WorkspacePage() {
         e.preventDefault()
         layout.maximize(layout.layout.slots.main.active)
       }
+      // ⌘J toggles the bottom dock, the way an editor's panel key works.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault()
+        if (layout.layout.slots.bottom.panels.length > 0) layout.toggleOpen('bottom')
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -234,6 +239,7 @@ export default function WorkspacePage() {
   const panels: PanelDef[] = [
     {
       id: 'chat',
+      minW: 520,
       title: 'Chat',
       home: 'main',
       canClose: false,
@@ -246,6 +252,7 @@ export default function WorkspacePage() {
     },
     {
       id: 'blueprint',
+      minW: 420,
       title: 'Blueprint',
       home: 'aux',
       node: (
@@ -266,8 +273,9 @@ export default function WorkspacePage() {
     },
     {
       id: 'files',
+      minW: 380,
       title: 'Files',
-      home: 'aux',
+      home: 'left',
       node: (
         <div className="bn-body">
           <FilesPage wsId={wsId} onError={setError} />
@@ -276,6 +284,7 @@ export default function WorkspacePage() {
     },
     {
       id: 'terminal',
+      minW: 360,
       title: 'Terminal',
       home: 'bottom',
       restore: 'onDemand',
@@ -287,6 +296,7 @@ export default function WorkspacePage() {
     },
     {
       id: 'agents',
+      minW: 200,
       title: 'Agents',
       home: 'right',
       node: (
@@ -320,6 +330,7 @@ export default function WorkspacePage() {
     },
     {
       id: 'agent',
+      minW: 420,
       title: selectedAgent ? selectedAgent.name : 'Agent',
       home: 'aux',
       node: (

@@ -105,6 +105,7 @@ export default function BlueprintEditor({
   // outward defaults ON: a capability that reaches off the machine must not
   // hide behind a toggle the operator has to remember to switch on.
   const [layers, setLayers] = useState({ delegation: true, tools: true, memory: false, outward: true })
+  const [showHelp, setShowHelp] = useState(() => localStorage.getItem('cogitorium.bpHelp') !== 'off')
   const [egress, setEgress] = useState<{ enabled: boolean; destination: string; grants: EgressGrant[]; reach: Record<string, string[]> } | null>(null)
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<NodeData>>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -354,11 +355,15 @@ export default function BlueprintEditor({
 
   return (
     <div className="blueprint">
-      <p className="hint">
-        Wires are the delegation capability, not decoration: an agent may delegate only along its outgoing edges.
-        A gear linked to an agent is a tool that agent may call. Drag between nodes to connect, select a link and
-        press Delete to revoke it. Double-click an agent to open it.
-      </p>
+      {showHelp && (
+        <p className="hint bp-help">
+          Drag between nodes to connect — a wire IS the capability, not a picture of one. Select a link and press
+          Delete to revoke it; double-click an agent to open it.
+          <button className="linkish" onClick={() => { setShowHelp(false); localStorage.setItem('cogitorium.bpHelp', 'off') }}>
+            got it
+          </button>
+        </p>
+      )}
       <div className="row legend">
         {(['delegation', 'tools', 'memory', 'outward'] as const).map((layer) => (
           <button

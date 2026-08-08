@@ -7,11 +7,11 @@
 // operator's shell. Every panel is a direct child of .bench for its whole life
 // and moves by having a different grid-area written onto it.
 
-export type SlotId = 'main' | 'aux' | 'bottom' | 'right'
+export type SlotId = 'left' | 'top' | 'main' | 'aux' | 'bottom' | 'right'
 
 // Fixed rank so DOM order matches reading order for tab sequence and screen
 // readers, without ever reordering the array itself.
-export const SLOT_ORDER: SlotId[] = ['main', 'aux', 'bottom', 'right']
+export const SLOT_ORDER: SlotId[] = ['left', 'top', 'main', 'aux', 'bottom', 'right']
 
 export type PanelId = string
 
@@ -22,6 +22,14 @@ export type Dock = {
   size: number
   /** false collapses the dock to a rail of tab labels; panels stay MOUNTED */
   open: boolean
+  /**
+   * push resizes the centre; overlay slides OVER it.
+   *
+   * This is the whole of "выдвигающиеся" — one boolean-ish field on the same
+   * record, identical for all four edges. No third positioning model, no
+   * hover-peek, no special case per side.
+   */
+  mode: 'push' | 'overlay'
 }
 
 export type Layout = {
@@ -31,10 +39,14 @@ export type Layout = {
 }
 
 export const DEFAULTS: Record<SlotId, Dock> = {
-  main: { panels: ['chat'], active: 'chat', size: 0, open: true },
-  aux: { panels: [], active: null, size: 420, open: true },
-  bottom: { panels: [], active: null, size: 260, open: true },
-  right: { panels: ['agents'], active: 'agents', size: 240, open: true },
+  left: { panels: [], active: null, size: 260, open: true, mode: 'push' },
+  top: { panels: [], active: null, size: 200, open: true, mode: 'push' },
+  main: { panels: ['chat'], active: 'chat', size: 0, open: true, mode: 'push' },
+  aux: { panels: [], active: null, size: 420, open: true, mode: 'push' },
+  // Bottom and top default to push: an overlay there would cover the composer
+  // and the newest tokens, which is the exact bug slice 0 just fixed.
+  bottom: { panels: [], active: null, size: 260, open: true, mode: 'push' },
+  right: { panels: ['agents'], active: 'agents', size: 240, open: true, mode: 'push' },
 }
 
 export const MIN_MAIN = 320
@@ -44,6 +56,8 @@ export function defaultLayout(): Layout {
   return {
     v: 1,
     slots: {
+      left: { ...DEFAULTS.left, panels: [] },
+      top: { ...DEFAULTS.top, panels: [] },
       main: { ...DEFAULTS.main, panels: [...DEFAULTS.main.panels] },
       aux: { ...DEFAULTS.aux, panels: [] },
       bottom: { ...DEFAULTS.bottom, panels: [] },
@@ -99,6 +113,7 @@ export function parseLayout(raw: unknown, known: (id: PanelId) => boolean): Layo
       active: typeof dock.active === 'string' && list.includes(dock.active) ? dock.active : (list[0] ?? null),
       size,
       open: dock.open === undefined ? true : dock.open === true,
+      mode: dock.mode === 'overlay' ? 'overlay' : 'push',
     }
   }
 
@@ -116,9 +131,16 @@ export function parseLayout(raw: unknown, known: (id: PanelId) => boolean): Layo
  */
 export function fit(layout: Layout, vw: number, vh: number): Layout {
   const s = layout.slots
-  const wRight = s.right.panels.length === 0 ? 0 : s.right.open ? s.right.size : RAIL
-  const wAux = s.aux.panels.length === 0 ? 0 : s.aux.open ? s.aux.size : RAIL
-  const hBottom = s.bottom.panels.length === 0 ? 0 : s.bottom.open ? s.bottom.size : RAIL
+  const trackOf = (d: Dock) => {
+    if (d.panels.length === 0) return 0
+    if (!d.open) return RAIL
+    // An overlay floats above the centre, so it consumes no track and can
+    // never squeeze the panel it is covering.
+    return d.mode === 'overlay' ? RAIL : d.size
+  }
+  const wRight = trackOf(s.right)
+  const wAux = trackOf(s.aux)
+  const hBottom = trackOf(s.bottom)
 
   let right = wRight
   let aux = wAux

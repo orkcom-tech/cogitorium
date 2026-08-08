@@ -12,13 +12,16 @@
   height: 100%;
   overflow: hidden; /* scroll is always owned by a panel body, never the bench */
   grid-template-areas:
-    'main aux    right'
-    'bottom bottom right';
+    'left top    top    right'
+    'left main   aux    right'
+    'left bottom bottom right';
   grid-template-columns:
+    var(--w-left, 0px)
     minmax(var(--min-main), 1fr)
     var(--w-aux, 0px)
     var(--w-right, 0px);
   grid-template-rows:
+    var(--h-top, 0px)
     minmax(120px, 1fr)
     var(--h-bottom, 0px);
 }
@@ -168,21 +171,28 @@
   background: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+/* An overlay is the same panel with a border and a shadow: an edge is
+   genuinely needed only when something floats above something else. */
+.bn-panel.bn-overlay {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r2);
+  box-shadow: var(--shadow);
+  background: var(--surface);
+}
+
 .bn-seam-x {
   top: 0;
-  bottom: 0;
-  right: var(--w-right, 0px);
+  bottom: var(--h-bottom, 0px);
+  right: calc(var(--w-right, 0px) + var(--w-aux, 0px) - 4px);
   width: 8px;
-  margin-right: calc(var(--w-aux, 0px) - 4px);
   cursor: col-resize;
 }
 
 .bn-seam-y {
   left: 0;
-  right: 0;
-  bottom: var(--h-bottom, 0px);
+  right: var(--w-right, 0px);
+  bottom: calc(var(--h-bottom, 0px) - 4px);
   height: 8px;
-  margin-bottom: -4px;
   cursor: row-resize;
 }
 
@@ -206,4 +216,77 @@
   gap: var(--s3);
   padding: var(--s4);
   max-width: 34rem;
+}
+
+/* Panels adapt to THEIR OWN width, not the window's.
+ *
+ * This is the fix for the worst thing about the first cut: the role gutter is
+ * 4.6rem, so in a narrow panel a message had three words per line while the
+ * window was 2000px wide and the media query saw nothing wrong. A container
+ * query asks the only question that matters — how much room does this panel
+ * actually have. */
+.bn-panel {
+  container-type: inline-size;
+  container-name: panel;
+}
+
+@container panel (max-width: 560px) {
+  /* Role above the message rather than beside it: below this width the gutter
+     costs more than it explains. */
+  .msg {
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .msg-role {
+    min-width: 0;
+    padding-top: 0;
+  }
+
+  .msg-tool {
+    margin-left: 0;
+  }
+
+  .ws-head .muted {
+    display: none;
+  }
+}
+
+@container panel (max-width: 420px) {
+  /* A roster this narrow shows who and what state, and drops the rest rather
+     than ellipsising three columns into noise. */
+  .agent-model {
+    display: none;
+  }
+}
+
+/* Chrome must never be the reason a panel scrolls sideways. */
+.bn-panel .hint,
+.bn-panel .row {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.bn-body .transcript {
+  border: 0;
+  padding: 0 var(--s2);
+}
+
+/* Prose reads at 15px; the surrounding chrome stays at 12. That asymmetry is
+   most of what separates a client from a control panel. */
+.bn-body .msg-body {
+  font-size: var(--t-prose);
+  line-height: 1.6;
+}
+
+.msg-role {
+  min-width: var(--role-gutter);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+}
+
+.bn-chrome-overlay {
+  border: 1px solid var(--border-strong);
+  border-bottom: 0;
+  border-radius: var(--r2) var(--r2) 0 0;
 }

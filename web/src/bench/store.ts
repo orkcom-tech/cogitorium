@@ -110,6 +110,10 @@ export function useLayout(userId: number, known: (id: PanelId) => boolean) {
         slots: { ...l.slots, [slot]: { ...l.slots[slot], active: id, open: true } },
       })),
 
+    /** push or overlay — the whole of "slide out", on the same record. */
+    setMode: (slot: SlotId, mode: 'push' | 'overlay') =>
+      mutate((l) => ({ ...l, slots: { ...l.slots, [slot]: { ...l.slots[slot], mode, open: true } } })),
+
     toggleOpen: (slot: SlotId) =>
       mutate((l) => ({
         ...l,

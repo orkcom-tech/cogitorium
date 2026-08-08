@@ -1248,3 +1248,29 @@ th {
   flex: 1;
   min-height: 0;
 }
+
+.bp-help {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  font-size: var(--t-chrome);
+  margin: 0;
+}
+
+/* Nothing in the shell may scroll sideways. A horizontal scrollbar on the app
+   means a track was sized against the window instead of its container. */
+.layout,
+.content,
+.ws-shell {
+  overflow-x: hidden;
+}
+
+.ws-head .tabs {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ws-head .tabs button {
+  font-size: var(--t-chrome);
+  padding: 0.2rem 0.5rem;
+}
