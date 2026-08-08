@@ -85,6 +85,14 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string) *Server {
 	mux.HandleFunc("DELETE /api/v1/context-bindings/{id}", s.handleDeleteContextBinding)
 	mux.HandleFunc("GET /api/v1/agents/{id}/prompt", s.handleAgentPrompt)
 
+	mux.HandleFunc("GET /api/v1/gears", s.handleListGears)
+	mux.HandleFunc("GET /api/v1/gears/{id}", s.handleGetGear)
+	mux.HandleFunc("PATCH /api/v1/gears/{id}", s.handleSetGearStatus)
+	mux.HandleFunc("DELETE /api/v1/gears/{id}", s.handleDeleteGear)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/gears", s.handleListGearBindings)
+	mux.HandleFunc("POST /api/v1/workspaces/{id}/gears", s.handleCreateGearBinding)
+	mux.HandleFunc("DELETE /api/v1/gear-bindings/{id}", s.handleDeleteGearBinding)
+
 	// Unmatched /api/* must answer JSON, not fall through to the SPA —
 	// otherwise wrong-method or typo'd API calls get 200 + index.html.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

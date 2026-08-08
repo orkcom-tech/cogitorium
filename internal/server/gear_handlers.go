@@ -2,6 +2,8 @@ package server
 
 import (
 	"net/http"
+
+	"github.com/orkcom-tech/cogitorium/internal/gear"
 )
 
 func (s *Server) handleListGears(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +46,12 @@ func (s *Server) handleSetGearStatus(w http.ResponseWriter, r *http.Request) {
 		Status string `json:"status"`
 	}
 	if !decodeJSON(w, r, &in) {
+		return
+	}
+	switch in.Status {
+	case gear.StatusPending, gear.StatusApproved, gear.StatusDisabled:
+	default:
+		writeError(w, http.StatusBadRequest, "status must be pending, approved or disabled")
 		return
 	}
 	g, err := s.gears.SetStatus(r.Context(), id, in.Status)
