@@ -120,6 +120,41 @@ func (s *Server) handleDeleteContextBinding(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleAgentMemory lists everything shaping an agent, with where each part
+// came from and whether it can be changed. Memory an operator cannot see is
+// memory they cannot correct — which is how an agent ends up steering by
+// something nobody intended and nobody noticed.
+func (s *Server) handleAgentMemory(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.nestedScoped(w, r, func(agentID int64) (int64, error) {
+		return s.workspaces.WorkspaceOfAgent(r.Context(), agentID)
+	})
+	if !ok {
+		return
+	}
+	items, err := s.engine.Memory(r.Context(), id)
+	if err != nil {
+		failContext(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+// handleForgetMessage removes one entry from the timeline — the other half
+// of an agent's memory, since the timeline is replayed on every turn.
+func (s *Server) handleForgetMessage(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.nestedScoped(w, r, func(msgID int64) (int64, error) {
+		return s.workspaces.WorkspaceOfMessage(r.Context(), msgID)
+	})
+	if !ok {
+		return
+	}
+	if err := s.workspaces.DeleteMessage(r.Context(), id); err != nil {
+		fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleAgentPrompt returns the assembled system prompt — the "what does
 // this agent actually see" preview.
 func (s *Server) handleAgentPrompt(w http.ResponseWriter, r *http.Request) {

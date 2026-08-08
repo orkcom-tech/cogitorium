@@ -441,6 +441,47 @@ th {
   gap: 0.5rem;
 }
 
+/* Memory */
+
+.memory-item .prompt-preview {
+  max-height: 14rem;
+}
+
+.memory-item textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  resize: vertical;
+}
+
+/* Every timeline entry can be dropped — the conversation is memory too. */
+.timeline-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.timeline-entry > *:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.timeline-entry .forget {
+  border: none;
+  font-size: 0.7rem;
+  opacity: 0;
+  padding: 0.1rem 0.35rem;
+  transition: opacity 0.12s;
+}
+
+.timeline-entry:hover .forget {
+  opacity: 0.55;
+}
+
+.timeline-entry .forget:hover {
+  opacity: 1;
+  color: var(--danger);
+}
+
 /* Gears */
 
 .status {

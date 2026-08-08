@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import BlueprintEditor from './BlueprintEditor'
 import TerminalPage from './TerminalPage'
+import AgentMemory from './AgentMemory'
 import {
   api,
   wsChatStream,
@@ -127,6 +128,16 @@ export default function WorkspacePage() {
     }
   }
 
+  // The timeline is replayed into the model on every turn, so removing an
+  // entry is genuinely forgetting it rather than hiding it.
+  const forget = (m: WSMessage) => {
+    if (!confirm('Forget this from the conversation? It stops being replayed to the model.')) return
+    api.messages
+      .forget(m.id)
+      .then(() => setMessages((all) => all.filter((x) => x.id !== m.id)))
+      .catch((e: Error) => setError(e.message))
+  }
+
   if (!workspace) {
     return (
       <div className="page">
@@ -206,7 +217,13 @@ export default function WorkspacePage() {
             onError={setError}
           />
         ) : (
-          <Timeline messages={messages} streams={streams} agentName={agentName} busy={busy} />
+          <Timeline
+            messages={messages}
+            streams={streams}
+            agentName={agentName}
+            busy={busy}
+            onForget={forget}
+          />
         )}
         {error && <p className="error">{error}</p>}
         {!selectedAgent && view === 'chat' && (
@@ -239,11 +256,13 @@ function Timeline({
   streams,
   agentName,
   busy,
+  onForget,
 }: {
   messages: WSMessage[]
   streams: Map<number, string>
   agentName: (id: number | null) => string
   busy: boolean
+  onForget: (m: WSMessage) => void
 }) {
   const bottom = useRef<HTMLDivElement>(null)
   useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [messages, streams])
@@ -257,7 +276,12 @@ function Timeline({
         </p>
       )}
       {messages.map((m) => (
-        <MessageRow key={m.id} m={m} agentName={agentName} />
+        <div key={m.id} className="timeline-entry">
+          <MessageRow m={m} agentName={agentName} />
+          <button className="forget" title="Forget this — it is replayed to the model on every turn" onClick={() => onForget(m)}>
+            forget
+          </button>
+        </div>
       ))}
       {[...streams.entries()].map(([agentId, text]) =>
         text ? (
@@ -337,6 +361,8 @@ function MessageRow({ m, agentName }: { m: WSMessage; agentName: (id: number | n
       )
     case 'error':
       return <p className="error">✗ {m.content}</p>
+    // Kinds not rendered above still exist on the timeline; they are
+    // replayed to the model but say nothing to a reader.
     default:
       return null
   }
@@ -511,7 +537,10 @@ function AgentPanel({
         </button>
       </div>
 
-      <h3>Context</h3>
+      <h3>Memory</h3>
+      <AgentMemory agent={agent} onChanged={() => setPrompt(null)} onError={onError} />
+
+      <h3>Add context</h3>
       {contextUnavailable ? (
         <p className="hint">
           Contextverse is not reachable — see the Context page. Agents run on their role alone until it is.

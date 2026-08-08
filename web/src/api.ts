@@ -104,6 +104,10 @@ export const api = {
       req<Agent>(`/api/v1/agents/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
     remove: (id: number) => req<void>(`/api/v1/agents/${id}`, { method: 'DELETE' }),
     prompt: (id: number) => req<{ prompt: string }>(`/api/v1/agents/${id}/prompt`),
+    memory: (id: number) => req<MemoryItem[]>(`/api/v1/agents/${id}/memory`),
+  },
+  messages: {
+    forget: (id: number) => req<void>(`/api/v1/messages/${id}`, { method: 'DELETE' }),
   },
   wires: {
     list: (wsId: number) => req<Wire[]>(`/api/v1/workspaces/${wsId}/wires`),
@@ -316,6 +320,16 @@ export type GearRun = {
   stdout: string
   stderr: string
   created_at: string
+}
+
+export type MemoryItem = {
+  kind: 'role' | 'private' | 'shared' | 'bound' | 'instruction'
+  source: string
+  content: string
+  editable: boolean
+  removable: boolean
+  binding_id?: number
+  description: string
 }
 
 export type Instruction = {

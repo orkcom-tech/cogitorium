@@ -751,6 +751,67 @@ func (s *Store) AppendMessage(ctx context.Context, wsID int64, agentID *int64, k
 	return m, nil
 }
 
+// DeleteMessage removes one entry from the timeline. The timeline is the
+// other half of an agent's memory — it is replayed into the model on every
+// turn — so an operator who spots something wrong in it needs a way to take
+// it back out, not only to edit documents.
+//
+// A tool call and its result are removed together: leaving one without the
+// other would produce a history providers reject. repairHistory would
+// synthesise a replacement, but silently keeping half of what someone asked
+// to forget is not what they asked for.
+func (s *Store) DeleteMessage(ctx context.Context, id int64) error {
+	var wsID int64
+	var kind, meta string
+	err := s.db.QueryRowContext(ctx, `SELECT workspace_id, kind, meta FROM ws_messages WHERE id = ?`, id).
+		Scan(&wsID, &kind, &meta)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("message %d: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("delete message %d: %w", id, err)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("delete message: begin: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ws_messages WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("delete message %d: %w", id, err)
+	}
+
+	// An assistant turn's tool results follow it directly; drop them too.
+	if kind == "assistant" && strings.Contains(meta, "tool_calls") {
+		if _, err := tx.ExecContext(ctx, `
+			DELETE FROM ws_messages
+			WHERE workspace_id = ? AND kind IN ('tool_result', 'delegation') AND id > ?
+			  AND id < COALESCE((SELECT MIN(id) FROM ws_messages
+			                     WHERE workspace_id = ? AND id > ? AND kind IN ('user', 'assistant')), 1e18)`,
+			wsID, id, wsID, id); err != nil {
+			return fmt.Errorf("delete message %d: orphaned results: %w", id, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("delete message: commit: %w", err)
+	}
+	slog.Info("timeline entry forgotten", "message_id", id, "workspace_id", wsID, "kind", kind)
+	return nil
+}
+
+// WorkspaceOfMessage resolves a timeline entry back to its workspace so the
+// access check can run before anything is forgotten.
+func (s *Store) WorkspaceOfMessage(ctx context.Context, id int64) (int64, error) {
+	var wsID int64
+	err := s.db.QueryRowContext(ctx, `SELECT workspace_id FROM ws_messages WHERE id = ?`, id).Scan(&wsID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("message %d: %w", id, ErrNotFound)
+	}
+	return wsID, err
+}
+
 // ListMessages returns the workspace timeline, optionally filtered to one
 // agent (the per-agent activity view), oldest first.
 func (s *Store) ListMessages(ctx context.Context, wsID int64, agentID *int64, limit int) ([]Message, error) {

@@ -121,6 +121,8 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Run
 	mux.HandleFunc("POST /api/v1/workspaces/{id}/context", s.handleCreateContextBinding)
 	mux.HandleFunc("DELETE /api/v1/context-bindings/{id}", s.handleDeleteContextBinding)
 	mux.HandleFunc("GET /api/v1/agents/{id}/prompt", s.handleAgentPrompt)
+	mux.HandleFunc("GET /api/v1/agents/{id}/memory", s.handleAgentMemory)
+	mux.HandleFunc("DELETE /api/v1/messages/{id}", s.handleForgetMessage)
 
 	mux.HandleFunc("GET /api/v1/terminal/status", s.handleTerminalStatus)
 	mux.HandleFunc("GET /api/v1/terminal", s.handleTerminal)

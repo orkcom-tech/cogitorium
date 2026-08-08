@@ -304,6 +304,12 @@ func (e *Engine) systemPrompt(ctx context.Context, wsID int64, agent workspace.A
 			if err != nil {
 				return "", fmt.Errorf("context doc %q bound to agent %q cannot be read: %w — restore the file in Contextverse or unbind it from the agent", p, agent.Name, err)
 			}
+			// An emptied document is forgotten. Contextverse's CLI has no
+			// delete, so clearing a memory is how an operator removes it —
+			// and a blank section in the prompt would be worse than absent.
+			if strings.TrimSpace(content) == "" {
+				continue
+			}
 			b = fmt.Appendf(b, "\n### %s\n%s\n", p, content)
 		}
 	}
@@ -392,6 +398,94 @@ func (e *Engine) AssembledPrompt(ctx context.Context, agentID int64) (string, er
 		return "", err
 	}
 	return e.systemPrompt(ctx, agent.WorkspaceID, agent)
+}
+
+// MemoryItem is one thing an agent remembers, with where it came from and
+// whether the operator can change it. Everything that reaches the prompt
+// appears here: memory an operator cannot see is memory they cannot correct,
+// which is how an agent ends up quietly steering by something nobody
+// intended.
+type MemoryItem struct {
+	Kind        string `json:"kind"`   // role | private | shared | bound | instruction
+	Source      string `json:"source"` // the path, or "role"
+	Content     string `json:"content"`
+	Editable    bool   `json:"editable"`
+	Removable   bool   `json:"removable"`
+	BindingID   *int64 `json:"binding_id,omitempty"`
+	Description string `json:"description"`
+}
+
+// Memory returns everything shaping this agent, in the order it reaches the
+// prompt.
+func (e *Engine) Memory(ctx context.Context, agentID int64) ([]MemoryItem, error) {
+	agent, err := e.ws.GetAgent(ctx, agentID)
+	if err != nil {
+		return nil, err
+	}
+	ws, err := e.ws.GetWorkspace(ctx, agent.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	items := []MemoryItem{{
+		Kind: "role", Source: "role", Content: agent.Role, Editable: true,
+		Description: "Its role — the instruction it always carries.",
+	}}
+
+	bindings, err := e.ws.ListContextBindings(ctx, agent.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	bindingFor := map[string]int64{}
+	for _, b := range bindings {
+		if b.AgentID == nil || *b.AgentID == agent.ID {
+			bindingFor[b.Path] = b.ID
+		}
+	}
+
+	files, err := e.ctx.List(ctx)
+	if err != nil {
+		// Without Contextverse the agent runs on its role alone; say so
+		// rather than pretending the list is complete.
+		slog.Warn("memory listing incomplete: contextd unavailable", "agent", agent.Name, "err", err)
+		return items, nil
+	}
+
+	seen := map[string]bool{}
+	add := func(path, kind, description string, removable bool, bindingID *int64) {
+		if seen[path] {
+			return
+		}
+		seen[path] = true
+		content, err := e.ctx.Get(ctx, path)
+		if err != nil {
+			content = "(cannot be read: " + err.Error() + ")"
+		}
+		items = append(items, MemoryItem{
+			Kind: kind, Source: path, Content: content, Editable: true,
+			Removable: removable, BindingID: bindingID, Description: description,
+		})
+	}
+
+	for _, f := range files {
+		if agent.Branch != "" && strings.HasPrefix(f.Path, agent.Branch+"/") {
+			add(f.Path, "private", "Only this agent reads it.", false, nil)
+		}
+	}
+	for _, f := range files {
+		if ws.Branch != "" && strings.HasPrefix(f.Path, ws.SharedBranch()+"/") {
+			add(f.Path, "shared", "Every agent in this workspace reads it.", false, nil)
+		}
+	}
+	for path, id := range bindingFor {
+		kind, description := "bound", "Bound from elsewhere in the space."
+		if strings.HasPrefix(path, library.Root+"/") {
+			kind, description = "instruction", "From the shared instruction library."
+		}
+		bindingID := id
+		add(path, kind, description, true, &bindingID)
+	}
+	return items, nil
 }
 
 func (e *Engine) persistAssistant(ctx context.Context, wsID, agentID int64, res llm.Result, emit func(Event)) (workspace.Message, error) {
