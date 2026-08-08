@@ -4,7 +4,6 @@ import { auth, Unauthorized, type User } from './api'
 import { session } from './session'
 import LoginPage from './pages/LoginPage'
 import ModelsPage from './pages/ModelsPage'
-import ChatPage from './pages/ChatPage'
 import WorkspacesPage from './pages/WorkspacesPage'
 import WorkspacePage from './pages/WorkspacePage'
 import ContextPage from './pages/ContextPage'
@@ -116,9 +115,6 @@ export default function App() {
             <NavLink to="/models" title="Models">
               <span>Models</span>
             </NavLink>
-            <NavLink to="/chat" title="Scratch chat">
-              <span>Scratch chat</span>
-            </NavLink>
             {user.role === 'admin' && <NavLink to="/terminal" title="Terminal">
               <span>Terminal</span>
             </NavLink>}
@@ -148,7 +144,6 @@ export default function App() {
             <Route path="/gears" element={<GearsPage />} />
             <Route path="/instructions" element={<LibraryPage />} />
             <Route path="/models" element={<ModelsPage />} />
-            <Route path="/chat" element={<ChatPage />} />
           </Routes>
         </main>
       </div>

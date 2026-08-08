@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { LayoutApi } from './store'
-import { MIN_MAIN, RAIL, SLOT_ORDER, fit, px, type PanelId, type SlotId } from './types'
+import { DEFAULTS, MIN_MAIN, RAIL, SLOT_ORDER, fit, px, type PanelId, type SlotId } from './types'
 
 export type PanelDef = {
   id: PanelId
@@ -186,20 +186,46 @@ export default function Bench({ panels, layout }: { panels: PanelDef[]; layout: 
       {!max && l.slots.aux.panels.length > 0 && l.slots.aux.open && vp.w > 0 && (
         <Splitter
           axis="x"
-          invert
-          onResize={(d) => {
-            const auxActive = l.slots.aux.active
-            const minAux = Math.max(240, (auxActive && byId.get(auxActive)?.minW) || 0)
-            const room = vp.w - track('right') - minMain
-            layout.resize('aux', clamp(l.slots.aux.size - d, minAux, Math.max(minAux, room)))
-          }}
+          cssVar="--w-aux"
+          size={track('aux')}
+          min={Math.max(240, (l.slots.aux.active && byId.get(l.slots.aux.active)?.minW) || 0)}
+          max={Math.max(240, vp.w - track('left') - track('right') - minMain)}
+          benchRef={ref}
+          onCommit={(n) => layout.resize('aux', n)}
         />
       )}
-      {!max && l.slots.bottom.panels.length > 0 && l.slots.bottom.open && vp.h > 0 && (
+      {!max && l.slots.left.panels.length > 0 && l.slots.left.open && l.slots.left.mode === 'push' && vp.w > 0 && (
+        <Splitter
+          axis="x"
+          grows="positive"
+          cssVar="--w-left"
+          size={track('left')}
+          min={Math.max(180, (l.slots.left.active && byId.get(l.slots.left.active)?.minW) || 0)}
+          max={Math.max(180, vp.w - track('aux') - track('right') - minMain)}
+          benchRef={ref}
+          onCommit={(n) => layout.resize('left', n)}
+        />
+      )}
+      {!max && l.slots.right.panels.length > 0 && l.slots.right.open && l.slots.right.mode === 'push' && vp.w > 0 && (
+        <Splitter
+          axis="x"
+          cssVar="--w-right"
+          size={track('right')}
+          min={160}
+          max={Math.max(160, vp.w - track('left') - track('aux') - minMain)}
+          benchRef={ref}
+          onCommit={(n) => layout.resize('right', n)}
+        />
+      )}
+      {!max && l.slots.bottom.panels.length > 0 && l.slots.bottom.open && l.slots.bottom.mode === 'push' && vp.h > 0 && (
         <Splitter
           axis="y"
-          invert
-          onResize={(d) => layout.resize('bottom', clamp(l.slots.bottom.size - d, 120, Math.max(120, vp.h - 200)))}
+          cssVar="--h-bottom"
+          size={track('bottom')}
+          min={120}
+          max={Math.max(120, vp.h - 160)}
+          benchRef={ref}
+          onCommit={(n) => layout.resize('bottom', n)}
         />
       )}
     </div>
@@ -479,37 +505,96 @@ function PlaceMenu({
 }
 
 /**
- * A seam drags by writing a CSS variable straight to the DOM and commits ONCE
- * on release.
+ * A seam.
  *
- * This is a correctness requirement rather than an optimisation: a
- * store-driven drag re-renders the adjacent container, which is the blueprint
- * canvas or xterm — precisely the things the bench exists to keep alive — and
- * would fire a refit every frame instead of once.
+ * Two rules, and the first version of this got both wrong.
+ *
+ * ABSOLUTE, NOT INCREMENTAL. The size at pointerdown is captured once and
+ * every move computes `startSize ± (now - startCoord)`. The first version fed
+ * a delta-from-gesture-start into the size as it was RIGHT NOW, so each move
+ * compounded on the last and the panel accelerated away from the pointer.
+ *
+ * SIGN COMES FROM GEOMETRY. A dock on the right or the bottom grows when the
+ * pointer moves toward the origin, so its sign is negative; left and top grow
+ * with it. The first version applied an `invert` flag AND subtracted the
+ * result, and the two negations cancelled — the panel moved against the hand
+ * dragging it.
+ *
+ * The drag writes the CSS variable straight to the DOM and commits to the
+ * store once, on release. That is correctness rather than performance: a
+ * store-driven drag re-renders the adjacent container, which IS the blueprint
+ * canvas or xterm, and would refit it every frame instead of once.
  */
-function Splitter({ axis, invert, onResize }: { axis: 'x' | 'y'; invert?: boolean; onResize: (delta: number) => void }) {
-  const start = useRef(0)
+function Splitter({
+  axis,
+  cssVar,
+  size,
+  min,
+  max,
+  grows = 'negative',
+  benchRef,
+  onCommit,
+}: {
+  axis: 'x' | 'y'
+  cssVar: string
+  size: number
+  min: number
+  max: number
+  /** which pointer direction makes this dock bigger */
+  grows?: 'positive' | 'negative'
+  benchRef: React.RefObject<HTMLDivElement | null>
+  onCommit: (size: number) => void
+}) {
+  const drag = useRef<{ at: number; from: number; latest: number } | null>(null)
+  const sign = grows === 'negative' ? -1 : 1
+
+  const apply = (n: number) => {
+    const clamped = clamp(n, min, max)
+    benchRef.current?.style.setProperty(cssVar, `${clamped}px`)
+    if (drag.current) drag.current.latest = clamped
+    return clamped
+  }
+
   return (
     <div
-      className={`bn-seam bn-seam-${axis}`}
+      className={`bn-seam bn-seam-${axis} bn-seam-${cssVar.replace('--', '')}`}
       role="separator"
       tabIndex={0}
       aria-orientation={axis === 'x' ? 'vertical' : 'horizontal'}
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId)
-        start.current = axis === 'x' ? e.clientX : e.clientY
+        const at = axis === 'x' ? e.clientX : e.clientY
+        drag.current = { at, from: size, latest: size }
       }}
       onPointerMove={(e) => {
-        if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
+        const d = drag.current
+        if (!d || !e.currentTarget.hasPointerCapture(e.pointerId)) return
         const now = axis === 'x' ? e.clientX : e.clientY
-        onResize(invert ? start.current - now : now - start.current)
+        apply(d.from + (now - d.at) * sign)
       }}
-      onPointerUp={(e) => e.currentTarget.releasePointerCapture(e.pointerId)}
+      onPointerUp={(e) => {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+        const d = drag.current
+        drag.current = null
+        if (d) onCommit(d.latest)
+      }}
+      onDoubleClick={() => onCommit(clamp(DEFAULTS_FOR(cssVar), min, max))}
       onKeyDown={(e) => {
         const step = 16
-        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') onResize(invert ? step : -step)
-        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') onResize(invert ? -step : step)
+        const back = e.key === 'ArrowLeft' || e.key === 'ArrowUp'
+        const fwd = e.key === 'ArrowRight' || e.key === 'ArrowDown'
+        if (!back && !fwd) return
+        e.preventDefault()
+        onCommit(clamp(size + (back ? -step : step) * sign, min, max))
       }}
     />
   )
+}
+
+/** Double-clicking a seam returns it to the size it shipped with. */
+function DEFAULTS_FOR(cssVar: string): number {
+  if (cssVar === '--w-left') return DEFAULTS.left.size
+  if (cssVar === '--w-aux') return DEFAULTS.aux.size
+  if (cssVar === '--w-right') return DEFAULTS.right.size
+  return DEFAULTS.bottom.size
 }

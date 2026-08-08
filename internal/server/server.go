@@ -116,8 +116,6 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	mux.HandleFunc("POST /api/v1/models", s.handleCreateModel)
 	mux.HandleFunc("DELETE /api/v1/models/{id}", s.handleDeleteModel)
 
-	mux.HandleFunc("POST /api/v1/chat", s.handleChat)
-
 	mux.HandleFunc("GET /api/v1/workspaces", s.handleListWorkspaces)
 	mux.HandleFunc("POST /api/v1/workspaces", s.handleCreateWorkspace)
 	mux.HandleFunc("GET /api/v1/workspaces/{id}", s.handleGetWorkspace)
