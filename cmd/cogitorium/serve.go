@@ -24,7 +24,11 @@ func newServeCmd() *cobra.Command {
 		Use:   "serve",
 		Short: "Start the Cogitorium server (API + web UI)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(configPath)
+			dataOverride := ""
+			if cmd.Flags().Changed("data") {
+				dataOverride = dataDir
+			}
+			cfg, err := config.Load(configPath, dataOverride)
 			if err != nil {
 				return err
 			}

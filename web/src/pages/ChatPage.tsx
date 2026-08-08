@@ -8,8 +8,10 @@ export default function ChatPage() {
   const [transcript, setTranscript] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     api.models
@@ -21,38 +23,58 @@ export default function ChatPage() {
       .catch((e: Error) => setError(e.message))
   }, [])
 
+  // Abort any in-flight stream when the page unmounts.
+  useEffect(() => () => abortRef.current?.abort(), [])
+
   useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [transcript])
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!modelId || !input.trim() || busy) return
     setError(null)
+    setNotice(null)
     setBusy(true)
 
     const userMsg: ChatMessage = { role: 'user', content: input.trim() }
-    const history = [...transcript, userMsg]
+    const history = [...transcript, userMsg].filter((m) => m.content.trim() !== '')
     setTranscript([...history, { role: 'assistant', content: '' }])
     setInput('')
 
     const wire: ChatMessage[] = system.trim() ? [{ role: 'system', content: system.trim() }, ...history] : history
 
+    const ac = new AbortController()
+    abortRef.current = ac
     try {
-      await chatStream(modelId, wire, (text) =>
-        setTranscript((t) => {
-          const next = [...t]
-          const last = next[next.length - 1]
-          next[next.length - 1] = { ...last, content: last.content + text }
-          return next
-        }),
+      const res = await chatStream(
+        modelId,
+        wire,
+        (text) =>
+          setTranscript((t) => {
+            const last = t[t.length - 1]
+            if (!last || last.role !== 'assistant') return t
+            return [...t.slice(0, -1), { ...last, content: last.content + text }]
+          }),
+        ac.signal,
       )
+      if (res.truncated) {
+        setNotice(`response was cut off by the token limit (${res.stopReason})`)
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-      // Drop the empty assistant stub if nothing streamed.
-      setTranscript((t) => (t[t.length - 1]?.content === '' ? t.slice(0, -1) : t))
+      if (!ac.signal.aborted) {
+        setError(err instanceof Error ? err.message : String(err))
+      }
     } finally {
+      abortRef.current = null
       setBusy(false)
+      // Drop the assistant stub if nothing streamed into it.
+      setTranscript((t) => {
+        const last = t[t.length - 1]
+        return last && last.role === 'assistant' && last.content === '' ? t.slice(0, -1) : t
+      })
     }
   }
+
+  const stop = () => abortRef.current?.abort()
 
   return (
     <div className="page chat-page">
@@ -73,7 +95,7 @@ export default function ChatPage() {
           value={system}
           onChange={(e) => setSystem(e.target.value)}
         />
-        <button onClick={() => setTranscript([])} disabled={transcript.length === 0}>
+        <button onClick={() => setTranscript([])} disabled={busy || transcript.length === 0}>
           clear
         </button>
       </div>
@@ -86,6 +108,7 @@ export default function ChatPage() {
         ))}
         <div ref={bottom} />
       </div>
+      {notice && <p className="hint">⚠ {notice}</p>}
       {error && <p className="error">{error}</p>}
       <form className="row" onSubmit={send}>
         <input
@@ -95,9 +118,15 @@ export default function ChatPage() {
           disabled={!modelId || busy}
           onChange={(e) => setInput(e.target.value)}
         />
-        <button type="submit" disabled={!modelId || busy || !input.trim()}>
-          {busy ? 'streaming…' : 'send'}
-        </button>
+        {busy ? (
+          <button type="button" onClick={stop}>
+            stop
+          </button>
+        ) : (
+          <button type="submit" disabled={!modelId || !input.trim()}>
+            send
+          </button>
+        )}
       </form>
     </div>
   )

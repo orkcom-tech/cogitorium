@@ -2,7 +2,10 @@ BINARY := bin/cogitorium
 
 .PHONY: build ui go run test clean
 
-build: ui go
+# Sequential even under make -j: go embeds web/dist, so ui must finish first.
+build:
+	$(MAKE) ui
+	$(MAKE) go
 
 ui:
 	cd web && npm ci --no-audit --no-fund && npm run build
@@ -19,3 +22,4 @@ test:
 
 clean:
 	rm -rf bin web/dist web/node_modules
+	@mkdir -p web/dist && touch web/dist/.gitkeep # keep the embed dir so bare `go build` works

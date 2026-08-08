@@ -24,4 +24,8 @@ COPY --from=build /out/cogitorium /usr/local/bin/cogitorium
 USER cogitorium
 VOLUME /data
 EXPOSE 8688
-ENTRYPOINT ["cogitorium", "serve", "--listen", "0.0.0.0:8688", "--data", "/data"]
+# Defaults via env, not baked flags, so `docker run -e COGITORIUM_LISTEN=…`
+# and compose environment overrides actually work.
+ENV COGITORIUM_LISTEN=0.0.0.0:8688 \
+    COGITORIUM_DATA_DIR=/data
+ENTRYPOINT ["cogitorium", "serve"]

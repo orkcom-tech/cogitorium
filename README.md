@@ -5,6 +5,12 @@ of dedicated agents behind an orchestrator chat, blueprint-style wiring
 between agents, Contextverse-backed context, and a persistent catalog of
 agent-forged tools (gears).
 
+The vision: a maximally modular, configurable, transparent AI OS. No
+telemetry, no tracking, no junk — every behavior local, inspectable, and
+explainable. From developers, for developers. Your models can live anywhere:
+a local process, your homelab, a provider API — Cogitorium doesn't care and
+doesn't phone home.
+
 > **Status: early development.** Nothing here is stable.
 
 ## Run
@@ -26,3 +32,10 @@ Then open <http://127.0.0.1:8688>.
 
 Configuration precedence: flags > `COGITORIUM_*` env > `config.yaml` (in the
 data dir, default `~/.cogitorium`) > defaults. See `cogitorium serve --help`.
+
+## License
+
+[BUSL-1.1](./LICENSE): free to use as a tool — including production use, solo
+or self-hosted for your team. What it forbids is offering Cogitorium itself
+to third parties as a hosted or embedded service competing with Cogitorium's
+products. Converts to Apache-2.0 on the change date.

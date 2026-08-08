@@ -34,17 +34,27 @@ func Defaults() Config {
 }
 
 // Load builds the effective config. path is the --config flag value; empty
-// means: use $COGITORIUM_CONFIG if set, else <default-data-dir>/config.yaml if
-// it exists, else file layer is skipped.
-func Load(path string) (Config, error) {
+// means: use $COGITORIUM_CONFIG if set, else <data-dir>/config.yaml if it
+// exists, else the file layer is skipped. dataDirOverride is the --data flag
+// value (empty if not given) so the default config probe honors the
+// effective data dir, not just the built-in default.
+func Load(path, dataDirOverride string) (Config, error) {
 	cfg := Defaults()
+
+	probeDir := cfg.DataDir
+	if v := os.Getenv("COGITORIUM_DATA_DIR"); v != "" {
+		probeDir = v
+	}
+	if dataDirOverride != "" {
+		probeDir = dataDirOverride
+	}
 
 	explicit := path != ""
 	if !explicit {
 		if env := os.Getenv("COGITORIUM_CONFIG"); env != "" {
 			path, explicit = env, true
 		} else {
-			path = filepath.Join(cfg.DataDir, "config.yaml")
+			path = filepath.Join(probeDir, "config.yaml")
 		}
 	}
 

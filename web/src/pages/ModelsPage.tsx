@@ -1,19 +1,25 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Model, type Provider, type TestResult } from '../api'
 
 export default function ModelsPage() {
   const [providers, setProviders] = useState<Provider[]>([])
   const [models, setModels] = useState<Model[]>([])
   const [error, setError] = useState<string | null>(null)
+  const reloadSeq = useRef(0)
 
   const reload = useCallback(() => {
+    // Overlapping reloads may resolve out of order; only the latest wins.
+    const seq = ++reloadSeq.current
     Promise.all([api.providers.list(), api.models.list()])
       .then(([p, m]) => {
+        if (reloadSeq.current !== seq) return
         setProviders(p)
         setModels(m)
         setError(null)
       })
-      .catch((e: Error) => setError(e.message))
+      .catch((e: Error) => {
+        if (reloadSeq.current === seq) setError(e.message)
+      })
   }, [])
 
   useEffect(reload, [reload])

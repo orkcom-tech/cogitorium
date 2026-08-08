@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -41,6 +42,12 @@ func New(listen string, db *sql.DB) *Server {
 
 	mux.HandleFunc("POST /api/v1/chat", s.handleChat)
 
+	// Unmatched /api/* must answer JSON, not fall through to the SPA —
+	// otherwise wrong-method or typo'd API calls get 200 + index.html.
+	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+		writeError(w, http.StatusNotFound, "no such API endpoint: "+r.Method+" "+r.URL.Path)
+	})
+
 	mux.Handle("/", uiHandler())
 
 	s.http = &http.Server{
@@ -51,8 +58,16 @@ func New(listen string, db *sql.DB) *Server {
 	return s
 }
 
-// Run serves until ctx is cancelled, then shuts down gracefully.
+// Run serves until ctx is cancelled, then shuts down gracefully. Request
+// contexts derive from a server-wide context that Shutdown cancels, so
+// long-lived SSE streams end promptly instead of blocking shutdown for the
+// full timeout.
 func (s *Server) Run(ctx context.Context) error {
+	baseCtx, cancelBase := context.WithCancel(context.Background())
+	defer cancelBase()
+	s.http.BaseContext = func(net.Listener) context.Context { return baseCtx }
+	s.http.RegisterOnShutdown(cancelBase)
+
 	errCh := make(chan error, 1)
 	go func() {
 		slog.Info("http server listening", "addr", s.http.Addr, "version", version.Version)
@@ -102,7 +117,9 @@ func uiHandler() http.Handler {
 		}
 		path := r.URL.Path
 		if path != "/" {
-			if _, err := fs.Stat(dist, path[1:]); errors.Is(err, fs.ErrNotExist) {
+			// Any Stat failure (ErrNotExist, ErrInvalid for e.g. trailing
+			// slashes) means "not a real file" — serve the SPA shell.
+			if _, err := fs.Stat(dist, path[1:]); err != nil {
 				r = r.Clone(r.Context())
 				r.URL.Path = "/"
 			}

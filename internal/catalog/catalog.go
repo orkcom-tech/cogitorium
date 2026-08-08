@@ -158,9 +158,10 @@ func (s *Store) UpdateProvider(ctx context.Context, id int64, name, baseURL, api
 		key = *apiKey
 	}
 
-	if _, err := s.db.ExecContext(ctx,
+	_, err = s.db.ExecContext(ctx,
 		`UPDATE providers SET name = ?, base_url = ?, api_key = ?, updated_at = ? WHERE id = ?`,
-		p.Name, p.BaseURL, key, now(), id); err != nil {
+		p.Name, p.BaseURL, key, now(), id)
+	if err := asConflict(err, fmt.Sprintf("provider %q", p.Name)); err != nil {
 		return Provider{}, fmt.Errorf("update provider %d: %w", id, err)
 	}
 	slog.Info("provider updated", "id", id, "name", p.Name, "base_url", p.BaseURL, "key_changed", apiKey != nil)

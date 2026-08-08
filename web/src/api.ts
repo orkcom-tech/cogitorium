@@ -48,15 +48,17 @@ export const api = {
   },
 }
 
+export type ChatStreamResult = { truncated: boolean; stopReason: string }
+
 // chatStream POSTs to the SSE chat endpoint and feeds parsed events back.
-// Resolves when the server sends "done"; rejects on "error" or transport
-// failure.
+// Resolves on the server's "done" event (carrying truncation info); rejects
+// on "error" or transport failure.
 export async function chatStream(
   modelId: number,
   messages: ChatMessage[],
   onDelta: (text: string) => void,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<ChatStreamResult> {
   const r = await fetch('/api/v1/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -86,10 +88,16 @@ export async function chatStream(
         .map((l) => l.slice(6))
         .join('\n')
       if (!data) continue
-      const ev = JSON.parse(data) as { type: string; text?: string; message?: string }
+      const ev = JSON.parse(data) as {
+        type: string
+        text?: string
+        message?: string
+        truncated?: boolean
+        stop_reason?: string
+      }
       if (ev.type === 'delta' && ev.text) onDelta(ev.text)
       if (ev.type === 'error') throw new Error(ev.message ?? 'stream error')
-      if (ev.type === 'done') return
+      if (ev.type === 'done') return { truncated: !!ev.truncated, stopReason: ev.stop_reason ?? '' }
     }
   }
   throw new Error('stream ended without done event')

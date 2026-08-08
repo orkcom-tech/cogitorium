@@ -23,7 +23,9 @@ var migrationsFS embed.FS
 // Open creates dataDir if needed, opens the database and applies pending
 // migrations.
 func Open(dataDir string) (*sql.DB, error) {
-	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+	// 0700: the database will hold provider API keys — no other local
+	// account has business reading it.
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create data dir %s: %w", dataDir, err)
 	}
 	dbPath := filepath.Join(dataDir, "cogitorium.db")
@@ -39,6 +41,9 @@ func Open(dataDir string) (*sql.DB, error) {
 	if err := db.Ping(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("ping sqlite %s: %w", dbPath, err)
+	}
+	if err := os.Chmod(dbPath, 0o600); err != nil {
+		slog.Warn("could not tighten database file permissions", "path", dbPath, "err", err)
 	}
 	slog.Info("database opened", "path", dbPath)
 
@@ -57,9 +62,25 @@ func migrate(db *sql.DB) error {
 		return fmt.Errorf("create schema_migrations: %w", err)
 	}
 
-	var current int
-	if err := db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&current); err != nil {
-		return fmt.Errorf("read schema version: %w", err)
+	// Track the applied set, not MAX(version): a backfilled lower-numbered
+	// migration must still run, and duplicate version numbers are a build
+	// error, not something to silently pick between.
+	applied := map[int]bool{}
+	rows, err := db.Query(`SELECT version FROM schema_migrations`)
+	if err != nil {
+		return fmt.Errorf("read applied migrations: %w", err)
+	}
+	for rows.Next() {
+		var v int
+		if err := rows.Scan(&v); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan applied migration: %w", err)
+		}
+		applied[v] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read applied migrations: %w", err)
 	}
 
 	entries, err := migrationsFS.ReadDir("migrations")
@@ -71,6 +92,7 @@ func migrate(db *sql.DB) error {
 		version int
 		name    string
 	}
+	seen := map[int]string{}
 	var pending []mig
 	for _, e := range entries {
 		name := e.Name()
@@ -85,14 +107,18 @@ func migrate(db *sql.DB) error {
 		if err != nil {
 			return fmt.Errorf("migration %s: bad version prefix: %w", name, err)
 		}
-		if v > current {
+		if prev, dup := seen[v]; dup {
+			return fmt.Errorf("duplicate migration version %d: %s and %s", v, prev, name)
+		}
+		seen[v] = name
+		if !applied[v] {
 			pending = append(pending, mig{version: v, name: name})
 		}
 	}
 	sort.Slice(pending, func(i, j int) bool { return pending[i].version < pending[j].version })
 
 	if len(pending) == 0 {
-		slog.Info("schema up to date", "version", current)
+		slog.Info("schema up to date", "applied", len(applied))
 		return nil
 	}
 
