@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
+	"github.com/orkcom-tech/cogitorium/internal/identity"
 )
 
 var (
@@ -79,6 +80,10 @@ type Workspace struct {
 	// SharedBranchPath is where the workspace's shared context lives; every
 	// agent reads it without an explicit binding.
 	SharedBranchPath string `json:"shared_branch"`
+	// OwnerID is the user who created it; TeamID, when set, shares it with
+	// every member of that team.
+	OwnerID *int64 `json:"owner_id"`
+	TeamID  *int64 `json:"team_id"`
 }
 
 type Agent struct {
@@ -131,8 +136,8 @@ func asConflict(err error, what string) error {
 }
 
 // CreateWorkspace creates the workspace and its orchestrator agent bound to
-// orchestratorModelID in one transaction.
-func (s *Store) CreateWorkspace(ctx context.Context, name, description string, orchestratorModelID int64) (Workspace, error) {
+// orchestratorModelID in one transaction, owned by ownerID.
+func (s *Store) CreateWorkspace(ctx context.Context, name, description string, orchestratorModelID, ownerID int64) (Workspace, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return Workspace{}, errors.New("name is required")
@@ -145,8 +150,8 @@ func (s *Store) CreateWorkspace(ctx context.Context, name, description string, o
 	defer tx.Rollback()
 
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO workspaces (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)`,
-		name, description, now(), now())
+		`INSERT INTO workspaces (name, description, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+		name, description, ownerID, now(), now())
 	if err := asConflict(err, fmt.Sprintf("workspace %q", name)); err != nil {
 		return Workspace{}, fmt.Errorf("create workspace: %w", err)
 	}
@@ -181,8 +186,8 @@ func (s *Store) CreateWorkspace(ctx context.Context, name, description string, o
 func (s *Store) GetWorkspace(ctx context.Context, id int64) (Workspace, error) {
 	var w Workspace
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, description, branch FROM workspaces WHERE id = ?`, id).
-		Scan(&w.ID, &w.Name, &w.Description, &w.Branch)
+		`SELECT id, name, description, branch, owner_id, team_id FROM workspaces WHERE id = ?`, id).
+		Scan(&w.ID, &w.Name, &w.Description, &w.Branch, &w.OwnerID, &w.TeamID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Workspace{}, fmt.Errorf("workspace %d: %w", id, ErrNotFound)
 	}
@@ -194,7 +199,8 @@ func (s *Store) GetWorkspace(ctx context.Context, id int64) (Workspace, error) {
 }
 
 func (s *Store) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, branch FROM workspaces ORDER BY name`)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, name, description, branch, owner_id, team_id FROM workspaces ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list workspaces: %w", err)
 	}
@@ -202,13 +208,167 @@ func (s *Store) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
 	out := []Workspace{}
 	for rows.Next() {
 		var w Workspace
-		if err := rows.Scan(&w.ID, &w.Name, &w.Description, &w.Branch); err != nil {
+		if err := rows.Scan(&w.ID, &w.Name, &w.Description, &w.Branch, &w.OwnerID, &w.TeamID); err != nil {
 			return nil, fmt.Errorf("scan workspace: %w", err)
 		}
 		w.SharedBranchPath = w.SharedBranch()
 		out = append(out, w)
 	}
 	return out, rows.Err()
+}
+
+// Visible reports whether a user may see and act on a workspace: an admin
+// sees everything, an owner sees their own, and a team grant shares one
+// with every member of that team.
+func Visible(w Workspace, u identity.User) bool {
+	if u.IsAdmin() {
+		return true
+	}
+	if w.OwnerID != nil && *w.OwnerID == u.ID {
+		return true
+	}
+	return w.TeamID != nil && u.InTeam(*w.TeamID)
+}
+
+// ListWorkspacesFor returns only what this user may see.
+func (s *Store) ListWorkspacesFor(ctx context.Context, u identity.User) ([]Workspace, error) {
+	all, err := s.ListWorkspaces(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := []Workspace{}
+	for _, w := range all {
+		if Visible(w, u) {
+			out = append(out, w)
+		}
+	}
+	return out, nil
+}
+
+// CanAccess resolves a workspace and reports whether the user may use it.
+// Handlers call this before anything workspace-scoped — a filtered list
+// alone would leave every other route open to a direct id.
+func (s *Store) CanAccess(ctx context.Context, u identity.User, wsID int64) (bool, error) {
+	w, err := s.GetWorkspace(ctx, wsID)
+	if err != nil {
+		return false, err
+	}
+	return Visible(w, u), nil
+}
+
+// WorkspaceOfAgent and friends resolve a nested resource back to its
+// workspace, so routes keyed by agent, wire or binding id are checked too.
+func (s *Store) WorkspaceOfAgent(ctx context.Context, agentID int64) (int64, error) {
+	var wsID int64
+	err := s.db.QueryRowContext(ctx, `SELECT workspace_id FROM agents WHERE id = ?`, agentID).Scan(&wsID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("agent %d: %w", agentID, ErrNotFound)
+	}
+	return wsID, err
+}
+
+func (s *Store) WorkspaceOfWire(ctx context.Context, wireID int64) (int64, error) {
+	var wsID int64
+	err := s.db.QueryRowContext(ctx, `SELECT workspace_id FROM wires WHERE id = ?`, wireID).Scan(&wsID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("wire %d: %w", wireID, ErrNotFound)
+	}
+	return wsID, err
+}
+
+func (s *Store) WorkspaceOfContextBinding(ctx context.Context, bindingID int64) (int64, error) {
+	var wsID int64
+	err := s.db.QueryRowContext(ctx, `SELECT workspace_id FROM context_bindings WHERE id = ?`, bindingID).Scan(&wsID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("context binding %d: %w", bindingID, ErrNotFound)
+	}
+	return wsID, err
+}
+
+// SetTeam shares a workspace with a team, or withdraws it when teamID is nil.
+func (s *Store) SetTeam(ctx context.Context, wsID int64, teamID *int64) (Workspace, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE workspaces SET team_id = ?, updated_at = ? WHERE id = ?`, teamID, now(), wsID)
+	if err != nil {
+		return Workspace{}, fmt.Errorf("set workspace %d team: %w", wsID, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Workspace{}, fmt.Errorf("workspace %d: %w", wsID, ErrNotFound)
+	}
+	slog.Info("workspace team grant changed", "workspace_id", wsID, "team_id", teamID)
+	return s.GetWorkspace(ctx, wsID)
+}
+
+// Clone copies a workspace's definition — agents, wires and gear grants —
+// under a new owner, leaving the timeline behind. This is what replaced
+// versioned templates: two people wanting the same setup each take a copy,
+// and nothing they do afterwards touches the other.
+func (s *Store) Clone(ctx context.Context, srcID int64, name string, ownerID int64) (Workspace, error) {
+	src, err := s.GetWorkspace(ctx, srcID)
+	if err != nil {
+		return Workspace{}, err
+	}
+	agents, err := s.ListAgents(ctx, srcID)
+	if err != nil {
+		return Workspace{}, err
+	}
+	wires, err := s.ListWires(ctx, srcID)
+	if err != nil {
+		return Workspace{}, err
+	}
+
+	var orchModel int64
+	for _, a := range agents {
+		if a.IsOrchestrator && a.ModelID != nil {
+			orchModel = *a.ModelID
+		}
+	}
+	clone, err := s.CreateWorkspace(ctx, name, src.Description, orchModel, ownerID)
+	if err != nil {
+		return Workspace{}, err
+	}
+
+	// Map source agent ids to their copies so wires can be rebuilt.
+	idMap := map[int64]int64{}
+	cloneAgents, err := s.ListAgents(ctx, clone.ID)
+	if err != nil {
+		return Workspace{}, err
+	}
+	for _, a := range agents {
+		if a.IsOrchestrator {
+			for _, ca := range cloneAgents {
+				if ca.IsOrchestrator {
+					idMap[a.ID] = ca.ID
+					if _, err := s.UpdateAgent(ctx, ca.ID, nil, &a.Role, a.ModelID); err != nil {
+						return Workspace{}, fmt.Errorf("clone: copy orchestrator role: %w", err)
+					}
+				}
+			}
+			continue
+		}
+		var modelID int64
+		if a.ModelID != nil {
+			modelID = *a.ModelID
+		}
+		created, err := s.CreateAgent(ctx, clone.ID, a.Name, a.Role, modelID)
+		if err != nil {
+			return Workspace{}, fmt.Errorf("clone: copy agent %q: %w", a.Name, err)
+		}
+		idMap[a.ID] = created.ID
+	}
+
+	for _, wire := range wires {
+		from, okF := idMap[wire.FromAgentID]
+		to, okT := idMap[wire.ToAgentID]
+		if !okF || !okT {
+			continue
+		}
+		if _, err := s.CreateWire(ctx, clone.ID, from, to, wire.Label); err != nil {
+			return Workspace{}, fmt.Errorf("clone: copy wire: %w", err)
+		}
+	}
+
+	slog.Info("workspace cloned", "from", srcID, "to", clone.ID, "agents", len(agents), "wires", len(wires))
+	return s.GetWorkspace(ctx, clone.ID)
 }
 
 func (s *Store) DeleteWorkspace(ctx context.Context, id int64) error {

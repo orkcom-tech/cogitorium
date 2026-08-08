@@ -78,6 +78,8 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string) *Server {
 	mux.HandleFunc("POST /api/v1/workspaces", s.handleCreateWorkspace)
 	mux.HandleFunc("GET /api/v1/workspaces/{id}", s.handleGetWorkspace)
 	mux.HandleFunc("DELETE /api/v1/workspaces/{id}", s.handleDeleteWorkspace)
+	mux.HandleFunc("POST /api/v1/workspaces/{id}/clone", s.handleCloneWorkspace)
+	mux.HandleFunc("PUT /api/v1/workspaces/{id}/team", s.handleSetWorkspaceTeam)
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/agents", s.handleListAgents)
 	mux.HandleFunc("POST /api/v1/workspaces/{id}/agents", s.handleCreateAgent)
 	mux.HandleFunc("PATCH /api/v1/agents/{id}", s.handleUpdateAgent)

@@ -9,6 +9,7 @@ import WorkspacesPage from './pages/WorkspacesPage'
 import WorkspacePage from './pages/WorkspacePage'
 import ContextPage from './pages/ContextPage'
 import GearsPage from './pages/GearsPage'
+import AdminPage from './pages/AdminPage'
 
 type Health = { status: string; version: string }
 
@@ -62,6 +63,7 @@ export default function App() {
             <NavLink to="/gears">Gears</NavLink>
             <NavLink to="/models">Models</NavLink>
             <NavLink to="/chat">Scratch chat</NavLink>
+            {user.role === 'admin' && <NavLink to="/people">People</NavLink>}
           </nav>
           <footer className="sidebar-footer">
             <div>
@@ -76,7 +78,8 @@ export default function App() {
         <main className="content">
           <Routes>
             <Route path="/" element={<Navigate to="/workspaces" replace />} />
-            <Route path="/workspaces" element={<WorkspacesPage />} />
+            <Route path="/workspaces" element={<WorkspacesPage me={user} />} />
+            <Route path="/people" element={user.role === 'admin' ? <AdminPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/workspaces/:id" element={<WorkspacePage />} />
             <Route path="/context" element={<ContextPage />} />
             <Route path="/gears" element={<GearsPage />} />

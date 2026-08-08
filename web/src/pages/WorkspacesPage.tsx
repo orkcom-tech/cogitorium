@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, type Model, type Workspace } from '../api'
+import { api, auth, type Model, type Team, type User, type Workspace } from '../api'
 
-export default function WorkspacesPage() {
+export default function WorkspacesPage({ me }: { me: User }) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [models, setModels] = useState<Model[]>([])
+  const [teams, setTeams] = useState<Team[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(() => {
-    Promise.all([api.workspaces.list(), api.models.list()])
-      .then(([w, m]) => {
+    Promise.all([api.workspaces.list(), api.models.list(), auth.teams()])
+      .then(([w, m, t]) => {
         setWorkspaces(w)
         setModels(m)
+        setTeams(t)
         setError(null)
       })
       .catch((e: Error) => setError(e.message))
@@ -31,26 +33,66 @@ export default function WorkspacesPage() {
         </p>
       ) : (
         <div className="ws-list">
-          {workspaces.map((w) => (
-            <div key={w.id} className="card">
-              <div className="card-head">
-                <Link to={`/workspaces/${w.id}`}>
-                  <strong>{w.name}</strong>
-                </Link>
-                <span className="muted">{w.description}</span>
-                <span className="spacer" />
-                <button
-                  className="danger"
-                  onClick={() => {
-                    if (confirm(`Delete workspace "${w.name}" with its agents and history?`))
-                      api.workspaces.remove(w.id).then(reload).catch((e: Error) => setError(e.message))
-                  }}
-                >
-                  delete
-                </button>
+          {workspaces.map((w) => {
+            const mine = w.owner_id === me.id
+            return (
+              <div key={w.id} className="card">
+                <div className="card-head">
+                  <Link to={`/workspaces/${w.id}`}>
+                    <strong>{w.name}</strong>
+                  </Link>
+                  <span className="muted">{w.description}</span>
+                  {!mine && <span className="muted">shared with you</span>}
+                  {w.team_id != null && (
+                    <span className="muted">· team: {teams.find((t) => t.id === w.team_id)?.name ?? w.team_id}</span>
+                  )}
+                  <span className="spacer" />
+                  {(mine || me.role === 'admin') && (
+                    <select
+                      value={w.team_id ?? ''}
+                      onChange={(e) =>
+                        api.workspaces
+                          .setTeam(w.id, e.target.value ? Number(e.target.value) : null)
+                          .then(reload)
+                          .catch((err: Error) => setError(err.message))
+                      }
+                    >
+                      <option value="">private</option>
+                      {teams.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          share with {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    onClick={() => {
+                      const name = prompt(`Name for your copy of "${w.name}"?`, `${w.name} copy`)
+                      if (name)
+                        api.workspaces
+                          .clone(w.id, name)
+                          .then(reload)
+                          .catch((err: Error) => setError(err.message))
+                    }}
+                    title="Copy the agents and wiring into a workspace of your own — the history stays here"
+                  >
+                    clone
+                  </button>
+                  {(mine || me.role === 'admin') && (
+                    <button
+                      className="danger"
+                      onClick={() => {
+                        if (confirm(`Delete workspace "${w.name}" with its agents and history?`))
+                          api.workspaces.remove(w.id).then(reload).catch((e: Error) => setError(e.message))
+                      }}
+                    >
+                      delete
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

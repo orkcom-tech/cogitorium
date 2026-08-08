@@ -69,7 +69,7 @@ func failContext(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func (s *Server) handleListContextBindings(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := s.workspaceScoped(w, r)
 	if !ok {
 		return
 	}
@@ -82,7 +82,7 @@ func (s *Server) handleListContextBindings(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleCreateContextBinding(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := s.workspaceScoped(w, r)
 	if !ok {
 		return
 	}
@@ -107,7 +107,9 @@ func (s *Server) handleCreateContextBinding(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) handleDeleteContextBinding(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := s.nestedScoped(w, r, func(bindingID int64) (int64, error) {
+		return s.workspaces.WorkspaceOfContextBinding(r.Context(), bindingID)
+	})
 	if !ok {
 		return
 	}

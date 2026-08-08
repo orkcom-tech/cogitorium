@@ -85,6 +85,13 @@ export const api = {
     create: (w: { name: string; description: string; orchestrator_model_id: number }) =>
       req<Workspace>('/api/v1/workspaces', { method: 'POST', body: JSON.stringify(w) }),
     remove: (id: number) => req<void>(`/api/v1/workspaces/${id}`, { method: 'DELETE' }),
+    clone: (id: number, name: string) =>
+      req<Workspace>(`/api/v1/workspaces/${id}/clone`, { method: 'POST', body: JSON.stringify({ name }) }),
+    setTeam: (id: number, teamId: number | null) =>
+      req<Workspace>(`/api/v1/workspaces/${id}/team`, {
+        method: 'PUT',
+        body: JSON.stringify({ team_id: teamId }),
+      }),
     agents: (id: number) => req<Agent[]>(`/api/v1/workspaces/${id}/agents`),
     createAgent: (id: number, a: { name: string; role: string; model_id: number }) =>
       req<Agent>(`/api/v1/workspaces/${id}/agents`, { method: 'POST', body: JSON.stringify(a) }),
@@ -211,7 +218,15 @@ export async function wsChatStream(
 
 import { session } from './session'
 
-export type Workspace = { id: number; name: string; description: string; shared_branch: string }
+export type Workspace = {
+  id: number
+  name: string
+  description: string
+  branch: string
+  shared_branch: string
+  owner_id: number | null
+  team_id: number | null
+}
 
 export type Agent = {
   id: number

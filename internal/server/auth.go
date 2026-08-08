@@ -82,6 +82,48 @@ func isLoopback(r *http.Request) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// requireWorkspace is the guard every workspace-scoped route runs first.
+// Filtering the list alone would leave every other route open to a direct
+// id, so access is checked where the work happens, not where it is listed.
+func (s *Server) requireWorkspace(w http.ResponseWriter, r *http.Request, wsID int64) bool {
+	ok, err := s.workspaces.CanAccess(r.Context(), callerFrom(r.Context()), wsID)
+	if err != nil {
+		fail(w, r, err)
+		return false
+	}
+	if !ok {
+		// 404, not 403: whether a workspace exists is not something a
+		// stranger gets to learn from the status code.
+		writeError(w, http.StatusNotFound, "no such workspace")
+		return false
+	}
+	return true
+}
+
+// workspaceScoped reads the {id} path value as a workspace id and checks it.
+func (s *Server) workspaceScoped(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return 0, false
+	}
+	return id, s.requireWorkspace(w, r, id)
+}
+
+// nestedScoped checks a resource identified by its own id — an agent, wire
+// or binding — by resolving it back to the workspace that owns it.
+func (s *Server) nestedScoped(w http.ResponseWriter, r *http.Request, resolve func(int64) (int64, error)) (int64, bool) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return 0, false
+	}
+	wsID, err := resolve(id)
+	if err != nil {
+		fail(w, r, err)
+		return 0, false
+	}
+	return id, s.requireWorkspace(w, r, wsID)
+}
+
 // requireAdmin gates the operations only an administrator may perform:
 // users, teams, and anything that reconfigures the install itself.
 func requireAdmin(w http.ResponseWriter, r *http.Request) (identity.User, bool) {

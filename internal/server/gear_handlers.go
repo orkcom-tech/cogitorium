@@ -194,7 +194,7 @@ func (s *Server) handleDeleteGear(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListGearBindings(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := s.workspaceScoped(w, r)
 	if !ok {
 		return
 	}
@@ -207,7 +207,7 @@ func (s *Server) handleListGearBindings(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleCreateGearBinding(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := s.workspaceScoped(w, r)
 	if !ok {
 		return
 	}
