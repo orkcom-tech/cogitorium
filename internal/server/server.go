@@ -20,6 +20,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/engine"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
+	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/version"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
@@ -33,6 +34,7 @@ type Server struct {
 	context    *contextstore.Store
 	gears      *gear.Store
 	gearExec   *gear.Executor
+	library    *library.Store
 	identity   *identity.Store
 	engine     *engine.Engine
 	http       *http.Server
@@ -53,6 +55,7 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Run
 	cs := contextstore.New(contextdPath)
 	gears := gear.NewStore(db)
 	gearExec := gear.NewExecutor(gears, dataDir, sb)
+	lib := library.NewStore(db)
 	s := &Server{
 		db:         db,
 		catalog:    cat,
@@ -60,8 +63,9 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Run
 		context:    cs,
 		gears:      gears,
 		gearExec:   gearExec,
+		library:    lib,
 		identity:   identity.NewStore(db),
-		engine:     engine.New(ws, cat, cs, gears, gearExec),
+		engine:     engine.New(ws, cat, cs, gears, gearExec, lib),
 		// A server reachable beyond this machine must not hand out admin
 		// to anyone who can open a socket to it.
 		trustLoopback:   isLoopbackListen(listen),
@@ -121,6 +125,11 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Run
 	mux.HandleFunc("GET /api/v1/terminal/status", s.handleTerminalStatus)
 	mux.HandleFunc("GET /api/v1/terminal", s.handleTerminal)
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/terminal", s.handleWorkspaceTerminal)
+
+	mux.HandleFunc("GET /api/v1/instructions", s.handleListInstructions)
+	mux.HandleFunc("POST /api/v1/instructions", s.handleSaveInstruction)
+	mux.HandleFunc("GET /api/v1/instructions/{id}", s.handleGetInstruction)
+	mux.HandleFunc("DELETE /api/v1/instructions/{id}", s.handleDeleteInstruction)
 
 	mux.HandleFunc("GET /api/v1/gears", s.handleListGears)
 	mux.HandleFunc("POST /api/v1/gears", s.handleCreateGear)

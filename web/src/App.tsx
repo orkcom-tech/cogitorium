@@ -9,6 +9,7 @@ import WorkspacesPage from './pages/WorkspacesPage'
 import WorkspacePage from './pages/WorkspacePage'
 import ContextPage from './pages/ContextPage'
 import GearsPage from './pages/GearsPage'
+import LibraryPage from './pages/LibraryPage'
 import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
 
@@ -62,6 +63,7 @@ export default function App() {
             <NavLink to="/workspaces">Workspaces</NavLink>
             <NavLink to="/context">Context</NavLink>
             <NavLink to="/gears">Gears</NavLink>
+            <NavLink to="/instructions">Instructions</NavLink>
             <NavLink to="/models">Models</NavLink>
             <NavLink to="/chat">Scratch chat</NavLink>
             {user.role === 'admin' && <NavLink to="/terminal">Terminal</NavLink>}
@@ -86,6 +88,7 @@ export default function App() {
             <Route path="/workspaces/:id" element={<WorkspacePage />} />
             <Route path="/context" element={<ContextPage />} />
             <Route path="/gears" element={<GearsPage />} />
+            <Route path="/instructions" element={<LibraryPage />} />
             <Route path="/models" element={<ModelsPage />} />
             <Route path="/chat" element={<ChatPage />} />
           </Routes>

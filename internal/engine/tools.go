@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/orkcom-tech/cogitorium/internal/gear"
+	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
@@ -136,17 +137,44 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 		}, "name", "description", "runtime", "code"),
 	})
 
-	// Every agent can search the catalog. A worker that cannot see what
+	// Every agent can search the catalogues. An agent that cannot see what
 	// already exists has no choice but to reinvent it, which is exactly how
-	// the catalog fills with near-duplicates.
-	tools = append(tools, llm.Tool{
-		Name:        "list_gears",
-		Description: "Search the global gear catalog — tools forged in this or any other workspace. Call this before forging anything: if a gear already does the job, use it, or say that it exists and should be granted to you.",
-		InputSchema: obj(map[string]any{
-			"query": str("optional free-text filter over name and description"),
-			"tag":   str("optional tag filter"),
-		}),
-	})
+	// both catalogues fill with near-duplicates.
+	tools = append(tools,
+		llm.Tool{
+			Name:        "list_gears",
+			Description: "Search the global gear catalog — tools forged in this or any other workspace. Call this before forging anything: if a gear already does the job, use it, or say that it exists and should be granted to you.",
+			InputSchema: obj(map[string]any{
+				"query": str("optional free-text filter over name and description"),
+				"tag":   str("optional tag filter"),
+			}),
+		},
+		llm.Tool{
+			Name:        "list_instructions",
+			Description: "Search the instruction library — reusable guidance written once and shared: house style, review checklists, how a particular job is done here. Check it before writing out guidance from scratch, and read one with read_instruction.",
+			InputSchema: obj(map[string]any{
+				"query": str("optional free-text filter over name and description"),
+				"tag":   str("optional tag filter"),
+			}),
+		},
+		llm.Tool{
+			Name:        "read_instruction",
+			Description: "Read an instruction from the library by name.",
+			InputSchema: obj(map[string]any{
+				"name": str("instruction name from the library"),
+			}, "name"),
+		},
+		llm.Tool{
+			Name: "save_instruction",
+			Description: "Write reusable guidance into the shared library so it survives this conversation and anyone can bind it later. Use it for things that will be true next week — house style, a procedure, a checklist — not for notes about the task at hand. Saving an existing name replaces its text; Contextverse keeps the previous version.",
+			InputSchema: obj(map[string]any{
+				"name":        str("lowercase identifier, e.g. 'review-checklist'"),
+				"description": str("what this instruction is for — this is what others read when choosing it"),
+				"text":        str("the instruction itself, in markdown"),
+				"tags":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "classification tags"},
+			}, "name", "description", "text"),
+		},
+	)
 
 	if agent.IsOrchestrator {
 		tools = append(tools, llm.Tool{
@@ -215,7 +243,8 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 	// Only the orchestrator manages the workspace; a worker that somehow
 	// asks for a management tool gets a clear refusal.
 	switch call.Name {
-	case "delegate", "forge_gear", "list_gears":
+	case "delegate", "forge_gear", "list_gears",
+		"list_instructions", "read_instruction", "save_instruction":
 		// Available to every agent.
 	default:
 		if !agent.IsOrchestrator {
@@ -457,6 +486,63 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 			return "", err
 		}
 		return marshal(gears)
+
+	case "list_instructions":
+		tag, err := args.str("tag")
+		if err != nil {
+			return "", err
+		}
+		query, err := args.str("query")
+		if err != nil {
+			return "", err
+		}
+		items, err := e.library.List(ctx, tag, query)
+		if err != nil {
+			return "", err
+		}
+		return marshal(items)
+
+	case "read_instruction":
+		name, err := args.reqStr("name")
+		if err != nil {
+			return "", err
+		}
+		in, err := e.library.GetByName(ctx, name)
+		if err != nil {
+			return "", err
+		}
+		text, err := e.ctx.Get(ctx, in.Path)
+		if err != nil {
+			return "", fmt.Errorf("instruction %q is indexed but its text cannot be read: %w", name, err)
+		}
+		return text, nil
+
+	case "save_instruction":
+		name, err := args.reqStr("name")
+		if err != nil {
+			return "", err
+		}
+		description, err := args.str("description")
+		if err != nil {
+			return "", err
+		}
+		text, err := args.reqStr("text")
+		if err != nil {
+			return "", err
+		}
+		tags, err := args.strSlice("tags")
+		if err != nil {
+			return "", err
+		}
+		// The text goes to Contextverse; only the index entry lands here.
+		if err := e.ctx.Put(ctx, library.PathFor(name), text); err != nil {
+			return "", fmt.Errorf("save instruction %q: %w", name, err)
+		}
+		in, err := e.library.Save(ctx, name, description, tags, wsID, agent.ID)
+		if err != nil {
+			return "", err
+		}
+		return marshal(in)
 
 	case "grant_gear":
 		gearName, err := args.reqStr("gear")

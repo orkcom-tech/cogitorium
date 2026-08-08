@@ -149,6 +149,19 @@ export const api = {
       }),
     unbind: (bindingId: number) => req<void>(`/api/v1/gear-bindings/${bindingId}`, { method: 'DELETE' }),
   },
+  instructions: {
+    list: (q = '', tag = '') => {
+      const p = new URLSearchParams()
+      if (q) p.set('q', q)
+      if (tag) p.set('tag', tag)
+      const qs = p.toString()
+      return req<Instruction[]>(`/api/v1/instructions${qs ? `?${qs}` : ''}`)
+    },
+    get: (id: number) => req<{ instruction: Instruction; text: string }>(`/api/v1/instructions/${id}`),
+    save: (i: { name: string; description: string; text: string; tags?: string[] }) =>
+      req<Instruction>('/api/v1/instructions', { method: 'POST', body: JSON.stringify(i) }),
+    remove: (id: number) => req<void>(`/api/v1/instructions/${id}`, { method: 'DELETE' }),
+  },
   terminal: {
     status: () => req<TerminalStatus>('/api/v1/terminal/status'),
   },
@@ -303,6 +316,17 @@ export type GearRun = {
   stdout: string
   stderr: string
   created_at: string
+}
+
+export type Instruction = {
+  id: number
+  name: string
+  description: string
+  tags: string[]
+  path: string
+  origin_workspace: string
+  created_by_agent: string
+  updated_at: string
 }
 
 export type TerminalStatus = {

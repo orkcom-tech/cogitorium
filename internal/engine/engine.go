@@ -17,6 +17,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
+	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
@@ -51,19 +52,21 @@ type Engine struct {
 	ctx      *contextstore.Store
 	gears    *gear.Store
 	gearExec *gear.Executor
+	library  *library.Store
 
 	mu      sync.Mutex
 	status  map[int64]AgentStatus
 	running map[int64]bool // workspace_id -> a turn is in flight
 }
 
-func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears *gear.Store, gearExec *gear.Executor) *Engine {
+func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears *gear.Store, gearExec *gear.Executor, lib *library.Store) *Engine {
 	return &Engine{
 		ws:       ws,
 		cat:      cat,
 		ctx:      cs,
 		gears:    gears,
 		gearExec: gearExec,
+		library:  lib,
 		status:   map[int64]AgentStatus{},
 		running:  map[int64]bool{},
 	}
@@ -310,6 +313,7 @@ func (e *Engine) systemPrompt(ctx context.Context, wsID int64, agent workspace.A
 		return "", err
 	}
 	b = append(b, gearSection...)
+	b = append(b, libraryNote...)
 	return string(b), nil
 }
 
@@ -374,6 +378,11 @@ func (e *Engine) gearSection(ctx context.Context, wsID int64, agent workspace.Ag
 	b = fmt.Appendf(b, "\nIf none of them fits the task, call list_gears to check the wider catalog before forging a new one.\n")
 	return string(b), nil
 }
+
+// libraryNote points every agent at the shared instruction library. The
+// same reasoning as gears: guidance nobody can find gets written again,
+// slightly differently, until nothing is authoritative.
+const libraryNote = "\n\n## Instruction library\nReusable guidance — house style, procedures, checklists — is kept in a shared library. Call list_instructions before writing out guidance from scratch, and read one with read_instruction. When you work something out that will still be true next week, save_instruction puts it where the next agent will find it.\n"
 
 // AssembledPrompt exposes the effective system prompt for the UI's
 // "what does this agent see" preview.
