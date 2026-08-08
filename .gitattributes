@@ -1,0 +1,4 @@
+# Screenshots are binary; never let a merge try to reconcile them line by line.
+*.png binary
+*.jpg binary
+*.webm binary

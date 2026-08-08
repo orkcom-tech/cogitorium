@@ -3,3 +3,12 @@ web/node_modules/
 web/dist/*
 !web/dist/.gitkeep
 web/tsconfig.tsbuildinfo
+
+# This repository lives inside a synced Documents folder, and the file
+# provider resolves conflicts by leaving a copy beside the original: "App
+# 2.tsx", "@types/estree 5". One of those duplicates broke a TypeScript build
+# because it sat inside tsconfig's include. They are never ours.
+* 2.*
+* 3.*
+* 4.*
+* 5.*

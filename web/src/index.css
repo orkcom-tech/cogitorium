@@ -1289,6 +1289,12 @@ th {
   margin: 0;
 }
 
+/* The dismiss link must not wrap to "go / t it" when the panel is narrow. */
+.bp-help .linkish {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 /* Nothing in the shell may scroll sideways. A horizontal scrollbar on the app
    means a track was sized against the window instead of its container. */
 .layout,

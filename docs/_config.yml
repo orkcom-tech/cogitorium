@@ -1,0 +1,7 @@
+title: Cogitorium
+description: >-
+  A workbench for agentic development. Model catalog, workspaces of dedicated
+  agents behind one orchestrator chat, blueprint wiring, and a persistent
+  catalog of agent-forged tools. Local-first, no telemetry.
+theme: jekyll-theme-cayman
+show_downloads: false
