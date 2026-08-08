@@ -8,6 +8,7 @@ import ApprovalDialog from './ApprovalDialog'
 import Bench, { type PanelDef } from '../bench/Bench'
 import { useLayout } from '../bench/store'
 import LayoutMenu from '../bench/LayoutMenu'
+import ThemeMenu from './ThemeMenu'
 
 // The set of ids the layout parser will accept. A restored layout naming a
 // panel nothing can render would otherwise be a permanent white screen.
@@ -200,6 +201,13 @@ export default function WorkspacePage() {
 
   const layout = useLayout(1, (id) => PANEL_IDS.has(id))
 
+  // The inspector opens by clicking an agent and closes when the selection
+  // goes. A restored layout must not bring back an empty one — that is the
+  // "Agents / Agent, which is which?" confusion, rebuilt on every reload.
+  useEffect(() => {
+    if (!selectedAgent && layout.slotOf('agent')) layout.close('agent')
+  }, [selectedAgent, layout])
+
   // ⌘↵ maximizes the focused panel; Escape is deliberately NOT bound here —
   // the approval dialog owns it, so one keypress can never both dismiss chrome
   // and silently refuse a pending web search.
@@ -332,6 +340,8 @@ export default function WorkspacePage() {
     {
       id: 'agent',
       minW: 420,
+      // The title IS the agent's name, so "Agents" (the roster) and this can
+      // never be mistaken for each other on a tab strip.
       title: selectedAgent ? selectedAgent.name : 'Agent',
       home: 'aux',
       node: (
@@ -342,7 +352,10 @@ export default function WorkspacePage() {
               models={models}
               wsId={wsId}
               status={statuses.get(selectedAgent.id)}
-              onClose={() => layout.close('agent')}
+              onClose={() => {
+                setSelectedAgent(null)
+                layout.close('agent')
+              }}
               onChanged={(a) => {
                 setSelectedAgent(a)
                 void reloadAgents()
@@ -367,18 +380,23 @@ export default function WorkspacePage() {
         <h2>{workspace.name}</h2>
         <span className="muted">{workspace.description}</span>
         <span className="spacer" />
-        <LayoutMenu layout={layout} />
+        <div className="row appearance">
+          <LayoutMenu layout={layout} />
+          <ThemeMenu />
+        </div>
         <div className="tabs">
-          {panels.map((p) => (
+          {panels
+            .filter((p) => p.id !== 'agent')
+            .map((p) => (
             <button
               key={p.id}
               className={layout.slotOf(p.id) ? 'active' : ''}
               onClick={() => (layout.slotOf(p.id) ? layout.close(p.id) : layout.show(p.id, p.home))}
               title={layout.slotOf(p.id) ? `Hide ${p.title}` : `Show ${p.title}`}
             >
-              {p.title}
-            </button>
-          ))}
+                {p.title}
+              </button>
+            ))}
         </div>
       </div>
       {error && (

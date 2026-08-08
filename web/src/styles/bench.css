@@ -8,8 +8,15 @@
 .bn-bench {
   position: relative;
   display: grid;
-  gap: var(--s2);
-  padding: 0 var(--s3) var(--s3);
+  /* No grid gap on purpose.
+   *
+   * left and right span all three rows, so they start at y=0, while main and
+   * aux sit in row 2 — and a gap AFTER an empty zero-height row still occupies
+   * its space. The side panels ended up sitting higher than the centre ones by
+   * exactly one gap. The spacing lives on the cards instead, where a collapsed
+   * track costs nothing. */
+  gap: 0;
+  padding: 0 var(--s2) var(--s2);
   min-height: 0;
   height: 100%;
   overflow: hidden; /* scroll is always owned by a panel body, never the bench */
@@ -30,6 +37,7 @@
 
 .bn-panel {
   position: relative;
+  margin: var(--s1);
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -62,6 +70,9 @@
   position: relative;
   z-index: 3;
   align-self: start;
+  /* Matches .bn-panel exactly: the strip and its body are two grid items in
+     one cell, so any difference here shows up as a misaligned header. */
+  margin: var(--s1);
   border-radius: var(--r3) var(--r3) 0 0;
   display: flex;
   align-items: stretch;

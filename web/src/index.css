@@ -1402,3 +1402,8 @@ th {
   background: var(--selected);
   border-color: var(--accent);
 }
+
+.appearance {
+  gap: var(--s1);
+  flex: 0 0 auto;
+}

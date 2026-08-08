@@ -11,7 +11,6 @@ import GearsPage from './pages/GearsPage'
 import LibraryPage from './pages/LibraryPage'
 import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
-import ThemeMenu from './pages/ThemeMenu'
 import { applyTheme, loadTheme } from './styles/theme'
 
 type Health = { status: string; version: string }
@@ -122,7 +121,6 @@ export default function App() {
               <span>People</span>
             </NavLink>}
           </nav>
-          <ThemeMenu />
           <footer className="sidebar-footer">
             <div>
               {user.name} · {user.role}
