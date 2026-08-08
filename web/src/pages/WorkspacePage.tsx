@@ -7,6 +7,7 @@ import FilesPage from './FilesPage'
 import ApprovalDialog from './ApprovalDialog'
 import Bench, { type PanelDef } from '../bench/Bench'
 import { useLayout } from '../bench/store'
+import LayoutMenu from '../bench/LayoutMenu'
 
 // The set of ids the layout parser will accept. A restored layout naming a
 // panel nothing can render would otherwise be a permanent white screen.
@@ -366,6 +367,7 @@ export default function WorkspacePage() {
         <h2>{workspace.name}</h2>
         <span className="muted">{workspace.description}</span>
         <span className="spacer" />
+        <LayoutMenu layout={layout} />
         <div className="tabs">
           {panels.map((p) => (
             <button

@@ -141,7 +141,7 @@ export default function Bench({ panels, layout }: { panels: PanelDef[]; layout: 
                       left: floating.x,
                       top: floating.y,
                       width: floating.w,
-                      height: floating.h,
+                      height: floating.collapsed ? 'var(--h-tabs)' : floating.h,
                       // z from array index, never a stored counter: a counter
                       // drifts upward forever and eventually puts a panel above
                       // the approval dialog.
@@ -158,9 +158,15 @@ export default function Bench({ panels, layout }: { panels: PanelDef[]; layout: 
                 rect={floating}
                 onMove={(r) => layout.moveFloat(p.id, r)}
                 onDock={() => layout.float(p.id, p.home)}
+                onCollapse={() => layout.collapseFloat(p.id)}
+                onExpand={() => layout.expandFloat(p.id, window.innerWidth, window.innerHeight)}
+                onClose={() => layout.close(p.id)}
               />
             )}
-            {gated ? (
+            {floating && !floating.collapsed && (
+              <FloatGrip rect={floating} onResize={(r) => layout.moveFloat(p.id, r)} />
+            )}
+            {floating?.collapsed ? null : gated ? (
               <div className="bn-gate">
                 <p className="hint">
                   A shell is not reconnected automatically. Restoring your layout brings the panel back, not the
@@ -210,11 +216,17 @@ function FloatBar({
   rect,
   onMove,
   onDock,
+  onCollapse,
+  onExpand,
+  onClose,
 }: {
   title: string
-  rect: { x: number; y: number; w: number; h: number }
+  rect: { x: number; y: number; w: number; h: number; collapsed?: boolean }
   onMove: (r: { x: number; y: number; w: number; h: number }) => void
   onDock: () => void
+  onCollapse: () => void
+  onExpand: () => void
+  onClose: () => void
 }) {
   const from = useRef<{ x: number; y: number; rx: number; ry: number } | null>(null)
   return (
@@ -243,10 +255,56 @@ function FloatBar({
     >
       <strong>{title}</strong>
       <span className="bn-spacer" />
+      <button className="bn-icon" onClick={onCollapse} title={rect.collapsed ? 'Unroll' : 'Roll up'}>
+        {rect.collapsed ? '▸' : '▾'}
+      </button>
+      <button className="bn-icon" onClick={onExpand} title="Fill the screen, or go back">
+        ⤢
+      </button>
       <button className="bn-icon" onClick={onDock} title="Put it back in a dock">
         ⤓
       </button>
+      <button className="bn-icon" onClick={onClose} title="Close">
+        ×
+      </button>
     </div>
+  )
+}
+
+/** The corner grip. Same rule as the seams: write to the DOM while dragging,
+ *  commit once on release, so a resize never re-renders the canvas or the
+ *  terminal inside the panel on every frame. */
+function FloatGrip({
+  rect,
+  onResize,
+}: {
+  rect: { x: number; y: number; w: number; h: number }
+  onResize: (r: { x: number; y: number; w: number; h: number }) => void
+}) {
+  const from = useRef<{ x: number; y: number; w: number; h: number } | null>(null)
+  return (
+    <div
+      className="bn-grip"
+      title="Resize"
+      onPointerDown={(e) => {
+        e.stopPropagation()
+        e.currentTarget.setPointerCapture(e.pointerId)
+        from.current = { x: e.clientX, y: e.clientY, w: rect.w, h: rect.h }
+      }}
+      onPointerMove={(e) => {
+        if (!from.current || !e.currentTarget.hasPointerCapture(e.pointerId)) return
+        const f = from.current
+        onResize({
+          ...rect,
+          w: Math.max(280, f.w + (e.clientX - f.x)),
+          h: Math.max(160, f.h + (e.clientY - f.y)),
+        })
+      }}
+      onPointerUp={(e) => {
+        from.current = null
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }}
+    />
   )
 }
 

@@ -161,7 +161,12 @@ export function useLayout(userId: number, known: (id: PanelId) => boolean) {
           const panels = slots[s].panels.filter((p) => p !== id)
           slots[s] = { ...slots[s], panels, active: slots[s].active === id ? (panels[0] ?? null) : slots[s].active }
         }
-        return { ...l, slots, maximized: l.maximized === id ? null : l.maximized }
+        // A float lives outside the slots, so removing it from every dock is
+        // not enough: without this, closing a floating panel left it on screen
+        // with no dock to close it from again.
+        const floats = { ...l.floats }
+        delete floats[id]
+        return { ...l, slots, floats, maximized: l.maximized === id ? null : l.maximized }
       }),
 
     /** Float a panel out of its dock, or dock it back where it belongs. */
@@ -193,9 +198,32 @@ export function useLayout(userId: number, known: (id: PanelId) => boolean) {
       }),
 
     moveFloat: (id: PanelId, rect: { x: number; y: number; w: number; h: number }) =>
-      setLayout((l) => (l.floats[id] ? { ...l, floats: { ...l.floats, [id]: rect } } : l)),
+      setLayout((l) => (l.floats[id] ? { ...l, floats: { ...l.floats, [id]: { ...l.floats[id], ...rect } } } : l)),
+
+    collapseFloat: (id: PanelId) =>
+      mutate((l) =>
+        l.floats[id]
+          ? { ...l, floats: { ...l.floats, [id]: { ...l.floats[id], collapsed: !l.floats[id].collapsed } } }
+          : l,
+      ),
+
+    /** Expand to fill, or come back to the rectangle it was at. Storing the
+     *  previous rect rather than recomputing one means "restore" puts it
+     *  exactly where the operator left it. */
+    expandFloat: (id: PanelId, vw: number, vh: number) =>
+      mutate((l) => {
+        const f = l.floats[id]
+        if (!f) return l
+        const next = f.prev
+          ? { ...f.prev, collapsed: false }
+          : { x: 24, y: 24, w: Math.max(320, vw - 48), h: Math.max(240, vh - 48), collapsed: false, prev: f }
+        return { ...l, floats: { ...l.floats, [id]: next } }
+      }),
 
     maximize: (id: PanelId | null) => mutate((l) => ({ ...l, maximized: l.maximized === id ? null : id })),
+
+    /** Apply a preset or a saved arrangement wholesale. */
+    apply: (l: Layout) => mutate(() => l),
 
     reset: () => mutate(() => defaultLayout()),
 

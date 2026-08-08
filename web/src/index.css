@@ -1274,3 +1274,34 @@ th {
   font-size: var(--t-chrome);
   padding: 0.2rem 0.5rem;
 }
+
+.layout-chip {
+  font-size: var(--t-chrome);
+  padding: 0.2rem 0.55rem;
+}
+
+.layout-menu {
+  min-width: 22rem;
+  max-width: 26rem;
+}
+
+.layout-menu .menu-head {
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  padding: var(--s2) var(--s2) var(--s1);
+}
+
+.layout-menu button {
+  white-space: normal;
+}
+
+.saved-row {
+  display: flex;
+  align-items: center;
+}
+
+.saved-row > button:first-child {
+  flex: 1;
+}

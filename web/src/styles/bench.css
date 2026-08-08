@@ -321,3 +321,28 @@
 .bn-floatbar:active {
   cursor: grabbing;
 }
+
+.bn-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  touch-action: none;
+  z-index: 5;
+  background: linear-gradient(
+    135deg,
+    transparent 0 50%,
+    color-mix(in srgb, var(--text) 35%, transparent) 50% 60%,
+    transparent 60% 72%,
+    color-mix(in srgb, var(--text) 35%, transparent) 72% 82%,
+    transparent 82%
+  );
+}
+
+/* Rolled up: the body is gone, the panel is not. Same rule as parking — a
+   collapsed terminal must not lose its session. */
+.bn-panel.bn-float.is-collapsed {
+  overflow: hidden;
+}

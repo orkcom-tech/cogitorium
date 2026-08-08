@@ -32,8 +32,10 @@ export type Dock = {
   mode: 'push' | 'overlay'
 }
 
-/** A floating panel: fixed to the viewport at a remembered rectangle. */
-export type Float = { x: number; y: number; w: number; h: number }
+/** A floating panel: fixed to the viewport at a remembered rectangle.
+ *  collapsed rolls it up to its title bar; prev remembers the rectangle to
+ *  come back to after it has been expanded to fill the screen. */
+export type Float = { x: number; y: number; w: number; h: number; collapsed?: boolean; prev?: Float }
 
 export type Layout = {
   v: 1
@@ -142,7 +144,13 @@ export function parseLayout(raw: unknown, known: (id: PanelId) => boolean): Layo
       const rect = r as Record<string, unknown>
       const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d)
       if (Object.keys(out.floats).length >= MAX_FLOATS) break
-      out.floats[id] = { x: num(rect.x, 80), y: num(rect.y, 80), w: num(rect.w, 520), h: num(rect.h, 380) }
+      out.floats[id] = {
+        x: num(rect.x, 80),
+        y: num(rect.y, 80),
+        w: num(rect.w, 520),
+        h: num(rect.h, 380),
+        collapsed: rect.collapsed === true,
+      }
     }
   }
   return out
