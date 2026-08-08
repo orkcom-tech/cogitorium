@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"syscall"
@@ -20,10 +21,16 @@ const (
 	// so a fetch can never outlive Shutdown and strand an awaiting audit row.
 	fetchTimeout = 8 * time.Second
 
-	// readLimit guards the JSON parser. It is not the budget the model sees —
-	// that is maxResults below, applied after parsing. Without the second
-	// cap, web_search would be web_fetch with an extra hop.
-	readLimit  = 3 << 10
+	// readLimit guards the JSON PARSER and nothing else. It is not the budget
+	// the model sees — that is maxResults and the per-field clips below,
+	// applied after parsing, and they are what keep web_search from being
+	// web_fetch with an extra hop.
+	//
+	// Set at 3 KB originally, which was a mistake worth naming: real answers
+	// exceed it, so the body arrived truncated mid-object and every rich
+	// result failed to parse. A cap that silently turns good responses into
+	// "unexpected data" is worse than no cap.
+	readLimit  = 256 << 10
 	maxResults = 5
 
 	maxTitle   = 120
@@ -64,7 +71,7 @@ func New(listenAddr, apiKey string) (*Searcher, error) {
 		}
 	}
 	if strings.TrimSpace(apiKey) == "" {
-		return nil, errors.New("the outward gate is enabled but no credential is configured for " + searchHost)
+		return nil, errors.New("the outward gate is enabled but no credential is configured for " + primaryHost)
 	}
 	policy, err := newAddrPolicy([]string{listenAddr})
 	if err != nil {
@@ -88,10 +95,11 @@ func New(listenAddr, apiKey string) (*Searcher, error) {
 		// checkAuthority runs on every request regardless.
 		DisableKeepAlives: true,
 		ForceAttemptHTTP2: false,
-		TLSClientConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-			ServerName: searchHost,
-		},
+		// No pinned ServerName: there are two permitted destinations and Go
+		// derives SNI from the request host, which is what keeps certificate
+		// verification honest for each. checkAuthority is what bounds WHICH
+		// hosts may appear there.
+		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
 	}
 
 	return &Searcher{
@@ -119,67 +127,155 @@ func (g guard) RoundTrip(r *http.Request) (*http.Response, error) {
 	return g.next.RoundTrip(r)
 }
 
-// Search issues the one permitted request and returns the results, the HTTP
-// status, and the bytes read. Errors are returned whole to the CALLER, which
-// logs them; the caller is responsible for handing the model a fixed string
-// instead, because Go's *url.Error stringifies the full URL and dial target
-// and would turn a tool error into an internal port scanner.
-func (s *Searcher) Search(ctx context.Context, query string) ([]Result, int, int, error) {
-	u := WireURL(query)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+// Search runs a query, primary destination first.
+//
+// The primary is always consulted. Only when it has nothing to say — no
+// results, or it cannot be reached at all — does the query go to the second
+// destination. Both are compiled in, so "search somewhere else" never means
+// "somewhere a model or a prompt chose".
+//
+// Errors are returned WHOLE to the caller, which logs them and hands the model
+// a fixed string instead. Go's *url.Error stringifies the full URL and dial
+// target, and a tool error lands verbatim in a model's context: that is an
+// internal port scanner, handed over politely.
+func (s *Searcher) Search(ctx context.Context, query string) (Outcome, error) {
+	primary, status, n, err := s.fetchPrimary(ctx, query)
+	if err == nil && len(primary) > 0 {
+		return Outcome{Results: primary, Host: primaryHost, Status: status, Bytes: n}, nil
+	}
+	primaryErr := err
+
+	second, status2, n2, err2 := s.fetchFallback(ctx, query)
+	if err2 != nil {
+		// Both failed. Report BOTH: hiding the second failure behind the
+		// first is how a fallback rots unnoticed — it would look like the
+		// primary is merely down while the backstop had been broken for
+		// months.
+		if primaryErr != nil {
+			return Outcome{Host: primaryHost, Status: status},
+				fmt.Errorf("both search services failed: %w; and then: %v", primaryErr, err2)
+		}
+		return Outcome{Host: fallbackHost, Status: status2},
+			fmt.Errorf("the primary returned nothing and the second failed: %w", err2)
+	}
+	return Outcome{Results: second, Host: fallbackHost, Status: status2, Bytes: n2, Secondary: true}, nil
+}
+
+// Outcome is one completed search: what came back, and from where. The host is
+// recorded because an audit that cannot say which party received a query
+// cannot answer the question it exists for.
+type Outcome struct {
+	Results   []Result
+	Host      string
+	Status    int
+	Bytes     int
+	Secondary bool
+}
+
+func (s *Searcher) fetchPrimary(ctx context.Context, query string) ([]Result, int, int, error) {
+	body, status, err := s.get(ctx, WireURL(query), true)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, status, 0, err
 	}
-	// The credential travels in a header, never in the query string: query
-	// strings are logged by every intermediary and shown in the audit table.
-	req.Header.Set("X-Api-Key", s.key)
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	defer resp.Body.Close()
-
-	// CheckRedirect returns ErrUseLastResponse, so a 3xx arrives here as a
-	// response rather than an error. Anything but 200 is drained and refused.
-	if resp.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, readLimit))
-		return nil, resp.StatusCode, 0, fmt.Errorf("%s answered with status %d", searchHost, resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, readLimit))
-	if err != nil {
-		return nil, resp.StatusCode, len(body), err
-	}
-
-	// The expected shape. echo-page.com is unreleased as of this writing, so
-	// this contract is asserted rather than observed: if the service answers
-	// with something else the call fails loudly with the body's opening
-	// bytes, which is the honest outcome — there is no fallback parse and no
-	// "best effort" reading that would quietly hand the model garbage.
 	var payload struct {
 		Results []Result `json:"results"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		snippet := string(body)
-		if len(snippet) > 120 {
-			snippet = snippet[:120]
-		}
-		return nil, resp.StatusCode, len(body),
-			fmt.Errorf("%s answered with something that is not the expected JSON: %q", searchHost, snippet)
+		return nil, status, len(body), fmt.Errorf("%s answered with something that is not the expected JSON: %q",
+			primaryHost, head(string(body), 120))
+	}
+	return truncate(payload.Results), status, len(body), nil
+}
+
+func (s *Searcher) fetchFallback(ctx context.Context, query string) ([]Result, int, int, error) {
+	body, status, err := s.get(ctx, FallbackWireURL(query), false)
+	if err != nil {
+		return nil, status, 0, err
+	}
+	// The shape this endpoint documents. Its coverage is abstracts and
+	// related topics rather than a full web index, which is stated plainly
+	// rather than dressed up: a thin answer the operator understands beats a
+	// rich-looking one that is quietly wrong.
+	var payload struct {
+		AbstractText  string `json:"AbstractText"`
+		AbstractURL   string `json:"AbstractURL"`
+		Heading       string `json:"Heading"`
+		RelatedTopics []struct {
+			Text     string `json:"Text"`
+			FirstURL string `json:"FirstURL"`
+		} `json:"RelatedTopics"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, status, len(body), fmt.Errorf("the second search service answered with unexpected data")
 	}
 
-	out := payload.Results
-	if len(out) > maxResults {
-		out = out[:maxResults]
+	var out []Result
+	if payload.AbstractText != "" {
+		out = append(out, Result{Title: payload.Heading, URL: payload.AbstractURL, Snippet: payload.AbstractText})
 	}
-	for i := range out {
-		out[i].Title = clip(out[i].Title, maxTitle)
-		out[i].URL = clip(out[i].URL, maxURL)
-		out[i].Snippet = clip(out[i].Snippet, maxSnippet)
+	for _, t := range payload.RelatedTopics {
+		if t.Text == "" {
+			continue
+		}
+		out = append(out, Result{Title: head(t.Text, 80), URL: t.FirstURL, Snippet: t.Text})
 	}
-	return out, resp.StatusCode, len(body), nil
+	if len(out) == 0 {
+		return nil, status, len(body), nil
+	}
+	return truncate(out), status, len(body), nil
+}
+
+// get performs one request against an already-constructed permitted URL.
+func (s *Searcher) get(ctx context.Context, u *url.URL, withKey bool) ([]byte, int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	if withKey {
+		// The credential travels in a header, never in a query string: query
+		// strings are logged by every intermediary and shown in the audit
+		// table. It goes only to the destination that issued it.
+		req.Header.Set("X-Api-Key", s.key)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	// CheckRedirect returns ErrUseLastResponse, so a 3xx arrives here as a
+	// response rather than an error. Any non-2xx is drained and refused —
+	// including redirects, which must never move a destination the operator
+	// already approved. 2xx rather than 200 exactly because a real service
+	// answers 202 with a complete body, and refusing that would have been a
+	// gate that only ever failed.
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, readLimit))
+		return nil, resp.StatusCode, fmt.Errorf("%s answered with status %d", u.Host, resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, readLimit))
+	return body, resp.StatusCode, err
+}
+
+func truncate(in []Result) []Result {
+	if len(in) > maxResults {
+		in = in[:maxResults]
+	}
+	for i := range in {
+		in[i].Title = clip(in[i].Title, maxTitle)
+		in[i].URL = clip(in[i].URL, maxURL)
+		in[i].Snippet = clip(in[i].Snippet, maxSnippet)
+	}
+	return in
+}
+
+func head(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }
 
 func clip(s string, n int) string {

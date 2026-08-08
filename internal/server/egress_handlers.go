@@ -45,8 +45,8 @@ func (s *Server) handleEgressStatus(w http.ResponseWriter, r *http.Request) {
 		st.Reason = "switched off at runtime by " + s.egressKilledBy + " — restart to restore"
 	default:
 		st.Enabled = true
-		st.Reason = "on — searches go to " + websearch.Destination() +
-			", one query at a time, and every one waits for you to approve it"
+		st.Reason = "on — agents may ask to search the web, one query at a time, " +
+			"and every one waits for you to approve it"
 	}
 	if u := callerFrom(r.Context()); u.IsAdmin() {
 		sandboxed := s.gearExec.Sandboxed()

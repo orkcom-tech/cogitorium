@@ -73,14 +73,15 @@ export default function ApprovalDialog({
           )}
         </div>
 
-        <label className="approval-label">what leaves</label>
-        {/* The wire string, not the raw query: they can differ, and this is
-            the one that travels. Plain text node — never dangerouslySetInnerHTML,
-            never a markdown renderer, never syntax highlighting. */}
+        <label className="approval-label">these words leave this machine</label>
+        {/* The query itself, verbatim. It is the only part an agent authored
+            and therefore the only part worth reading closely — the destination
+            is a constant compiled into the binary, not something a prompt can
+            steer. Plain text node: never dangerouslySetInnerHTML, never a
+            markdown renderer, never syntax highlighting. */}
         <div className="wire" dir="ltr">
-          {request.wire}
+          {request.query}
         </div>
-        <p className="muted decoded">reads as: {request.query}</p>
 
         <div className="approval-facts">
           <span>
@@ -112,7 +113,7 @@ export default function ApprovalDialog({
         )}
 
         <p className="approval-warning">
-          These exact bytes leave this machine when you allow — whether or not the search service answers.
+          These exact words leave this machine when you allow — whether or not anything is found.
         </p>
 
         <div className="row approval-actions">

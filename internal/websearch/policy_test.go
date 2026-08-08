@@ -228,10 +228,10 @@ func TestWireURLKeepsTheQueryAValueAndNothingElse(t *testing.T) {
 		"a b+c",
 	} {
 		u := WireURL(q)
-		if u.Host != searchHost || u.Scheme != "https" {
+		if u.Host != primaryHost || u.Scheme != "https" {
 			t.Fatalf("destination moved for %q: %s", q, u.String())
 		}
-		if u.EscapedPath() != searchPath {
+		if u.EscapedPath() != primaryPath {
 			t.Errorf("path changed for %q: %s", q, u.EscapedPath())
 		}
 		if u.Fragment != "" {

@@ -24,10 +24,22 @@ import (
 )
 
 const (
-	// searchHost is ASCII and lowercase so that comparison is ==, not a
-	// normalisation routine that can disagree with the resolver.
-	searchHost = "echo-page.com"
-	searchPath = "/api/search"
+	// primaryHost is consulted first for every search, always. ASCII and
+	// lowercase so comparison is ==, not a normalisation routine that could
+	// disagree with the resolver.
+	primaryHost = "echo-page.com"
+	primaryPath = "/api/search"
+
+	// fallbackHost is where a search goes when the primary finds nothing or
+	// cannot be reached. It is a second COMPILED-IN constant, not a setting:
+	// the destination set stays fixed at build time, so a model still cannot
+	// name where its words go and an operator cannot be talked into
+	// repointing it by a helpful-sounding agent.
+	// The official JSON endpoint rather than the HTML one. Scraping a results
+	// page would rot silently the first time the markup changed, and a search
+	// that quietly returns nothing is worse than one that says it failed.
+	fallbackHost = "api.duckduckgo.com"
+	fallbackPath = "/"
 
 	// maxQueryRunes bounds one request. It is also the exfiltration budget
 	// per call, which is why it is small and why the audit column is wider.
@@ -173,24 +185,40 @@ func (p *addrPolicy) permit(addrPort string) error {
 	return nil
 }
 
-// WireURL builds the one URL this process may fetch. Scheme, host, port and
-// path are constants; the query is only ever a value, escaped by url.Values.
+// WireURL builds a URL this process may fetch. Scheme, host, port and path are
+// constants; the query is only ever a value, escaped by url.Values.
 //
 // Never build this by concatenation. A '#' in a concatenated string silently
 // drops everything after it before the request is sent, so the operator would
-// approve one string and a different one would leave the machine — which is
-// the exact property the approval dialog exists to guarantee.
-func WireURL(query string) *url.URL {
-	return &url.URL{
-		Scheme:   "https",
-		Host:     searchHost,
-		Path:     searchPath,
-		RawQuery: url.Values{"q": {query}}.Encode(),
+// approve one string while a different one left the machine — the exact
+// property the approval dialog exists to guarantee.
+func WireURL(query string) *url.URL { return wireFor(primaryHost, primaryPath, query) }
+
+// FallbackWireURL is the same for the second destination.
+func FallbackWireURL(query string) *url.URL { return wireFor(fallbackHost, fallbackPath, query) }
+
+func wireFor(host, path, query string) *url.URL {
+	v := url.Values{"q": {query}}
+	if host == fallbackHost {
+		// Asked for as data rather than a rendered page, so what comes back
+		// is parseable and cannot carry markup into a model's context.
+		v.Set("format", "json")
+		v.Set("no_html", "1")
 	}
+	return &url.URL{Scheme: "https", Host: host, Path: path, RawQuery: v.Encode()}
 }
 
-// Destination names where searches go, for the UI and the status endpoint.
-func Destination() string { return searchHost }
+// Destination names the first place searches go.
+func Destination() string { return primaryHost }
+
+// Fallback names the second.
+func Fallback() string { return fallbackHost }
+
+// permittedHosts is the complete set of names this process may ever contact.
+// Fixed at build time and deliberately tiny: every attack that works by making
+// a checker and a dialer disagree needs a host string to work on, and no model
+// or operator input reaches this slice.
+var permittedHosts = []string{primaryHost, fallbackHost}
 
 // checkAuthority runs per request rather than per connection. Keep-alive and
 // HTTP/2 pooling mean a dial-time check is a backstop, not a gate: a second
@@ -208,10 +236,12 @@ func checkAuthority(raw string) error {
 		// resolve as another.
 		return errRefused
 	}
-	if !hostIs(u.Host, searchHost) {
-		return errRefused
+	for _, h := range permittedHosts {
+		if hostIs(u.Host, h) {
+			return nil
+		}
 	}
-	return nil
+	return errRefused
 }
 
 // hostIs compares an authority against the one permitted name. Lowercasing
