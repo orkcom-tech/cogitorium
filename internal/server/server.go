@@ -12,20 +12,35 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/orkcom-tech/cogitorium/internal/catalog"
 	"github.com/orkcom-tech/cogitorium/internal/version"
 	"github.com/orkcom-tech/cogitorium/web"
 )
 
 type Server struct {
-	db   *sql.DB
-	http *http.Server
+	db      *sql.DB
+	catalog *catalog.Store
+	http    *http.Server
 }
 
 func New(listen string, db *sql.DB) *Server {
-	s := &Server{db: db}
+	s := &Server{db: db, catalog: catalog.NewStore(db)}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.handleHealth)
+
+	mux.HandleFunc("GET /api/v1/providers", s.handleListProviders)
+	mux.HandleFunc("POST /api/v1/providers", s.handleCreateProvider)
+	mux.HandleFunc("PATCH /api/v1/providers/{id}", s.handleUpdateProvider)
+	mux.HandleFunc("DELETE /api/v1/providers/{id}", s.handleDeleteProvider)
+	mux.HandleFunc("POST /api/v1/providers/{id}/test", s.handleTestProvider)
+
+	mux.HandleFunc("GET /api/v1/models", s.handleListModels)
+	mux.HandleFunc("POST /api/v1/models", s.handleCreateModel)
+	mux.HandleFunc("DELETE /api/v1/models/{id}", s.handleDeleteModel)
+
+	mux.HandleFunc("POST /api/v1/chat", s.handleChat)
+
 	mux.Handle("/", uiHandler())
 
 	s.http = &http.Server{
@@ -113,6 +128,10 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
 }
+
+// Unwrap lets http.ResponseController reach the underlying writer, so
+// streaming handlers can flush through this wrapper.
+func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
 
 func logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

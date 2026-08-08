@@ -1,31 +1,41 @@
 import { useEffect, useState } from 'react'
+import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import ModelsPage from './pages/ModelsPage'
+import ChatPage from './pages/ChatPage'
 
 type Health = { status: string; version: string }
 
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/health')
       .then((r) => r.json())
       .then(setHealth)
-      .catch((e: unknown) => setError(String(e)))
+      .catch(() => setHealth(null))
   }, [])
 
   return (
-    <main className="shell">
-      <h1>Cogitorium</h1>
-      <p className="tagline">A workbench for agentic development.</p>
-      <p className="health">
-        {health && (
-          <>
-            server <code>{health.version}</code> — {health.status}
-          </>
-        )}
-        {error && <>server unreachable: {error}</>}
-        {!health && !error && <>checking server…</>}
-      </p>
-    </main>
+    <BrowserRouter>
+      <div className="layout">
+        <aside className="sidebar">
+          <h1 className="brand">Cogitorium</h1>
+          <nav>
+            <NavLink to="/models">Models</NavLink>
+            <NavLink to="/chat">Chat</NavLink>
+          </nav>
+          <footer className="sidebar-footer">
+            {health ? `${health.version} · ${health.status}` : 'server unreachable'}
+          </footer>
+        </aside>
+        <main className="content">
+          <Routes>
+            <Route path="/" element={<Navigate to="/models" replace />} />
+            <Route path="/models" element={<ModelsPage />} />
+            <Route path="/chat" element={<ChatPage />} />
+          </Routes>
+        </main>
+      </div>
+    </BrowserRouter>
   )
 }
