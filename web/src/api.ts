@@ -69,6 +69,8 @@ export type GraphData = { nodes: GraphNode[]; edges: GraphEdge[] }
 // unreported_turns counts model calls whose provider sent no usage figures.
 // It is shown rather than hidden: a spend of 0 means something different when
 // the provider never reports, and the operator should be told which it is.
+export type FileEntry = { name: string; path: string; dir: boolean; size: number; mtime: string }
+
 export type AgentUsage = {
   agent_id: number
   input_tokens: number
@@ -217,6 +219,26 @@ export const api = {
   usage: {
     workspace: (wsId: number) => req<AgentUsage[]>(`/api/v1/workspaces/${wsId}/usage`),
     agent: (agentId: number) => req<AgentUsage>(`/api/v1/agents/${agentId}/usage`),
+  },
+  files: {
+    list: (wsId: number, path: string) =>
+      req<FileEntry[]>(`/api/v1/workspaces/${wsId}/files?path=${encodeURIComponent(path)}`),
+    read: (wsId: number, path: string) =>
+      req<{ path: string; content: string; mtime: string }>(
+        `/api/v1/workspaces/${wsId}/file?path=${encodeURIComponent(path)}`,
+      ),
+    // Sent as text/plain rather than JSON so the file's bytes are the body,
+    // not a string escaped inside an envelope.
+    write: (wsId: number, path: string, content: string) =>
+      fetch(session.url(`/api/v1/workspaces/${wsId}/file?path=${encodeURIComponent(path)}`), {
+        method: 'PUT',
+        headers: session.headers({ 'Content-Type': 'text/plain' }),
+        body: content,
+      }).then(async (r) => {
+        const body = await r.json().catch(() => null)
+        if (!r.ok) throw new Error(body?.error?.message ?? `${r.status} ${r.statusText}`)
+        return body as { path: string; size: number; mtime: string }
+      }),
   },
   context: {
     status: () => req<ContextStatus>('/api/v1/context/status'),

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import BlueprintEditor from './BlueprintEditor'
 import TerminalPage from './TerminalPage'
 import AgentMemory from './AgentMemory'
+import FilesPage from './FilesPage'
 import {
   api,
   wsChatStream,
@@ -30,7 +31,7 @@ export default function WorkspacePage() {
   const [streams, setStreams] = useState<Map<number, string>>(new Map())
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [usage, setUsage] = useState<Map<number, AgentUsage>>(new Map())
-  const [view, setView] = useState<'chat' | 'blueprint' | 'terminal'>('chat')
+  const [view, setView] = useState<'chat' | 'blueprint' | 'files' | 'terminal'>('chat')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -196,6 +197,15 @@ export default function WorkspacePage() {
               blueprint
             </button>
             <button
+              className={view === 'files' && !selectedAgent ? 'active' : ''}
+              onClick={() => {
+                setView('files')
+                setSelectedAgent(null)
+              }}
+            >
+              files
+            </button>
+            <button
               className={view === 'terminal' && !selectedAgent ? 'active' : ''}
               onClick={() => {
                 setView('terminal')
@@ -221,6 +231,8 @@ export default function WorkspacePage() {
           />
         ) : view === 'terminal' ? (
           <TerminalPage workspaceId={wsId} />
+        ) : view === 'files' ? (
+          <FilesPage wsId={wsId} onError={setError} />
         ) : view === 'blueprint' ? (
           <BlueprintEditor
             wsId={wsId}

@@ -759,6 +759,100 @@ th {
   font-size: 0.72rem;
 }
 
+/* File tree beside the editor: the tree stays narrow and scrolls on its own,
+   so a deep path never pushes the editor off the panel. */
+.files {
+  display: grid;
+  grid-template-columns: minmax(12rem, 18rem) 1fr;
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.file-tree,
+.file-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 0;
+  overflow: auto;
+}
+
+.file-tree {
+  border-right: 1px solid var(--border);
+  padding-right: 0.5rem;
+}
+
+.tree-head {
+  align-items: center;
+  gap: 0.5rem;
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  padding-bottom: 0.25rem;
+}
+
+.tree-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.15rem 0.4rem;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tree-row:hover {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.tree-row.selected {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.tree-icon {
+  width: 0.8rem;
+  opacity: 0.6;
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-size {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.new-file {
+  margin-top: auto;
+  padding-top: 0.5rem;
+  gap: 0.35rem;
+}
+
+.code-edit {
+  flex: 1;
+  min-height: 20rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  tab-size: 2;
+  resize: none;
+}
+
+.warn {
+  color: #d0a050;
+  font-size: 0.75rem;
+}
+
 /* Spend rides in the agent row without stealing the name's space. */
 .agent-spend {
   font-variant-numeric: tabular-nums;
