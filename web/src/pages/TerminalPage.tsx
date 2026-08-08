@@ -8,7 +8,7 @@ import { session } from '../session'
 // A shell, running in the same sandbox gears run in — not on the server.
 // The server refuses to open one without that sandbox, so what you get here
 // cannot read the database or the provider keys in it.
-export default function TerminalPage() {
+export default function TerminalPage({ workspaceId }: { workspaceId?: number }) {
   const [status, setStatus] = useState<TerminalStatus | null>(null)
   const [connected, setConnected] = useState(false)
   const holder = useRef<HTMLDivElement>(null)
@@ -18,8 +18,13 @@ export default function TerminalPage() {
     api.terminal.status().then(setStatus).catch(() => setStatus(null))
   }, [])
 
+  // The server-wide shell is an administrator's; a workspace shell belongs
+  // to whoever may use that workspace.
+  const allowed = workspaceId ? status?.available : status?.global_available
+  const blockedReason = workspaceId ? status?.reason : status?.global_reason
+
   useEffect(() => {
-    if (!status?.available || !holder.current) return
+    if (!allowed || !holder.current) return
 
     const term = new Terminal({
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -34,7 +39,8 @@ export default function TerminalPage() {
     fit.fit()
 
     const base = session.server() || window.location.origin
-    const wsUrl = new URL('/api/v1/terminal', base)
+    const path = workspaceId ? `/api/v1/workspaces/${workspaceId}/terminal` : '/api/v1/terminal'
+    const wsUrl = new URL(path, base)
     wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:'
     wsUrl.searchParams.set('rows', String(term.rows))
     wsUrl.searchParams.set('cols', String(term.cols))
@@ -74,15 +80,15 @@ export default function TerminalPage() {
       ws.close()
       term.dispose()
     }
-  }, [status])
+  }, [allowed, workspaceId])
 
-  if (status && !status.available) {
+  if (status && !allowed) {
     return (
       <div className="page">
         <h2>Terminal</h2>
         <div className="card">
           <p>A terminal is not available here.</p>
-          <p className="error">{status.reason}</p>
+          <p className="error">{blockedReason}</p>
           <p className="hint">
             Gear execution backend: <code>{status.backend}</code>. The terminal runs in that same sandbox — the
             server refuses to open a shell that would hold its own file access.
@@ -93,11 +99,12 @@ export default function TerminalPage() {
   }
 
   return (
-    <div className="page terminal-page">
+    <div className={workspaceId ? 'terminal-embedded' : 'page terminal-page'}>
       <div className="row">
-        <h2>Terminal</h2>
+        {!workspaceId && <h2>Terminal</h2>}
         <span className="muted">
           {connected ? 'connected' : 'connecting…'} · sandboxed, no network, nothing of the server's mounted
+          {workspaceId ? " · this workspace's files" : ''}
         </span>
       </div>
       <div className="terminal-holder" ref={holder} />

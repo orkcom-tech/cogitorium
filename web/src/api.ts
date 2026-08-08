@@ -303,7 +303,13 @@ export type GearRun = {
   created_at: string
 }
 
-export type TerminalStatus = { available: boolean; reason: string; backend: string }
+export type TerminalStatus = {
+  available: boolean
+  global_available: boolean
+  reason: string
+  global_reason: string
+  backend: string
+}
 
 export type GearRunResult = {
   stdout: string

@@ -111,16 +111,22 @@ func (s *dockerSession) Resize(rows, cols uint16) error {
 
 const dockerSocket = "/var/run/docker.sock"
 
-// ShellSpec builds the Spec for an operator terminal: an interactive shell
-// in a scratch container with no network and no host files.
-func ShellSpec(rows, cols uint16) Spec {
+// ShellSpec builds the Spec for a terminal: an interactive shell in a
+// throwaway container with no network and no host files. dir, when given,
+// is the workspace's own directory, copied in so the session opens on that
+// workspace's work rather than on nothing.
+func ShellSpec(rows, cols uint16, dir, label string) Spec {
+	if label == "" {
+		label = "cogitorium"
+	}
 	return Spec{
+		Dir:     dir,
 		Command: "/bin/sh",
 		Args:    []string{"-i"},
 		Env: map[string]string{
 			"HOME":    "/tmp",
 			"TERM":    "xterm-256color",
-			"PS1":     "cogitorium:\\w$ ",
+			"PS1":     label + ":\\w$ ",
 			"LINES":   strconv.Itoa(int(rows)),
 			"COLUMNS": strconv.Itoa(int(cols)),
 		},

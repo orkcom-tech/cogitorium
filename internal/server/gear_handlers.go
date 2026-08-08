@@ -91,9 +91,20 @@ func (s *Server) handleCreateGear(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, g)
 }
 
-// handleRunGear is the operator's dry run: execute a gear — including a
-// pending one — to see what it actually does before approving it.
+// handleRunGear is the dry run: execute a gear — including a pending one —
+// to see what it actually does before approving it.
+//
+// This deliberately bypasses the approval gate, which makes it code
+// execution available to any signed-in user. That is acceptable only
+// because it runs in the sandbox: the blast radius is a throwaway container
+// with no network and none of the server's files. Without a sandbox it is
+// refused outright rather than run with the server's own access.
 func (s *Server) handleRunGear(w http.ResponseWriter, r *http.Request) {
+	if !s.gearExec.Sandboxed() {
+		writeError(w, http.StatusForbidden,
+			"dry runs need a sandbox: running unapproved code with this server's file access is refused")
+		return
+	}
 	id, ok := pathID(w, r)
 	if !ok {
 		return
@@ -139,8 +150,13 @@ func (s *Server) handleListGearRuns(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSetGearStatus is the operator's approval gate — the only path that
-// can make agent-authored code runnable.
+// can make agent-authored code runnable. The catalog is global, so an
+// approval here reaches every agent the gear is bound to in every
+// workspace; that is an administrator's decision, not a member's.
 func (s *Server) handleSetGearStatus(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
 	id, ok := pathID(w, r)
 	if !ok {
 		return
@@ -181,7 +197,13 @@ func (s *Server) handleSetGearStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, g)
 }
 
+// handleDeleteGear removes a gear from the shared catalog, taking it away
+// from every workspace bound to it — administrator only for the same reason
+// approval is.
 func (s *Server) handleDeleteGear(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
 	id, ok := pathID(w, r)
 	if !ok {
 		return

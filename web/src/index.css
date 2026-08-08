@@ -81,7 +81,7 @@ body {
 
 /* Terminal */
 
-.terminal-page {
+.terminal-page, .terminal-embedded {
   height: calc(100vh - 3rem);
 }
 

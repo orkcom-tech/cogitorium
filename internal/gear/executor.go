@@ -56,6 +56,11 @@ func (e *Executor) Backend() string {
 	return e.sandbox.Name()
 }
 
+// Sandboxed reports whether gear execution is isolated from the server's
+// files. Anything that runs code without the approval gate must check this
+// first.
+func (e *Executor) Sandboxed() bool { return e.sandbox != nil && e.sandbox.Isolated() }
+
 type Result struct {
 	Stdout   string `json:"stdout"`
 	Stderr   string `json:"stderr"`

@@ -44,6 +44,7 @@ type Server struct {
 	// no terminal is possible, and that is a refusal rather than a fallback.
 	interactive     sandbox.Interactive
 	terminalEnabled bool
+	dataDir         string
 }
 
 func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Runner, terminal bool) *Server {
@@ -65,6 +66,7 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Run
 		// to anyone who can open a socket to it.
 		trustLoopback:   isLoopbackListen(listen),
 		terminalEnabled: terminal,
+		dataDir:         dataDir,
 	}
 	// A terminal is only offered when the sandbox can host one: without it
 	// the shell would hold the server's own file access.
@@ -118,6 +120,7 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Run
 
 	mux.HandleFunc("GET /api/v1/terminal/status", s.handleTerminalStatus)
 	mux.HandleFunc("GET /api/v1/terminal", s.handleTerminal)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/terminal", s.handleWorkspaceTerminal)
 
 	mux.HandleFunc("GET /api/v1/gears", s.handleListGears)
 	mux.HandleFunc("POST /api/v1/gears", s.handleCreateGear)

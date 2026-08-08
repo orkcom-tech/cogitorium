@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import BlueprintEditor from './BlueprintEditor'
+import TerminalPage from './TerminalPage'
 import {
   api,
   wsChatStream,
@@ -26,7 +27,7 @@ export default function WorkspacePage() {
   const [statuses, setStatuses] = useState<Map<number, AgentStatus>>(new Map())
   const [streams, setStreams] = useState<Map<number, string>>(new Map())
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
-  const [view, setView] = useState<'chat' | 'blueprint'>('chat')
+  const [view, setView] = useState<'chat' | 'blueprint' | 'terminal'>('chat')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -169,6 +170,15 @@ export default function WorkspacePage() {
             >
               blueprint
             </button>
+            <button
+              className={view === 'terminal' && !selectedAgent ? 'active' : ''}
+              onClick={() => {
+                setView('terminal')
+                setSelectedAgent(null)
+              }}
+            >
+              terminal
+            </button>
           </div>
         </div>
         {selectedAgent ? (
@@ -184,6 +194,8 @@ export default function WorkspacePage() {
             }}
             onError={setError}
           />
+        ) : view === 'terminal' ? (
+          <TerminalPage workspaceId={wsId} />
         ) : view === 'blueprint' ? (
           <BlueprintEditor
             wsId={wsId}
