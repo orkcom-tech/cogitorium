@@ -279,13 +279,24 @@ func (e *Engine) systemPrompt(ctx context.Context, wsID int64, agent workspace.A
 		}
 	}
 
-	paths, err := e.ws.BindingsForAgent(ctx, wsID, agent.ID)
+	explicit, err := e.ws.BindingsForAgent(ctx, wsID, agent.ID)
 	if err != nil {
 		return "", err
 	}
+	implicit, err := e.branchDocs(ctx, wsID, agent)
+	if err != nil {
+		return "", err
+	}
+	paths := append(implicit, explicit...)
+
 	if len(paths) > 0 {
 		b = fmt.Appendf(b, "\n\n## Context (from Contextverse)\n")
+		seen := map[string]bool{}
 		for _, p := range paths {
+			if seen[p] {
+				continue
+			}
+			seen[p] = true
 			content, err := e.ctx.Get(ctx, p)
 			if err != nil {
 				return "", fmt.Errorf("context doc %q bound to agent %q cannot be read: %w — restore the file in Contextverse or unbind it from the agent", p, agent.Name, err)
@@ -300,6 +311,39 @@ func (e *Engine) systemPrompt(ctx context.Context, wsID int64, agent workspace.A
 	}
 	b = append(b, gearSection...)
 	return string(b), nil
+}
+
+// branchDocs returns the workspace-branch documents an agent sees without
+// anyone binding them by hand: everything under the workspace's shared
+// branch, plus everything under its own. This is the mind-map shape —
+// context organized by who it belongs to rather than by a list of manual
+// bindings.
+//
+// An unreachable Contextverse yields no documents rather than an error:
+// the branch is a convenience, and an agent must still be able to run on
+// its role alone.
+func (e *Engine) branchDocs(ctx context.Context, wsID int64, agent workspace.Agent) ([]string, error) {
+	ws, err := e.ws.GetWorkspace(ctx, wsID)
+	if err != nil {
+		return nil, err
+	}
+	files, err := e.ctx.List(ctx)
+	if err != nil {
+		slog.Warn("context branch unavailable; agent runs without it", "workspace_id", wsID, "agent", agent.Name, "err", err)
+		return nil, nil
+	}
+
+	var out []string
+	for _, f := range files {
+		if ws.Branch != "" && strings.HasPrefix(f.Path, ws.SharedBranch()+"/") {
+			out = append(out, f.Path)
+			continue
+		}
+		if agent.Branch != "" && strings.HasPrefix(f.Path, agent.Branch+"/") {
+			out = append(out, f.Path)
+		}
+	}
+	return out, nil
 }
 
 // gearSection spells out the agent's forged tools in the prompt itself.

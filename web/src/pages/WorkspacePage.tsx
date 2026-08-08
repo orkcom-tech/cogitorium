@@ -506,7 +506,8 @@ function AgentPanel({
         </p>
       ) : (
         <>
-          {visible.length === 0 && <p className="hint">No context bound — this agent sees only its role.</p>}
+          <BranchDocs agent={agent} spaceFiles={spaceFiles} onError={onError} onWritten={() => setPrompt(null)} />
+          {visible.length > 0 && <p className="muted">Bound from elsewhere in the space:</p>}
           {visible.map((b) => (
             <div key={b.id} className="row binding">
               <code>{b.path}</code>
@@ -620,6 +621,63 @@ function AgentPanel({
         </div>
       )}
     </div>
+  )
+}
+
+// BranchDocs shows the agent's own Contextverse branch — context it reads
+// without anyone binding it, organized by whose it is rather than by a list
+// of manual bindings — and lets the operator write into it.
+function BranchDocs({
+  agent,
+  spaceFiles,
+  onError,
+  onWritten,
+}: {
+  agent: Agent
+  spaceFiles: ContextFile[]
+  onError: (m: string) => void
+  onWritten: () => void
+}) {
+  const [name, setName] = useState('')
+  const mine = spaceFiles.filter((f) => f.path.startsWith(agent.branch + '/'))
+
+  return (
+    <>
+      <p className="muted">
+        Its own branch — <code>{agent.branch}/</code> — read automatically, no binding needed:
+      </p>
+      {mine.length === 0 && <p className="hint">Empty. Anything you put here only this agent sees.</p>}
+      {mine.map((f) => (
+        <div key={f.path} className="row binding">
+          <code>{f.path.slice(agent.branch.length + 1)}</code>
+          <span className="muted">{f.version}</span>
+        </div>
+      ))}
+      <form
+        className="row"
+        onSubmit={(e) => {
+          e.preventDefault()
+          const file = name.trim().endsWith('.md') ? name.trim() : `${name.trim()}.md`
+          api.context
+            .put(`${agent.branch}/${file}`, `# ${name.trim()}\n\n`)
+            .then(() => {
+              setName('')
+              onWritten()
+            })
+            .catch((err: Error) => onError(err.message))
+        }}
+      >
+        <input
+          className="grow"
+          placeholder="new note in this agent's branch, e.g. house-style"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <button type="submit" disabled={!name.trim()}>
+          create
+        </button>
+      </form>
+    </>
   )
 }
 

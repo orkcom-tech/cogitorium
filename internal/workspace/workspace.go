@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -22,6 +23,47 @@ var (
 
 const OrchestratorName = "orchestrator"
 
+// ContextRoot is the only part of the Contextverse space Cogitorium writes
+// to. Everything outside it belongs to the operator and to Contextverse's
+// other clients.
+const ContextRoot = "workspaces"
+
+// slugRe strips anything that would make a path awkward to read or unsafe.
+var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
+
+func slug(name string) string {
+	s := slugRe.ReplaceAllString(strings.ToLower(name), "-")
+	s = strings.Trim(s, "-")
+	if s == "" {
+		s = "unnamed"
+	}
+	if len(s) > 40 {
+		s = strings.Trim(s[:40], "-")
+	}
+	return s
+}
+
+// newWorkspaceBranch names a workspace's subtree in the Contextverse space.
+// The id keeps it unique and the slug keeps the tree readable as a mind
+// map. It is computed once, at creation, and stored: recomputing it from
+// the current name would move an agent away from its own context the
+// moment anyone renames it.
+func newWorkspaceBranch(name string, id int64) string {
+	return fmt.Sprintf("%s/%s-%d", ContextRoot, slug(name), id)
+}
+
+func newAgentBranch(workspaceBranch, name string, id int64) string {
+	return fmt.Sprintf("%s/agents/%s-%d", workspaceBranch, slug(name), id)
+}
+
+// SharedBranch holds context every agent in the workspace sees.
+func (w Workspace) SharedBranch() string {
+	if w.Branch == "" {
+		return ""
+	}
+	return w.Branch + "/shared"
+}
+
 // DefaultOrchestratorRole seeds the orchestrator's editable system prompt.
 const DefaultOrchestratorRole = `You are the orchestrator of this workspace. You are the operator's single point of contact: everything they want done in this workspace goes through you.
 
@@ -31,6 +73,12 @@ type Workspace struct {
 	ID          int64  `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	// Branch is this workspace's subtree in the Contextverse space, frozen
+	// at creation so a rename cannot orphan it.
+	Branch string `json:"branch"`
+	// SharedBranchPath is where the workspace's shared context lives; every
+	// agent reads it without an explicit binding.
+	SharedBranchPath string `json:"shared_branch"`
 }
 
 type Agent struct {
@@ -44,6 +92,9 @@ type Agent struct {
 	IsOrchestrator bool     `json:"is_orchestrator"`
 	PosX           *float64 `json:"pos_x"` // blueprint canvas position; nil = unplaced
 	PosY           *float64 `json:"pos_y"`
+	// Branch is this agent's private context subtree, read without an
+	// explicit binding and frozen at creation.
+	Branch string `json:"branch"`
 }
 
 type Wire struct {
@@ -101,36 +152,49 @@ func (s *Store) CreateWorkspace(ctx context.Context, name, description string, o
 	}
 	wsID, _ := res.LastInsertId()
 
-	if _, err := tx.ExecContext(ctx,
+	// Branches are frozen here, with the ids the rows just received.
+	wsBranch := newWorkspaceBranch(name, wsID)
+	if _, err := tx.ExecContext(ctx, `UPDATE workspaces SET branch = ? WHERE id = ?`, wsBranch, wsID); err != nil {
+		return Workspace{}, fmt.Errorf("create workspace: set branch: %w", err)
+	}
+
+	agentRes, err := tx.ExecContext(ctx,
 		`INSERT INTO agents (workspace_id, name, kind, role, model_id, is_orchestrator, created_at, updated_at)
 		 VALUES (?, ?, 'model', ?, ?, 1, ?, ?)`,
-		wsID, OrchestratorName, DefaultOrchestratorRole, orchestratorModelID, now(), now()); err != nil {
+		wsID, OrchestratorName, DefaultOrchestratorRole, orchestratorModelID, now(), now())
+	if err != nil {
 		return Workspace{}, fmt.Errorf("create workspace: seed orchestrator: %w", err)
+	}
+	agentID, _ := agentRes.LastInsertId()
+	if _, err := tx.ExecContext(ctx, `UPDATE agents SET branch = ? WHERE id = ?`,
+		newAgentBranch(wsBranch, OrchestratorName, agentID), agentID); err != nil {
+		return Workspace{}, fmt.Errorf("create workspace: set orchestrator branch: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
 		return Workspace{}, fmt.Errorf("create workspace: commit: %w", err)
 	}
 	slog.Info("workspace created with orchestrator", "id", wsID, "name", name, "orchestrator_model_id", orchestratorModelID)
-	return Workspace{ID: wsID, Name: name, Description: description}, nil
+	return s.GetWorkspace(ctx, wsID)
 }
 
 func (s *Store) GetWorkspace(ctx context.Context, id int64) (Workspace, error) {
 	var w Workspace
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, description FROM workspaces WHERE id = ?`, id).
-		Scan(&w.ID, &w.Name, &w.Description)
+		`SELECT id, name, description, branch FROM workspaces WHERE id = ?`, id).
+		Scan(&w.ID, &w.Name, &w.Description, &w.Branch)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Workspace{}, fmt.Errorf("workspace %d: %w", id, ErrNotFound)
 	}
 	if err != nil {
 		return Workspace{}, fmt.Errorf("get workspace %d: %w", id, err)
 	}
+	w.SharedBranchPath = w.SharedBranch()
 	return w, nil
 }
 
 func (s *Store) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description FROM workspaces ORDER BY name`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, branch FROM workspaces ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list workspaces: %w", err)
 	}
@@ -138,9 +202,10 @@ func (s *Store) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
 	out := []Workspace{}
 	for rows.Next() {
 		var w Workspace
-		if err := rows.Scan(&w.ID, &w.Name, &w.Description); err != nil {
+		if err := rows.Scan(&w.ID, &w.Name, &w.Description, &w.Branch); err != nil {
 			return nil, fmt.Errorf("scan workspace: %w", err)
 		}
+		w.SharedBranchPath = w.SharedBranch()
 		out = append(out, w)
 	}
 	return out, rows.Err()
@@ -161,7 +226,7 @@ func (s *Store) DeleteWorkspace(ctx context.Context, id int64) error {
 const agentSelect = `
 	SELECT a.id, a.workspace_id, a.name, a.kind, a.role, a.model_id, a.is_orchestrator,
 	       COALESCE(p.name || ' / ' || COALESCE(NULLIF(m.label, ''), m.model_name), ''),
-	       a.pos_x, a.pos_y
+	       a.pos_x, a.pos_y, a.branch
 	FROM agents a
 	LEFT JOIN models m ON m.id = a.model_id
 	LEFT JOIN providers p ON p.id = m.provider_id`
@@ -169,7 +234,8 @@ const agentSelect = `
 func scanAgent(row interface{ Scan(...any) error }) (Agent, error) {
 	var a Agent
 	var orch int
-	if err := row.Scan(&a.ID, &a.WorkspaceID, &a.Name, &a.Kind, &a.Role, &a.ModelID, &orch, &a.ModelLabel, &a.PosX, &a.PosY); err != nil {
+	if err := row.Scan(&a.ID, &a.WorkspaceID, &a.Name, &a.Kind, &a.Role, &a.ModelID, &orch,
+		&a.ModelLabel, &a.PosX, &a.PosY, &a.Branch); err != nil {
 		return Agent{}, err
 	}
 	a.IsOrchestrator = orch == 1
@@ -230,6 +296,10 @@ func (s *Store) CreateAgent(ctx context.Context, wsID int64, name, role string, 
 		return Agent{}, err
 	}
 
+	ws, err := s.GetWorkspace(ctx, wsID)
+	if err != nil {
+		return Agent{}, err
+	}
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO agents (workspace_id, name, kind, role, model_id, is_orchestrator, created_at, updated_at)
 		 VALUES (?, ?, 'model', ?, ?, 0, ?, ?)`,
@@ -238,6 +308,10 @@ func (s *Store) CreateAgent(ctx context.Context, wsID int64, name, role string, 
 		return Agent{}, fmt.Errorf("create agent: %w", err)
 	}
 	id, _ := res.LastInsertId()
+	if _, err := s.db.ExecContext(ctx, `UPDATE agents SET branch = ? WHERE id = ?`,
+		newAgentBranch(ws.Branch, name, id), id); err != nil {
+		return Agent{}, fmt.Errorf("create agent: set branch: %w", err)
+	}
 	slog.Info("agent created", "id", id, "workspace_id", wsID, "name", name, "model_id", modelID)
 	return s.GetAgent(ctx, id)
 }

@@ -176,7 +176,7 @@ export async function wsChatStream(
   }
 }
 
-export type Workspace = { id: number; name: string; description: string }
+export type Workspace = { id: number; name: string; description: string; shared_branch: string }
 
 export type Agent = {
   id: number
@@ -189,6 +189,7 @@ export type Agent = {
   is_orchestrator: boolean
   pos_x: number | null
   pos_y: number | null
+  branch: string
 }
 
 export type Wire = { id: number; workspace_id: number; from_agent_id: number; to_agent_id: number; label: string }
