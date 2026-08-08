@@ -34,8 +34,34 @@ body {
 
 .layout.nav-collapsed .sidebar nav a span,
 .layout.nav-collapsed .brand,
-.layout.nav-collapsed .sidebar-footer {
+.layout.nav-collapsed .account-id,
+.layout.nav-collapsed .account-server,
+.layout.nav-collapsed .chip-label,
+.layout.nav-collapsed .out-label {
   display: none;
+}
+
+/* Collapsed, the account block keeps only what still means something at 32px:
+   the avatar, the palette swatch, and a way out. */
+.layout.nav-collapsed .account {
+  padding: var(--s1);
+  align-items: center;
+}
+
+.layout.nav-collapsed .side-pane,
+.layout.nav-collapsed nav a {
+  padding: var(--s1);
+}
+
+.layout.nav-collapsed .theme-chip {
+  padding: 0.2rem;
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+}
+
+.layout.nav-collapsed .bn-menu-holder {
+  width: 100%;
 }
 
 .nav-toggle {
@@ -1334,15 +1360,7 @@ th {
   border-radius: 6px;
 }
 
-.theme-menu {
-  min-width: 17rem;
-  left: auto;
-  right: 0;
-  top: calc(100% + 6px);
-  bottom: auto;
-  max-height: 78vh;
-  overflow-y: auto;
-}
+
 
 .theme-presets {
   display: flex;
@@ -1504,19 +1522,23 @@ th {
 .account-out button {
   width: 100%;
   font-size: var(--t-chrome);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s1);
+}
+
+.out-icon {
+  display: none;
+}
+
+.layout.nav-collapsed .out-icon {
+  display: inline;
 }
 
 .account .theme-chip {
   width: 100%;
   justify-content: center;
-}
-
-/* The palette menu now opens from the bottom-left corner of the screen. */
-.account .theme-menu {
-  left: 0;
-  right: auto;
-  bottom: calc(100% + 6px);
-  top: auto;
 }
 
 .file-btn {
@@ -1535,4 +1557,84 @@ th {
 .backdrop-row {
   padding: var(--s1) var(--s2);
   gap: var(--s2);
+}
+
+
+/* Appearance is a dialog, not a dropdown.
+ *
+ * Fifteen controls hanging off a 48px rail were clipped by their own sidebar
+ * and lay across the conversation. Anchoring was the wrong shape; every CSS
+ * fix was a patch on it. A centred dialog owes its width to nothing. */
+.theme-dialog {
+  background: var(--surface);
+  -webkit-backdrop-filter: var(--pane-blur);
+  backdrop-filter: var(--pane-blur);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r3);
+  box-shadow: var(--shadow);
+  width: min(30rem, calc(100vw - 2rem));
+  max-height: min(80vh, 46rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.theme-head {
+  padding: var(--s3) var(--s3) var(--s2);
+  border-bottom: 1px solid var(--border);
+}
+
+.theme-head h3 {
+  margin: 0;
+}
+
+.theme-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  padding: var(--s2) var(--s3) var(--s3);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.theme-body .menu-head {
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  padding: var(--s3) 0 var(--s1);
+}
+
+.theme-body .dial,
+.theme-body .backdrop-row,
+.theme-body .mode-row,
+.theme-body .theme-stops {
+  padding: var(--s1) 0;
+}
+
+.theme-body .glow-pad {
+  margin: var(--s1) 0;
+}
+
+.theme-body > button {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: var(--s2) 0;
+  font-size: var(--t-ui);
+}
+
+.theme-body .theme-presets {
+  gap: var(--s2);
+}
+
+/* Flex children shrink by default, which flattened the light-source map to a
+   sliver inside the dialog's column. */
+.theme-body .glow-pad {
+  flex: 0 0 auto;
+  height: 84px;
+}
+
+.theme-body > * {
+  flex: 0 0 auto;
 }

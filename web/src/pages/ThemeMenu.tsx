@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { DEFAULT_THEME, PRESET_THEMES, applyTheme, loadTheme, saveTheme, type Theme } from '../styles/theme'
 
 /**
@@ -13,7 +14,6 @@ export default function ThemeMenu() {
   const [theme, setTheme] = useState<Theme>(() => loadTheme())
   const [open, setOpen] = useState(false)
   const [bgError, setBgError] = useState<string | null>(null)
-  const box = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     applyTheme(theme)
@@ -24,14 +24,11 @@ export default function ThemeMenu() {
 
   useEffect(() => {
     if (!open) return
-    const close = (e: MouseEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
     }
-    const t = setTimeout(() => document.addEventListener('click', close), 0)
-    return () => {
-      clearTimeout(t)
-      document.removeEventListener('click', close)
-    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
   const setColor = (i: number, v: string) => {
@@ -43,13 +40,25 @@ export default function ThemeMenu() {
   const stops = [theme.colors[0] ?? '#1a1a19', theme.colors[1] ?? '', theme.colors[2] ?? '']
 
   return (
-    <div className="bn-menu-holder" ref={box}>
+    <>
       <button className="layout-chip theme-chip" onClick={() => setOpen((v) => !v)} title="Palette">
         <span className="swatch" style={{ background: `linear-gradient(135deg, ${stops.filter(Boolean).join(', ')})` }} />
-        theme
+        {/* A label, not a bare text node: a bare one cannot be hidden when the
+            sidebar collapses, so it kept forcing the chip wider than the rail. */}
+        <span className="chip-label">theme</span>
       </button>
-      {open && (
-        <div className="bn-menu theme-menu">
+      {open &&
+        createPortal(
+          <div className="modal-backdrop" onClick={() => setOpen(false)}>
+            <div className="modal theme-dialog" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+              <div className="row theme-head">
+                <h3>Appearance</h3>
+                <span className="spacer" />
+                <button onClick={() => setOpen(false)} title="Close">
+                  ×
+                </button>
+              </div>
+              <div className="theme-body">
           <span className="menu-head">Ready-made</span>
           <div className="theme-presets">
             {PRESET_THEMES.map((p) => (
@@ -92,7 +101,7 @@ export default function ThemeMenu() {
             )}
           </div>
 
-          <span className="menu-head">Backdrop</span>
+          <span className="menu-head">Background</span>
           <div className="row backdrop-row">
             <label className="file-btn">
               picture or clip…
@@ -235,10 +244,13 @@ export default function ThemeMenu() {
 
           <hr />
           <button onClick={() => setTheme(DEFAULT_THEME)}>reset palette</button>
-          <span className="hint">the palette is saved on this device</span>
-        </div>
-      )}
-    </div>
+                <span className="hint">the palette is saved on this device</span>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }
 

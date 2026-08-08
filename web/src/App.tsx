@@ -147,8 +147,11 @@ export default function App() {
             {/* Signing out gets its own bordered block: it is the one control
                 here that ends the session, and it read as a footnote. */}
             <div className="account-out">
-              <button className="danger" onClick={signOut}>
-                sign out
+              <button className="danger" onClick={signOut} title="Sign out">
+                <span className="out-icon" aria-hidden>
+                  ⏻
+                </span>
+                <span className="out-label">sign out</span>
               </button>
             </div>
           </footer>
