@@ -89,6 +89,39 @@ export default function ThemeMenu() {
             )}
           </div>
 
+          <span className="menu-head">Panels</span>
+          <div className="row mode-row">
+            {(['glass', 'solid'] as const).map((v) => (
+              <button key={v} className={theme.surface === v ? 'active' : ''} onClick={() => setTheme({ ...theme, surface: v })}>
+                {v}
+              </button>
+            ))}
+          </div>
+          {theme.surface === 'glass' && (
+            <label className="dial">
+              blur
+              <input
+                type="range"
+                min={0}
+                max={40}
+                step={2}
+                value={theme.blur}
+                onChange={(e) => setTheme({ ...theme, blur: Number(e.target.value) })}
+              />
+            </label>
+          )}
+          <label className="dial">
+            {theme.surface === 'glass' ? 'darken' : 'lighten'}
+            <input
+              type="range"
+              min={0.25}
+              max={1}
+              step={0.05}
+              value={theme.dim}
+              onChange={(e) => setTheme({ ...theme, dim: Number(e.target.value) })}
+            />
+          </label>
+
           <span className="menu-head">Light source</span>
           <GlowPad
             glow={theme.glow}

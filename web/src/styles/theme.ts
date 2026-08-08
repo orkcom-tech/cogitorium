@@ -20,6 +20,12 @@ export type Theme = {
   drift: boolean
   /** seconds for one full circuit */
   driftSpeed: number
+  /** how every panel, card and rail is filled */
+  surface: 'glass' | 'solid'
+  /** backdrop blur in px, glass only */
+  blur: number
+  /** how dark the fill is, 0…1 */
+  dim: number
 }
 
 export type Palette = Pick<Theme, 'colors' | 'grain' | 'tint'>
@@ -38,6 +44,9 @@ export const DEFAULT_THEME: Theme = {
   glow: { x: 12, y: 4 },
   drift: false,
   driftSpeed: 90,
+  surface: 'glass',
+  blur: 14,
+  dim: 0.62,
 }
 
 const KEY = 'cogitorium.theme'
@@ -61,6 +70,9 @@ export function loadTheme(): Theme {
       },
       drift: t.drift === true,
       driftSpeed: typeof t.driftSpeed === 'number' && t.driftSpeed >= 10 && t.driftSpeed <= 600 ? t.driftSpeed : 90,
+      surface: t.surface === 'solid' ? 'solid' : 'glass',
+      blur: typeof t.blur === 'number' && t.blur >= 0 && t.blur <= 40 ? t.blur : DEFAULT_THEME.blur,
+      dim: clamp01(typeof t.dim === 'number' ? t.dim : DEFAULT_THEME.dim),
     }
   } catch {
     return DEFAULT_THEME
@@ -125,6 +137,14 @@ export function applyTheme(t: Theme) {
   // session. The browser can run this off the main thread and it costs
   // nothing once started.
   root.classList.toggle('drifting', t.drift)
+
+  // Glass or solid, and how much of each. Solid is a real opaque fill rather
+  // than glass with the blur turned down: a backdrop-filter that blurs nothing
+  // still costs a compositing layer per panel, and on a laptop that is a fan
+  // spinning for no visible reason.
+  root.classList.toggle('solid-surfaces', t.surface === 'solid')
+  root.style.setProperty('--surface-blur', `${t.blur}px`)
+  root.style.setProperty('--surface-dim', String(t.dim))
 
   if (t.mode === 'system') root.removeAttribute('data-theme')
   else root.setAttribute('data-theme', t.mode)

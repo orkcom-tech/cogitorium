@@ -198,9 +198,35 @@ button.primary:hover:not(:disabled) {
 /* Surfaces borrow a little of the palette so a card belongs to its ground.
    Capped in code well below the point where text contrast stops holding. */
 :root {
-  --surface: color-mix(in srgb, var(--theme-b) var(--surface-tint), light-dark(#ffffff, #212120));
-  --surface-2: color-mix(in srgb, var(--theme-b) var(--surface-tint), light-dark(#f4f4f2, #2a2a28));
+  --surface-base: color-mix(in srgb, var(--theme-b) var(--surface-tint), light-dark(#ffffff, #212120));
+  --surface-2-base: color-mix(in srgb, var(--theme-b) var(--surface-tint), light-dark(#f4f4f2, #2a2a28));
+
+  /* Glass: the fill is translucent and the ground is blurred behind it. */
+  --surface: color-mix(in srgb, var(--surface-base) calc(var(--surface-dim, 0.62) * 100%), transparent);
+  --surface-2: color-mix(in srgb, var(--surface-2-base) calc(var(--surface-dim, 0.62) * 100%), transparent);
   --bg: transparent;
+  --pane-blur: blur(var(--surface-blur, 14px)) saturate(1.25);
+}
+
+/* Solid: an opaque fill and no compositing at all. Not "glass with the blur
+   at zero" — a backdrop-filter that blurs nothing still costs a layer per
+   panel, which is a fan spinning for nothing. */
+:root.solid-surfaces {
+  --surface: var(--surface-base);
+  --surface-2: var(--surface-2-base);
+  --pane-blur: none;
+}
+
+/* Every pane in the product takes its fill from one place, so the choice
+   applies everywhere at once rather than panel by panel. */
+.pane,
+.bn-panel,
+.card,
+.modal.approval,
+.bn-menu {
+  background: var(--surface);
+  -webkit-backdrop-filter: var(--pane-blur);
+  backdrop-filter: var(--pane-blur);
 }
 
 

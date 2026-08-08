@@ -96,7 +96,7 @@ export default function App() {
             {navOpen ? '⟨' : '⟩'}
           </button>
           <h1 className="brand">Cogitorium</h1>
-          <nav>
+          <nav className="pane side-pane">
             <NavLink to="/workspaces" title="Workspaces">
               <span>Workspaces</span>
             </NavLink>
@@ -123,7 +123,7 @@ export default function App() {
               <span>People</span>
             </NavLink>}
           </nav>
-          <footer className="sidebar-footer">
+          <footer className="pane side-pane sidebar-footer">
             <div>
               {user.name} · {user.role}
             </div>
