@@ -241,7 +241,21 @@ func (e *Engine) modelTurn(ctx context.Context, wsID int64, agent workspace.Agen
 		return llm.Result{}, fmt.Errorf("model call for %q failed: %w", agent.Name, err)
 	}
 	slog.Info("model turn finished", "workspace_id", wsID, "agent", agent.Name, "stop_reason", res.StopReason, "tool_calls", len(res.ToolCalls))
+	e.recordUsage(ctx, wsID, agent, res.Usage)
 	return res, nil
+}
+
+// recordUsage books what a turn cost against the agent that spent it. The
+// answer is already in hand by this point, so a bookkeeping failure is logged
+// and swallowed: losing a reply because the ledger hiccuped would be a worse
+// bug than an incomplete ledger.
+func (e *Engine) recordUsage(ctx context.Context, wsID int64, agent workspace.Agent, u llm.Usage) {
+	if err := e.ws.RecordTurn(context.WithoutCancel(ctx), wsID, agent.ID, agent.ModelLabel, u.InputTokens, u.OutputTokens, u.Reported); err != nil {
+		slog.Warn("could not record token usage", "workspace_id", wsID, "agent", agent.Name, "err", err)
+	}
+	if !u.Reported {
+		slog.Info("provider reported no token usage", "agent", agent.Name, "model", agent.ModelLabel)
+	}
 }
 
 // systemPrompt assembles an agent's effective system prompt: its role, the
@@ -759,6 +773,7 @@ func (e *Engine) runAgent(ctx context.Context, wsID int64, agent workspace.Agent
 		if err != nil {
 			return "", err
 		}
+		e.recordUsage(ctx, wsID, agent, res.Usage)
 		if res.StopReason != llm.StopToolUse || len(res.ToolCalls) == 0 {
 			// An empty answer is a failure the caller must see, not a
 			// result to pass along silently.

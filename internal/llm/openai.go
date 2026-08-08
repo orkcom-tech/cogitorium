@@ -123,6 +123,10 @@ func (c *openAIClient) Chat(ctx context.Context, r Request, onDelta func(string)
 		"model":    r.Model,
 		"stream":   true,
 		"messages": openAIMessages(r.System, r.Messages),
+		// Usage only arrives on a stream if it is asked for. Servers that do
+		// not know the option ignore it; those that do send a final chunk
+		// with the totals, which is the only way to bill an agent honestly.
+		"stream_options": map[string]any{"include_usage": true},
 	}
 	if r.MaxTokens > 0 {
 		payload["max_tokens"] = r.MaxTokens
@@ -196,6 +200,10 @@ func (c *openAIClient) Chat(ctx context.Context, r Request, onDelta func(string)
 			Error *struct {
 				Message string `json:"message"`
 			} `json:"error"`
+			Usage *struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+			} `json:"usage"`
 		}
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
 			slog.Warn("openai-compatible: bad stream chunk", "err", err)
@@ -203,6 +211,13 @@ func (c *openAIClient) Chat(ctx context.Context, r Request, onDelta func(string)
 		}
 		if ev.Error != nil {
 			return fmt.Errorf("openai-compatible stream error: %s", ev.Error.Message)
+		}
+		// The usage chunk carries no choices, so it must be read before the
+		// empty-choices guard below returns.
+		if ev.Usage != nil {
+			result.Usage.InputTokens = ev.Usage.PromptTokens
+			result.Usage.OutputTokens = ev.Usage.CompletionTokens
+			result.Usage.Reported = true
 		}
 		if len(ev.Choices) == 0 {
 			return nil

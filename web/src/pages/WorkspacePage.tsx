@@ -8,6 +8,7 @@ import {
   wsChatStream,
   type Agent,
   type AgentStatus,
+  type AgentUsage,
   type ContextBinding,
   type ContextFile,
   type Gear,
@@ -28,6 +29,7 @@ export default function WorkspacePage() {
   const [statuses, setStatuses] = useState<Map<number, AgentStatus>>(new Map())
   const [streams, setStreams] = useState<Map<number, string>>(new Map())
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
+  const [usage, setUsage] = useState<Map<number, AgentUsage>>(new Map())
   const [view, setView] = useState<'chat' | 'blueprint' | 'terminal'>('chat')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -35,6 +37,15 @@ export default function WorkspacePage() {
   // Fresh agent ids for stream callbacks — a stale closure over `agents`
   // would refetch on every status event of a newly created agent.
   const agentIdsRef = useRef<Set<number>>(new Set())
+
+  const reloadUsage = useCallback(
+    () =>
+      api.usage
+        .workspace(wsId)
+        .then((u) => setUsage(new Map(u.map((x) => [x.agent_id, x]))))
+        .catch((e: Error) => setError(e.message)),
+    [wsId],
+  )
 
   const reloadAgents = useCallback(
     () =>
@@ -55,14 +66,16 @@ export default function WorkspacePage() {
       api.models.list(),
       api.workspaces.messages(wsId),
       api.workspaces.status(wsId),
+      api.usage.workspace(wsId),
     ])
-      .then(([w, a, m, msgs, sts]) => {
+      .then(([w, a, m, msgs, sts, u]) => {
         setWorkspace(w)
         agentIdsRef.current = new Set(a.map((x) => x.id))
         setAgents(a)
         setModels(m)
         setMessages(msgs)
         setStatuses(new Map(sts.map((s) => [s.agent_id, s])))
+        setUsage(new Map(u.map((x) => [x.agent_id, x])))
       })
       .catch((e: Error) => setError(e.message))
   }, [wsId])
@@ -124,6 +137,7 @@ export default function WorkspacePage() {
       setBusy(false)
       setStreams(new Map())
       void reloadAgents()
+      void reloadUsage()
       void api.workspaces.status(wsId).then((sts) => setStatuses(new Map(sts.map((s) => [s.agent_id, s]))))
     }
   }
@@ -243,12 +257,83 @@ export default function WorkspacePage() {
                 {a.is_orchestrator && <span className="muted"> ★</span>}
               </span>
               <span className="muted agent-model">{a.model_label || 'no model'}</span>
+              <span className="muted agent-spend" title={spendTitle(usage.get(a.id))}>
+                {spendLabel(usage.get(a.id))}
+              </span>
             </button>
           )
         })}
       </aside>
     </div>
   )
+}
+
+// Spend on the agent's own card, spelled out rather than abbreviated: this is
+// the view an operator opens precisely to answer "what is this one costing
+// me", so the split between input and output is the answer, not a detail.
+function Spend({ agentId }: { agentId: number }) {
+  const [u, setU] = useState<AgentUsage | null>(null)
+  useEffect(() => {
+    let live = true
+    api.usage
+      .agent(agentId)
+      .then((x) => live && setU(x))
+      .catch(() => live && setU(null))
+    return () => {
+      live = false
+    }
+  }, [agentId])
+
+  if (!u) return null
+  if (u.turns === 0) return <span className="muted">no model calls yet</span>
+  const total = u.input_tokens + u.output_tokens
+  const blind = u.unreported_turns === u.turns && total === 0
+  return (
+    <span className="muted agent-spend-detail" title={spendTitle(u)}>
+      {blind ? (
+        <>this provider reports no token usage</>
+      ) : (
+        <>
+          {total.toLocaleString()} tokens
+          <span className="dim">
+            {' '}
+            ({u.input_tokens.toLocaleString()} in / {u.output_tokens.toLocaleString()} out, {u.turns}{' '}
+            {u.turns === 1 ? 'call' : 'calls'})
+          </span>
+          {u.unreported_turns > 0 && <span className="warn"> · {u.unreported_turns} unreported</span>}
+        </>
+      )}
+    </span>
+  )
+}
+
+// Spend is shown compactly in the list and in full on hover. Rounding to "k"
+// is fine for a glance; the tooltip carries the exact figures because the
+// point of the display is comparing what each agent actually costs.
+function compact(n: number) {
+  if (n < 1000) return String(n)
+  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`
+  return `${(n / 1_000_000).toFixed(1)}M`
+}
+
+function spendLabel(u?: AgentUsage) {
+  if (!u || u.turns === 0) return '—'
+  const total = u.input_tokens + u.output_tokens
+  // A provider that reports nothing would otherwise show a confident 0.
+  if (total === 0 && u.unreported_turns === u.turns) return 'n/a'
+  return compact(total)
+}
+
+function spendTitle(u?: AgentUsage) {
+  if (!u || u.turns === 0) return 'has not run yet'
+  const lines = [
+    `${u.input_tokens.toLocaleString()} in + ${u.output_tokens.toLocaleString()} out`,
+    `${u.turns} model ${u.turns === 1 ? 'call' : 'calls'}`,
+  ]
+  if (u.unreported_turns > 0) {
+    lines.push(`${u.unreported_turns} of them reported no usage — the real spend is higher`)
+  }
+  return lines.join('\n')
 }
 
 function Timeline({
@@ -478,6 +563,7 @@ function AgentPanel({
         <span className="muted">
           {status && status.state !== 'idle' ? `${status.state}${status.detail ? `: ${status.detail}` : ''}` : 'idle'}
         </span>
+        <Spend agentId={agent.id} />
         <span className="spacer" />
         {!agent.is_orchestrator && (
           <button

@@ -65,6 +65,18 @@ export type GraphEdge = {
   id?: number
 }
 export type GraphData = { nodes: GraphNode[]; edges: GraphEdge[] }
+
+// unreported_turns counts model calls whose provider sent no usage figures.
+// It is shown rather than hidden: a spend of 0 means something different when
+// the provider never reports, and the operator should be told which it is.
+export type AgentUsage = {
+  agent_id: number
+  input_tokens: number
+  output_tokens: number
+  turns: number
+  unreported_turns: number
+  last_at?: string
+}
 export type Team = { id: number; name: string }
 
 export const auth = {
@@ -201,6 +213,10 @@ export const api = {
   graph: {
     workspace: (wsId: number) => req<GraphData>(`/api/v1/workspaces/${wsId}/graph`),
     map: () => req<GraphData>('/api/v1/map'),
+  },
+  usage: {
+    workspace: (wsId: number) => req<AgentUsage[]>(`/api/v1/workspaces/${wsId}/usage`),
+    agent: (agentId: number) => req<AgentUsage>(`/api/v1/agents/${agentId}/usage`),
   },
   context: {
     status: () => req<ContextStatus>('/api/v1/context/status'),

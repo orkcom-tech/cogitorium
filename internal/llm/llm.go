@@ -53,7 +53,21 @@ type Result struct {
 	Text       string
 	ToolCalls  []ToolCall
 	StopReason string // "end_turn" | "tool_use" | provider-specific raw value
+	Usage      Usage
 }
+
+// Usage is what the provider said the turn cost. Reported is false when the
+// provider sent no usage at all — not every OpenAI-compatible server does.
+// Distinguishing "nothing reported" from "zero tokens" matters: a spend
+// display that silently shows 0 for a provider that never reports is a lie,
+// and the operator would only find out from a bill.
+type Usage struct {
+	InputTokens  int
+	OutputTokens int
+	Reported     bool
+}
+
+func (u Usage) Total() int { return u.InputTokens + u.OutputTokens }
 
 const (
 	StopEndTurn = "end_turn"

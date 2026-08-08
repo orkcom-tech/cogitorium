@@ -759,6 +759,26 @@ th {
   font-size: 0.72rem;
 }
 
+/* Spend rides in the agent row without stealing the name's space. */
+.agent-spend {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+
+.agent-spend-detail {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-spend-detail .dim {
+  opacity: 0.65;
+}
+
+.agent-spend-detail .warn {
+  color: #d0a050;
+}
+
 .map-canvas {
   display: flex;
   flex-direction: column;

@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/orkcom-tech/cogitorium/internal/engine"
+	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
 
 func (s *Server) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
@@ -303,6 +304,53 @@ func (s *Server) handleWorkspaceStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, statuses)
+}
+
+// handleWorkspaceUsage reports what every agent in the workspace has spent.
+// One query rather than one call per agent, so the agent list can show spend
+// without turning a page render into N round trips.
+func (s *Server) handleWorkspaceUsage(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.workspaceScoped(w, r)
+	if !ok {
+		return
+	}
+	agents, err := s.workspaces.ListAgents(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	byAgent, err := s.workspaces.UsageForWorkspace(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	// Every agent appears, including ones that have never run: an absent row
+	// reads as a loading bug, whereas an explicit zero reads as a fact.
+	out := make([]workspace.Usage, 0, len(agents))
+	for _, a := range agents {
+		u, ok := byAgent[a.ID]
+		if !ok {
+			u = workspace.Usage{AgentID: a.ID}
+		}
+		out = append(out, u)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleAgentUsage is the same figures for one agent.
+func (s *Server) handleAgentUsage(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.nestedScoped(w, r, func(agentID int64) (int64, error) {
+		return s.workspaces.WorkspaceOfAgent(r.Context(), agentID)
+	})
+	if !ok {
+		return
+	}
+	u, err := s.workspaces.UsageForAgent(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, u)
 }
 
 // handleWorkspaceChat runs one orchestrator turn, streaming engine events

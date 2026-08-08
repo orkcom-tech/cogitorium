@@ -205,14 +205,43 @@ func (c *anthropicClient) Chat(ctx context.Context, r Request, onDelta func(stri
 					b.WriteString(ev.Delta.PartialJSON)
 				}
 			}
+		case "message_start":
+			// Input tokens arrive once, up front; output tokens accumulate
+			// and are restated in message_delta.
+			var ev struct {
+				Message struct {
+					Usage struct {
+						InputTokens  int `json:"input_tokens"`
+						OutputTokens int `json:"output_tokens"`
+					} `json:"usage"`
+				} `json:"message"`
+			}
+			if err := json.Unmarshal([]byte(data), &ev); err == nil {
+				result.Usage.InputTokens = ev.Message.Usage.InputTokens
+				result.Usage.OutputTokens = ev.Message.Usage.OutputTokens
+				result.Usage.Reported = true
+			}
 		case "message_delta":
 			var ev struct {
 				Delta struct {
 					StopReason string `json:"stop_reason"`
 				} `json:"delta"`
+				Usage struct {
+					InputTokens  int `json:"input_tokens"`
+					OutputTokens int `json:"output_tokens"`
+				} `json:"usage"`
 			}
-			if err := json.Unmarshal([]byte(data), &ev); err == nil && ev.Delta.StopReason != "" {
-				result.StopReason = ev.Delta.StopReason
+			if err := json.Unmarshal([]byte(data), &ev); err == nil {
+				if ev.Delta.StopReason != "" {
+					result.StopReason = ev.Delta.StopReason
+				}
+				if ev.Usage.OutputTokens > 0 {
+					result.Usage.OutputTokens = ev.Usage.OutputTokens
+					result.Usage.Reported = true
+				}
+				if ev.Usage.InputTokens > 0 {
+					result.Usage.InputTokens = ev.Usage.InputTokens
+				}
 			}
 		case "error":
 			var ev struct {
