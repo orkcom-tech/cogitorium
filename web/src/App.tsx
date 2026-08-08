@@ -61,7 +61,11 @@ export default function App() {
           <h1 className="brand">Cogitorium</h1>
           <nav>
             <NavLink to="/workspaces">Workspaces</NavLink>
-            <NavLink to="/context">Context</NavLink>
+            {/* The Context page browses the whole space — every workspace's
+                memory and every agent's private branch — so it follows the
+                Terminal's rule and is admin-only. Members reach context
+                through their own workspace's bindings. */}
+            {user.role === 'admin' && <NavLink to="/context">Context</NavLink>}
             <NavLink to="/gears">Gears</NavLink>
             <NavLink to="/instructions">Instructions</NavLink>
             <NavLink to="/models">Models</NavLink>
@@ -86,7 +90,7 @@ export default function App() {
             <Route path="/people" element={user.role === 'admin' ? <AdminPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/terminal" element={user.role === 'admin' ? <TerminalPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/workspaces/:id" element={<WorkspacePage />} />
-            <Route path="/context" element={<ContextPage />} />
+            <Route path="/context" element={user.role === 'admin' ? <ContextPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/gears" element={<GearsPage />} />
             <Route path="/instructions" element={<LibraryPage />} />
             <Route path="/models" element={<ModelsPage />} />

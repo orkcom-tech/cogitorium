@@ -13,7 +13,16 @@ func (s *Server) handleContextStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.context.CheckStatus(r.Context()))
 }
 
+// These three reach the WHOLE context space — every workspace's shared
+// branch, every agent's private memory, and the instruction library — so they
+// follow the terminal's split: the global surface is admin-only, and members
+// reach context through their workspace's own bindings instead. Per-branch
+// access for non-admins is the right finer-grained answer and is a separate
+// piece of work; until it exists, an unrestricted global reader is a hole.
 func (s *Server) handleContextList(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
 	files, err := s.context.List(r.Context())
 	if err != nil {
 		failContext(w, r, err)
@@ -23,6 +32,9 @@ func (s *Server) handleContextList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleContextGet(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
 	path := r.URL.Query().Get("path")
 	content, err := s.context.Get(r.Context(), path)
 	if err != nil {
@@ -33,6 +45,9 @@ func (s *Server) handleContextGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleContextPut(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
 	path := r.URL.Query().Get("path")
 	// MaxBytesReader errors on oversized bodies — a silent LimitReader
 	// truncation would write a corrupted document and report success.

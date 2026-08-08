@@ -13,7 +13,13 @@ func (s *Server) handleListProviders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, providers)
 }
 
+// Providers hold this install's API keys, so configuring one is an install
+// decision rather than a workspace one. Everything that mutates a provider —
+// or that makes the server dial one — is admin-only.
 func (s *Server) handleCreateProvider(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
 	var in struct {
 		Name    string `json:"name"`
 		Type    string `json:"type"`
@@ -32,6 +38,9 @@ func (s *Server) handleCreateProvider(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
 	id, ok := pathID(w, r)
 	if !ok {
 		return
@@ -44,6 +53,21 @@ func (s *Server) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &in) {
 		return
 	}
+	// Repointing a provider without re-supplying the key would make the
+	// server deliver its own credential to whatever the new address is. The
+	// key does not travel to an address its owner did not name.
+	if in.BaseURL != nil && in.APIKey == nil {
+		existing, err := s.catalog.GetProvider(r.Context(), id)
+		if err != nil {
+			fail(w, r, err)
+			return
+		}
+		if existing.BaseURL != *in.BaseURL {
+			writeError(w, http.StatusBadRequest,
+				"changing base_url requires supplying api_key again — the stored key is not carried to a new address")
+			return
+		}
+	}
 	p, err := s.catalog.UpdateProvider(r.Context(), id, in.Name, in.BaseURL, in.APIKey)
 	if err != nil {
 		fail(w, r, err)
@@ -53,6 +77,9 @@ func (s *Server) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteProvider(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
 	id, ok := pathID(w, r)
 	if !ok {
 		return
@@ -67,6 +94,11 @@ func (s *Server) handleDeleteProvider(w http.ResponseWriter, r *http.Request) {
 // handleTestProvider probes the provider by listing its models: one call
 // verifies URL, key, and protocol, and gives the UI the pick-list.
 func (s *Server) handleTestProvider(w http.ResponseWriter, r *http.Request) {
+	// Admin-only because it makes the server dial an address holding a stored
+	// credential — the exact step a repointed provider needs to complete.
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
 	id, ok := pathID(w, r)
 	if !ok {
 		return
