@@ -30,9 +30,19 @@ export default function WorkspacePage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  // Fresh agent ids for stream callbacks — a stale closure over `agents`
+  // would refetch on every status event of a newly created agent.
+  const agentIdsRef = useRef<Set<number>>(new Set())
 
   const reloadAgents = useCallback(
-    () => api.workspaces.agents(wsId).then(setAgents).catch((e: Error) => setError(e.message)),
+    () =>
+      api.workspaces
+        .agents(wsId)
+        .then((a) => {
+          agentIdsRef.current = new Set(a.map((x) => x.id))
+          setAgents(a)
+        })
+        .catch((e: Error) => setError(e.message)),
     [wsId],
   )
 
@@ -46,6 +56,7 @@ export default function WorkspacePage() {
     ])
       .then(([w, a, m, msgs, sts]) => {
         setWorkspace(w)
+        agentIdsRef.current = new Set(a.map((x) => x.id))
         setAgents(a)
         setModels(m)
         setMessages(msgs)
@@ -88,9 +99,18 @@ export default function WorkspacePage() {
           if (ev.type === 'status' && ev.status) {
             const st = ev.status
             setStatuses((s) => new Map(s).set(st.agent_id, st))
+            // An idle agent has finished — its live stream bubble, if any,
+            // is stale (a failed delegation never sends a message event).
+            if (st.state === 'idle')
+              setStreams((s) => {
+                if (!s.has(st.agent_id)) return s
+                const next = new Map(s)
+                next.delete(st.agent_id)
+                return next
+              })
             // A status for an agent we don't know yet means the orchestrator
             // just created one.
-            if (!agents.some((a) => a.id === st.agent_id)) void reloadAgents()
+            if (!agentIdsRef.current.has(st.agent_id)) void reloadAgents()
           }
         },
         ac.signal,
@@ -114,8 +134,11 @@ export default function WorkspacePage() {
     )
   }
 
+  // NULL agent_id means the operator only on user rows; on agent rows it
+  // means the agent was deleted (FK SET NULL) — never attribute those to
+  // the operator.
   const agentName = (id: number | null) =>
-    id == null ? 'you' : agents.find((a) => a.id === id)?.name ?? `agent #${id}`
+    id == null ? '(deleted agent)' : agents.find((a) => a.id === id)?.name ?? `agent #${id}`
 
   return (
     <div className="ws-layout">
@@ -441,7 +464,11 @@ function AgentPanel({
       <label className="field">
         <span className="muted">model</span>
         <select value={modelId} onChange={(e) => setModelId(e.target.value ? Number(e.target.value) : '')}>
-          <option value="">no model</option>
+          {/* Clearing a bound model isn't supported by the API; the empty
+              option exists only to display agents that never had one. */}
+          <option value="" disabled>
+            no model
+          </option>
           {models.map((m) => (
             <option key={m.id} value={m.id}>
               {m.provider_name} / {m.label || m.model_name}

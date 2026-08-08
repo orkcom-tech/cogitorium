@@ -57,23 +57,42 @@ export default function BlueprintEditor({
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<AgentNodeData>>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
 
+  // Wires resync whenever the agent set changes — the orchestrator may
+  // have wired agents mid-turn.
   useEffect(() => {
     api.wires.list(wsId).then(setWires).catch((e: Error) => onError(e.message))
-  }, [wsId, onError])
+  }, [wsId, agents, onError])
 
-  // Rebuild the canvas whenever agents, wires, or live statuses change.
+  // Nodes are rebuilt only when the agent set changes. Status updates are
+  // applied in place below: a rebuild mid-drag would snap the node back
+  // and wipe the selection during live turns.
   const positions = useMemo(() => layout(agents), [agents])
   useEffect(() => {
     setNodes(
       agents.map((a) => ({
         id: String(a.id),
         position: positions.get(a.id) ?? { x: 0, y: 0 },
-        data: { agent: a, state: statuses.get(a.id)?.state ?? 'idle' },
+        data: { agent: a, state: 'idle' },
         type: 'default',
-        className: `bp-node ${a.is_orchestrator ? 'bp-orchestrator' : ''} bp-${statuses.get(a.id)?.state ?? 'idle'}`,
-        })),
+        className: `bp-node ${a.is_orchestrator ? 'bp-orchestrator' : ''} bp-idle`,
+      })),
     )
-  }, [agents, positions, statuses, setNodes])
+  }, [agents, positions, setNodes])
+
+  useEffect(() => {
+    setNodes((prev) =>
+      prev.map((n) => {
+        const a = n.data.agent
+        const state = statuses.get(a.id)?.state ?? 'idle'
+        if (n.data.state === state) return n
+        return {
+          ...n,
+          data: { ...n.data, state },
+          className: `bp-node ${a.is_orchestrator ? 'bp-orchestrator' : ''} bp-${state}`,
+        }
+      }),
+    )
+  }, [statuses, setNodes])
 
   useEffect(() => {
     setEdges(

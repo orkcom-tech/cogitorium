@@ -112,9 +112,15 @@ func (e *Executor) Run(ctx context.Context, g Gear, argsJSON string) (Result, er
 }
 
 // materialize writes the approved version's files into
-// <data-dir>/gears/<name>/v<version>/ if they are not already there.
+// <data-dir>/gears/<name>/v<version>/. The directory is rebuilt from the
+// database on every run: a deleted-and-reforged gear reuses name and
+// version numbers, and stale files from the previous life must never
+// execute under the new gear's approval.
 func (e *Executor) materialize(ctx context.Context, g Gear) (string, error) {
 	dir := filepath.Join(e.baseDir, g.Name, fmt.Sprintf("v%d", g.Version))
+	if err := os.RemoveAll(dir); err != nil {
+		return "", fmt.Errorf("clear gear dir: %w", err)
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("create gear dir: %w", err)
 	}

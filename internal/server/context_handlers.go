@@ -34,8 +34,15 @@ func (s *Server) handleContextGet(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleContextPut(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
-	body, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
+	// MaxBytesReader errors on oversized bodies — a silent LimitReader
+	// truncation would write a corrupted document and report success.
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4<<20))
 	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeError(w, http.StatusRequestEntityTooLarge, "document exceeds the 4MB limit")
+			return
+		}
 		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}

@@ -129,6 +129,17 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// A pure position patch must not trigger a read-modify-write of the
+	// other fields — that write could resurrect values stale since read.
+	if in.Name == nil && in.Role == nil && in.ModelID == nil {
+		agent, err := s.workspaces.GetAgent(r.Context(), id)
+		if err != nil {
+			fail(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, agent)
+		return
+	}
 	agent, err := s.workspaces.UpdateAgent(r.Context(), id, in.Name, in.Role, in.ModelID)
 	if err != nil {
 		fail(w, r, err)

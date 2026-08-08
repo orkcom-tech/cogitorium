@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Gear, type GearFile } from '../api'
 
 export default function GearsPage() {
@@ -7,12 +7,19 @@ export default function GearsPage() {
   const [openId, setOpenId] = useState<number | null>(null)
   const [source, setSource] = useState<GearFile[]>([])
   const [error, setError] = useState<string | null>(null)
+  const seqRef = useRef(0)
 
   const reload = useCallback(() => {
+    // Per-keystroke searches may resolve out of order; only the latest wins.
+    const seq = ++seqRef.current
     api.gears
       .list(query)
-      .then(setGears)
-      .catch((e: Error) => setError(e.message))
+      .then((g) => {
+        if (seqRef.current === seq) setGears(g)
+      })
+      .catch((e: Error) => {
+        if (seqRef.current === seq) setError(e.message)
+      })
   }, [query])
 
   useEffect(reload, [reload])

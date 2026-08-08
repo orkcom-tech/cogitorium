@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	neturl "net/url"
-	"sort"
 	"strings"
 )
 
@@ -125,6 +124,9 @@ func (c *openAIClient) Chat(ctx context.Context, r Request, onDelta func(string)
 		"stream":   true,
 		"messages": openAIMessages(r.System, r.Messages),
 	}
+	if r.MaxTokens > 0 {
+		payload["max_tokens"] = r.MaxTokens
+	}
 	if len(r.Tools) > 0 {
 		tools := make([]map[string]any, 0, len(r.Tools))
 		for _, t := range r.Tools {
@@ -162,9 +164,13 @@ func (c *openAIClient) Chat(ctx context.Context, r Request, onDelta func(string)
 	var (
 		result Result
 		text   strings.Builder
-		// tool calls under assembly, keyed by the protocol's index field
-		pending = map[int]*ToolCall{}
-		args    = map[int]*strings.Builder{}
+		// Tool calls under assembly, in stream order. slotFor maps the
+		// protocol's index field to a slot; a fragment carrying a NEW id at
+		// an already-used index starts a new call — some local servers omit
+		// or zero the index, and keying on it alone would merge calls.
+		slots   []*ToolCall
+		args    []*strings.Builder
+		slotFor = map[int]int{}
 		finish  string
 	)
 
@@ -205,26 +211,31 @@ func (c *openAIClient) Chat(ctx context.Context, r Request, onDelta func(string)
 		if ch.FinishReason != nil && *ch.FinishReason != "" {
 			finish = *ch.FinishReason
 		}
+		// A chunk may carry BOTH content and tool_calls — returning early
+		// on content would silently drop the calls.
 		if ch.Delta.Content != "" {
 			text.WriteString(ch.Delta.Content)
 			if onDelta != nil {
-				return onDelta(ch.Delta.Content)
+				if err := onDelta(ch.Delta.Content); err != nil {
+					return err
+				}
 			}
 		}
 		for _, tc := range ch.Delta.ToolCalls {
-			p, ok := pending[tc.Index]
-			if !ok {
-				p = &ToolCall{}
-				pending[tc.Index] = p
-				args[tc.Index] = &strings.Builder{}
+			s, ok := slotFor[tc.Index]
+			if !ok || (tc.ID != "" && slots[s].ID != "" && slots[s].ID != tc.ID) {
+				slots = append(slots, &ToolCall{})
+				args = append(args, &strings.Builder{})
+				s = len(slots) - 1
+				slotFor[tc.Index] = s
 			}
 			if tc.ID != "" {
-				p.ID = tc.ID
+				slots[s].ID = tc.ID
 			}
 			if tc.Function.Name != "" {
-				p.Name = tc.Function.Name
+				slots[s].Name = tc.Function.Name
 			}
-			args[tc.Index].WriteString(tc.Function.Arguments)
+			args[s].WriteString(tc.Function.Arguments)
 		}
 		return nil
 	})
@@ -233,14 +244,8 @@ func (c *openAIClient) Chat(ctx context.Context, r Request, onDelta func(string)
 	}
 
 	result.Text = text.String()
-	idxs := make([]int, 0, len(pending))
-	for i := range pending {
-		idxs = append(idxs, i)
-	}
-	sort.Ints(idxs)
-	for i, idx := range idxs {
-		tc := pending[idx]
-		in := args[idx].String()
+	for i, tc := range slots {
+		in := args[i].String()
 		if in == "" {
 			in = "{}"
 		}
@@ -255,13 +260,18 @@ func (c *openAIClient) Chat(ctx context.Context, r Request, onDelta func(string)
 	switch finish {
 	case "tool_calls":
 		result.StopReason = StopToolUse
+	case "length":
+		// Token-limit truncation must stay visible even when tool calls
+		// were being assembled — they may be incomplete.
+		result.StopReason = "length"
 	case "stop", "":
-		result.StopReason = StopEndTurn
+		if len(result.ToolCalls) > 0 {
+			result.StopReason = StopToolUse
+		} else {
+			result.StopReason = StopEndTurn
+		}
 	default:
 		result.StopReason = finish
-	}
-	if len(result.ToolCalls) > 0 {
-		result.StopReason = StopToolUse
 	}
 	return result, nil
 }

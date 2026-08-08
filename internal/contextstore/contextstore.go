@@ -33,6 +33,7 @@ type File struct {
 
 type Status struct {
 	Available bool   `json:"available"`
+	Version   string `json:"version,omitempty"`
 	SpaceRoot string `json:"space_root,omitempty"`
 	Mode      string `json:"mode,omitempty"`
 	Error     string `json:"error,omitempty"`
@@ -111,11 +112,18 @@ func reason(stderr string) string {
 	return lines[len(lines)-1]
 }
 
-// CheckStatus reports whether contextd runs and has an initialized space.
+// CheckStatus reports whether contextd runs, which version it is, and
+// whether it has an initialized space — the basis for install-time and
+// runtime "is Contextverse here" checks (requirement 16).
 func (s *Store) CheckStatus(ctx context.Context) Status {
+	version := ""
+	if raw, err := s.run(ctx, nil, "version"); err == nil {
+		version = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(raw)), "contextd"))
+	}
+
 	out, err := s.run(ctx, nil, "status", "--json")
 	if err != nil {
-		return Status{Available: false, Error: err.Error()}
+		return Status{Available: false, Version: version, Error: err.Error()}
 	}
 	var st struct {
 		SpaceRoot string `json:"space_root"`
@@ -123,13 +131,13 @@ func (s *Store) CheckStatus(ctx context.Context) Status {
 		Mode      string `json:"mode"`
 	}
 	if err := json.Unmarshal(out, &st); err != nil {
-		return Status{Available: false, Error: "unparseable contextd status: " + err.Error()}
+		return Status{Available: false, Version: version, Error: "unparseable contextd status: " + err.Error()}
 	}
 	if !st.Exists {
-		return Status{Available: false, SpaceRoot: st.SpaceRoot, Mode: st.Mode,
+		return Status{Available: false, Version: version, SpaceRoot: st.SpaceRoot, Mode: st.Mode,
 			Error: "no context space initialized — run: contextd init solo"}
 	}
-	return Status{Available: true, SpaceRoot: st.SpaceRoot, Mode: st.Mode}
+	return Status{Available: true, Version: version, SpaceRoot: st.SpaceRoot, Mode: st.Mode}
 }
 
 func (s *Store) List(ctx context.Context) ([]File, error) {
@@ -155,6 +163,11 @@ func (s *Store) Get(ctx context.Context, path string) (string, error) {
 	return string(out), nil
 }
 
+// Put writes through contextd. Known limitation: the contextd CLI's put
+// takes no expected-version argument, so the CAS protection is contextd's
+// own write-time check, not a read-to-write guard — two operators editing
+// the same file can still last-write-win. Closing that needs an upstream
+// contextd flag (e.g. --if-version); tracked, not worked around here.
 func (s *Store) Put(ctx context.Context, path, content string) error {
 	if err := validPath(path); err != nil {
 		return err

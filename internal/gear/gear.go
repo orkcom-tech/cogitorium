@@ -113,8 +113,12 @@ func (s *Store) Forge(ctx context.Context, name, description string, tags []stri
 	if argsSchema == "" {
 		argsSchema = "{}"
 	}
-	if !json.Valid([]byte(argsSchema)) {
-		return Gear{}, errors.New("args_schema is not valid JSON")
+	// Must be a JSON *object*: the schema is sent to providers as the tool's
+	// input_schema, and a non-object (array, string, number) makes them
+	// reject every request of every agent the gear is bound to.
+	var schemaObj map[string]any
+	if err := json.Unmarshal([]byte(argsSchema), &schemaObj); err != nil {
+		return Gear{}, fmt.Errorf("args_schema must be a JSON Schema object: %w", err)
 	}
 	if tags == nil {
 		tags = []string{}

@@ -28,9 +28,12 @@ func parseArgs(tool, input string) (toolArgs, error) {
 	return a, nil
 }
 
+// has reports whether the argument is present with an actual value. JSON
+// null counts as absent: models send {"role": null} meaning "no change",
+// and treating that as an empty string would silently wipe the field.
 func (a toolArgs) has(key string) bool {
-	_, ok := a.fields[key]
-	return ok
+	raw, ok := a.fields[key]
+	return ok && string(raw) != "null"
 }
 
 // str returns a string argument. Numbers and booleans are read as their

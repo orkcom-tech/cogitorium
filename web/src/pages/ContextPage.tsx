@@ -24,6 +24,7 @@ export default function ContextPage() {
   useEffect(reload, [reload])
 
   const open = (path: string) => {
+    if (selected && content !== original && !confirm(`Discard unsaved changes to ${selected}?`)) return
     api.context
       .get(path)
       .then((f) => {
