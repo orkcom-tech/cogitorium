@@ -147,6 +147,9 @@ export const api = {
       }),
     unbind: (bindingId: number) => req<void>(`/api/v1/gear-bindings/${bindingId}`, { method: 'DELETE' }),
   },
+  terminal: {
+    status: () => req<TerminalStatus>('/api/v1/terminal/status'),
+  },
   context: {
     status: () => req<ContextStatus>('/api/v1/context/status'),
     files: () => req<ContextFile[]>('/api/v1/context/files'),
@@ -299,6 +302,8 @@ export type GearRun = {
   stderr: string
   created_at: string
 }
+
+export type TerminalStatus = { available: boolean; reason: string; backend: string }
 
 export type GearRunResult = {
   stdout: string

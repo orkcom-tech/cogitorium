@@ -3,10 +3,12 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -38,9 +40,13 @@ type Server struct {
 	// which is what makes a single-operator install feel accountless while
 	// running the same model as a team install.
 	trustLoopback bool
+	// interactive is the sandbox backend able to host a terminal; nil means
+	// no terminal is possible, and that is a refusal rather than a fallback.
+	interactive     sandbox.Interactive
+	terminalEnabled bool
 }
 
-func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Runner) *Server {
+func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Runner, terminal bool) *Server {
 	cat := catalog.NewStore(db)
 	ws := workspace.NewStore(db)
 	cs := contextstore.New(contextdPath)
@@ -57,7 +63,16 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Run
 		engine:     engine.New(ws, cat, cs, gears, gearExec),
 		// A server reachable beyond this machine must not hand out admin
 		// to anyone who can open a socket to it.
-		trustLoopback: isLoopbackListen(listen),
+		trustLoopback:   isLoopbackListen(listen),
+		terminalEnabled: terminal,
+	}
+	// A terminal is only offered when the sandbox can host one: without it
+	// the shell would hold the server's own file access.
+	if i, ok := sb.(sandbox.Interactive); ok && sb != nil {
+		s.interactive = i
+	}
+	if terminal && s.interactive == nil {
+		slog.Warn("terminal requested but no sandbox can host one; it stays disabled")
 	}
 
 	mux := http.NewServeMux()
@@ -100,6 +115,9 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Run
 	mux.HandleFunc("POST /api/v1/workspaces/{id}/context", s.handleCreateContextBinding)
 	mux.HandleFunc("DELETE /api/v1/context-bindings/{id}", s.handleDeleteContextBinding)
 	mux.HandleFunc("GET /api/v1/agents/{id}/prompt", s.handleAgentPrompt)
+
+	mux.HandleFunc("GET /api/v1/terminal/status", s.handleTerminalStatus)
+	mux.HandleFunc("GET /api/v1/terminal", s.handleTerminal)
 
 	mux.HandleFunc("GET /api/v1/gears", s.handleListGears)
 	mux.HandleFunc("POST /api/v1/gears", s.handleCreateGear)
@@ -265,6 +283,18 @@ func (r *statusRecorder) WriteHeader(code int) {
 // Unwrap lets http.ResponseController reach the underlying writer, so
 // streaming handlers can flush through this wrapper.
 func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
+
+// Hijack lets the WebSocket upgrade take over the connection. Middleware
+// that wraps the writer silently breaks protocol upgrades unless it passes
+// this through — gorilla asserts on http.Hijacker directly, not through
+// ResponseController.
+func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := r.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("connection cannot be hijacked by %T", r.ResponseWriter)
+	}
+	return h.Hijack()
+}
 
 func logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

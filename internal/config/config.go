@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -27,6 +28,11 @@ type Config struct {
 	Sandbox string `yaml:"sandbox"`
 	// SandboxImage is the container image gears run in.
 	SandboxImage string `yaml:"sandbox_image"`
+	// Terminal opens a shell in the UI. Off by default: it is interactive
+	// code execution over HTTP, so switching it on is a deliberate act. It
+	// also requires a sandbox — without one the request is refused rather
+	// than served with the server's own file access.
+	Terminal bool `yaml:"terminal"`
 }
 
 func Defaults() Config {
@@ -99,6 +105,9 @@ func Load(path, dataDirOverride string) (Config, error) {
 	}
 	if v := os.Getenv("COGITORIUM_SANDBOX_IMAGE"); v != "" {
 		cfg.SandboxImage = v
+	}
+	if v := os.Getenv("COGITORIUM_TERMINAL"); v != "" {
+		cfg.Terminal = v == "1" || strings.EqualFold(v, "true")
 	}
 	return cfg, nil
 }

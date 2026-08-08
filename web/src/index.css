@@ -79,6 +79,21 @@ body {
   font-size: 0.75rem;
 }
 
+/* Terminal */
+
+.terminal-page {
+  height: calc(100vh - 3rem);
+}
+
+.terminal-holder {
+  flex: 1;
+  min-height: 20rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem;
+  overflow: hidden;
+}
+
 /* Login */
 
 .login {

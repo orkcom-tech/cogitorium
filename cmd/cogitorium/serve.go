@@ -90,7 +90,7 @@ func newServeCmd() *cobra.Command {
 				return err
 			}
 
-			srv := server.New(cfg.Listen, db, cfg.ContextdPath, cfg.DataDir, sb)
+			srv := server.New(cfg.Listen, db, cfg.ContextdPath, cfg.DataDir, sb, cfg.Terminal)
 			if err := srv.Bootstrap(ctx); err != nil {
 				return err
 			}

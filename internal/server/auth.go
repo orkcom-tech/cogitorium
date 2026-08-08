@@ -70,6 +70,14 @@ func bearerToken(r *http.Request) string {
 	if after, ok := strings.CutPrefix(h, "Bearer "); ok {
 		return strings.TrimSpace(after)
 	}
+	// A browser cannot set headers when opening a WebSocket, so the token
+	// arrives as a subprotocol instead: ["bearer", "<token>"].
+	if proto := r.Header.Get("Sec-WebSocket-Protocol"); proto != "" {
+		parts := strings.Split(proto, ",")
+		if len(parts) == 2 && strings.TrimSpace(parts[0]) == "bearer" {
+			return strings.TrimSpace(parts[1])
+		}
+	}
 	return ""
 }
 
