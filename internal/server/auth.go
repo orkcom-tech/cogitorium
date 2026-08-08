@@ -90,6 +90,59 @@ func isLoopback(r *http.Request) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// human is a caller together with HOW they proved who they were. The two are
+// not the same fact: a loopback request carries the admin's identity without
+// anyone having typed anything, so a decision recorded as "admin" may or may
+// not be evidence that a person made it. Every egress record stores both.
+type human struct {
+	user identity.User
+	auth string // "bearer" | "loopback-implicit"
+}
+
+// requireHuman gates the two actions that must be a person's: granting the
+// internet gate, and approving one search. It is admin-only, and when the
+// install has asked for it, implicit loopback admin is refused outright.
+func (s *Server) requireHuman(w http.ResponseWriter, r *http.Request) (human, bool) {
+	u, ok := requireAdmin(w, r)
+	if !ok {
+		return human{}, false
+	}
+	auth := "loopback-implicit"
+	if bearerToken(r) != "" {
+		auth = "bearer"
+	}
+	if s.egressBearer && auth != "bearer" {
+		writeError(w, http.StatusForbidden,
+			"this action needs a signed-in operator: send Authorization: Bearer <token> "+
+				"(egress_approval_bearer is on in this server's configuration)")
+		return human{}, false
+	}
+	return human{user: u, auth: auth}, true
+}
+
+// requireWorkspaceCtx is requireWorkspace with a caller-supplied context, so
+// a route that must not hang on a saturated database can bound its own check.
+func (s *Server) requireWorkspaceCtx(ctx context.Context, w http.ResponseWriter, r *http.Request, wsID int64) bool {
+	ok, err := s.workspaces.CanAccess(ctx, callerFrom(r.Context()), wsID)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			writeError(w, http.StatusServiceUnavailable,
+				"could not verify this approval — the database is busy. Try again.")
+			return false
+		}
+		fail(w, r, err)
+		return false
+	}
+	if !ok {
+		// 403 here rather than 404: the caller is answering a prompt that
+		// demonstrably exists, so hiding it would only confuse the operator
+		// whose click lost a race with someone else's.
+		writeError(w, http.StatusForbidden, "this approval belongs to a workspace you cannot reach")
+		return false
+	}
+	return true
+}
+
 // requireWorkspace is the guard every workspace-scoped route runs first.
 // Filtering the list alone would leave every other route open to a direct
 // id, so access is checked where the work happens, not where it is listed.

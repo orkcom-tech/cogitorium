@@ -20,6 +20,7 @@ import {
   type GearBinding,
   type GraphData,
   type GraphNode,
+  type EgressGrant,
   type Wire,
 } from '../api'
 import { KINDS } from './GraphCanvas'
@@ -33,7 +34,9 @@ const bindingEdge = (id: number) => `b-${id}`
 const idOf = (nodeOrEdgeId: string) => Number(nodeOrEdgeId.slice(2))
 
 type NodeData = {
-  kind: 'agent' | 'gear' | 'memory'
+  kind: 'agent' | 'gear' | 'memory' | 'outward'
+  egressOn?: boolean
+  destination?: string
   agent?: Agent
   gear?: Gear
   memory?: GraphNode
@@ -50,7 +53,14 @@ const LAYER_HINT = {
   delegation: 'Wires: which agent may hand work to which',
   tools: 'Gears: which tools each agent may call',
   memory: 'Memory and context: what each agent knows',
+  outward: 'The internet gate: which agents may ask to search the web',
 }
+
+// The one node that is not part of this workspace. Wiring an agent to it IS
+// the grant — the same rule the delegation wires already follow, where the
+// wire is the capability rather than a picture of one.
+const OUTWARD = 'outward'
+const egressEdge = (id: number) => `x-${id}`
 
 // Agents keep their stored positions; gears are laid out beneath them.
 function layoutAgents(agents: Agent[]): Map<number, { x: number; y: number }> {
@@ -92,7 +102,10 @@ export default function BlueprintEditor({
   const [graph, setGraph] = useState<GraphData | null>(null)
   // Wiring is what the operator came here to edit, so it starts visible;
   // memory is context for that work and is opened when it is wanted.
-  const [layers, setLayers] = useState({ delegation: true, tools: true, memory: false })
+  // outward defaults ON: a capability that reaches off the machine must not
+  // hide behind a toggle the operator has to remember to switch on.
+  const [layers, setLayers] = useState({ delegation: true, tools: true, memory: false, outward: true })
+  const [egress, setEgress] = useState<{ enabled: boolean; destination: string; grants: EgressGrant[]; reach: Record<string, string[]> } | null>(null)
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<NodeData>>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
 
@@ -103,12 +116,14 @@ export default function BlueprintEditor({
         api.gears.bindings(wsId),
         api.gears.list(),
         api.graph.workspace(wsId),
+        api.egress.grants(wsId),
       ])
-        .then(([w, b, c, g]) => {
+        .then(([w, b, c, g, e]) => {
           setWires(w)
           setBindings(b)
           setCatalog(c)
           setGraph(g)
+          setEgress(e)
         })
         .catch((e: Error) => onError(e.message)),
     [wsId, onError],
@@ -160,8 +175,23 @@ export default function BlueprintEditor({
             className: `bp-node bp-memory ${KINDS[n.kind]?.className ?? ''}`,
           }))
 
-    setNodes([...agentNodes, ...gearNodes, ...memoryNodes])
-  }, [agents, positions, bindings, gearById, graph, layers.tools, layers.memory, setNodes])
+    // One singleton node, pinned above the agents. When the master switch is
+    // off no edges are drawn even where grants exist: "nobody can go out" and
+    // "nobody is allowed to ask" are different facts and must look different.
+    const outwardNodes: Node<NodeData>[] = !layers.outward
+      ? []
+      : [
+          {
+            id: OUTWARD,
+            position: { x: 0, y: -420 },
+            data: { kind: 'outward', state: 'idle', egressOn: egress?.enabled ?? false, destination: egress?.destination ?? '' },
+            className: `bp-node bp-outward ${egress?.enabled ? '' : 'bp-outward-off'}`,
+            draggable: false,
+          },
+        ]
+
+    setNodes([...agentNodes, ...gearNodes, ...memoryNodes, ...outwardNodes])
+  }, [agents, positions, bindings, gearById, graph, layers.tools, layers.memory, layers.outward, egress, setNodes])
 
   useEffect(() => {
     setNodes((prev) =>
@@ -214,8 +244,17 @@ export default function BlueprintEditor({
             // these edges are shown but not deletable from the canvas.
             deletable: false,
           }))
-    setEdges([...wireEdges, ...bindingEdges, ...memoryEdges])
-  }, [wires, bindings, graph, layers, setEdges])
+    const egressEdges: Edge[] = !layers.outward || !egress?.enabled
+      ? []
+      : (egress?.grants ?? []).map((g) => ({
+          id: egressEdge(g.id),
+          source: OUTWARD,
+          target: agentNode(g.agent_id),
+          className: g.stale ? 'bp-egress-edge stale' : 'bp-egress-edge',
+          label: g.stale ? 'lapsed — review it' : undefined,
+        }))
+    setEdges([...wireEdges, ...bindingEdges, ...memoryEdges, ...egressEdges])
+  }, [wires, bindings, graph, layers, egress, setEdges])
 
   const onConnect = useCallback(
     (c: Connection) => {
@@ -224,6 +263,30 @@ export default function BlueprintEditor({
       const to = nodes.find((n) => n.id === c.target)
       if (!from || !to) return
 
+      // Dragging the internet node onto an agent IS the grant. Only a human
+      // can do this: no agent tool creates, edits or deletes this edge.
+      if (from.id === OUTWARD || to.id === OUTWARD) {
+        if (from.id !== OUTWARD || to.data.kind !== 'agent' || !to.data.agent) {
+          onError('Drag from the internet node to an agent to let that agent ask to search the web.')
+          return
+        }
+        const target = to.data.agent
+        const indirect = egress?.reach?.[target.name] ?? []
+        const extra = indirect.length
+          ? `\n\n${indirect.length} other agent${indirect.length === 1 ? '' : 's'} (${indirect.join(', ')}) can delegate to it, so they gain an indirect path outward.`
+          : ''
+        if (
+          !confirm(
+            `Let "${target.name}" ask to search the web?\n\nThis grants only the right to ASK: every search still stops and waits for you to approve that exact query.${extra}`,
+          )
+        )
+          return
+        api.egress
+          .grant(wsId, target.id)
+          .then(reloadGraph)
+          .catch((e: Error) => onError(e.message))
+        return
+      }
       if (from.data.kind === 'memory' || to.data.kind === 'memory') {
         onError('Memory is attached in the Context tab, not by dragging: bind a document to the workspace or to one agent.')
         return
@@ -254,10 +317,12 @@ export default function BlueprintEditor({
     (deleted: Edge[]) => {
       Promise.all(
         deleted
-          .filter((e) => e.id.startsWith('b-') || e.id.startsWith('w-'))
-          .map((e) =>
-            e.id.startsWith('b-') ? api.gears.unbind(idOf(e.id)) : api.wires.remove(idOf(e.id)),
-          ),
+          .filter((e) => e.id.startsWith('b-') || e.id.startsWith('w-') || e.id.startsWith('x-'))
+          .map((e) => {
+            if (e.id.startsWith('x-')) return api.egress.revoke(idOf(e.id))
+            if (e.id.startsWith('b-')) return api.gears.unbind(idOf(e.id))
+            return api.wires.remove(idOf(e.id))
+          }),
       )
         .then(() => {
           onChanged()
@@ -295,7 +360,7 @@ export default function BlueprintEditor({
         press Delete to revoke it. Double-click an agent to open it.
       </p>
       <div className="row legend">
-        {(['delegation', 'tools', 'memory'] as const).map((layer) => (
+        {(['delegation', 'tools', 'memory', 'outward'] as const).map((layer) => (
           <button
             key={layer}
             className={`legend-item ${layers[layer] ? '' : 'off'}`}
@@ -357,6 +422,17 @@ export default function BlueprintEditor({
 }
 
 function nodeLabel(data: NodeData) {
+  if (data.kind === 'outward') {
+    return (
+      <div className="bp-label">
+        <strong>🌐 {data.destination || 'the internet'}</strong>
+        <span className="muted">search only · https · one query at a time</span>
+        <span className={data.egressOn ? 'bp-state' : 'warn'}>
+          {data.egressOn ? 'drag onto an agent to let it ask' : 'off in this server’s configuration'}
+        </span>
+      </div>
+    )
+  }
   if (data.kind === 'memory') {
     const m = data.memory
     return (

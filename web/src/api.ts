@@ -71,6 +71,81 @@ export type GraphData = { nodes: GraphNode[]; edges: GraphEdge[] }
 // the provider never reports, and the operator should be told which it is.
 export type FileEntry = { name: string; path: string; dir: boolean; size: number; mtime: string }
 
+// The internet gate. Two human keys: a master switch that lives only in the
+// server's configuration file, and a per-agent grant an operator draws on the
+// blueprint. Neither is reachable from an agent, and every individual search
+// still stops the turn and waits for a person.
+export type EgressStatus = {
+  enabled: boolean
+  reason: string
+  destination: string
+  killed: boolean
+  killed_by?: string
+  killed_at?: string
+  sandboxed?: boolean
+}
+
+export type EgressGrant = {
+  id: number
+  workspace_id: number
+  agent_id: number
+  agent_name: string
+  granted_by_name: string
+  granted_auth: string
+  created_at: string
+  // stale means the agent's role, model or bound context changed after a
+  // human reviewed it, so the grant no longer applies.
+  stale: boolean
+}
+
+export type EgressOverlap = { chars: number; source: string }
+
+export type ApprovalRequest = {
+  token: string
+  workspace_id: number
+  agent_id: number
+  agent_name: string
+  role_excerpt: string
+  chain: string[]
+  query: string
+  // wire is the exact string that leaves the machine. It is the primary
+  // artefact in the dialog, not the raw query, because they can differ.
+  wire: string
+  expires_at: string
+  facts: {
+    runes: number
+    bytes: number
+    non_ascii: number
+    blob_shaped: boolean
+    overlap: EgressOverlap[] | null
+    used_this_turn: number
+    max_per_turn: number
+    used_24h: number
+    max_24h: number
+    granted_by: string
+    granted_at: string
+    prev_queries: string[] | null
+  }
+}
+
+export type SearchRecord = {
+  id: number
+  agent_id: number | null
+  agent_name: string
+  chain: string[] | null
+  query: string
+  blob_flag: boolean
+  overlap: string
+  state: string
+  decided_name: string
+  decided_auth: string
+  decided_at: string
+  http_status: number | null
+  result_bytes: number | null
+  error: string
+  created_at: string
+}
+
 export type AgentUsage = {
   agent_id: number
   input_tokens: number
@@ -219,6 +294,28 @@ export const api = {
   usage: {
     workspace: (wsId: number) => req<AgentUsage[]>(`/api/v1/workspaces/${wsId}/usage`),
     agent: (agentId: number) => req<AgentUsage>(`/api/v1/agents/${agentId}/usage`),
+  },
+  egress: {
+    status: () => req<EgressStatus>('/api/v1/egress/status'),
+    kill: () => req<{ killed: boolean; notice: string }>('/api/v1/egress/off', { method: 'POST' }),
+    grants: (wsId: number) =>
+      req<{ enabled: boolean; destination: string; grants: EgressGrant[]; reach: Record<string, string[]> }>(
+        `/api/v1/workspaces/${wsId}/egress`,
+      ),
+    grant: (wsId: number, agentId: number) =>
+      req<EgressGrant>(`/api/v1/workspaces/${wsId}/egress`, {
+        method: 'POST',
+        body: JSON.stringify({ agent_id: agentId }),
+      }),
+    revoke: (grantId: number) => req<void>(`/api/v1/egress-grants/${grantId}`, { method: 'DELETE' }),
+    pending: (wsId: number) => req<ApprovalRequest | null>(`/api/v1/workspaces/${wsId}/egress/pending`),
+    answer: (token: string, allow: boolean) =>
+      req<{ allow: boolean }>(`/api/v1/egress/approvals/${encodeURIComponent(token)}`, {
+        method: 'POST',
+        body: JSON.stringify({ allow }),
+      }),
+    log: (wsId: number, limit = 100) =>
+      req<SearchRecord[]>(`/api/v1/workspaces/${wsId}/egress/log?limit=${limit}`),
   },
   files: {
     list: (wsId: number, path: string) =>

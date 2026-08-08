@@ -984,3 +984,136 @@ th {
   font-size: 0.8rem;
   margin: 0;
 }
+
+/* The internet node. It is deliberately unlike everything else on the canvas:
+   it is the only node that is not part of this workspace. */
+.react-flow__node.bp-outward {
+  border-color: #c85a5a;
+  border-width: 2px;
+  background: color-mix(in srgb, #c85a5a 14%, transparent);
+  max-width: 15rem;
+}
+
+.react-flow__node.bp-outward-off {
+  border-style: dashed;
+  opacity: 0.55;
+}
+
+.react-flow__edge.bp-egress-edge .react-flow__edge-path {
+  stroke: #c85a5a;
+  stroke-width: 2;
+  stroke-dasharray: 8 4;
+}
+
+.react-flow__edge.bp-egress-edge.stale .react-flow__edge-path {
+  stroke: #d0a050;
+}
+
+.legend-dot.layer-outward {
+  --kind: #c85a5a;
+}
+
+/* The approval dialog. Every rule here exists so that what the operator reads
+   is provably the bytes that leave: no ligatures, no bidi reordering, no
+   scroll container that could hide the tail of a query. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+
+.modal.approval {
+  background: var(--bg);
+  border: 2px solid #c85a5a;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  max-width: 44rem;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.modal.approval h3 {
+  margin: 0;
+}
+
+.approval-who strong {
+  font-size: 0.9rem;
+}
+
+.role-excerpt {
+  font-size: 0.75rem;
+  margin: 0.2rem 0;
+  max-height: 3.5rem;
+  overflow: hidden;
+}
+
+.approval-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+}
+
+.wire {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-ligatures: none;
+  unicode-bidi: isolate-override;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* Never a scroll container: a query that scrolls is a query the operator
+     did not fully read. At 256 runes with no newlines it always fits. */
+  overflow: visible;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.82rem;
+}
+
+.decoded {
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.approval-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+
+.approval-prev {
+  font-size: 0.75rem;
+}
+
+.approval-prev ul {
+  margin: 0.3rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.approval-warning {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.approval-actions {
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+}
+
+.approval-foot {
+  font-size: 0.72rem;
+  margin: 0;
+}

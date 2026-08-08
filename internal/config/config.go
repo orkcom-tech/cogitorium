@@ -33,6 +33,30 @@ type Config struct {
 	// also requires a sandbox — without one the request is refused rather
 	// than served with the server's own file access.
 	Terminal bool `yaml:"terminal"`
+
+	// Egress is the master switch for agents reaching the internet. Off by
+	// default, and deliberately reachable ONLY from this file and the
+	// environment: there is no route, no setter and no database row, so no
+	// agent and no tool call can flip it. Turning it on means editing a file
+	// on the operator's own disk and restarting the server.
+	//
+	// It grants nothing on its own. An agent must additionally hold a grant
+	// an operator drew on the blueprint, and every individual search still
+	// stops the turn and waits for a person to approve that exact query.
+	Egress bool `yaml:"egress"`
+
+	// EgressKey is the credential for the search destination. It travels in a
+	// header, never in a query string. Empty with Egress on is a startup
+	// error, not a silent degradation to unauthenticated requests.
+	EgressKey string `yaml:"egress_key"`
+
+	// EgressApprovalBearer requires a real bearer token to grant the gate or
+	// approve a search, refusing the implicit-admin that loopback otherwise
+	// confers. Off by default because it would make the feature unusable on a
+	// default single-operator install; the audit records which kind of
+	// authentication each decision actually had, so a row is never mistaken
+	// for stronger evidence than it is.
+	EgressApprovalBearer bool `yaml:"egress_approval_bearer"`
 }
 
 func Defaults() Config {
@@ -108,6 +132,17 @@ func Load(path, dataDirOverride string) (Config, error) {
 	}
 	if v := os.Getenv("COGITORIUM_TERMINAL"); v != "" {
 		cfg.Terminal = v == "1" || strings.EqualFold(v, "true")
+	}
+	// Same strict parse as Terminal, so COGITORIUM_EGRESS=0 is a working
+	// off-switch over a file that says true.
+	if v := os.Getenv("COGITORIUM_EGRESS"); v != "" {
+		cfg.Egress = v == "1" || strings.EqualFold(v, "true")
+	}
+	if v := os.Getenv("COGITORIUM_EGRESS_KEY"); v != "" {
+		cfg.EgressKey = v
+	}
+	if v := os.Getenv("COGITORIUM_EGRESS_APPROVAL_BEARER"); v != "" {
+		cfg.EgressApprovalBearer = v == "1" || strings.EqualFold(v, "true")
 	}
 	return cfg, nil
 }

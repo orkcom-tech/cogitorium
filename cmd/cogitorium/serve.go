@@ -13,6 +13,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/server"
 	"github.com/orkcom-tech/cogitorium/internal/store"
+	"github.com/orkcom-tech/cogitorium/internal/websearch"
 	"github.com/spf13/cobra"
 )
 
@@ -34,6 +35,9 @@ func selectSandbox(ctx context.Context, mode, image string) (sandbox.Runner, err
 		if mode == "docker" {
 			return nil, errors.New("sandbox: docker was requested but the daemon does not answer")
 		}
+		// A compensating control nobody is told about is not one: this branch
+		// silently downgraded to unsandboxed execution before.
+		slog.Warn("docker did not answer; gears will run unsandboxed with this server's file access")
 		return nil, nil
 	default:
 		return nil, fmt.Errorf("sandbox must be auto, docker or subprocess (got %q)", mode)
@@ -90,7 +94,12 @@ func newServeCmd() *cobra.Command {
 				return err
 			}
 
-			srv := server.New(cfg.Listen, db, cfg.ContextdPath, cfg.DataDir, sb, cfg.Terminal)
+			searcher, err := buildSearcher(cfg, sb)
+			if err != nil {
+				return err
+			}
+
+			srv := server.New(cfg, db, sb, searcher)
 			if err := srv.Bootstrap(ctx); err != nil {
 				return err
 			}
@@ -104,4 +113,31 @@ func newServeCmd() *cobra.Command {
 	cmd.Flags().StringVar(&dataDir, "data", def.DataDir, "data directory (SQLite DB and server-owned files)")
 	cmd.Flags().StringVar(&logLevel, "log-level", def.LogLevel, "log level: debug|info|warn|error")
 	return cmd
+}
+
+// buildSearcher constructs the internet gate, or refuses to start.
+//
+// Enabling a capability that cannot work is a crash, not a warning. The
+// distinction matters: absence of a capability nobody asked for is worth a
+// log line, but a gate the operator explicitly switched on and which would
+// silently guard nothing is the failure this whole design exists to avoid.
+func buildSearcher(cfg config.Config, sb sandbox.Runner) (*websearch.Searcher, error) {
+	if !cfg.Egress {
+		return nil, nil
+	}
+	// Unsandboxed gears already run with this server's file access: they can
+	// rewrite config.yaml and the grants table, so the gate would be theatre.
+	if sb == nil {
+		return nil, errors.New("egress is enabled but gears are not sandboxed. An unsandboxed gear runs " +
+			"with this server's file access and can rewrite the configuration and the grants table, so the " +
+			"gate would be decorative. Install Docker, or set egress: false.")
+	}
+	s, err := websearch.New(cfg.Listen, cfg.EgressKey)
+	if err != nil {
+		return nil, fmt.Errorf("egress is enabled but cannot be built: %w", err)
+	}
+	slog.Warn("the outward gate is ON: agents may ask to search the web",
+		"destination", websearch.Destination(),
+		"note", "every search still stops the turn and waits for an operator to approve that exact query")
+	return s, nil
 }

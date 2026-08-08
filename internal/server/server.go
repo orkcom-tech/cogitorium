@@ -13,16 +13,20 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
+	"github.com/orkcom-tech/cogitorium/internal/config"
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
+	"github.com/orkcom-tech/cogitorium/internal/egress"
 	"github.com/orkcom-tech/cogitorium/internal/engine"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/version"
+	"github.com/orkcom-tech/cogitorium/internal/websearch"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 	"github.com/orkcom-tech/cogitorium/web"
 )
@@ -47,15 +51,30 @@ type Server struct {
 	interactive     sandbox.Interactive
 	terminalEnabled bool
 	dataDir         string
+
+	// The internet gate. searcher is nil unless the master switch is on and a
+	// credential was supplied; broker holds the single pending approval;
+	// egressOff is a runtime kill that can only ever close.
+	searcher       *websearch.Searcher
+	broker         *egress.Broker
+	egressOff      atomic.Bool
+	egressBearer   bool
+	egressKilledBy string
+	egressKilledAt string
 }
 
-func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Runner, terminal bool) *Server {
+// New takes the whole config rather than trailing booleans. That is a
+// deliberate refusal of the obvious alternative: with New(..., terminal,
+// egress bool) a caller that swaps two arguments compiles cleanly, and the
+// result is a security gate silently switched on.
+func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.Searcher) *Server {
 	cat := catalog.NewStore(db)
 	ws := workspace.NewStore(db)
-	cs := contextstore.New(contextdPath)
+	cs := contextstore.New(cfg.ContextdPath)
 	gears := gear.NewStore(db)
-	gearExec := gear.NewExecutor(gears, dataDir, sb)
+	gearExec := gear.NewExecutor(gears, cfg.DataDir, sb)
 	lib := library.NewStore(db)
+	broker := egress.New()
 	s := &Server{
 		db:         db,
 		catalog:    cat,
@@ -65,19 +84,22 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Run
 		gearExec:   gearExec,
 		library:    lib,
 		identity:   identity.NewStore(db),
-		engine:     engine.New(ws, cat, cs, gears, gearExec, lib),
+		engine:     engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker),
 		// A server reachable beyond this machine must not hand out admin
 		// to anyone who can open a socket to it.
-		trustLoopback:   isLoopbackListen(listen),
-		terminalEnabled: terminal,
-		dataDir:         dataDir,
+		trustLoopback:   isLoopbackListen(cfg.Listen),
+		terminalEnabled: cfg.Terminal,
+		dataDir:         cfg.DataDir,
+		searcher:        searcher,
+		broker:          broker,
+		egressBearer:    cfg.EgressApprovalBearer,
 	}
 	// A terminal is only offered when the sandbox can host one: without it
 	// the shell would hold the server's own file access.
 	if i, ok := sb.(sandbox.Interactive); ok && sb != nil {
 		s.interactive = i
 	}
-	if terminal && s.interactive == nil {
+	if cfg.Terminal && s.interactive == nil {
 		slog.Warn("terminal requested but no sandbox can host one; it stays disabled")
 	}
 
@@ -138,6 +160,15 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Run
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/graph", s.handleWorkspaceGraph)
 	mux.HandleFunc("GET /api/v1/map", s.handleAccessMap)
 
+	mux.HandleFunc("GET /api/v1/egress/status", s.handleEgressStatus)
+	mux.HandleFunc("POST /api/v1/egress/off", s.handleEgressKill)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/egress", s.handleListEgressGrants)
+	mux.HandleFunc("POST /api/v1/workspaces/{id}/egress", s.handleGrantEgress)
+	mux.HandleFunc("DELETE /api/v1/egress-grants/{id}", s.handleRevokeEgress)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/egress/pending", s.handleEgressPending)
+	mux.HandleFunc("POST /api/v1/egress/approvals/{token}", s.handleEgressApproval)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/egress/log", s.handleEgressLog)
+
 	mux.HandleFunc("GET /api/v1/instructions", s.handleListInstructions)
 	mux.HandleFunc("POST /api/v1/instructions", s.handleSaveInstruction)
 	mux.HandleFunc("GET /api/v1/instructions/{id}", s.handleGetInstruction)
@@ -176,7 +207,7 @@ func New(listen string, db *sql.DB, contextdPath, dataDir string, sb sandbox.Run
 	mux.Handle("/", uiHandler())
 
 	s.http = &http.Server{
-		Addr:              listen,
+		Addr:              cfg.Listen,
 		Handler:           logRequests(s.authenticate(mux)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -201,6 +232,19 @@ func isLoopbackListen(addr string) bool {
 // Bootstrap seeds the admin on first start. The returned token is shown to
 // the operator once and never recoverable afterwards.
 func (s *Server) Bootstrap(ctx context.Context) error {
+	// The runtime kill switch is handed to the engine here rather than at
+	// construction, so the engine never imports the server.
+	s.engine.SetEgressKill(s.egressOff.Load)
+
+	// A pause lives in one process's memory, so nothing left awaiting can
+	// ever be answered after a restart. Saying so in the row is what keeps
+	// the log from implying a request is still open.
+	if n, err := s.workspaces.ReconcileSearches(ctx); err != nil {
+		return err
+	} else if n > 0 {
+		slog.Warn("search requests were awaiting approval when the server stopped; they are recorded as interrupted", "count", n)
+	}
+
 	_, token, err := s.identity.Bootstrap(ctx)
 	if err != nil {
 		return err

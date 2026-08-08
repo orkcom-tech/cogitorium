@@ -4,12 +4,14 @@ import BlueprintEditor from './BlueprintEditor'
 import TerminalPage from './TerminalPage'
 import AgentMemory from './AgentMemory'
 import FilesPage from './FilesPage'
+import ApprovalDialog from './ApprovalDialog'
 import {
   api,
   wsChatStream,
   type Agent,
   type AgentStatus,
   type AgentUsage,
+  type ApprovalRequest,
   type ContextBinding,
   type ContextFile,
   type Gear,
@@ -31,6 +33,11 @@ export default function WorkspacePage() {
   const [streams, setStreams] = useState<Map<number, string>>(new Map())
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [usage, setUsage] = useState<Map<number, AgentUsage>>(new Map())
+  // A paused turn waiting for permission to search the web. The SSE event is
+  // a latency optimisation; the poll below is the mechanism, so a buffering
+  // proxy that swallows the stream costs a second rather than the feature.
+  const [approval, setApproval] = useState<ApprovalRequest | null>(null)
+  const [answering, setAnswering] = useState(false)
   const [view, setView] = useState<'chat' | 'blueprint' | 'files' | 'terminal'>('chat')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -82,6 +89,38 @@ export default function WorkspacePage() {
   }, [wsId])
 
   useEffect(() => () => abortRef.current?.abort(), [])
+
+  useEffect(() => {
+    if (!busy) {
+      setApproval(null)
+      return
+    }
+    const poll = setInterval(() => {
+      api.egress
+        .pending(wsId)
+        .then(setApproval)
+        .catch(() => {})
+    }, 2000)
+    return () => clearInterval(poll)
+  }, [busy, wsId])
+
+  const answerApproval = useCallback(
+    (allow: boolean) => {
+      if (!approval) return
+      setAnswering(true)
+      api.egress
+        .answer(approval.token, allow)
+        .then(() => setApproval(null))
+        .catch((e: Error) => {
+          // A lost race is worth showing rather than swallowing: the operator
+          // needs to know whether their click landed.
+          setError(e.message)
+          setApproval(null)
+        })
+        .finally(() => setAnswering(false))
+    },
+    [approval],
+  )
 
   const send = async (text: string) => {
     setBusy(true)
@@ -169,6 +208,7 @@ export default function WorkspacePage() {
 
   return (
     <div className="ws-layout">
+      {approval && <ApprovalDialog request={approval} onAnswer={answerApproval} busy={answering} />}
       <div className="ws-main">
         <div className="ws-head">
           <Link to="/workspaces" className="muted">

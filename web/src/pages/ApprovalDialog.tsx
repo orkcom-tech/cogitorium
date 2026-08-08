@@ -1,0 +1,141 @@
+import { useEffect, useState } from 'react'
+import type { ApprovalRequest } from '../api'
+
+// The last control before data leaves the machine.
+//
+// Everything here is either fixed chrome or a server-computed fact. The only
+// model-authored strings are the query and the agent name, and both are
+// constrained server-side: the query to printable text under 256 runes, the
+// name to a short slug. There is deliberately no free-text "reason" field —
+// a box the attacker fills, displayed at the moment of decision, is a prompt
+// injection aimed at the human.
+export default function ApprovalDialog({
+  request,
+  onAnswer,
+  busy,
+}: {
+  request: ApprovalRequest
+  onAnswer: (allow: boolean) => void
+  busy: boolean
+}) {
+  // Allow arms after a second. This is the pattern browsers use on permission
+  // prompts, and it costs nothing while defeating a reflex click that was
+  // already queued for whatever was under the cursor.
+  const [armed, setArmed] = useState(false)
+  const [left, setLeft] = useState(() => secondsLeft(request.expires_at))
+
+  useEffect(() => {
+    setArmed(false)
+    const t = setTimeout(() => setArmed(true), 1000)
+    return () => clearTimeout(t)
+  }, [request.token])
+
+  useEffect(() => {
+    const t = setInterval(() => setLeft(secondsLeft(request.expires_at)), 500)
+    return () => clearInterval(t)
+  }, [request.expires_at])
+
+  // Esc refuses, and so does any dismissal: the safe answer must be the one
+  // that happens when the operator does nothing deliberate.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onAnswer(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onAnswer])
+
+  const f = request.facts
+  const delegated = request.chain.length > 1
+
+  return (
+    <div className="modal-backdrop" onClick={() => onAnswer(false)}>
+      <div className="modal approval" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <h3>A search is about to leave this machine.</h3>
+
+        <div className="approval-who">
+          {/* Id first: ids are not spoofable, names are. */}
+          <strong>
+            agent #{request.agent_id} · {request.agent_name}
+          </strong>
+          <p className="muted role-excerpt">{request.role_excerpt}</p>
+          <p className="muted">
+            path: {request.chain.join(' → ')}
+            {delegated && (
+              <span className="warn"> · requested through a delegation, not by this agent directly</span>
+            )}
+          </p>
+          {f.granted_by && (
+            <p className="muted">
+              granted by {f.granted_by}
+              {f.granted_at ? ` · ${f.granted_at.slice(0, 10)}` : ''}
+            </p>
+          )}
+        </div>
+
+        <label className="approval-label">what leaves</label>
+        {/* The wire string, not the raw query: they can differ, and this is
+            the one that travels. Plain text node — never dangerouslySetInnerHTML,
+            never a markdown renderer, never syntax highlighting. */}
+        <div className="wire" dir="ltr">
+          {request.wire}
+        </div>
+        <p className="muted decoded">reads as: {request.query}</p>
+
+        <div className="approval-facts">
+          <span>
+            {f.runes} runes · {f.bytes} bytes · {f.non_ascii} non-ASCII
+          </span>
+          {f.blob_shaped && <span className="warn">blob-shaped run detected</span>}
+          {(f.overlap ?? []).map((o) => (
+            <span key={o.source} className="warn">
+              contains {o.chars} characters that also appear in {o.source}
+            </span>
+          ))}
+          <span>
+            request {f.used_this_turn} of {f.max_per_turn} permitted this turn
+          </span>
+          <span>
+            this agent has sent {f.used_24h} of {f.max_24h} searches in 24h
+          </span>
+        </div>
+
+        {(f.prev_queries ?? []).length > 0 && (
+          <details className="approval-prev">
+            <summary>what this agent usually searches for</summary>
+            <ul>
+              {(f.prev_queries ?? []).map((q, i) => (
+                <li key={i}>{q}</li>
+              ))}
+            </ul>
+          </details>
+        )}
+
+        <p className="approval-warning">
+          These exact bytes leave this machine when you allow — whether or not the search service answers.
+        </p>
+
+        <div className="row approval-actions">
+          <button className="danger" autoFocus onClick={() => onAnswer(false)} disabled={busy}>
+            Refuse
+          </button>
+          <button className="primary" onClick={() => onAnswer(true)} disabled={!armed || busy}>
+            {armed ? 'Allow once' : 'Allow once…'}
+          </button>
+          <span className="spacer" />
+          <span className="muted">{left > 0 ? `${left}s left` : 'expiring…'}</span>
+        </div>
+
+        <p className="muted approval-foot">
+          Refusing also stops this turn from asking again. If nobody answers, the search is refused and the turn
+          continues.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function secondsLeft(iso: string) {
+  const ms = new Date(iso).getTime() - Date.now()
+  return Math.max(0, Math.round(ms / 1000))
+}

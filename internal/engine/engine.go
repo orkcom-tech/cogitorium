@@ -16,9 +16,11 @@ import (
 
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
+	"github.com/orkcom-tech/cogitorium/internal/egress"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
+	"github.com/orkcom-tech/cogitorium/internal/websearch"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
 
@@ -44,6 +46,11 @@ type Event struct {
 	Text    string             `json:"text,omitempty"`
 	Status  *AgentStatus       `json:"status,omitempty"`
 	Error   string             `json:"error,omitempty"`
+	// Approval carries a paused turn's request for permission to search the
+	// web; Resolved reports how that request ended, so the modal never sits
+	// on screen dead and clickable.
+	Approval *egress.Request `json:"approval,omitempty"`
+	Resolved string          `json:"resolved,omitempty"`
 }
 
 type Engine struct {
@@ -54,12 +61,21 @@ type Engine struct {
 	gearExec *gear.Executor
 	library  *library.Store
 
+	// The internet gate. searcher is nil when the master switch is off, and
+	// every path checks for nil rather than carrying a disabled object that
+	// might dial by accident. egressKilled is the runtime close-only switch,
+	// injected so the engine does not import the server.
+	searcher     *websearch.Searcher
+	broker       *egress.Broker
+	egressKilled func() bool
+
 	mu      sync.Mutex
 	status  map[int64]AgentStatus
 	running map[int64]bool // workspace_id -> a turn is in flight
+	turns   map[int64]*turnState
 }
 
-func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears *gear.Store, gearExec *gear.Executor, lib *library.Store) *Engine {
+func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears *gear.Store, gearExec *gear.Executor, lib *library.Store, searcher *websearch.Searcher, broker *egress.Broker) *Engine {
 	return &Engine{
 		ws:       ws,
 		cat:      cat,
@@ -67,10 +83,16 @@ func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears 
 		gears:    gears,
 		gearExec: gearExec,
 		library:  lib,
+		searcher: searcher,
+		broker:   broker,
 		status:   map[int64]AgentStatus{},
 		running:  map[int64]bool{},
+		turns:    map[int64]*turnState{},
 	}
 }
+
+// SetEgressKill injects the server's runtime kill switch.
+func (e *Engine) SetEgressKill(f func() bool) { e.egressKilled = f }
 
 // Statuses returns the live status of every agent in a workspace (agents
 // with no recorded activity are idle).
@@ -117,6 +139,12 @@ func (e *Engine) HandleUserMessage(ctx context.Context, wsID int64, text string,
 		delete(e.running, wsID)
 		e.mu.Unlock()
 	}()
+
+	// One budget and one set of latches for the whole turn, delegation tree
+	// included. Created here rather than threaded through every signature,
+	// which is sound because only one turn runs per workspace at a time.
+	e.beginTurn(wsID)
+	defer e.endTurn(wsID)
 
 	orch, err := e.orchestrator(ctx, wsID)
 	if err != nil {
@@ -232,7 +260,7 @@ func (e *Engine) modelTurn(ctx context.Context, wsID int64, agent workspace.Agen
 		Model:    model.ModelName,
 		System:   system,
 		Messages: history,
-		Tools:    e.toolsFor(agent, targets, gears),
+		Tools:    e.toolsFor(agent, targets, gears, e.egressAvailable(ctx, wsID, agent)),
 	}, func(text string) error {
 		emit(Event{Type: "delta", AgentID: agent.ID, Text: text})
 		return ctx.Err()
@@ -757,7 +785,7 @@ func (e *Engine) runAgent(ctx context.Context, wsID int64, agent workspace.Agent
 	if err != nil {
 		return "", err
 	}
-	tools := e.toolsFor(agent, targets, gears)
+	tools := e.toolsFor(agent, targets, gears, e.egressAvailable(ctx, wsID, agent))
 
 	history := []llm.Turn{{Role: "user", Text: task}}
 	for iter := 0; iter < maxToolIterations; iter++ {

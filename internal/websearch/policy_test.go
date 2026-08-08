@@ -158,7 +158,7 @@ func TestAuthorityGuardRefusesEveryHostButTheOne(t *testing.T) {
 	}
 	for _, raw := range []string{
 		"https://echo-page.com/api/search",
-		"https://ECHO-PAGE.COM/api/search", // case
+		"https://ECHO-PAGE.COM/api/search",  // case
 		"https://echo-page.com./api/search", // trailing dot
 		"https://echo-page.com:443/api/search",
 	} {
@@ -170,9 +170,76 @@ func TestAuthorityGuardRefusesEveryHostButTheOne(t *testing.T) {
 
 func TestValidateQueryRefusesWhatCannotBeAQuestion(t *testing.T) {
 	long := strings.Repeat("a", 257)
-	for _, q := range []string{"", "   ", "hello\x00world", "line\nbreak", long} {
+	for _, q := range []string{"", "   ", "hello\x00world", "line\nbreak", "tab\there", long} {
 		if _, _, err := ValidateQuery(q); err == nil {
 			t.Errorf("%q was accepted", q)
+		}
+	}
+}
+
+// Every one of these renders as nothing, or renders as something other than
+// its bytes. The approval dialog's whole promise is that the operator read
+// what leaves the machine, so each must be refused rather than stripped.
+func TestValidateQueryRefusesRunesThatRenderDishonestly(t *testing.T) {
+	// Written as escapes on purpose: pasted literally, several of these are
+	// invisible in a diff and one of them is an illegal byte order mark that
+	// the Go parser rejects outright.
+	cases := map[string]string{
+		"zero-width space":        "aws\u200bkey",
+		"zero-width no-break/BOM": "aws\ufeffkey",
+		"soft hyphen":             "aws\u00adkey",
+		"right-to-left override":  "invoice\u202egnp.txt",
+		"bidi isolate":            "look\u2066up",
+		"arabic letter mark":      "look\u061cup",
+		"tag block carries ASCII": "look\U000E0041up",
+		"combining mark":          "cafe\u0301 opening hours",
+		"private use":             "look\uE000up",
+	}
+	for name, q := range cases {
+		if _, _, err := ValidateQuery(q); err == nil {
+			t.Errorf("%s was accepted: %q", name, q)
+		} else if !strings.Contains(err.Error(), "U+") {
+			t.Errorf("%s was refused without naming the codepoint: %v", name, err)
+		}
+	}
+}
+
+func TestValidateQueryAcceptsOrdinaryQuestionsIncludingNonEnglish(t *testing.T) {
+	for _, q := range []string{
+		"sqlite WAL concurrency best practices",
+		"golang net/http CheckRedirect example",
+		"как настроить nginx для websockets",
+		"C++ std::vector reserve vs resize (performance)",
+		"what is 2 + 2 = ?",
+	} {
+		if _, _, err := ValidateQuery(q); err != nil {
+			t.Errorf("an ordinary query was refused: %q — %v", q, err)
+		}
+	}
+}
+
+// The dialog shows the wire string, so the wire string is what must be
+// impossible to smuggle structure into.
+func TestWireURLKeepsTheQueryAValueAndNothingElse(t *testing.T) {
+	for _, q := range []string{
+		"a&engine=evil",
+		"a#fragment",
+		"a/../../etc/passwd",
+		"a b+c",
+	} {
+		u := WireURL(q)
+		if u.Host != searchHost || u.Scheme != "https" {
+			t.Fatalf("destination moved for %q: %s", q, u.String())
+		}
+		if u.EscapedPath() != searchPath {
+			t.Errorf("path changed for %q: %s", q, u.EscapedPath())
+		}
+		if u.Fragment != "" {
+			t.Errorf("a fragment survived for %q: %s", q, u.String())
+		}
+		vals := u.Query()
+		if len(vals) != 1 || vals.Get("q") != q {
+			t.Errorf("query smuggled structure for %q: %#v", q, vals)
 		}
 	}
 }

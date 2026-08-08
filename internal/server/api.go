@@ -58,3 +58,12 @@ func parseID(s string) (int64, error) { return strconv.ParseInt(s, 10, 64) }
 // isDomainError reports whether err is one of the shared sentinel errors,
 // which the fail() mapping already turns into the right status.
 func isDomainError(err, sentinel error) bool { return errors.Is(err, sentinel) }
+
+// parsePositive reads a positive integer from a query parameter.
+func parsePositive(v string) (int, error) {
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return 0, errors.New("not a positive number")
+	}
+	return n, nil
+}

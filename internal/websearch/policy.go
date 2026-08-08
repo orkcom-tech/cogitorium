@@ -15,6 +15,7 @@ package websearch
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"net/url"
@@ -49,34 +50,34 @@ var errRefused = errors.New("that destination is not permitted")
 // — the reviewed design's table omitted 192.168.0.0/16, which is exactly the
 // kind of gap a second, differently-derived layer catches.
 var denied = []netip.Prefix{
-	netip.MustParsePrefix("0.0.0.0/8"),          // this network
-	netip.MustParsePrefix("10.0.0.0/8"),         // RFC1918
-	netip.MustParsePrefix("100.64.0.0/10"),      // CGNAT
-	netip.MustParsePrefix("127.0.0.0/8"),        // loopback
-	netip.MustParsePrefix("169.254.0.0/16"),     // link-local, incl. cloud metadata
-	netip.MustParsePrefix("172.16.0.0/12"),      // RFC1918
-	netip.MustParsePrefix("192.0.0.0/24"),       // IETF protocol assignments
-	netip.MustParsePrefix("192.0.2.0/24"),       // TEST-NET-1
-	netip.MustParsePrefix("192.88.99.0/24"),     // 6to4 relay anycast
-	netip.MustParsePrefix("192.168.0.0/16"),     // RFC1918
-	netip.MustParsePrefix("198.18.0.0/15"),      // benchmarking
-	netip.MustParsePrefix("198.51.100.0/24"),    // TEST-NET-2
-	netip.MustParsePrefix("203.0.113.0/24"),     // TEST-NET-3
-	netip.MustParsePrefix("224.0.0.0/4"),        // multicast
-	netip.MustParsePrefix("240.0.0.0/4"),        // reserved, incl. broadcast
-	netip.MustParsePrefix("::/128"),             // unspecified
-	netip.MustParsePrefix("::1/128"),            // loopback
-	netip.MustParsePrefix("::/96"),              // IPv4-compatible
-	netip.MustParsePrefix("::ffff:0:0/96"),      // IPv4-mapped
-	netip.MustParsePrefix("64:ff9b::/96"),       // NAT64
-	netip.MustParsePrefix("64:ff9b:1::/48"),     // local-use NAT64
-	netip.MustParsePrefix("100::/64"),           // discard-only
-	netip.MustParsePrefix("2001::/32"),          // Teredo
-	netip.MustParsePrefix("2001:db8::/32"),      // documentation
-	netip.MustParsePrefix("2002::/16"),          // 6to4
-	netip.MustParsePrefix("fc00::/7"),           // unique local
-	netip.MustParsePrefix("fe80::/10"),          // link-local
-	netip.MustParsePrefix("ff00::/8"),           // multicast
+	netip.MustParsePrefix("0.0.0.0/8"),       // this network
+	netip.MustParsePrefix("10.0.0.0/8"),      // RFC1918
+	netip.MustParsePrefix("100.64.0.0/10"),   // CGNAT
+	netip.MustParsePrefix("127.0.0.0/8"),     // loopback
+	netip.MustParsePrefix("169.254.0.0/16"),  // link-local, incl. cloud metadata
+	netip.MustParsePrefix("172.16.0.0/12"),   // RFC1918
+	netip.MustParsePrefix("192.0.0.0/24"),    // IETF protocol assignments
+	netip.MustParsePrefix("192.0.2.0/24"),    // TEST-NET-1
+	netip.MustParsePrefix("192.88.99.0/24"),  // 6to4 relay anycast
+	netip.MustParsePrefix("192.168.0.0/16"),  // RFC1918
+	netip.MustParsePrefix("198.18.0.0/15"),   // benchmarking
+	netip.MustParsePrefix("198.51.100.0/24"), // TEST-NET-2
+	netip.MustParsePrefix("203.0.113.0/24"),  // TEST-NET-3
+	netip.MustParsePrefix("224.0.0.0/4"),     // multicast
+	netip.MustParsePrefix("240.0.0.0/4"),     // reserved, incl. broadcast
+	netip.MustParsePrefix("::/128"),          // unspecified
+	netip.MustParsePrefix("::1/128"),         // loopback
+	netip.MustParsePrefix("::/96"),           // IPv4-compatible
+	netip.MustParsePrefix("::ffff:0:0/96"),   // IPv4-mapped
+	netip.MustParsePrefix("64:ff9b::/96"),    // NAT64
+	netip.MustParsePrefix("64:ff9b:1::/48"),  // local-use NAT64
+	netip.MustParsePrefix("100::/64"),        // discard-only
+	netip.MustParsePrefix("2001::/32"),       // Teredo
+	netip.MustParsePrefix("2001:db8::/32"),   // documentation
+	netip.MustParsePrefix("2002::/16"),       // 6to4
+	netip.MustParsePrefix("fc00::/7"),        // unique local
+	netip.MustParsePrefix("fe80::/10"),       // link-local
+	netip.MustParsePrefix("ff00::/8"),        // multicast
 }
 
 // v6Global is the only IPv6 range that may be dialled at all. Requiring
@@ -172,6 +173,25 @@ func (p *addrPolicy) permit(addrPort string) error {
 	return nil
 }
 
+// WireURL builds the one URL this process may fetch. Scheme, host, port and
+// path are constants; the query is only ever a value, escaped by url.Values.
+//
+// Never build this by concatenation. A '#' in a concatenated string silently
+// drops everything after it before the request is sent, so the operator would
+// approve one string and a different one would leave the machine — which is
+// the exact property the approval dialog exists to guarantee.
+func WireURL(query string) *url.URL {
+	return &url.URL{
+		Scheme:   "https",
+		Host:     searchHost,
+		Path:     searchPath,
+		RawQuery: url.Values{"q": {query}}.Encode(),
+	}
+}
+
+// Destination names where searches go, for the UI and the status endpoint.
+func Destination() string { return searchHost }
+
 // checkAuthority runs per request rather than per connection. Keep-alive and
 // HTTP/2 pooling mean a dial-time check is a backstop, not a gate: a second
 // request can ride a connection that was authorised for the first.
@@ -210,10 +230,30 @@ func hostIs(authority, want string) bool {
 	return h == want
 }
 
+// queryPunct is the punctuation a genuine search query needs. Everything
+// outside it, the letters and the digits is refused.
+const queryPunct = `-_.,:;!?'"()[]/+*=#@%&~$|<>`
+
 // ValidateQuery is the whole of what a model may put on the wire. It returns
 // the query to send, whether it looked blob-shaped, and an error if it cannot
 // be sent at all. The returned string is what is both sent and recorded — the
 // audit row must never differ from what left the machine.
+//
+// The rule is not "sanitise". It is that what the operator reads in the
+// approval dialog and what leaves this machine must be provably the same
+// string, so anything that can make a renderer disagree with the bytes is
+// REFUSED rather than stripped — stripping would change the string the
+// operator went on to approve.
+//
+// This is an allowlist because a denylist of dangerous runes cannot be
+// finished: unicode.IsControl only inspects runes up to U+00FF, so a denylist
+// built on it silently passes U+200B, U+FEFF, U+00AD, the bidi overrides at
+// U+202A–U+202E, and the whole U+E0000 tag block, which encodes arbitrary
+// ASCII in codepoints that render as nothing at all.
+//
+// Refusing combining marks outright also removes the need to normalise: two
+// spellings of the same visible text cannot both be accepted, so there is no
+// normalisation step where the checker and the display could diverge.
 func ValidateQuery(q string) (string, bool, error) {
 	q = strings.TrimSpace(q)
 	if q == "" {
@@ -222,10 +262,14 @@ func ValidateQuery(q string) (string, bool, error) {
 	if len([]rune(q)) > maxQueryRunes {
 		return "", false, errors.New("the search query is too long (256 characters maximum)")
 	}
-	for _, r := range q {
-		if r != ' ' && unicode.IsControl(r) {
-			return "", false, errors.New("the search query contains control characters")
+	for i, r := range q {
+		if r == ' ' || unicode.IsLetter(r) || unicode.IsNumber(r) || strings.ContainsRune(queryPunct, r) {
+			continue
 		}
+		// The offending codepoint is named, because a refusal a model cannot
+		// act on becomes a retry loop, and because an operator reading the
+		// audit log should see exactly what was attempted.
+		return "", false, fmt.Errorf("the search query is refused: character %U at offset %d is not printable text", r, i)
 	}
 
 	// A long unbroken run is what base64 and hex look like. Flagging rather
