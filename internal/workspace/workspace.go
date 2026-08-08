@@ -1,0 +1,396 @@
+// Package workspace owns workspaces, their agents, and the wires between
+// agents. Every workspace is created with its orchestrator agent — the
+// mandatory chat entry point.
+package workspace
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/orkcom-tech/cogitorium/internal/catalog"
+)
+
+var (
+	ErrNotFound = catalog.ErrNotFound
+	ErrConflict = catalog.ErrConflict
+)
+
+const OrchestratorName = "orchestrator"
+
+// DefaultOrchestratorRole seeds the orchestrator's editable system prompt.
+const DefaultOrchestratorRole = `You are the orchestrator of this workspace. You are the operator's single point of contact: everything they want done in this workspace goes through you.
+
+You can inspect the model catalog, create and configure worker agents (each with its own role and model), and delegate tasks to them. Prefer delegating specialized work to a fitting agent — create one if none fits. Report results back plainly and honestly; if an agent fails, say so and show why.`
+
+type Workspace struct {
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type Agent struct {
+	ID             int64  `json:"id"`
+	WorkspaceID    int64  `json:"workspace_id"`
+	Name           string `json:"name"`
+	Kind           string `json:"kind"`
+	Role           string `json:"role"`
+	ModelID        *int64 `json:"model_id"`
+	ModelLabel     string `json:"model_label"` // "provider / model" for display; empty if unbound
+	IsOrchestrator bool   `json:"is_orchestrator"`
+}
+
+type Wire struct {
+	ID          int64  `json:"id"`
+	WorkspaceID int64  `json:"workspace_id"`
+	FromAgentID int64  `json:"from_agent_id"`
+	ToAgentID   int64  `json:"to_agent_id"`
+	Label       string `json:"label"`
+}
+
+type Message struct {
+	ID          int64  `json:"id"`
+	WorkspaceID int64  `json:"workspace_id"`
+	AgentID     *int64 `json:"agent_id"` // nil = the operator
+	Kind        string `json:"kind"`
+	Content     string `json:"content"`
+	Meta        string `json:"meta"`
+	CreatedAt   string `json:"created_at"`
+}
+
+type Store struct {
+	db *sql.DB
+}
+
+func NewStore(db *sql.DB) *Store { return &Store{db: db} }
+
+func now() string { return time.Now().UTC().Format(time.RFC3339) }
+
+func asConflict(err error, what string) error {
+	if err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		return fmt.Errorf("%s: %w", what, ErrConflict)
+	}
+	return err
+}
+
+// CreateWorkspace creates the workspace and its orchestrator agent bound to
+// orchestratorModelID in one transaction.
+func (s *Store) CreateWorkspace(ctx context.Context, name, description string, orchestratorModelID int64) (Workspace, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Workspace{}, errors.New("name is required")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Workspace{}, fmt.Errorf("create workspace: begin: %w", err)
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO workspaces (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+		name, description, now(), now())
+	if err := asConflict(err, fmt.Sprintf("workspace %q", name)); err != nil {
+		return Workspace{}, fmt.Errorf("create workspace: %w", err)
+	}
+	wsID, _ := res.LastInsertId()
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO agents (workspace_id, name, kind, role, model_id, is_orchestrator, created_at, updated_at)
+		 VALUES (?, ?, 'model', ?, ?, 1, ?, ?)`,
+		wsID, OrchestratorName, DefaultOrchestratorRole, orchestratorModelID, now(), now()); err != nil {
+		return Workspace{}, fmt.Errorf("create workspace: seed orchestrator: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return Workspace{}, fmt.Errorf("create workspace: commit: %w", err)
+	}
+	slog.Info("workspace created with orchestrator", "id", wsID, "name", name, "orchestrator_model_id", orchestratorModelID)
+	return Workspace{ID: wsID, Name: name, Description: description}, nil
+}
+
+func (s *Store) GetWorkspace(ctx context.Context, id int64) (Workspace, error) {
+	var w Workspace
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, name, description FROM workspaces WHERE id = ?`, id).
+		Scan(&w.ID, &w.Name, &w.Description)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Workspace{}, fmt.Errorf("workspace %d: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return Workspace{}, fmt.Errorf("get workspace %d: %w", id, err)
+	}
+	return w, nil
+}
+
+func (s *Store) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description FROM workspaces ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("list workspaces: %w", err)
+	}
+	defer rows.Close()
+	out := []Workspace{}
+	for rows.Next() {
+		var w Workspace
+		if err := rows.Scan(&w.ID, &w.Name, &w.Description); err != nil {
+			return nil, fmt.Errorf("scan workspace: %w", err)
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DeleteWorkspace(ctx context.Context, id int64) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM workspaces WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete workspace %d: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("workspace %d: %w", id, ErrNotFound)
+	}
+	slog.Info("workspace deleted (agents, wires, messages cascade)", "id", id)
+	return nil
+}
+
+const agentSelect = `
+	SELECT a.id, a.workspace_id, a.name, a.kind, a.role, a.model_id, a.is_orchestrator,
+	       COALESCE(p.name || ' / ' || COALESCE(NULLIF(m.label, ''), m.model_name), '')
+	FROM agents a
+	LEFT JOIN models m ON m.id = a.model_id
+	LEFT JOIN providers p ON p.id = m.provider_id`
+
+func scanAgent(row interface{ Scan(...any) error }) (Agent, error) {
+	var a Agent
+	var orch int
+	if err := row.Scan(&a.ID, &a.WorkspaceID, &a.Name, &a.Kind, &a.Role, &a.ModelID, &orch, &a.ModelLabel); err != nil {
+		return Agent{}, err
+	}
+	a.IsOrchestrator = orch == 1
+	return a, nil
+}
+
+func (s *Store) CreateAgent(ctx context.Context, wsID int64, name, role string, modelID int64) (Agent, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Agent{}, errors.New("name is required")
+	}
+	if _, err := s.GetWorkspace(ctx, wsID); err != nil {
+		return Agent{}, err
+	}
+
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO agents (workspace_id, name, kind, role, model_id, is_orchestrator, created_at, updated_at)
+		 VALUES (?, ?, 'model', ?, ?, 0, ?, ?)`,
+		wsID, name, role, modelID, now(), now())
+	if err := asConflict(err, fmt.Sprintf("agent %q in this workspace", name)); err != nil {
+		return Agent{}, fmt.Errorf("create agent: %w", err)
+	}
+	id, _ := res.LastInsertId()
+	slog.Info("agent created", "id", id, "workspace_id", wsID, "name", name, "model_id", modelID)
+	return s.GetAgent(ctx, id)
+}
+
+func (s *Store) GetAgent(ctx context.Context, id int64) (Agent, error) {
+	a, err := scanAgent(s.db.QueryRowContext(ctx, agentSelect+` WHERE a.id = ?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Agent{}, fmt.Errorf("agent %d: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return Agent{}, fmt.Errorf("get agent %d: %w", id, err)
+	}
+	return a, nil
+}
+
+// GetAgentByName resolves an agent by its name within a workspace — the
+// handle the orchestrator's tools use.
+func (s *Store) GetAgentByName(ctx context.Context, wsID int64, name string) (Agent, error) {
+	a, err := scanAgent(s.db.QueryRowContext(ctx, agentSelect+` WHERE a.workspace_id = ? AND a.name = ?`, wsID, name))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Agent{}, fmt.Errorf("agent %q: %w", name, ErrNotFound)
+	}
+	if err != nil {
+		return Agent{}, fmt.Errorf("get agent %q: %w", name, err)
+	}
+	return a, nil
+}
+
+func (s *Store) ListAgents(ctx context.Context, wsID int64) ([]Agent, error) {
+	rows, err := s.db.QueryContext(ctx, agentSelect+` WHERE a.workspace_id = ? ORDER BY a.is_orchestrator DESC, a.name`, wsID)
+	if err != nil {
+		return nil, fmt.Errorf("list agents: %w", err)
+	}
+	defer rows.Close()
+	out := []Agent{}
+	for rows.Next() {
+		a, err := scanAgent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan agent: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// UpdateAgent patches non-nil fields. The orchestrator's name is fixed;
+// its role and model are editable.
+func (s *Store) UpdateAgent(ctx context.Context, id int64, name, role *string, modelID *int64) (Agent, error) {
+	a, err := s.GetAgent(ctx, id)
+	if err != nil {
+		return Agent{}, err
+	}
+	if name != nil {
+		if a.IsOrchestrator {
+			return Agent{}, errors.New("the orchestrator cannot be renamed")
+		}
+		a.Name = strings.TrimSpace(*name)
+		if a.Name == "" {
+			return Agent{}, errors.New("name cannot be empty")
+		}
+	}
+	if role != nil {
+		a.Role = *role
+	}
+	mid := a.ModelID
+	if modelID != nil {
+		mid = modelID
+	}
+
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE agents SET name = ?, role = ?, model_id = ?, updated_at = ? WHERE id = ?`,
+		a.Name, a.Role, mid, now(), id)
+	if err := asConflict(err, fmt.Sprintf("agent %q in this workspace", a.Name)); err != nil {
+		return Agent{}, fmt.Errorf("update agent %d: %w", id, err)
+	}
+	slog.Info("agent updated", "id", id, "name", a.Name, "model_changed", modelID != nil)
+	return s.GetAgent(ctx, id)
+}
+
+func (s *Store) DeleteAgent(ctx context.Context, id int64) error {
+	a, err := s.GetAgent(ctx, id)
+	if err != nil {
+		return err
+	}
+	if a.IsOrchestrator {
+		return errors.New("the orchestrator cannot be deleted — it is the workspace entry point")
+	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM agents WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("delete agent %d: %w", id, err)
+	}
+	slog.Info("agent deleted", "id", id, "name", a.Name)
+	return nil
+}
+
+func (s *Store) CreateWire(ctx context.Context, wsID, fromAgentID, toAgentID int64, label string) (Wire, error) {
+	if fromAgentID == toAgentID {
+		return Wire{}, errors.New("an agent cannot be wired to itself")
+	}
+	for _, id := range []int64{fromAgentID, toAgentID} {
+		a, err := s.GetAgent(ctx, id)
+		if err != nil {
+			return Wire{}, err
+		}
+		if a.WorkspaceID != wsID {
+			return Wire{}, fmt.Errorf("agent %d belongs to another workspace", id)
+		}
+	}
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO wires (workspace_id, from_agent_id, to_agent_id, label, created_at) VALUES (?, ?, ?, ?, ?)`,
+		wsID, fromAgentID, toAgentID, label, now())
+	if err := asConflict(err, "wire"); err != nil {
+		return Wire{}, fmt.Errorf("create wire: %w", err)
+	}
+	id, _ := res.LastInsertId()
+	slog.Info("wire created", "id", id, "workspace_id", wsID, "from", fromAgentID, "to", toAgentID)
+	return Wire{ID: id, WorkspaceID: wsID, FromAgentID: fromAgentID, ToAgentID: toAgentID, Label: label}, nil
+}
+
+func (s *Store) ListWires(ctx context.Context, wsID int64) ([]Wire, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, workspace_id, from_agent_id, to_agent_id, label FROM wires WHERE workspace_id = ? ORDER BY id`, wsID)
+	if err != nil {
+		return nil, fmt.Errorf("list wires: %w", err)
+	}
+	defer rows.Close()
+	out := []Wire{}
+	for rows.Next() {
+		var w Wire
+		if err := rows.Scan(&w.ID, &w.WorkspaceID, &w.FromAgentID, &w.ToAgentID, &w.Label); err != nil {
+			return nil, fmt.Errorf("scan wire: %w", err)
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DeleteWire(ctx context.Context, id int64) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM wires WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete wire %d: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("wire %d: %w", id, ErrNotFound)
+	}
+	slog.Info("wire deleted", "id", id)
+	return nil
+}
+
+// AppendMessage persists one timeline entry and returns it.
+func (s *Store) AppendMessage(ctx context.Context, wsID int64, agentID *int64, kind, content, meta string) (Message, error) {
+	if meta == "" {
+		meta = "{}"
+	}
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO ws_messages (workspace_id, agent_id, kind, content, meta, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		wsID, agentID, kind, content, meta, now())
+	if err != nil {
+		return Message{}, fmt.Errorf("append message: %w", err)
+	}
+	id, _ := res.LastInsertId()
+	var m Message
+	err = s.db.QueryRowContext(ctx,
+		`SELECT id, workspace_id, agent_id, kind, content, meta, created_at FROM ws_messages WHERE id = ?`, id).
+		Scan(&m.ID, &m.WorkspaceID, &m.AgentID, &m.Kind, &m.Content, &m.Meta, &m.CreatedAt)
+	if err != nil {
+		return Message{}, fmt.Errorf("read back message %d: %w", id, err)
+	}
+	return m, nil
+}
+
+// ListMessages returns the workspace timeline, optionally filtered to one
+// agent (the per-agent activity view), oldest first.
+func (s *Store) ListMessages(ctx context.Context, wsID int64, agentID *int64, limit int) ([]Message, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 500
+	}
+	q := `SELECT id, workspace_id, agent_id, kind, content, meta, created_at FROM ws_messages WHERE workspace_id = ?`
+	args := []any{wsID}
+	if agentID != nil {
+		q += ` AND agent_id = ?`
+		args = append(args, *agentID)
+	}
+	q += ` ORDER BY id DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list messages: %w", err)
+	}
+	defer rows.Close()
+	out := []Message{}
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.WorkspaceID, &m.AgentID, &m.Kind, &m.Content, &m.Meta, &m.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan message: %w", err)
+		}
+		out = append(out, m)
+	}
+	// Reverse to oldest-first for display.
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out, rows.Err()
+}

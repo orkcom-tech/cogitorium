@@ -14,18 +14,29 @@ import (
 	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
+	"github.com/orkcom-tech/cogitorium/internal/engine"
 	"github.com/orkcom-tech/cogitorium/internal/version"
+	"github.com/orkcom-tech/cogitorium/internal/workspace"
 	"github.com/orkcom-tech/cogitorium/web"
 )
 
 type Server struct {
-	db      *sql.DB
-	catalog *catalog.Store
-	http    *http.Server
+	db         *sql.DB
+	catalog    *catalog.Store
+	workspaces *workspace.Store
+	engine     *engine.Engine
+	http       *http.Server
 }
 
 func New(listen string, db *sql.DB) *Server {
-	s := &Server{db: db, catalog: catalog.NewStore(db)}
+	cat := catalog.NewStore(db)
+	ws := workspace.NewStore(db)
+	s := &Server{
+		db:         db,
+		catalog:    cat,
+		workspaces: ws,
+		engine:     engine.New(ws, cat),
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.handleHealth)
@@ -41,6 +52,21 @@ func New(listen string, db *sql.DB) *Server {
 	mux.HandleFunc("DELETE /api/v1/models/{id}", s.handleDeleteModel)
 
 	mux.HandleFunc("POST /api/v1/chat", s.handleChat)
+
+	mux.HandleFunc("GET /api/v1/workspaces", s.handleListWorkspaces)
+	mux.HandleFunc("POST /api/v1/workspaces", s.handleCreateWorkspace)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}", s.handleGetWorkspace)
+	mux.HandleFunc("DELETE /api/v1/workspaces/{id}", s.handleDeleteWorkspace)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/agents", s.handleListAgents)
+	mux.HandleFunc("POST /api/v1/workspaces/{id}/agents", s.handleCreateAgent)
+	mux.HandleFunc("PATCH /api/v1/agents/{id}", s.handleUpdateAgent)
+	mux.HandleFunc("DELETE /api/v1/agents/{id}", s.handleDeleteAgent)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/wires", s.handleListWires)
+	mux.HandleFunc("POST /api/v1/workspaces/{id}/wires", s.handleCreateWire)
+	mux.HandleFunc("DELETE /api/v1/wires/{id}", s.handleDeleteWire)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/messages", s.handleListWSMessages)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/status", s.handleWorkspaceStatus)
+	mux.HandleFunc("POST /api/v1/workspaces/{id}/chat", s.handleWorkspaceChat)
 
 	// Unmatched /api/* must answer JSON, not fall through to the SPA —
 	// otherwise wrong-method or typo'd API calls get 200 + index.html.

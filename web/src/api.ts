@@ -46,6 +46,105 @@ export const api = {
       req<Model>('/api/v1/models', { method: 'POST', body: JSON.stringify(m) }),
     remove: (id: number) => req<void>(`/api/v1/models/${id}`, { method: 'DELETE' }),
   },
+  workspaces: {
+    list: () => req<Workspace[]>('/api/v1/workspaces'),
+    get: (id: number) => req<Workspace>(`/api/v1/workspaces/${id}`),
+    create: (w: { name: string; description: string; orchestrator_model_id: number }) =>
+      req<Workspace>('/api/v1/workspaces', { method: 'POST', body: JSON.stringify(w) }),
+    remove: (id: number) => req<void>(`/api/v1/workspaces/${id}`, { method: 'DELETE' }),
+    agents: (id: number) => req<Agent[]>(`/api/v1/workspaces/${id}/agents`),
+    createAgent: (id: number, a: { name: string; role: string; model_id: number }) =>
+      req<Agent>(`/api/v1/workspaces/${id}/agents`, { method: 'POST', body: JSON.stringify(a) }),
+    messages: (id: number, agentId?: number) =>
+      req<WSMessage[]>(`/api/v1/workspaces/${id}/messages${agentId ? `?agent_id=${agentId}` : ''}`),
+    status: (id: number) => req<AgentStatus[]>(`/api/v1/workspaces/${id}/status`),
+  },
+  agents: {
+    update: (id: number, patch: { name?: string; role?: string; model_id?: number }) =>
+      req<Agent>(`/api/v1/agents/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+    remove: (id: number) => req<void>(`/api/v1/agents/${id}`, { method: 'DELETE' }),
+  },
+}
+
+// wsChatStream sends one operator message into a workspace and feeds every
+// engine event (messages, deltas, statuses) back until done/error.
+export async function wsChatStream(
+  workspaceId: number,
+  text: string,
+  onEvent: (ev: WSEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const r = await fetch(`/api/v1/workspaces/${workspaceId}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+    signal,
+  })
+  if (!r.ok || !r.body) {
+    const body = await r.json().catch(() => null)
+    throw new Error(body?.error?.message ?? `${r.status} ${r.statusText}`)
+  }
+
+  const reader = r.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) return
+    buf += decoder.decode(value, { stream: true })
+    for (;;) {
+      const sep = buf.indexOf('\n\n')
+      if (sep === -1) break
+      const block = buf.slice(0, sep)
+      buf = buf.slice(sep + 2)
+      const data = block
+        .split('\n')
+        .filter((l) => l.startsWith('data: '))
+        .map((l) => l.slice(6))
+        .join('\n')
+      if (!data) continue
+      const ev = JSON.parse(data) as WSEvent
+      onEvent(ev)
+      if (ev.type === 'error' && ev.error) throw new Error(ev.error)
+      if (ev.type === 'done') return
+    }
+  }
+}
+
+export type Workspace = { id: number; name: string; description: string }
+
+export type Agent = {
+  id: number
+  workspace_id: number
+  name: string
+  kind: string
+  role: string
+  model_id: number | null
+  model_label: string
+  is_orchestrator: boolean
+}
+
+export type Wire = { id: number; workspace_id: number; from_agent_id: number; to_agent_id: number; label: string }
+
+export type WSMessage = {
+  id: number
+  workspace_id: number
+  agent_id: number | null
+  kind: 'user' | 'assistant' | 'tool_call' | 'tool_result' | 'delegation' | 'error'
+  content: string
+  meta: string
+  created_at: string
+}
+
+export type AgentStatus = { agent_id: number; state: string; detail: string; since?: string }
+
+export type WSEvent = {
+  type: 'message' | 'delta' | 'status' | 'done' | 'error'
+  message?: WSMessage
+  agent_id?: number
+  text?: string
+  status?: AgentStatus
+  error?: string
 }
 
 export type ChatStreamResult = { truncated: boolean; stopReason: string }

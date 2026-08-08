@@ -1,0 +1,196 @@
+package engine
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"strings"
+
+	"github.com/orkcom-tech/cogitorium/internal/llm"
+	"github.com/orkcom-tech/cogitorium/internal/workspace"
+)
+
+// toolDefs are the orchestrator's built-in tools. Gears (agent-forged
+// tools) will join this list in Phase 5; wires gate delegation in Phase 4.
+func toolDefs() []llm.Tool {
+	obj := func(props map[string]any, required ...string) map[string]any {
+		s := map[string]any{"type": "object", "properties": props}
+		if len(required) > 0 {
+			s["required"] = required
+		}
+		return s
+	}
+	str := func(desc string) map[string]any {
+		return map[string]any{"type": "string", "description": desc}
+	}
+
+	return []llm.Tool{
+		{
+			Name:        "models_list",
+			Description: "List the models available in the catalog. Use the returned model_name when creating or re-binding agents.",
+			InputSchema: obj(map[string]any{}),
+		},
+		{
+			Name:        "agent_list",
+			Description: "List this workspace's agents with their roles and models.",
+			InputSchema: obj(map[string]any{}),
+		},
+		{
+			Name:        "agent_create",
+			Description: "Create a new worker agent in this workspace with a role (its system prompt) and a model from the catalog.",
+			InputSchema: obj(map[string]any{
+				"name":  str("short unique agent name, e.g. 'researcher'"),
+				"role":  str("the agent's system prompt: who it is, how it works, what it optimizes for"),
+				"model": str("catalog model to bind: model_name (preferred), label, or 'provider / model_name'"),
+			}, "name", "role", "model"),
+		},
+		{
+			Name:        "agent_update",
+			Description: "Update an existing agent's role and/or model.",
+			InputSchema: obj(map[string]any{
+				"name":  str("name of the agent to update"),
+				"role":  str("new system prompt (omit to keep)"),
+				"model": str("new catalog model (omit to keep)"),
+			}, "name"),
+		},
+		{
+			Name:        "delegate",
+			Description: "Delegate a task to another agent in this workspace and get its answer back. Give the full task context — the agent sees only its role and your task text.",
+			InputSchema: obj(map[string]any{
+				"agent": str("name of the agent to delegate to"),
+				"task":  str("the complete task, self-contained"),
+			}, "agent", "task"),
+		},
+	}
+}
+
+// execTool runs one orchestrator tool call and returns (output, isError).
+// Tool failures are results for the model to react to, not turn aborts.
+func (e *Engine) execTool(ctx context.Context, wsID int64, orch workspace.Agent, call llm.ToolCall, emit func(Event)) (string, bool) {
+	slog.Info("tool call", "workspace_id", wsID, "tool", call.Name, "input", call.InputJSON)
+	e.setStatus(orch.ID, "working", call.Name, emit)
+
+	out, err := e.dispatchTool(ctx, wsID, orch, call, emit)
+	if err != nil {
+		slog.Warn("tool call failed", "workspace_id", wsID, "tool", call.Name, "err", err)
+		return err.Error(), true
+	}
+	return out, false
+}
+
+func (e *Engine) dispatchTool(ctx context.Context, wsID int64, orch workspace.Agent, call llm.ToolCall, emit func(Event)) (string, error) {
+	var args struct {
+		Name  string `json:"name"`
+		Role  string `json:"role"`
+		Model string `json:"model"`
+		Agent string `json:"agent"`
+		Task  string `json:"task"`
+	}
+	if call.InputJSON != "" {
+		if err := json.Unmarshal([]byte(call.InputJSON), &args); err != nil {
+			return "", fmt.Errorf("tool %s: arguments are not valid JSON: %w", call.Name, err)
+		}
+	}
+
+	switch call.Name {
+	case "models_list":
+		models, err := e.cat.ListModels(ctx)
+		if err != nil {
+			return "", err
+		}
+		return marshal(models)
+
+	case "agent_list":
+		agents, err := e.ws.ListAgents(ctx, wsID)
+		if err != nil {
+			return "", err
+		}
+		return marshal(agents)
+
+	case "agent_create":
+		modelID, err := e.resolveModel(ctx, args.Model)
+		if err != nil {
+			return "", err
+		}
+		agent, err := e.ws.CreateAgent(ctx, wsID, args.Name, args.Role, modelID)
+		if err != nil {
+			return "", err
+		}
+		return marshal(agent)
+
+	case "agent_update":
+		target, err := e.ws.GetAgentByName(ctx, wsID, args.Name)
+		if err != nil {
+			return "", err
+		}
+		var rolePtr *string
+		if args.Role != "" {
+			rolePtr = &args.Role
+		}
+		var modelPtr *int64
+		if args.Model != "" {
+			id, err := e.resolveModel(ctx, args.Model)
+			if err != nil {
+				return "", err
+			}
+			modelPtr = &id
+		}
+		agent, err := e.ws.UpdateAgent(ctx, target.ID, nil, rolePtr, modelPtr)
+		if err != nil {
+			return "", err
+		}
+		return marshal(agent)
+
+	case "delegate":
+		if strings.TrimSpace(args.Task) == "" {
+			return "", fmt.Errorf("delegate: task must not be empty")
+		}
+		return e.delegate(ctx, wsID, orch, args.Agent, args.Task, emit)
+
+	default:
+		return "", fmt.Errorf("unknown tool %q", call.Name)
+	}
+}
+
+// resolveModel maps a model reference the orchestrator gives (model_name,
+// label, or "provider / model_name") to a catalog id. Ambiguity and misses
+// return an error listing what exists, so the model can self-correct.
+func (e *Engine) resolveModel(ctx context.Context, ref string) (int64, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return 0, fmt.Errorf("model reference is required")
+	}
+	models, err := e.cat.ListModels(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	var matches []int64
+	for _, m := range models {
+		display := m.ProviderName + " / " + m.ModelName
+		if strings.EqualFold(m.ModelName, ref) || strings.EqualFold(m.Label, ref) || strings.EqualFold(display, ref) {
+			matches = append(matches, m.ID)
+		}
+	}
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		available := make([]string, 0, len(models))
+		for _, m := range models {
+			available = append(available, m.ProviderName+" / "+m.ModelName)
+		}
+		return 0, fmt.Errorf("no catalog model matches %q; available: %s", ref, strings.Join(available, ", "))
+	default:
+		return 0, fmt.Errorf("model reference %q is ambiguous (%d matches) — use 'provider / model_name'", ref, len(matches))
+	}
+}
+
+func marshal(v any) (string, error) {
+	raw, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshal tool result: %w", err)
+	}
+	return string(raw), nil
+}

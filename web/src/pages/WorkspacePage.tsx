@@ -1,0 +1,413 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import {
+  api,
+  wsChatStream,
+  type Agent,
+  type AgentStatus,
+  type Model,
+  type WSMessage,
+  type Workspace,
+} from '../api'
+
+export default function WorkspacePage() {
+  const { id } = useParams()
+  const wsId = Number(id)
+
+  const [workspace, setWorkspace] = useState<Workspace | null>(null)
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [models, setModels] = useState<Model[]>([])
+  const [messages, setMessages] = useState<WSMessage[]>([])
+  const [statuses, setStatuses] = useState<Map<number, AgentStatus>>(new Map())
+  const [streams, setStreams] = useState<Map<number, string>>(new Map())
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+
+  const reloadAgents = useCallback(
+    () => api.workspaces.agents(wsId).then(setAgents).catch((e: Error) => setError(e.message)),
+    [wsId],
+  )
+
+  useEffect(() => {
+    Promise.all([
+      api.workspaces.get(wsId),
+      api.workspaces.agents(wsId),
+      api.models.list(),
+      api.workspaces.messages(wsId),
+      api.workspaces.status(wsId),
+    ])
+      .then(([w, a, m, msgs, sts]) => {
+        setWorkspace(w)
+        setAgents(a)
+        setModels(m)
+        setMessages(msgs)
+        setStatuses(new Map(sts.map((s) => [s.agent_id, s])))
+      })
+      .catch((e: Error) => setError(e.message))
+  }, [wsId])
+
+  useEffect(() => () => abortRef.current?.abort(), [])
+
+  const send = async (text: string) => {
+    setBusy(true)
+    setError(null)
+    const ac = new AbortController()
+    abortRef.current = ac
+    try {
+      await wsChatStream(
+        wsId,
+        text,
+        (ev) => {
+          if (ev.type === 'message' && ev.message) {
+            const msg = ev.message
+            setMessages((m) => [...m, msg])
+            // A persisted message replaces that agent's live stream buffer.
+            if (msg.agent_id != null)
+              setStreams((s) => {
+                const next = new Map(s)
+                next.delete(msg.agent_id!)
+                return next
+              })
+          }
+          if (ev.type === 'delta' && ev.agent_id != null) {
+            const agentId = ev.agent_id
+            setStreams((s) => {
+              const next = new Map(s)
+              next.set(agentId, (next.get(agentId) ?? '') + (ev.text ?? ''))
+              return next
+            })
+          }
+          if (ev.type === 'status' && ev.status) {
+            const st = ev.status
+            setStatuses((s) => new Map(s).set(st.agent_id, st))
+            // A status for an agent we don't know yet means the orchestrator
+            // just created one.
+            if (!agents.some((a) => a.id === st.agent_id)) void reloadAgents()
+          }
+        },
+        ac.signal,
+      )
+    } catch (err) {
+      if (!ac.signal.aborted) setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      abortRef.current = null
+      setBusy(false)
+      setStreams(new Map())
+      void reloadAgents()
+      void api.workspaces.status(wsId).then((sts) => setStatuses(new Map(sts.map((s) => [s.agent_id, s]))))
+    }
+  }
+
+  if (!workspace) {
+    return (
+      <div className="page">
+        {error ? <p className="error">{error}</p> : <p className="hint">loading…</p>}
+      </div>
+    )
+  }
+
+  const agentName = (id: number | null) =>
+    id == null ? 'you' : agents.find((a) => a.id === id)?.name ?? `agent #${id}`
+
+  return (
+    <div className="ws-layout">
+      <div className="ws-main">
+        <div className="ws-head">
+          <Link to="/workspaces" className="muted">
+            ← workspaces
+          </Link>
+          <h2>{workspace.name}</h2>
+          <span className="muted">{workspace.description}</span>
+        </div>
+        {selectedAgent ? (
+          <AgentPanel
+            agent={selectedAgent}
+            models={models}
+            wsId={wsId}
+            status={statuses.get(selectedAgent.id)}
+            onClose={() => setSelectedAgent(null)}
+            onChanged={(a) => {
+              setSelectedAgent(a)
+              void reloadAgents()
+            }}
+            onError={setError}
+          />
+        ) : (
+          <Timeline messages={messages} streams={streams} agentName={agentName} busy={busy} />
+        )}
+        {error && <p className="error">{error}</p>}
+        {!selectedAgent && <Composer busy={busy} onSend={send} onStop={() => abortRef.current?.abort()} />}
+      </div>
+      <aside className="ws-agents">
+        <h3>Agents</h3>
+        {agents.map((a) => {
+          const st = statuses.get(a.id)
+          const state = st?.state ?? 'idle'
+          return (
+            <button key={a.id} className={`agent-row ${selectedAgent?.id === a.id ? 'selected' : ''}`} onClick={() => setSelectedAgent(a)}>
+              <span className={`dot ${state}`} title={state + (st?.detail ? `: ${st.detail}` : '')} />
+              <span className="agent-name">
+                {a.name}
+                {a.is_orchestrator && <span className="muted"> ★</span>}
+              </span>
+              <span className="muted agent-model">{a.model_label || 'no model'}</span>
+            </button>
+          )
+        })}
+      </aside>
+    </div>
+  )
+}
+
+function Timeline({
+  messages,
+  streams,
+  agentName,
+  busy,
+}: {
+  messages: WSMessage[]
+  streams: Map<number, string>
+  agentName: (id: number | null) => string
+  busy: boolean
+}) {
+  const bottom = useRef<HTMLDivElement>(null)
+  useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [messages, streams])
+
+  return (
+    <div className="transcript">
+      {messages.length === 0 && !busy && (
+        <p className="hint">
+          This is the workspace entry point: talk to the orchestrator. It can create agents, configure them, and
+          delegate work.
+        </p>
+      )}
+      {messages.map((m) => (
+        <MessageRow key={m.id} m={m} agentName={agentName} />
+      ))}
+      {[...streams.entries()].map(([agentId, text]) =>
+        text ? (
+          <div key={`stream-${agentId}`} className="msg assistant">
+            <span className="msg-role">{agentName(agentId)}</span>
+            <div className="msg-body">{text}▍</div>
+          </div>
+        ) : null,
+      )}
+      <div ref={bottom} />
+    </div>
+  )
+}
+
+function MessageRow({ m, agentName }: { m: WSMessage; agentName: (id: number | null) => string }) {
+  switch (m.kind) {
+    case 'user':
+      return (
+        <div className="msg user">
+          <span className="msg-role">you</span>
+          <div className="msg-body">{m.content}</div>
+        </div>
+      )
+    case 'assistant': {
+      let calls: { name: string }[] = []
+      try {
+        calls = (JSON.parse(m.meta)?.tool_calls as { Name?: string; name?: string }[])?.map((c) => ({
+          name: c.Name ?? c.name ?? '?',
+        })) ?? []
+      } catch {
+        /* display-only */
+      }
+      if (!m.content && calls.length === 0) return null
+      return (
+        <div className="msg assistant">
+          <span className="msg-role">{agentName(m.agent_id)}</span>
+          <div className="msg-body">
+            {m.content}
+            {calls.length > 0 && (
+              <span className="tool-chips">
+                {calls.map((c, i) => (
+                  <code key={i} className="chip">
+                    ⚙ {c.name}
+                  </code>
+                ))}
+              </span>
+            )}
+          </div>
+        </div>
+      )
+    }
+    case 'tool_result': {
+      let name = 'tool'
+      let isErr = false
+      try {
+        const meta = JSON.parse(m.meta)
+        name = meta?.name ?? 'tool'
+        isErr = !!meta?.is_error
+      } catch {
+        /* display-only */
+      }
+      return (
+        <details className={`msg-tool ${isErr ? 'tool-error' : ''}`}>
+          <summary>
+            {isErr ? '✗' : '✓'} {name}
+          </summary>
+          <pre>{m.content}</pre>
+        </details>
+      )
+    }
+    case 'delegation':
+      return (
+        <div className="msg delegation">
+          <span className="msg-role">{agentName(m.agent_id)}</span>
+          <div className="msg-body">{m.content}</div>
+        </div>
+      )
+    case 'error':
+      return <p className="error">✗ {m.content}</p>
+    default:
+      return null
+  }
+}
+
+function Composer({ busy, onSend, onStop }: { busy: boolean; onSend: (text: string) => void; onStop: () => void }) {
+  const [input, setInput] = useState('')
+  return (
+    <form
+      className="row"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (!input.trim() || busy) return
+        onSend(input.trim())
+        setInput('')
+      }}
+    >
+      <input
+        className="grow"
+        placeholder="tell the orchestrator what you need…"
+        value={input}
+        disabled={busy}
+        onChange={(e) => setInput(e.target.value)}
+      />
+      {busy ? (
+        <button type="button" onClick={onStop}>
+          stop
+        </button>
+      ) : (
+        <button type="submit" disabled={!input.trim()}>
+          send
+        </button>
+      )}
+    </form>
+  )
+}
+
+// AgentPanel is the per-agent view: identity, role editor, model binding,
+// and this agent's own activity trail.
+function AgentPanel({
+  agent,
+  models,
+  wsId,
+  status,
+  onClose,
+  onChanged,
+  onError,
+}: {
+  agent: Agent
+  models: Model[]
+  wsId: number
+  status?: AgentStatus
+  onClose: () => void
+  onChanged: (a: Agent) => void
+  onError: (msg: string) => void
+}) {
+  const [role, setRole] = useState(agent.role)
+  const [modelId, setModelId] = useState<number | ''>(agent.model_id ?? '')
+  const [activity, setActivity] = useState<WSMessage[]>([])
+
+  useEffect(() => {
+    setRole(agent.role)
+    setModelId(agent.model_id ?? '')
+    api.workspaces
+      .messages(wsId, agent.id)
+      .then(setActivity)
+      .catch((e: Error) => onError(e.message))
+  }, [agent, wsId, onError])
+
+  const dirty = role !== agent.role || modelId !== (agent.model_id ?? '')
+
+  return (
+    <div className="agent-panel">
+      <div className="card-head">
+        <strong>{agent.name}</strong>
+        {agent.is_orchestrator && <span className="muted">orchestrator — the workspace entry point</span>}
+        <span className="muted">
+          {status && status.state !== 'idle' ? `${status.state}${status.detail ? `: ${status.detail}` : ''}` : 'idle'}
+        </span>
+        <span className="spacer" />
+        {!agent.is_orchestrator && (
+          <button
+            className="danger"
+            onClick={() => {
+              if (confirm(`Delete agent "${agent.name}"?`))
+                api.agents
+                  .remove(agent.id)
+                  .then(() => {
+                    onChanged(agent)
+                    onClose()
+                  })
+                  .catch((e: Error) => onError(e.message))
+            }}
+          >
+            delete
+          </button>
+        )}
+        <button onClick={onClose}>back to chat</button>
+      </div>
+
+      <label className="field">
+        <span className="muted">model</span>
+        <select value={modelId} onChange={(e) => setModelId(e.target.value ? Number(e.target.value) : '')}>
+          <option value="">no model</option>
+          {models.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.provider_name} / {m.label || m.model_name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="field">
+        <span className="muted">role (system prompt)</span>
+        <textarea rows={8} value={role} onChange={(e) => setRole(e.target.value)} />
+      </label>
+
+      <div className="row">
+        <button
+          disabled={!dirty}
+          onClick={() => {
+            const patch: { role?: string; model_id?: number } = {}
+            if (role !== agent.role) patch.role = role
+            if (modelId !== '' && modelId !== agent.model_id) patch.model_id = modelId
+            api.agents
+              .update(agent.id, patch)
+              .then(onChanged)
+              .catch((e: Error) => onError(e.message))
+          }}
+        >
+          save
+        </button>
+      </div>
+
+      <h3>Activity</h3>
+      {activity.length === 0 ? (
+        <p className="hint">Nothing yet — this agent hasn't produced or done anything.</p>
+      ) : (
+        <div className="transcript agent-activity">
+          {activity.map((m) => (
+            <MessageRow key={m.id} m={m} agentName={() => agent.name} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
