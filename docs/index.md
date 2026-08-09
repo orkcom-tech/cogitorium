@@ -32,7 +32,6 @@ command; an archive brings nothing and says as much.
 | Docker | `docker compose up --build` | yes, in the image |
 | deb / rpm | from the [releases page](https://github.com/orkcom-tech/cogitorium/releases) | recommends it |
 | winget | `winget install OrkcomTech.Cogitorium` | declared, not resolved |
-| Desktop app | installers attached to each release | yes, bundled |
 | Archive | download and unpack | no |
 | Source | `make build` | no |
 
@@ -272,6 +271,8 @@ the editor; the conversation and the shell stay, because watching a turn while
 editing what it produced is why both are on screen. Nothing is destroyed —
 every panel put away is one chip away in the top bar, and the editor floats out
 into its own window like any other panel.
+
+![Unsaved edits, shown as a diff against what is on disk](assets/12-diff.png)
 
 **Diffs.** With unsaved edits open, **changes** shows them against what is on
 disk — two line-number columns, a sign column, and long runs of unchanged lines

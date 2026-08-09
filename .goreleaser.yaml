@@ -100,7 +100,7 @@ release:
     Cogitorium {{ .Tag }} — a workbench for agentic development.
 
     Install with Homebrew, Scoop, a Linux package, Docker, or the archive for
-    your platform below. Desktop applications are attached separately.
+    your platform below.
   footer: |
     **Verifying a download**
 

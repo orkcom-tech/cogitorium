@@ -96,9 +96,6 @@ systemd unit. They recommend `contextd` rather than requiring it, because it
 ships from GitHub rather than a distribution repository; the postinstall says
 what to run.
 
-**Desktop applications** for macOS, Windows and Linux are attached to each
-release.
-
 **From source** — Go ≥1.25 and Node ≥22; Docker if you want gears and the
 terminal sandboxed:
 
@@ -140,6 +137,8 @@ diff against what is on disk. A gear past its first version diffs against the
 previous one — an approval covers exact content, so what you want before
 approving is what changed. All of it is written in the product rather than
 installed: no highlighter library, no diff library, no editor component.
+
+![Unsaved edits, shown as a diff against what is on disk](docs/assets/12-diff.png)
 
 Nothing has to be docked at all. Any panel can be pulled off the grid into a
 window you move, resize, roll up or close.
