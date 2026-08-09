@@ -308,28 +308,39 @@ export default function WorkspacePage() {
       title: 'Agents',
       home: 'right',
       node: (
-        <div className="bn-body bn-scroll">
+        <div className="bn-body bn-scroll agent-cards">
           {agents.map((a) => {
             const st = statuses.get(a.id)
             const state = st?.state ?? 'idle'
+            const u = usage.get(a.id)
+            // The bar is this agent's share of the workspace's spend, not a
+            // percentage of some invented budget. A number nobody can act on
+            // is decoration; a share tells you where the money went.
+            const total = [...usage.values()].reduce((n, x) => n + x.input_tokens + x.output_tokens, 0)
+            const mine = u ? u.input_tokens + u.output_tokens : 0
+            const share = total > 0 ? Math.round((mine / total) * 100) : 0
             return (
               <button
                 key={a.id}
-                className={`agent-row ${selectedAgent?.id === a.id ? 'selected' : ''}`}
+                className={`agent-card ${selectedAgent?.id === a.id ? 'selected' : ''}`}
                 onClick={() => {
                   setSelectedAgent(a)
                   layout.show('agent', 'aux')
                 }}
               >
-                <span className={`dot ${state}`} title={state + (st?.detail ? `: ${st.detail}` : '')} />
-                <span className="agent-name">
-                  {a.name}
-                  {a.is_orchestrator && <span className="muted"> ★</span>}
+                <span className="agent-card-head">
+                  <span className={`dot ${state}`} title={state + (st?.detail ? `: ${st.detail}` : '')} />
+                  <span className="agent-name">{a.name}</span>
+                  {a.is_orchestrator && <span className="star" title="the workspace entry point">★</span>}
                 </span>
-                <span className="muted agent-model">{a.model_label || 'no model'}</span>
-                <span className="muted agent-spend" title={spendTitle(usage.get(a.id))}>
-                  {spendLabel(usage.get(a.id))}
+                <span className="agent-spend-big" title={spendTitle(u)}>
+                  {spendLabel(u)}
                 </span>
+                <span className="agent-model muted">{a.model_label || 'no model'}</span>
+                <span className="share-bar" aria-hidden>
+                  <span style={{ width: `${share}%` }} />
+                </span>
+                <span className="muted share-label">{total > 0 ? `${share}% of this workspace` : 'no spend yet'}</span>
               </button>
             )
           })}

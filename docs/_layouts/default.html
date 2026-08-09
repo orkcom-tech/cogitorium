@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% if page.title and page.title != site.title %}{{ page.title }} · {% endif %}{{ site.title }}</title>
+    <meta name="description" content="{{ page.description | default: site.description }}" />
+    <meta property="og:title" content="{{ page.title | default: site.title }}" />
+    <meta property="og:description" content="{{ page.description | default: site.description }}" />
+    <meta property="og:type" content="website" />
+    <link rel="stylesheet" href="{{ '/assets/docs.css' | relative_url }}" />
+  </head>
+  <body>
+    <a class="skip" href="#content">Skip to content</a>
+
+    <button class="nav-toggle" aria-label="Menu" aria-expanded="false">☰</button>
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="{{ '/' | relative_url }}">
+        <span class="mark">◉</span>
+        <span>
+          Cogitorium
+          <small>documentation</small>
+        </span>
+      </a>
+
+      <nav aria-label="Documentation">
+        <a href="#quick-start">Quick start</a>
+        <a href="#the-idea-in-five-minutes">The idea</a>
+
+        <span class="group">Using it</span>
+        <a href="#workspaces-agents-and-the-orchestrator">Workspaces &amp; agents</a>
+        <a href="#the-blueprint">The blueprint</a>
+        <a href="#gears--tools-your-agents-build">Gears</a>
+        <a href="#context-and-memory">Context &amp; memory</a>
+        <a href="#the-interface">The interface</a>
+
+        <span class="group">Running it</span>
+        <a href="#teams-and-access">Teams &amp; access</a>
+        <a href="#letting-agents-reach-the-web">Web access</a>
+        <a href="#the-terminal">The terminal</a>
+        <a href="#configuration-reference">Configuration</a>
+        <a href="#security-model">Security model</a>
+      </nav>
+
+      <div class="side-foot">
+        <a href="https://github.com/orkcom-tech/cogitorium">GitHub ↗</a>
+        <a href="https://github.com/orkcom-tech/cogitorium/releases">Releases ↗</a>
+        <span>BUSL-1.1</span>
+      </div>
+    </aside>
+
+    <main id="content">
+      <article>{{ content }}</article>
+      <footer>
+        Documentation for
+        <a href="https://github.com/orkcom-tech/cogitorium">Cogitorium</a>. Everything here describes what the
+        software does today; where something is absent, it says so.
+      </footer>
+    </main>
+
+    <script>
+      // Small enough to inline, and inlining is the point: the page fetches
+      // nothing at runtime, exactly like the product it documents.
+      const toggle = document.querySelector('.nav-toggle')
+      const sidebar = document.getElementById('sidebar')
+      toggle.addEventListener('click', () => {
+        const open = document.body.classList.toggle('nav-open')
+        toggle.setAttribute('aria-expanded', String(open))
+      })
+      sidebar.addEventListener('click', (e) => {
+        if (e.target.tagName === 'A') document.body.classList.remove('nav-open')
+      })
+
+      // Highlight the section actually on screen rather than the last link
+      // clicked — the two disagree the moment anyone scrolls.
+      const links = [...sidebar.querySelectorAll('nav a[href^="#"]')]
+      const byId = new Map(links.map((a) => [decodeURIComponent(a.hash.slice(1)), a]))
+      const seen = new Set()
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) seen.add(entry.target.id)
+            else seen.delete(entry.target.id)
+          }
+          links.forEach((a) => a.classList.remove('current'))
+          for (const [id, a] of byId) {
+            if (seen.has(id)) {
+              a.classList.add('current')
+              break
+            }
+          }
+        },
+        { rootMargin: '-64px 0px -70% 0px' },
+      )
+      byId.forEach((_, id) => {
+        const el = document.getElementById(id)
+        if (el) observer.observe(el)
+      })
+    </script>
+  </body>
+</html>

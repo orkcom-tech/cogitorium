@@ -164,7 +164,7 @@ export function parseLayout(raw: unknown, known: (id: PanelId) => boolean): Layo
  * per slot, because two independent `viewport * 0.6` clamps happily permit
  * 120% of an axis and collapse the centre to nothing.
  */
-export function fit(layout: Layout, vw: number, vh: number): Layout {
+export function fit(layout: Layout, vw: number, vh: number, minMain = MIN_MAIN): Layout {
   const s = layout.slots
   const trackOf = (d: Dock) => {
     if (d.panels.length === 0) return 0
@@ -180,13 +180,20 @@ export function fit(layout: Layout, vw: number, vh: number): Layout {
   let right = wRight
   let aux = wAux
   const horizontal = right + aux
-  const room = Math.max(0, vw - MIN_MAIN)
+  // Clamp against the SAME floor the grid enforces. Using the global constant
+  // while the grid used the active panel's own minimum let the side docks be
+  // sized on one number and then squeezed by another — the agent roster ended
+  // up a sliver next to a panel that had taken the room it was promised.
+  const room = Math.max(0, vw - minMain)
   if (horizontal > room && horizontal > 0) {
     const scale = room / horizontal
     right = Math.floor(right * scale)
     aux = Math.floor(aux * scale)
   }
   const bottom = Math.min(hBottom, Math.max(0, vh - 160))
+  // A dock never shrinks below the rail; below that it is not a panel.
+  if (right > 0) right = Math.max(right, RAIL)
+  if (aux > 0) aux = Math.max(aux, RAIL)
 
   return {
     ...layout,

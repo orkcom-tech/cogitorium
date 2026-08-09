@@ -11,19 +11,6 @@ No telemetry.
 Everything below describes what the software does today. Where something is
 absent or unfinished, it says so.
 
-- [Quick start](#quick-start)
-- [The idea in five minutes](#the-idea-in-five-minutes)
-- [Workspaces, agents and the orchestrator](#workspaces-agents-and-the-orchestrator)
-- [The blueprint](#the-blueprint)
-- [Gears — tools your agents build](#gears--tools-your-agents-build)
-- [Context and memory](#context-and-memory)
-- [The interface](#the-interface)
-- [Teams and access](#teams-and-access)
-- [Letting agents reach the web](#letting-agents-reach-the-web)
-- [The terminal](#the-terminal)
-- [Configuration reference](#configuration-reference)
-- [Security model](#security-model)
-
 ---
 
 ## Quick start

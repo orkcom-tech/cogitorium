@@ -59,7 +59,9 @@ export default function Bench({ panels, layout }: { panels: PanelDef[]; layout: 
   const [started, setStarted] = useState<Set<PanelId>>(new Set())
   // Clamp at paint time, never on write: stored sizes are the operator's
   // intent, so plugging the monitor back in restores the real arrangement.
-  const l = useMemo(() => fit(layout.layout, vp.w, vp.h), [layout.layout, vp])
+  const rawMainActive = layout.layout.slots.main.active
+  const minMain = Math.max(MIN_MAIN, (rawMainActive && byId.get(rawMainActive)?.minW) || 0)
+  const l = useMemo(() => fit(layout.layout, vp.w, vp.h, minMain), [layout.layout, vp, minMain])
   const max = l.maximized
 
   const overlayBox = (slot: SlotId): React.CSSProperties | null => {
@@ -82,11 +84,12 @@ export default function Bench({ panels, layout }: { panels: PanelDef[]; layout: 
     // the centre. Without this the track stays full width and the "overlay"
     // sits politely beside the thing it is supposed to cover.
     if (d.mode === 'overlay' && slot !== 'main' && slot !== 'aux') return RAIL
-    return d.size
+    // A panel's own minimum is a floor on the track, not merely a rule for the
+    // seam. A size persisted from an earlier drag — or from a narrower window —
+    // would otherwise reopen the panel below the width it declared unusable.
+    const min = (d.active && byId.get(d.active)?.minW) || 0
+    return Math.max(d.size, min)
   }
-
-  const mainActive = l.slots.main.active
-  const minMain = Math.max(MIN_MAIN, (mainActive && byId.get(mainActive)?.minW) || 0)
 
   const style = {
     '--w-left': px(track('left'), 0),

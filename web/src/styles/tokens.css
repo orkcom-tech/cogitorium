@@ -67,7 +67,7 @@
   --r3: 14px;
 
   --h-topbar: 32px;
-  --h-tabs: 30px;
+  --h-tabs: 38px;
   --rail: 32px;
   --seam: 1px;
   --nav-w: 200px;
@@ -324,4 +324,165 @@ button.primary:hover:not(:disabled) {
 :root:not(.has-backdrop) .shell-backdrop,
 :root:not(.has-backdrop) .shell-scrim {
   display: none;
+}
+
+/* Sidebar, in the shape of the reference: a mark, icon-and-label rows, and a
+   rounded pill on the row you are on. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+}
+
+.sidebar nav a {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--r2);
+  font-size: var(--t-ui);
+}
+
+.nav-icon {
+  width: 20px;
+  flex: 0 0 auto;
+  text-align: center;
+  opacity: 0.75;
+}
+
+.sidebar nav a.active .nav-icon {
+  opacity: 1;
+}
+
+.layout.nav-collapsed .sidebar nav a {
+  justify-content: center;
+  gap: 0;
+}
+
+/* Agent cards: the reference's stat tile, with a number that means something.
+   The bar is a share of the workspace's own spend — a percentage of an
+   invented budget would be decoration. */
+.agent-cards {
+  gap: var(--s2);
+}
+
+.agent-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: var(--s3);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  background: var(--surface-2);
+  color: inherit;
+}
+
+.agent-card.selected {
+  border-color: var(--accent);
+  background: var(--selected);
+}
+
+.agent-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.agent-card .star {
+  color: var(--accent);
+  font-size: var(--t-chrome);
+}
+
+.agent-spend-big {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.share-bar {
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  overflow: hidden;
+  margin-top: var(--s2);
+}
+
+.share-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.share-label {
+  font-size: var(--t-micro);
+}
+
+/* The window stays the window: full bleed, no inset frame. The reference's
+   generosity belongs to what is INSIDE — corners, air and headers — not to a
+   card wrapped around the whole application. */
+:root {
+  --r3: 18px;
+}
+
+/* Panels get the reference's generosity: more corner, more air, and a header
+   that is a header rather than a strip of small text. */
+.bn-panel {
+  border-radius: var(--r3);
+}
+
+.bn-chrome {
+  height: 38px;
+  padding: 0 var(--s3);
+  border-radius: var(--r3) var(--r3) 0 0;
+}
+
+.bn-panel {
+  padding-top: 38px;
+}
+
+.bn-tab {
+  font-size: var(--t-ui);
+  padding: 0 var(--s3);
+}
+
+.card {
+  border-radius: var(--r3);
+  padding: var(--s4);
+}
+
+.page > h2,
+.page-head h2 {
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+/* Icon-in-a-rounded-square, the reference's most repeated shape. */
+.icon-tile {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r2);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  flex: 0 0 auto;
 }

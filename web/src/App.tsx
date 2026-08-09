@@ -99,9 +99,15 @@ export default function App() {
           >
             {navOpen ? '⟨' : '⟩'}
           </button>
-          <h1 className="brand">Cogitorium</h1>
+          <h1 className="brand">
+            <span className="brand-mark" aria-hidden>
+              ◉
+            </span>
+            Cogitorium
+          </h1>
           <nav className="pane side-pane">
             <NavLink to="/workspaces" title="Workspaces">
+              <span className="nav-icon" aria-hidden>▦</span>
               <span>Workspaces</span>
             </NavLink>
             {/* The Context page browses the whole space — every workspace's
@@ -109,21 +115,27 @@ export default function App() {
                 Terminal's rule and is admin-only. Members reach context
                 through their own workspace's bindings. */}
             {user.role === 'admin' && <NavLink to="/context" title="Context">
+              <span className="nav-icon" aria-hidden>◇</span>
               <span>Context</span>
             </NavLink>}
             <NavLink to="/gears" title="Gears">
+              <span className="nav-icon" aria-hidden>⚙</span>
               <span>Gears</span>
             </NavLink>
             <NavLink to="/instructions" title="Instructions">
+              <span className="nav-icon" aria-hidden>❏</span>
               <span>Instructions</span>
             </NavLink>
             <NavLink to="/models" title="Models">
+              <span className="nav-icon" aria-hidden>◈</span>
               <span>Models</span>
             </NavLink>
             {user.role === 'admin' && <NavLink to="/terminal" title="Terminal">
+              <span className="nav-icon" aria-hidden>▤</span>
               <span>Terminal</span>
             </NavLink>}
             {user.role === 'admin' && <NavLink to="/people" title="People">
+              <span className="nav-icon" aria-hidden>◉</span>
               <span>People</span>
             </NavLink>}
           </nav>

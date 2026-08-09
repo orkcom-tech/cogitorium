@@ -1,0 +1,324 @@
+/* Documentation styling.
+ *
+ * The same palette and the same restraint as the product: dark by default,
+ * light when the reader's system asks for it, one accent, nothing fetched from
+ * anywhere. No web fonts — a docs page that hangs on a font CDN is a docs page
+ * that lies about being self-contained.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: light-dark(#fbfbfa, #16171b);
+  --surface: light-dark(#ffffff, #1d1f24);
+  --surface-2: light-dark(#f2f3f5, #23262c);
+  --text: light-dark(#1a1a19, #e7e8ea);
+  --dim: color-mix(in srgb, var(--text) 60%, transparent);
+  --border: color-mix(in srgb, var(--text) 14%, transparent);
+  --accent: #6c8cff;
+  --warn: #d0a050;
+
+  --sidebar-w: 264px;
+  --measure: 46rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+}
+.skip:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 100;
+  background: var(--surface);
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+}
+
+/* Sidebar */
+
+.sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: var(--sidebar-w);
+  padding: 1.25rem 1rem;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: inherit;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.brand .mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+}
+
+.brand small {
+  display: block;
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--dim);
+}
+
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sidebar nav a {
+  color: var(--dim);
+  text-decoration: none;
+  font-size: 0.875rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+}
+
+.sidebar nav a:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.sidebar nav a.current {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.sidebar .group {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  padding: 0.9rem 0.6rem 0.25rem;
+}
+
+.side-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--dim);
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.side-foot a {
+  color: var(--dim);
+  text-decoration: none;
+}
+.side-foot a:hover {
+  color: var(--text);
+}
+
+/* Content */
+
+main {
+  margin-left: var(--sidebar-w);
+  padding: 3rem 3rem 5rem;
+}
+
+article {
+  max-width: var(--measure);
+}
+
+/* Images are the exception to the measure: a screenshot narrowed to prose
+   width is a screenshot nobody can read. */
+article img {
+  display: block;
+  max-width: min(100%, 62rem);
+  height: auto;
+  margin: 1.5rem 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+h1 {
+  font-size: 2.1rem;
+  letter-spacing: -0.025em;
+  margin: 0 0 0.5rem;
+}
+
+h2 {
+  font-size: 1.4rem;
+  letter-spacing: -0.02em;
+  margin: 3rem 0 0.75rem;
+  padding-top: 0.5rem;
+  scroll-margin-top: 1.5rem;
+}
+
+h3 {
+  font-size: 1.05rem;
+  margin: 2rem 0 0.5rem;
+  scroll-margin-top: 1.5rem;
+}
+
+p,
+li {
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+}
+
+a {
+  color: var(--accent);
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2.5rem 0;
+}
+
+blockquote {
+  margin: 1.5rem 0;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--warn);
+  background: var(--surface-2);
+  border-radius: 0 10px 10px 0;
+}
+
+blockquote p {
+  margin: 0;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.86em;
+  background: var(--surface-2);
+  padding: 0.12em 0.36em;
+  border-radius: 5px;
+}
+
+pre {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+/* A wide table must scroll inside itself; the page never scrolls sideways. */
+.table-wrap,
+article > table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9rem;
+  margin: 1.25rem 0;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+th {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+td code {
+  white-space: nowrap;
+}
+
+footer {
+  max-width: var(--measure);
+  margin-top: 4rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--dim);
+}
+
+/* Small screens: the sidebar slides in rather than stealing half the width. */
+
+.nav-toggle {
+  display: none;
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 60;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: inherit;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .nav-toggle {
+    display: block;
+  }
+
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 160ms ease;
+    z-index: 50;
+    box-shadow: 0 0 40px rgb(0 0 0 / 0.3);
+  }
+
+  body.nav-open .sidebar {
+    transform: none;
+  }
+
+  main {
+    margin-left: 0;
+    padding: 4rem 1.25rem 3rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+}
