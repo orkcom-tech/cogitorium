@@ -20,7 +20,10 @@ import (
 // the process group, and removing it takes everything inside. It is exactly
 // the configuration where every other protection is already absent, which is
 // the worst place to also hang the server.
-func isolateProcess(cmd *exec.Cmd) {
+//
+// The returned function is called once the process has started; on Unix the
+// group is established by the kernel at fork, so there is nothing left to do.
+func isolateProcess(cmd *exec.Cmd) (afterStart func(), release func()) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
@@ -34,4 +37,5 @@ func isolateProcess(cmd *exec.Cmd) {
 		}
 		return nil
 	}
+	return func() {}, func() {}
 }

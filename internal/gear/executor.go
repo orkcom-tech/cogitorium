@@ -174,7 +174,11 @@ func (e *Executor) RunStream(ctx context.Context, g Gear, argsJSON string, calle
 	// orphan is holding open. See procgroup_unix.go: without this a gear that
 	// backgrounds anything outlives its timeout AND blocks the call forever,
 	// which on this path means blocking the turn that called it.
-	isolateProcess(cmd)
+	// afterStart exists for Windows, where a process can only be put into its
+	// job object once it exists — see procgroup_windows.go. On Unix the group
+	// is established at fork and both hooks are empty.
+	afterStart, releaseGroup := isolateProcess(cmd)
+	defer releaseGroup()
 	cmd.WaitDelay = 3 * time.Second
 	// Keep the environment minimal: a forged tool has no business reading
 	// the server's environment (which may hold provider API keys).
@@ -184,13 +188,23 @@ func (e *Executor) RunStream(ctx context.Context, g Gear, argsJSON string, calle
 		"COGITORIUM_GEAR=" + g.Name,
 	}
 
+	// Start and Wait rather than Run: the containment hook has to land between
+	// the two, and Run does not offer a seam.
 	start := time.Now()
-	runErr := cmd.Run()
+	runErr := cmd.Start()
+	if runErr == nil {
+		afterStart()
+		runErr = cmd.Wait()
+	}
 	elapsed := time.Since(start)
+	exitCode := -1
+	if cmd.ProcessState != nil {
+		exitCode = cmd.ProcessState.ExitCode()
+	}
 	res := Result{
 		Stdout:   truncate(stdout.String()),
 		Stderr:   truncate(stderr.String()),
-		ExitCode: cmd.ProcessState.ExitCode(),
+		ExitCode: exitCode,
 		TimedOut: runCtx.Err() == context.DeadlineExceeded,
 	}
 	slog.Info("gear executed", "gear", g.Name, "version", g.Version, "exit_code", res.ExitCode,

@@ -166,10 +166,11 @@ what still holds:
 - A gear gets its own process group and the timeout kills the group, not just
   the process it started. Before that, a gear that backgrounded anything
   outlived its timeout *and* blocked the call forever, because the orphan held
-  the output pipes open and the wait never ended. On Windows the group kill is
-  not available — the call still returns, but a runaway can outlive its
-  timeout, which is one more reason this path is a fallback rather than a way
-  to run.
+  the output pipes open and the wait never ended. On Windows the equivalent is
+  a Job Object with kill-on-close, which does the same job — with two caveats
+  stated in the source: a microsecond-wide window between the process starting
+  and being assigned to the job, and the fact that this path has been compiled
+  for Windows but not run there.
 - There are no memory, CPU or process-count ceilings. Docker supplies those;
   nothing else does.
 
