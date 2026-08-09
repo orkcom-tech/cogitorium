@@ -38,6 +38,14 @@ type Spec struct {
 	// Writable makes Dir writable; otherwise the sandbox is read-only apart
 	// from a scratch space.
 	Writable bool
+	// OnOutput, when set, is called with each chunk as it arrives rather than
+	// only at the end. The buffered Result is unaffected — this is an extra
+	// tap on the same stream, not a replacement — so a caller that does not
+	// care can leave it nil and nothing about the run changes.
+	//
+	// It is called from the goroutine draining the pipe, so it must not block:
+	// a slow consumer stalls the gear it is watching.
+	OnOutput func(stream, chunk string)
 }
 
 type Result struct {

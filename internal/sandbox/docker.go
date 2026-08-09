@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os/exec"
 
@@ -163,8 +164,12 @@ func (d *Docker) Run(ctx context.Context, spec Spec) (Result, error) {
 		cmd.Stdin = spec.Stdin
 	}
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	// The buffers still collect everything, so the recorded run is byte for
+	// byte what it always was; the tap is additional. Without it the operator
+	// watches a spinner for the whole of a sixty-second gear and then gets the
+	// output all at once, which tells them nothing about where it got stuck.
+	cmd.Stdout = tap(&stdout, "stdout", spec.OnOutput)
+	cmd.Stderr = tap(&stderr, "stderr", spec.OnOutput)
 
 	start := time.Now()
 	runErr := cmd.Run()
@@ -186,3 +191,21 @@ func (d *Docker) Run(ctx context.Context, spec Spec) (Result, error) {
 	}
 	return res, nil
 }
+
+// tap returns a writer that fills buf and, when on is set, reports each chunk
+// as it arrives. Chunks are whatever the pipe delivered — no line buffering,
+// because a gear that prints a progress bar without newlines is exactly the
+// one worth watching.
+func tap(buf *bytes.Buffer, stream string, on func(string, string)) io.Writer {
+	if on == nil {
+		return buf
+	}
+	return io.MultiWriter(buf, writerFunc(func(p []byte) (int, error) {
+		on(stream, string(p))
+		return len(p), nil
+	}))
+}
+
+type writerFunc func([]byte) (int, error)
+
+func (f writerFunc) Write(p []byte) (int, error) { return f(p) }

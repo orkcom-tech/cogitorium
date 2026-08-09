@@ -4,8 +4,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 )
@@ -145,6 +147,17 @@ func (s *Server) handleRunGear(w http.ResponseWriter, r *http.Request) {
 	if len(in.Args) > 0 {
 		args = string(in.Args)
 	}
+
+	// ?stream=1 reports the run as it happens instead of at the end. The two
+	// paths execute exactly the same thing and record exactly the same run —
+	// the only difference is when the operator finds out. A gear with a
+	// sixty-second timeout used to be a spinner, and a spinner does not say
+	// whether it is thinking or hung.
+	if r.URL.Query().Get("stream") == "1" {
+		s.streamGearRun(w, r, g, args)
+		return
+	}
+
 	res, runErr := s.gearExec.Run(r.Context(), g, args, gear.Caller{DryRun: true})
 	out := map[string]any{
 		"stdout": res.Stdout, "stderr": res.Stderr,
@@ -154,6 +167,50 @@ func (s *Server) handleRunGear(w http.ResponseWriter, r *http.Request) {
 		out["error"] = runErr.Error()
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// streamGearRun runs the gear inside this request and emits its output as it
+// arrives, then one final event carrying the same result the buffered path
+// would have returned.
+func (s *Server) streamGearRun(w http.ResponseWriter, r *http.Request, g gear.Gear, args string) {
+	rc := http.NewResponseController(w)
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+
+	// The sink is called from the goroutine draining the container's pipe, and
+	// this handler writes from its own — so writes are serialised rather than
+	// left to race on the ResponseWriter.
+	var mu sync.Mutex
+	emit := func(ev map[string]any) {
+		raw, err := json.Marshal(ev)
+		if err != nil {
+			slog.Error("gear run stream: marshal event", "err", err)
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if _, err := w.Write([]byte("data: " + string(raw) + "\n\n")); err != nil {
+			return
+		}
+		if err := rc.Flush(); err != nil {
+			slog.Warn("gear run stream: flush failed", "err", err)
+		}
+	}
+
+	res, runErr := s.gearExec.RunStream(r.Context(), g, args, gear.Caller{DryRun: true},
+		func(stream, chunk string) {
+			emit(map[string]any{"type": "output", "stream": stream, "text": chunk})
+		})
+
+	done := map[string]any{
+		"type": "result", "stdout": res.Stdout, "stderr": res.Stderr,
+		"exit_code": res.ExitCode, "timed_out": res.TimedOut,
+	}
+	if runErr != nil {
+		done["error"] = runErr.Error()
+	}
+	emit(done)
 }
 
 func (s *Server) handleListGearRuns(w http.ResponseWriter, r *http.Request) {

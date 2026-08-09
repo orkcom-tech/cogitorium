@@ -547,3 +547,58 @@ export type WSEvent = {
 }
 
 export type ChatStreamResult = { truncated: boolean; stopReason: string }
+
+/**
+ * A gear run, reported as it happens.
+ *
+ * The same shape as the chat stream and for the same reason: the run lives
+ * inside the request that started it, so there is no separate subscription to
+ * get wrong and nothing to clean up if the operator navigates away — dropping
+ * the connection is dropping the watch.
+ *
+ * The final `result` event carries exactly what the buffered endpoint returns,
+ * so a caller can ignore every chunk and still be correct.
+ */
+export type GearRunEvent =
+  | { type: 'output'; stream: 'stdout' | 'stderr'; text: string }
+  | ({ type: 'result' } & GearRunResult)
+
+export async function gearRunStream(
+  gearId: number,
+  args: unknown,
+  onEvent: (ev: GearRunEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const r = await fetch(session.url(`/api/v1/gears/${gearId}/run?stream=1`), {
+    method: 'POST',
+    headers: session.headers({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ args }),
+    signal,
+  })
+  if (!r.ok || !r.body) {
+    const body = await r.json().catch(() => null)
+    throw new Error(body?.error?.message ?? `${r.status} ${r.statusText}`)
+  }
+
+  const reader = r.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) return
+    buf += decoder.decode(value, { stream: true })
+    for (;;) {
+      const sep = buf.indexOf('\n\n')
+      if (sep === -1) break
+      const block = buf.slice(0, sep)
+      buf = buf.slice(sep + 2)
+      const data = block
+        .split('\n')
+        .filter((l) => l.startsWith('data: '))
+        .map((l) => l.slice(6))
+        .join('\n')
+      if (!data) continue
+      onEvent(JSON.parse(data) as GearRunEvent)
+    }
+  }
+}

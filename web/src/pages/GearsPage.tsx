@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type Gear, type GearFile, type GearRun, type GearRunResult } from '../api'
+import { api, type Gear, type GearFile, type GearRun, type GearRunResult , gearRunStream } from '../api'
 
 export default function GearsPage() {
   const [gears, setGears] = useState<Gear[]>([])
@@ -9,6 +9,8 @@ export default function GearsPage() {
   const [source, setSource] = useState<GearFile[]>([])
   const [authoring, setAuthoring] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Whether this server can actually isolate a gear; null until it answers.
+  const [sandboxed, setSandboxed] = useState<boolean | null>(null)
   const seqRef = useRef(0)
 
   const reload = useCallback(() => {
@@ -25,6 +27,15 @@ export default function GearsPage() {
   }, [query, tag])
 
   useEffect(reload, [reload])
+
+  // Whether this server can actually isolate a gear. The terminal endpoint
+  // already reports the backend, and it is the same backend gears run in.
+  useEffect(() => {
+    api.terminal
+      .status()
+      .then((t) => setSandboxed(!!t.backend && t.backend !== 'none'))
+      .catch(() => setSandboxed(null))
+  }, [])
 
   const open = (g: Gear) => {
     if (openId === g.id) {
@@ -46,9 +57,19 @@ export default function GearsPage() {
   return (
     <div className="page">
       <h2>Gears</h2>
+      {/* This paragraph is a security claim, so it states what is actually
+          true of THIS server rather than a general sentence. It said "runs as
+          a subprocess with your own privileges" long after the sandbox landed,
+          which is the wrong way round: it understated the protection here and
+          would understate the danger on a server without one. */}
       <p className="hint">
-        Tools your agents forged, kept for reuse. A gear runs as a subprocess with your own privileges — read the
-        source, and try it with the dry run, before approving it. Nothing an agent calls runs until you do.
+        Tools your agents forged, kept for reuse.{' '}
+        {sandboxed === null
+          ? 'Read the source, and try it with the dry run, before approving it.'
+          : sandboxed
+            ? 'Each gear runs in a throwaway container with no network and none of this server\u2019s files — read the source, and try it with the dry run, before approving it.'
+            : 'This server has no sandbox, so a gear runs as a subprocess with the server\u2019s own file access — read the source before approving anything.'}{' '}
+        Nothing an agent calls runs until you do.
       </p>
       {pending > 0 && (
         <p className="notice">
@@ -122,6 +143,10 @@ function GearCard({
   const [dryArgs, setDryArgs] = useState('{}')
   const [dryResult, setDryResult] = useState<GearRunResult | null>(null)
   const [running, setRunning] = useState(false)
+  // What the gear has printed so far. Kept separate from the final result: the
+  // result is the record, this is the view of it arriving.
+  const [live, setLive] = useState('')
+  const abort = useRef<AbortController | null>(null)
   const [runs, setRuns] = useState<GearRun[] | null>(null)
 
   const setStatus = (status: 'approved' | 'disabled') =>
@@ -136,12 +161,34 @@ function GearCard({
       return
     }
     setRunning(true)
-    api.gears
-      .run(g.id, parsed)
-      .then(setDryResult)
-      .catch((e: Error) => onError(e.message))
-      .finally(() => setRunning(false))
+    setDryResult(null)
+    setLive('')
+    const ac = new AbortController()
+    abort.current = ac
+    gearRunStream(
+      g.id,
+      parsed,
+      (ev) => {
+        // Both streams go into one pane, in the order they actually arrived.
+        // Splitting them puts an error before the line that caused it, which
+        // is the one ordering that makes a run harder to read.
+        if (ev.type === 'output') setLive((t) => t + ev.text)
+        if (ev.type === 'result') setDryResult(ev)
+      },
+      ac.signal,
+    )
+      .catch((e: Error) => {
+        if (!ac.signal.aborted) onError(e.message)
+      })
+      .finally(() => {
+        abort.current = null
+        setRunning(false)
+      })
   }
+
+  // A run outlives the panel otherwise: the request keeps streaming into a
+  // component nobody is looking at.
+  useEffect(() => () => abort.current?.abort(), [])
 
   return (
     <div className="card">
@@ -219,9 +266,20 @@ function GearCard({
               <button onClick={dryRun} disabled={running}>
                 {running ? 'running…' : 'run'}
               </button>
+              {running && (
+                <button onClick={() => abort.current?.abort()} title="Stop watching; the gear finishes on the server">
+                  stop watching
+                </button>
+              )}
             </div>
           </div>
-          {dryResult && (
+          {/* While it runs, this is the only thing on screen; once the result
+              lands it is replaced by the recorded run, which is the same bytes
+              plus the exit code. */}
+          {running && (
+            <pre className="prompt-preview run-live">{live || 'waiting for the first output…'}</pre>
+          )}
+          {!running && dryResult && (
             <pre className={`prompt-preview ${dryResult.exit_code !== 0 || dryResult.error ? 'run-failed' : ''}`}>
               {dryResult.error
                 ? dryResult.error

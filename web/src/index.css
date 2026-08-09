@@ -2022,3 +2022,16 @@ button.big {
 .look-canvas::after {
   background: color-mix(in srgb, var(--accent) 25%, transparent);
 }
+
+/* A run in progress.
+ *
+ * Distinct from the recorded run below it, and deliberately not styled as an
+ * error even when stderr is coming through — a gear that writes progress to
+ * stderr is normal, and colouring it red while it works reports a failure that
+ * has not happened. The exit code decides that, and the exit code is not in
+ * yet. */
+.run-live {
+  border-left: 2px solid var(--accent);
+  max-height: 20rem;
+  overflow: auto;
+}

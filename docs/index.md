@@ -148,6 +148,13 @@ file and print a provider API key; that was demonstrated, and the sandbox is the
 fix. Without Docker the server says plainly that gears run unsandboxed rather
 than implying otherwise.
 
+**Watching a run.** A dry run reports its output as the gear produces it rather
+than in one lump at the end, so a gear with a sixty-second timeout is a visible
+process instead of a spinner. stdout and stderr are shown interleaved in the
+order they actually arrived — splitting them puts an error above the line that
+caused it. The recorded run is identical either way: whether anyone was watching
+never changes what is stored.
+
 ![The gear catalog](assets/07-gears.png)
 
 ---

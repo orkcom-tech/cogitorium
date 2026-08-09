@@ -109,6 +109,20 @@ type Caller struct {
 // execution, and refuses anything the operator has not approved (except an
 // operator's own dry run).
 func (e *Executor) Run(ctx context.Context, g Gear, argsJSON string, caller Caller) (Result, error) {
+	return e.RunStream(ctx, g, argsJSON, caller, nil)
+}
+
+// RunStream is Run with a tap on the output.
+//
+// onOutput, when set, is called with each chunk as the gear produces it. The
+// recorded run is identical either way — the audit trail must not depend on
+// whether anyone happened to be watching — so this only decides whether the
+// operator sees a sixty-second gear working or a spinner followed by
+// everything at once.
+//
+// An agent's tool call passes nil: there is nobody at the other end of it, and
+// a turn's transcript already carries the result.
+func (e *Executor) RunStream(ctx context.Context, g Gear, argsJSON string, caller Caller, onOutput func(stream, chunk string)) (Result, error) {
 	if g.Status != StatusApproved && !caller.DryRun {
 		return Result{}, fmt.Errorf("gear %q (status %s): %w — the operator must approve it in the gear catalog first", g.Name, g.Status, ErrNotApproved)
 	}
@@ -131,7 +145,7 @@ func (e *Executor) Run(ctx context.Context, g Gear, argsJSON string, caller Call
 	}
 
 	if e.sandbox != nil {
-		return e.runSandboxed(ctx, g, dir, argsJSON, timeout, caller)
+		return e.runSandboxed(ctx, g, dir, argsJSON, timeout, caller, onOutput)
 	}
 
 	bin, preArgs := interpreter(g.Runtime)
@@ -194,7 +208,7 @@ func (e *Executor) Run(ctx context.Context, g Gear, argsJSON string, caller Call
 
 // runSandboxed executes the gear in isolation and records it exactly as the
 // subprocess path does, so the audit trail does not depend on the backend.
-func (e *Executor) runSandboxed(ctx context.Context, g Gear, dir, argsJSON string, timeout time.Duration, caller Caller) (Result, error) {
+func (e *Executor) runSandboxed(ctx context.Context, g Gear, dir, argsJSON string, timeout time.Duration, caller Caller, onOutput func(stream, chunk string)) (Result, error) {
 	bin, args := command(g)
 	start := time.Now()
 	out, runErr := e.sandbox.Run(ctx, sandbox.Spec{
@@ -204,6 +218,7 @@ func (e *Executor) runSandboxed(ctx context.Context, g Gear, dir, argsJSON strin
 		Stdin:          strings.NewReader(argsJSON),
 		Env:            map[string]string{"COGITORIUM_GEAR": g.Name, "HOME": "/tmp"},
 		TimeoutSeconds: int(timeout.Seconds()),
+		OnOutput:       onOutput,
 	})
 	elapsed := time.Since(start)
 
