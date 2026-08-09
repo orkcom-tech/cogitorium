@@ -26,8 +26,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Apple silicon only. Intel macOS is not built: the macos-13 image is
+          # being retired and its queue outlasted the workflow, which mattered
+          # more than the missing architecture — `attach` needs every matrix
+          # leg, so one stuck runner meant no desktop installer reached the
+          # release at all, on any platform.
           - { name: macOS (Apple silicon), os: macos-14, goarch: arm64, artifact: darwin_arm64 }
-          - { name: macOS (Intel),         os: macos-13, goarch: amd64, artifact: darwin_amd64 }
           - { name: Windows,               os: windows-latest, goarch: amd64, artifact: windows_amd64 }
           - { name: Linux,                 os: ubuntu-22.04,   goarch: amd64, artifact: linux_amd64 }
     steps:

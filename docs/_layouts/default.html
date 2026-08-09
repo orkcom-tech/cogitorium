@@ -27,6 +27,32 @@
       </a>
 
       <nav aria-label="Documentation">
+        {%- assign on_guide = false -%}
+        {%- if page.url contains 'guide' -%}{%- assign on_guide = true -%}{%- endif -%}
+        {%- comment -%}
+          Two pages, two anchor lists. The scrollspy below only ever touches
+          links whose href starts with '#', so the page links keep their state
+          instead of being cleared the first time anyone scrolls.
+        {%- endcomment -%}
+        <a href="{{ '/' | relative_url }}" {% unless on_guide %}class="current"{% endunless %}>Reference</a>
+        <a href="{{ '/guide/' | relative_url }}" {% if on_guide %}class="current"{% endif %}>Guide</a>
+
+        {%- if on_guide -%}
+        <span class="group">Walkthrough</span>
+        <a href="#1-from-nothing-to-an-answer">From nothing to an answer</a>
+        <a href="#2-a-second-agent">A second agent</a>
+        <a href="#3-gears--tools-your-agents-keep">Gears</a>
+        <a href="#4-files-the-editor-and-diffs">Files &amp; diffs</a>
+        <a href="#5-memory">Memory</a>
+        <a href="#6-letting-an-agent-search-the-web">Web access</a>
+        <a href="#7-the-terminal">The terminal</a>
+        <a href="#8-more-than-one-person">More than one person</a>
+
+        <span class="group">When it refuses</span>
+        <a href="#9-when-it-refuses">Error messages</a>
+        <a href="#10-what-is-not-here">What is not here</a>
+        {%- else -%}
+        <span class="group">Start</span>
         <a href="#install">Install</a>
         <a href="#the-idea-in-five-minutes">The idea</a>
 
@@ -46,6 +72,7 @@
         <a href="#configuration-reference">Configuration</a>
         <a href="#security-model">Security model</a>
         <a href="#known-issues">Known issues</a>
+        {%- endif -%}
       </nav>
 
       <div class="side-foot">

@@ -34,8 +34,12 @@ command; an archive brings nothing and says as much.
 | winget | `winget install OrkcomTech.Cogitorium` | declared, not resolved |
 | Desktop app | attached to each release | no — install contextd separately |
 | Archive | download and unpack | no |
-| Kubernetes | `helm install` from `deploy/helm/cogitorium` | yes, in the image |
+| Kubernetes | `helm install` from `deploy/helm/cogitorium`, with `--set image.repository` | yes, in the image |
 | Source | `make build`, or `make desktop` for the window | no |
+
+**Start here if you have never run it:** the [Guide](guide/) is a walkthrough
+from an empty install to agents with tools, with every command and every error
+message taken from a real run.
 
 **Desktop application.** Attached to each release for macOS (Apple silicon and
 Intel), Windows and Linux — the same server and the same interface in a native
@@ -63,11 +67,19 @@ SmartScreen on Windows. Saying so is better than a signature that is not one:
   under `~/.local`, or `./install.sh --system` for everyone. The window needs
   WebKitGTK (`libwebkit2gtk-4.1-0` on Debian and Ubuntu).
 
-**Kubernetes.** A Helm chart is in `deploy/helm/cogitorium`:
+**Kubernetes.** A Helm chart is in `deploy/helm/cogitorium`. No container image
+is published yet — the chart's default `image.repository` points at a registry
+path nothing pushes to, so build the image and point the chart at wherever you
+pushed it:
 
 ```sh
+docker build -t <your-registry>/cogitorium:0.1.1 .
+docker push <your-registry>/cogitorium:0.1.1
+
 helm install cogitorium ./deploy/helm/cogitorium \
   --namespace cogitorium --create-namespace \
+  --set image.repository=<your-registry>/cogitorium \
+  --set image.tag=0.1.1 \
   --set auth.adminToken="$(openssl rand -hex 24)"
 ```
 
