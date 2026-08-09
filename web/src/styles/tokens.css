@@ -142,11 +142,29 @@ button.primary:hover:not(:disabled) {
   --surface-tint: 11%;
 }
 
+/* The ground has to follow the mode, not just the palette.
+ *
+ * Every palette that ships is authored dark, and the ground used to paint
+ * those stops raw whatever the mode was. Switch to light and the text tokens
+ * flipped to near-black while the ground stayed near-black underneath them:
+ * in Instrument, where the menu is transparent and sits directly on the
+ * ground, the entire menu went invisible. It was not subtle and it was not
+ * only the menu — the window title went too.
+ *
+ * In light mode the palette becomes a TINT carried into a light base rather
+ * than the base itself. The operator's colours still choose the character of
+ * the room; they no longer choose whether it is lit. */
+:root {
+  --ground-a: light-dark(color-mix(in srgb, var(--theme-a) 10%, #fbfbfa), var(--theme-a));
+  --ground-b: light-dark(color-mix(in srgb, var(--theme-b) 14%, #f2f2f0), var(--theme-b));
+  --ground-c: light-dark(color-mix(in srgb, var(--theme-c) 34%, #ffffff), var(--theme-c));
+}
+
 .shell-ground {
   position: fixed;
   inset: 0;
   z-index: -2;
-  background: linear-gradient(150deg, var(--theme-a) 0%, var(--theme-b) 55%, var(--theme-a) 100%);
+  background: linear-gradient(150deg, var(--ground-a) 0%, var(--ground-b) 55%, var(--ground-a) 100%);
 }
 
 /* The glow is its own layer so it can be moved or animated without repainting
@@ -156,7 +174,7 @@ button.primary:hover:not(:disabled) {
   inset: 0;
   z-index: -2;
   pointer-events: none;
-  background: radial-gradient(1100px 760px at var(--glow-x, 12%) var(--glow-y, 4%), var(--theme-c) 0%, transparent 58%);
+  background: radial-gradient(1100px 760px at var(--glow-x, 12%) var(--glow-y, 4%), var(--ground-c) 0%, transparent 58%);
 }
 
 /* Drift: the DVD-logo idea, as a keyframe path rather than a rAF loop, so it
@@ -174,7 +192,7 @@ button.primary:hover:not(:disabled) {
 }
 
 :root.drifting .shell-glow {
-  background: radial-gradient(1100px 760px at 50% 50%, var(--theme-c) 0%, transparent 58%);
+  background: radial-gradient(1100px 760px at 50% 50%, var(--ground-c) 0%, transparent 58%);
   background-repeat: no-repeat;
   background-size: 180% 180%;
   animation: glow-drift var(--drift-speed, 90s) linear infinite;
@@ -784,7 +802,7 @@ button.primary:hover:not(:disabled) {
 :root[data-look='canvas'] .shell-ground {
   background-image:
     radial-gradient(color-mix(in srgb, var(--text) 11%, transparent) 1px, transparent 1px),
-    linear-gradient(150deg, var(--theme-a) 0%, var(--theme-b) 55%, var(--theme-a) 100%);
+    linear-gradient(150deg, var(--ground-a) 0%, var(--ground-b) 55%, var(--ground-a) 100%);
   background-size: 22px 22px, auto;
 }
 

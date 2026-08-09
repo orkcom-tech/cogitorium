@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type FileEntry } from '../api'
 
 // A tree and an editor, so a quick look or a small correction does not mean
@@ -8,6 +8,43 @@ import { api, type FileEntry } from '../api'
 
 type Node = { entry: FileEntry; children?: FileEntry[]; open: boolean }
 
+/**
+ * How the two halves share the panel.
+ *
+ * The split used to be `minmax(12rem, 18rem) 1fr`, which is a rule about the
+ * TREE and says nothing about the editor. In a narrow panel the tree took its
+ * 18rem ceiling and the editor got whatever was left — at 365px that is about
+ * fifty pixels, and the file's text wrapped to one character per line. Both
+ * halves need a floor, and the operator needs to be able to move the seam,
+ * because which half matters depends on what they are doing.
+ */
+const MIN_TREE = 150
+const MIN_EDITOR = 260
+const DEFAULT_TREE_W = 260
+const TREE_W_KEY = 'cogitorium.files.tree'
+
+/** Never let either half fall under its floor — and when the container is too
+ *  narrow to honour both, the stacked layout takes over and this stops being
+ *  the question being asked. */
+function clampTree(px: number, containerW: number) {
+  const ceiling = Math.max(MIN_TREE, containerW - MIN_EDITOR)
+  return Math.round(Math.min(Math.max(px, MIN_TREE), ceiling))
+}
+
+function storeTreeW(px: number, set: (n: number) => void) {
+  set(px)
+  try {
+    localStorage.setItem(TREE_W_KEY, String(px))
+  } catch {
+    /* private mode: the split simply does not survive the session */
+  }
+}
+
+function loadTreeW() {
+  const n = Number(localStorage.getItem(TREE_W_KEY))
+  return Number.isFinite(n) && n >= MIN_TREE ? n : DEFAULT_TREE_W
+}
+
 export default function FilesPage({ wsId, onError }: { wsId: number; onError: (m: string) => void }) {
   const [nodes, setNodes] = useState<Map<string, Node>>(new Map())
   const [roots, setRoots] = useState<FileEntry[]>([])
@@ -16,6 +53,9 @@ export default function FilesPage({ wsId, onError }: { wsId: number; onError: (m
   const [saved, setSaved] = useState('')
   const [note, setNote] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [treeW, setTreeW] = useState(loadTreeW)
+  const filesRef = useRef<HTMLDivElement>(null)
+  const dragging = useRef(false)
 
   const loadRoot = useCallback(() => {
     api.files
@@ -120,7 +160,7 @@ export default function FilesPage({ wsId, onError }: { wsId: number; onError: (m
   }
 
   return (
-    <div className="files">
+    <div className="files" ref={filesRef} style={{ ['--tree-w' as string]: `${treeW}px` }}>
       <div className="file-tree">
         <div className="row tree-head">
           <strong>Workspace files</strong>
@@ -153,6 +193,46 @@ export default function FilesPage({ wsId, onError }: { wsId: number; onError: (m
           }}
         />
       </div>
+
+      {/* The seam between the tree and the editor.
+       *
+       * Absolute, not incremental: the width is the pointer's distance from
+       * the container's own left edge, so a drag can never accumulate error
+       * or run away from the cursor. The ceiling is measured against the
+       * container rather than the window — a panel is not the screen.
+       *
+       * Below the stacking width this is display:none, because at that size
+       * there is no ratio worth choosing. */}
+      <div
+        className="files-seam"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the file tree"
+        tabIndex={0}
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId)
+          dragging.current = true
+        }}
+        onPointerMove={(e) => {
+          if (!dragging.current || !filesRef.current) return
+          const box = filesRef.current.getBoundingClientRect()
+          filesRef.current.style.setProperty('--tree-w', `${clampTree(e.clientX - box.left, box.width)}px`)
+        }}
+        onPointerUp={(e) => {
+          e.currentTarget.releasePointerCapture(e.pointerId)
+          dragging.current = false
+          const px = filesRef.current?.style.getPropertyValue('--tree-w')
+          if (px) storeTreeW(parseFloat(px), setTreeW)
+        }}
+        onKeyDown={(e) => {
+          const step = e.shiftKey ? 48 : 16
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+          e.preventDefault()
+          const box = filesRef.current?.getBoundingClientRect()
+          storeTreeW(clampTree(treeW + (e.key === 'ArrowRight' ? step : -step), box?.width ?? 0), setTreeW)
+        }}
+        onDoubleClick={() => storeTreeW(DEFAULT_TREE_W, setTreeW)}
+      />
 
       <div className="file-editor">
         {loading && <p className="hint">opening…</p>}

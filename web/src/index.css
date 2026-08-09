@@ -855,10 +855,17 @@ th {
 
 /* File tree beside the editor: the tree stays narrow and scrolls on its own,
    so a deep path never pushes the editor off the panel. */
+/* The tree and the editor share the panel on a seam the operator can move.
+ *
+ * The old rule was `minmax(12rem, 18rem) 1fr`: a constraint on the tree with
+ * nothing said about the editor. Grid handed the tree its 18rem ceiling and
+ * gave the editor the remainder, so in a 365px float the editor was fifty
+ * pixels wide and every word broke to one character per line. `minmax(0, …)`
+ * on both tracks is what lets either one yield. */
 .files {
   display: grid;
-  grid-template-columns: minmax(12rem, 18rem) 1fr;
-  gap: 0.75rem;
+  grid-template-columns: minmax(0, var(--tree-w, 260px)) 5px minmax(0, 1fr);
+  gap: 0;
   flex: 1;
   min-height: 0;
 }
@@ -868,13 +875,62 @@ th {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
 }
 
 .file-tree {
-  border-right: 1px solid var(--border);
   padding-right: 0.5rem;
+}
+
+.files-seam {
+  cursor: col-resize;
+  background: var(--border);
+  /* The hit area is wider than the line, because a 1px target is a target
+     nobody hits: the box is 5px and a pseudo-element pads it either side. */
+  position: relative;
+  touch-action: none;
+}
+
+.files-seam::after {
+  content: '';
+  position: absolute;
+  inset: 0 -4px;
+}
+
+.files-seam:hover,
+.files-seam:focus-visible {
+  background: var(--accent);
+}
+
+.file-editor {
+  padding-left: 0.6rem;
+}
+
+/* Below this width there is no ratio worth choosing: two columns cannot both
+   clear their floor, so the tree becomes a band above the editor and the seam
+   stops being a question. */
+@container panel (max-width: 480px) {
+  .files {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(6rem, 35%) minmax(0, 1fr);
+  }
+
+  .files-seam {
+    display: none;
+  }
+
+  .file-tree {
+    border-bottom: 1px solid var(--border);
+    padding-right: 0;
+    padding-bottom: 0.4rem;
+  }
+
+  .file-editor {
+    padding-left: 0;
+    padding-top: 0.5rem;
+  }
 }
 
 .tree-head {
@@ -934,7 +990,10 @@ th {
 
 .code-edit {
   flex: 1;
-  min-height: 20rem;
+  min-width: 0;
+  /* 20rem here was a second cause of the same bug: in a short panel the
+     textarea refused to shrink and pushed its own toolbar out of view. */
+  min-height: 5rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.8rem;
   line-height: 1.5;
