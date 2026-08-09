@@ -198,22 +198,65 @@ the agent inspector.
 - **Maximize** with `⌘↵`, toggle the sidebar with `⌘B`, the bottom dock with
   `⌘J`.
 
-Layouts persist per browser tab, with a seed for new tabs. Four arrangements
-ship ready-made — Converse, Build, Wire up, Watch one agent — and you can save
-your own. `?layout=reset` in the URL recovers from anything.
+Layouts persist per browser tab, with a seed for new tabs. Five arrangements
+ship ready-made — Converse, Build, Wire up, Canvas-first, Watch one agent — and
+you can save your own. `?layout=reset` in the URL recovers from anything.
 
 ![Files, chat and a terminal](assets/03-build-layout.png)
 
-**Appearance.** One to three colours make the background gradient; dials control
-grain, tint, and where the light falls, and the light can drift slowly around
-the screen. Panels are frosted glass or solid fill — solid genuinely switches
-the compositing off rather than blurring by zero. You can put your own picture
-or looping clip behind everything, with a scrim dial so text stays readable.
+![The conversation and the file tree as floating windows](assets/11-floats.png)
+
+### Looks
+
+The interface has two, and they are whole designs rather than a density switch:
+each carries its own ground, accent, surface treatment and arrangement.
+
+**Instrument** — a bench instrument. Hairlines carry every boundary, nothing is
+rounded, panel names are stencilled in monospace, and every figure is monospaced
+so a column of token spends lines up down the panel. The conversation stays in
+the centre. Every screenshot above is Instrument.
+
+**Canvas-first** — the wiring graph becomes the application. The menu shrinks to
+a rail of glyphs, the ground becomes a drafting grid, and panels float over it
+on shadows instead of dividing it. This deliberately contradicts the rule that
+the orchestrator chat is the way in, which is why it is a choice and not the
+default.
+
+![Canvas-first](assets/08-canvas-first.png)
+
+Choosing a look applies its arrangement too — picking Canvas-first and then
+hunting for a matching layout preset would be two decisions for one intention.
+A plain reload never overwrites an arrangement you built by hand.
+
+### Palette
+
+Independent of the look, so either one can wear any of it.
+
+One to three colours make the background gradient, and when there is a third it
+becomes the accent. Dials control grain, tint, and where the light falls, and
+the light can drift slowly around the screen. Panels are frosted glass or solid
+fill — solid genuinely switches the compositing off rather than blurring by
+zero — with the blur and the fill darkness on their own sliders. Five palettes
+ship ready-made: Graphite, Lime, Cobalt, Ember, Moss.
+
+![The same workspace in a warmer palette](assets/09-palette.png)
 
 ![The appearance dialog](assets/04-appearance.png)
 
-Everything here is stored on your device. Nothing about your appearance settings
-leaves the machine.
+You can put your own picture or looping clip behind everything, with a scrim
+dial so text stays readable over whatever you chose.
+
+![An operator's own backdrop](assets/10-backdrop.png)
+
+Light and dark both work and follow the system unless you pin one. In light mode
+the palette becomes a tint carried into a light ground rather than the ground
+itself, so your colours choose the character of the room without deciding
+whether it is lit.
+
+Everything here is stored on your device, and the interface fetches nothing at
+runtime: the grain texture, the maker's mark and your own backdrop are all
+carried inside the page. Nothing about your appearance settings leaves the
+machine.
 
 ---
 

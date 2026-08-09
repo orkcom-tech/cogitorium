@@ -94,22 +94,52 @@ Add a model under **Models**, then press **+ New workspace**.
 
 Panels, not tabs. Chat, blueprint, files, editor, terminal and the agent
 inspector are panels on a grid: put one at any edge, slide it out over the
-centre, float it, or hide it. Arrangements can be saved, and four are
+centre, float it, or hide it. Arrangements can be saved, and five are
 ready-made.
 
 ![Files, chat and a terminal, arranged for building](docs/assets/03-build-layout.png)
+
+Nothing has to be docked at all. Any panel can be pulled off the grid into a
+window you move, resize, roll up or close.
+
+![The conversation and the file tree as floating windows](docs/assets/11-floats.png)
 
 An agent's card shows what it is, what it knows, what it may call, and what it
 has spent.
 
 ![The agent inspector beside the conversation](docs/assets/05-agent.png)
 
-The palette is yours: up to three colours make the gradient, with dials for
-grain, tint and where the light falls — or set your own picture or clip behind
-everything. Panels can be frosted glass or plain solid fill.
+### Two looks, and a palette under them
+
+Pick the room you want to work in. **Instrument** is a bench instrument —
+hairlines instead of cards, nothing rounded, every figure in monospace so a
+column of spends lines up, and the conversation in the centre. Everything above
+this line is Instrument.
+
+**Canvas-first** turns it inside out: the wiring graph becomes the application,
+the menu shrinks to a rail of glyphs, and the panels float over a drafting grid.
+It contradicts the rule that the chat is the way in, which is why it is a choice
+and never the default. Choosing a look brings its arrangement with it.
+
+![Canvas-first: the graph takes the room](docs/assets/08-canvas-first.png)
+
+The palette is independent of both. Up to three colours make the gradient — the
+third is the accent — with dials for grain, tint, and where the light falls,
+plus a drift that walks it slowly around the screen. Panels are frosted glass or
+plain solid fill, with the blur and the darkness on sliders. Five palettes ship
+ready-made; the picture below is Instrument wearing one of them.
+
+![The same workspace in a warmer palette](docs/assets/09-palette.png)
 
 ![The appearance dialog](docs/assets/04-appearance.png)
-![The same workspace with solid panels](docs/assets/08-solid.png)
+
+Or put your own picture or looping clip behind the whole thing, with a scrim
+dial that buys back as much legibility as it needs.
+
+![An operator's own backdrop behind the panels](docs/assets/10-backdrop.png)
+
+Light and dark both work, and either follows the system by default. Nothing here
+is fetched: the grain, the mark and your backdrop are all carried in the page.
 
 Admins get a map of who can reach what — the same relationships the permission
 checks use, drawn rather than pieced together from three tables.
