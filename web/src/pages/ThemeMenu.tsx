@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { DEFAULT_THEME, PRESET_THEMES, applyTheme, loadTheme, saveTheme, type Theme } from '../styles/theme'
+import { DEFAULT_THEME, PRESET_THEMES, applyTheme, loadTheme, saveTheme, withLook, type Theme } from '../styles/theme'
 
 /**
  * The operator's palette: up to three colours and a grain dial.
@@ -68,7 +68,11 @@ export default function ThemeMenu() {
               <button
                 key={v}
                 className={`look-option ${theme.look === v ? 'active' : ''}`}
-                onClick={() => setTheme({ ...theme, look: v })}
+                /* A look is a whole visual world — ground, accent, surface and
+                   arrangement — so picking one lands you in it rather than
+                   changing one attribute of the last one. Everything below
+                   stays live: this is where you arrive, not where you stay. */
+                onClick={() => setTheme(withLook(theme, v))}
               >
                 <span className={`look-thumb look-${v}`} aria-hidden />
                 <span className="look-text">

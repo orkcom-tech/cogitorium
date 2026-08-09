@@ -642,7 +642,7 @@ function Composer({ busy, onSend, onStop }: { busy: boolean; onSend: (text: stri
   const [input, setInput] = useState('')
   return (
     <form
-      className="row"
+      className="row composer"
       onSubmit={(e) => {
         e.preventDefault()
         if (!input.trim() || busy) return

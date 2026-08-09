@@ -13,6 +13,7 @@ import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
 import ThemeMenu from './pages/ThemeMenu'
 import { applyTheme, loadTheme } from './styles/theme'
+import { DOCS_URL, ORKCOM_URL, ORK_MARK } from './styles/brand'
 
 type Health = { status: string; version: string }
 
@@ -100,12 +101,34 @@ export default function App() {
           {navOpen ? '⟨' : '☰'}
         </button>
         <aside className="sidebar" aria-hidden={!navOpen}>
-          <h1 className="brand">
-            <span className="brand-mark" aria-hidden>
-              ◉
-            </span>
-            Cogitorium
-          </h1>
+          <div className="brand-block">
+            <h1 className="brand">
+              <span className="brand-mark" aria-hidden>
+                ◉
+              </span>
+              <span className="wordmark">Cogitorium</span>
+            </h1>
+            {/* The maker, stated once and not repeated anywhere else. The mark
+                carries no colour of its own — it is alpha over currentColor —
+                so it belongs to whatever palette the operator has chosen. */}
+            <a
+              className="by-ork"
+              href={ORKCOM_URL}
+              target="_blank"
+              rel="noreferrer"
+              title="ORKCOM on GitHub"
+            >
+              <span className="by-word">by</span>
+              {/* The mark spells ORK and the company is ORKCOM, so the type
+                  finishes the word the logo starts. Setting both the mark and
+                  the full name side by side would read as a duplicate. */}
+              <span className="ork-lockup" aria-hidden>
+                <span className="ork-mark" style={{ maskImage: `url("${ORK_MARK}")`, WebkitMaskImage: `url("${ORK_MARK}")` }} />
+                <span className="ork-com">com</span>
+              </span>
+              <span className="sr-only">ORKCOM</span>
+            </a>
+          </div>
           <nav className="pane side-pane">
             <NavLink to="/workspaces" title="Workspaces">
               <span className="nav-icon" aria-hidden>▦</span>
@@ -139,6 +162,13 @@ export default function App() {
               <span className="nav-icon" aria-hidden>◉</span>
               <span>People</span>
             </NavLink>}
+            {/* An <a>, not a NavLink: the documentation is a site rather than a
+                route, and it opens beside the workbench instead of replacing
+                it — nobody wants to lose a running turn to read a page. */}
+            <a href={DOCS_URL} target="_blank" rel="noreferrer" title="Documentation" className="nav-external">
+              <span className="nav-icon" aria-hidden>❯</span>
+              <span>Documentation</span>
+            </a>
           </nav>
           <footer className="pane side-pane account">
             <div className="account-who">

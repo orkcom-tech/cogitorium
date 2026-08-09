@@ -483,25 +483,211 @@ button.primary:hover:not(:disabled) {
   flex: 0 0 auto;
 }
 
-/* ═══ INSTRUMENT ═══
- * A bench instrument. Hairlines carry the structure, nothing is rounded, and
- * every figure is monospaced so columns line up down the panel. The density
- * is the feature: what is not spent on padding is spent on the transcript. */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE MAKER'S MARK
+
+   One line, at the top, next to the name — and nowhere else in the product.
+   The glyph is alpha over currentColor rather than an image with a colour of
+   its own, so it belongs to whatever ground the operator's palette produces
+   instead of punching a lighter rectangle into it.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.brand-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--s2) var(--s2) var(--s2);
+}
+
+.by-ork {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  color: var(--text-dim);
+  text-decoration: none;
+  opacity: 0.7;
+}
+
+.by-ork:hover {
+  opacity: 1;
+  color: var(--text);
+}
+
+.by-word {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* The mark and the two letters that finish the name are one object: they must
+   scale, dim and hover together, never drift apart by a pixel. */
+.ork-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.ork-com {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.ork-mark {
+  display: block;
+  width: 24px;
+  height: 12px; /* the mark's own 97 × 48 */
+  background: currentColor;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-size: contain;
+  mask-position: left center;
+  -webkit-mask-position: left center;
+}
+
+/* Present to a screen reader, absent to a mouse: the mark says ORKCOM to
+   anyone who can see it and nothing at all to anyone who cannot. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The name is set, not merely printed — and it is set differently per look,
+   because a wordmark that ignores the design around it is a logo pasted on. */
+.wordmark {
+  font-weight: 620;
+  letter-spacing: -0.015em;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INSTRUMENT
+
+   A bench instrument. One dark face with the divisions scored into it:
+   hairlines carry every boundary, nothing is rounded, and the numerals are
+   monospaced so a column of spends lines up down the panel. Density is the
+   feature — what is not spent on padding is spent on the transcript.
+
+   Colour, ground and accent arrive with the look (LOOK_SIGNATURE in theme.ts);
+   this file is its shape, type and chrome.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 :root[data-look='instrument'] {
-  --r1: 2px;
-  --r2: 3px;
-  --r3: 3px;
+  --r1: 0px;
+  --r2: 0px;
+  --r3: 0px;
   --s3: 10px;
   --s4: 13px;
   --h-tabs: 30px;
   --t-prose: 14px;
+  --nav-w: 190px;
+  --nav-w-open: 190px;
   --border: color-mix(in srgb, var(--text) 20%, transparent);
+
+  /* Panels are the face itself, one shade off the ground, rather than cards
+     lifted above it. Everything that separates them is a scored line. */
+  --surface-base: light-dark(#ffffff, color-mix(in srgb, var(--theme-b) 55%, var(--theme-a)));
+  --surface-2-base: light-dark(#f1f1ef, color-mix(in srgb, var(--theme-b) 100%, var(--theme-a)));
 }
 
-:root[data-look='instrument'] .bn-panel,
-:root[data-look='instrument'] .card,
-:root[data-look='instrument'] .agent-card {
+/* An instrument has no weather. The glow stays as the faint wash across a lit
+   panel, which is why the control still does something rather than being
+   silently disabled here. */
+:root[data-look='instrument'] .shell-glow {
+  opacity: 0.22;
+}
+
+:root[data-look='instrument'] .wordmark {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+:root[data-look='instrument'] .brand {
+  font-size: 1rem;
+  gap: var(--s2);
+}
+
+:root[data-look='instrument'] .brand-mark {
   border-radius: 0;
+  background: var(--accent);
+  /* The ground colour, so the glyph stays legible whatever accent is picked. */
+  color: var(--theme-a);
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+}
+
+:root[data-look='instrument'] .brand-block {
+  border-bottom: 1px solid var(--border);
+}
+
+:root[data-look='instrument'] .by-ork {
+  padding-left: 30px; /* aligned under the wordmark, not under the tile */
+}
+
+/* The menu is a column of the same face, divided by rules — not three boxes
+   stacked with gaps between them. */
+:root[data-look='instrument'] .sidebar {
+  border-right: 1px solid var(--border);
+  padding: 0;
+  gap: 0;
+}
+
+:root[data-look='instrument'] .side-pane {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  padding: var(--s2) 0;
+}
+
+:root[data-look='instrument'] .sidebar nav a,
+:root[data-look='instrument'] .nav-external {
+  border-radius: 0;
+  border-left: 2px solid transparent;
+  padding: 0.35rem 0.6rem 0.35rem 10px;
+}
+
+:root[data-look='instrument'] .sidebar nav a.active {
+  border-left-color: var(--accent);
+  background: var(--surface-2);
+}
+
+:root[data-look='instrument'] .account {
+  border-top: 1px solid var(--border);
+  padding: var(--s3) var(--s2);
+}
+
+/* Every control is square, including the ones that came from the browser. */
+:root[data-look='instrument'] input,
+:root[data-look='instrument'] select,
+:root[data-look='instrument'] button,
+:root[data-look='instrument'] textarea,
+:root[data-look='instrument'] .chip,
+:root[data-look='instrument'] .card,
+:root[data-look='instrument'] .bn-panel,
+:root[data-look='instrument'] .agent-card,
+:root[data-look='instrument'] .canvas,
+:root[data-look='instrument'] .terminal-holder,
+:root[data-look='instrument'] .icon-tile {
+  border-radius: 0;
+}
+
+:root[data-look='instrument'] .bn-panel {
+  box-shadow: none;
 }
 
 :root[data-look='instrument'] .bn-chrome {
@@ -509,26 +695,30 @@ button.primary:hover:not(:disabled) {
   border-radius: 0;
 }
 
-:root[data-look='instrument'] .bn-tab {
+/* Panel names are stencilled, the way a rack unit labels its channels. */
+:root[data-look='instrument'] .bn-tab,
+:root[data-look='instrument'] .menu-head,
+:root[data-look='instrument'] .ws-agents h3 {
   font-family: var(--mono);
   font-size: 11px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
 :root[data-look='instrument'] .bn-tab.active::after {
-  inset-inline: 0;
+  left: 0;
+  right: 0;
   bottom: 0;
-  border-radius: 0;
   height: 2px;
+  border-radius: 0;
 }
 
-/* Numbers are the reason for the monospace: a column of spends that does not
-   line up is a column nobody compares. */
-:root[data-look='instrument'] .a-num,
+/* The reason for the monospace: a column of spends that does not line up is a
+   column nobody compares. */
 :root[data-look='instrument'] .agent-spend-big,
 :root[data-look='instrument'] .agent-spend,
-:root[data-look='instrument'] .agent-spend-detail {
+:root[data-look='instrument'] .agent-spend-detail,
+:root[data-look='instrument'] .tree-size {
   font-family: var(--mono);
   font-weight: 500;
   letter-spacing: -0.01em;
@@ -536,83 +726,196 @@ button.primary:hover:not(:disabled) {
 
 :root[data-look='instrument'] .agent-card {
   border-left: 2px solid transparent;
+  background: transparent;
 }
 
 :root[data-look='instrument'] .agent-card.selected {
   border-left-color: var(--accent);
-  background: transparent;
+  background: var(--surface-2);
 }
 
 :root[data-look='instrument'] .share-bar,
-:root[data-look='instrument'] .share-bar > span {
+:root[data-look='instrument'] .share-bar > span,
+:root[data-look='instrument'] .dot,
+:root[data-look='instrument'] .avatar {
   border-radius: 0;
 }
 
 :root[data-look='instrument'] .msg.user .msg-body {
-  border-radius: 2px;
-}
-
-:root[data-look='instrument'] .sidebar nav a {
   border-radius: 0;
-  border-left: 2px solid transparent;
-}
-
-:root[data-look='instrument'] .sidebar nav a.active {
-  border-left-color: var(--accent);
+  background: var(--surface-2);
+  border-color: var(--border);
+  border-left: 2px solid var(--accent);
 }
 
 :root[data-look='instrument'] .transcript {
   gap: var(--s3);
 }
 
-/* ═══ CANVAS-FIRST ═══
- * The graph is the application. The menu becomes a rail of glyphs, and the
- * conversation floats above the canvas rather than sitting beside it.
- * This deliberately contradicts the rule that the chat is the way in — which
- * is why it is a choice and not the default. */
-:root[data-look='canvas'] .layout {
-  grid-template-columns: 52px 1fr;
+/* Wiring is drawn on the same face: boxes scored into it, not tiles laid on. */
+:root[data-look='instrument'] .react-flow__node.bp-node,
+:root[data-look='instrument'] .react-flow__node[class*='gn-'] {
+  border-radius: 0;
+  background: var(--surface-2);
 }
 
-:root[data-look='canvas'] .sidebar {
-  width: 52px;
-  padding: var(--s2) 6px;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CANVAS-FIRST
+
+   The graph is the application. The menu shrinks to a rail of glyphs, the
+   ground becomes a drafting grid, and every panel is a card floating over it
+   rather than a division of it.
+
+   This deliberately contradicts the rule that the orchestrator chat is the way
+   in — which is exactly why it is a choice and never the default.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root[data-look='canvas'] {
+  --r1: 8px;
+  --r2: 11px;
+  --r3: 14px;
+  --nav-w: 58px;
+  --nav-w-open: 58px;
 }
 
+/* The drafting grid, over the palette gradient rather than instead of it, so
+   the operator's own colours still carry the room. */
+:root[data-look='canvas'] .shell-ground {
+  background-image:
+    radial-gradient(color-mix(in srgb, var(--text) 11%, transparent) 1px, transparent 1px),
+    linear-gradient(150deg, var(--theme-a) 0%, var(--theme-b) 55%, var(--theme-a) 100%);
+  background-size: 22px 22px, auto;
+}
+
+/* On a rail there is room for a mark and nothing else. The name is still on
+   the element for anyone hovering or listening. */
+:root[data-look='canvas'] .wordmark,
+:root[data-look='canvas'] .by-word,
 :root[data-look='canvas'] .sidebar nav a span:not(.nav-icon),
-:root[data-look='canvas'] .brand span:not(.brand-mark),
+:root[data-look='canvas'] .nav-external span:not(.nav-icon),
 :root[data-look='canvas'] .account-id,
 :root[data-look='canvas'] .account-server,
 :root[data-look='canvas'] .chip-label,
-:root[data-look='canvas'] .out-label {
-  display: none;
-}
-
-:root[data-look='canvas'] .sidebar nav a,
-:root[data-look='canvas'] .account,
-:root[data-look='canvas'] .theme-chip {
-  justify-content: center;
-  padding: var(--s2) 0;
-}
-
-:root[data-look='canvas'] .side-pane {
-  padding: var(--s1);
-}
-
+:root[data-look='canvas'] .out-label,
 :root[data-look='canvas'] .nav-toggle {
   display: none;
 }
 
-:root[data-look='canvas'] .ws-head,
-:root[data-look='canvas'] .page-head {
-  padding-left: 0;
+:root[data-look='canvas'] .brand-block {
+  align-items: center;
+  padding: var(--s2) 0 var(--s1);
+  gap: 6px;
 }
 
-/* Panels float over the canvas rather than dividing the space with it. */
+:root[data-look='canvas'] .brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r1);
+  font-size: 14px;
+}
+
+:root[data-look='canvas'] .by-ork {
+  align-self: center;
+}
+
+/* On a rail there is no room to finish the word, so the logo stands alone —
+   which is the one job a logo is for. */
+:root[data-look='canvas'] .ork-com {
+  display: none;
+}
+
+:root[data-look='canvas'] .ork-mark {
+  width: 26px;
+  height: 13px;
+}
+
+:root[data-look='canvas'] .sidebar {
+  padding: var(--s3) 5px;
+  gap: var(--s2);
+}
+
+:root[data-look='canvas'] .side-pane {
+  border-radius: var(--r3);
+  padding: 5px 4px;
+}
+
+:root[data-look='canvas'] .sidebar nav {
+  gap: 3px;
+  align-items: center;
+}
+
+:root[data-look='canvas'] .sidebar nav a,
+:root[data-look='canvas'] .nav-external {
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--r1);
+}
+
+:root[data-look='canvas'] .sidebar nav a.active {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+
+:root[data-look='canvas'] .nav-icon {
+  width: auto;
+  font-size: 14px;
+}
+
+:root[data-look='canvas'] .account {
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) 4px;
+}
+
+:root[data-look='canvas'] .account-who,
+:root[data-look='canvas'] .account-out,
+:root[data-look='canvas'] .theme-chip {
+  justify-content: center;
+  padding: 0;
+}
+
+:root[data-look='canvas'] .account-out button {
+  width: 32px;
+  padding: 0;
+}
+
+/* Panels stop dividing the space and start floating over it. */
 :root[data-look='canvas'] .bn-panel:not(.bn-parked) {
   box-shadow: 0 18px 50px rgb(0 0 0 / 0.45);
 }
 
+/* The graph is the ground here, so its frame comes off. */
+:root[data-look='canvas'] .canvas {
+  border-color: transparent;
+  border-radius: var(--r2);
+}
+
 :root[data-look='canvas'] .bn-panel .canvas {
   background: transparent;
+}
+
+:root[data-look='canvas'] .ws-head,
+:root[data-look='canvas'] .page-head,
+:root[data-look='canvas'] .page > h2:first-child {
+  padding-left: 0;
+}
+
+/* The composer is the one control the eye returns to between every turn, so it
+   gets the look's own treatment rather than the default input's. */
+:root[data-look='instrument'] .composer {
+  border-top: 1px solid var(--border);
+  padding-top: var(--s2);
+  margin-top: var(--s1);
+}
+
+:root[data-look='canvas'] .composer input {
+  border-radius: var(--r1);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+
+:root[data-look='canvas'] .composer button {
+  border-radius: var(--r1);
 }

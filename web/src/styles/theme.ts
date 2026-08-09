@@ -44,6 +44,51 @@ export type Theme = {
 
 export type Palette = Pick<Theme, 'colors' | 'grain' | 'tint'>
 
+export type Look = Theme['look']
+
+/**
+ * What a look actually is.
+ *
+ * A look is not a density switch. Each one is a whole visual world — its own
+ * ground, its own accent, its own idea of what a panel is — so picking one
+ * carries its palette and surface treatment with it. Rounding the corners
+ * differently on the same dark blue is not a design, it is a preference pane.
+ *
+ * The palette controls stay live underneath: the signature is where you land,
+ * not a cage. Pick a look, then change every colour in it if you like.
+ */
+export const LOOK_SIGNATURE: Record<Look, Palette & Pick<Theme, 'surface' | 'dim' | 'blur' | 'glow' | 'drift'>> = {
+  // Near-black with a mint instrument accent, and a glow low enough to read
+  // as the bezel of a lit panel rather than as weather.
+  instrument: {
+    colors: ['#0d0f11', '#151b1a', '#5ec8a0'],
+    grain: 0.3,
+    tint: 0.55,
+    surface: 'solid',
+    dim: 1,
+    blur: 0,
+    glow: { x: 50, y: 0 },
+    drift: false,
+  },
+  // Cooler and deeper, with the accent pushed brighter: on a dot grid the
+  // wires have to stay legible against the ground they cross.
+  canvas: {
+    colors: ['#101318', '#1a2230', '#6ee7b7'],
+    grain: 0.4,
+    tint: 0.45,
+    surface: 'glass',
+    dim: 0.82,
+    blur: 16,
+    glow: { x: 84, y: 6 },
+    drift: false,
+  },
+}
+
+/** Switching look replaces the whole visual world, not one attribute. */
+export function withLook(t: Theme, look: Look): Theme {
+  return { ...t, ...LOOK_SIGNATURE[look], look }
+}
+
 export const PRESET_THEMES: { name: string; theme: Palette }[] = [
   { name: 'Graphite', theme: { colors: ['#1a1a19', '#232326'], grain: 0.5, tint: 0.5 } },
   { name: 'Lime', theme: { colors: ['#171a14', '#1f2a17', '#cdfa50'], grain: 0.55, tint: 0.35 } },
