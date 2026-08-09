@@ -71,6 +71,7 @@
   --rail: 32px;
   --seam: 1px;
   --nav-w: 200px;
+  --nav-w-open: 200px;
   --nav-w-min: 48px;
   --row-h: 26px;
   --min-main: 320px;
@@ -365,11 +366,6 @@ button.primary:hover:not(:disabled) {
 
 .sidebar nav a.active .nav-icon {
   opacity: 1;
-}
-
-.layout.nav-collapsed .sidebar nav a {
-  justify-content: center;
-  gap: 0;
 }
 
 /* Agent cards: the reference's stat tile, with a number that means something.

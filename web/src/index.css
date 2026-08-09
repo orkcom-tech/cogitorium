@@ -28,47 +28,77 @@ body {
   grid-template-columns: var(--nav-w) 1fr;
 }
 
+/* Collapsed, the menu is GONE — not a rail of glyphs. The column closes to
+   zero and the panel slides out to the left, so the content takes the whole
+   width rather than living beside a strip.
+   The toggle sits outside the sidebar for the obvious reason: inside it, it
+   would slide away with the thing it is meant to bring back. */
 .layout.nav-collapsed {
-  --nav-w: var(--nav-w-min);
+  --nav-w: 0px;
 }
 
-.layout.nav-collapsed .sidebar nav a span:not(.nav-icon),
-.layout.nav-collapsed .brand,
-.layout.nav-collapsed .account-id,
-.layout.nav-collapsed .account-server,
-.layout.nav-collapsed .chip-label,
-.layout.nav-collapsed .out-label {
-  display: none;
+:root {
+  --nav-w-open: 200px;
 }
 
-/* Collapsed, the account block keeps only what still means something at 32px:
-   the avatar, the palette swatch, and a way out. */
-.layout.nav-collapsed .account {
-  padding: var(--s1);
-  align-items: center;
+.sidebar {
+  /* The panel keeps its own width, independent of the grid track.
+     translateX(-100%) is a percentage of the ELEMENT, so with the track
+     collapsed to zero the element was zero too and the slide moved it nowhere
+     — it simply spilled its contents over the workspace. */
+  width: var(--nav-w-open);
+  transition: transform 160ms ease;
+  will-change: transform;
+  overflow: hidden;
 }
 
-.layout.nav-collapsed .side-pane,
-.layout.nav-collapsed nav a {
-  padding: var(--s1);
+.layout.nav-collapsed .sidebar {
+  transform: translateX(calc(-1 * var(--nav-w-open)));
+  pointer-events: none;
+  visibility: hidden;
 }
 
-.layout.nav-collapsed .theme-chip {
-  padding: 0.2rem;
-  width: 100%;
-  min-width: 0;
-  justify-content: center;
-}
-
-.layout.nav-collapsed .bn-menu-holder {
-  width: 100%;
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
 }
 
 .nav-toggle {
-  align-self: flex-start;
+  position: fixed;
+  top: var(--s2);
+  left: var(--s2);
+  z-index: 60;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
   font-size: var(--t-chrome);
-  padding: 0.15rem 0.4rem;
+  border-radius: var(--r1);
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
+
+/* With the menu open the button sits on the panel; closed, it floats over the
+   content, so it never covers the workspace title. */
+.layout:not(.nav-collapsed) .nav-toggle {
+  background: transparent;
+  border-color: transparent;
+}
+
+.ws-head,
+.page-head,
+.page > h2:first-child {
+  padding-left: 2.2rem;
+}
+
+.layout:not(.nav-collapsed) .ws-head,
+.layout:not(.nav-collapsed) .page-head,
+.layout:not(.nav-collapsed) .page > h2:first-child {
+  padding-left: 0;
+}
+
 
 .sidebar {
   padding: var(--s2);
@@ -1534,12 +1564,10 @@ th {
   gap: var(--s1);
 }
 
+/* The power glyph was for a 32px rail. The menu is either present in full or
+   absent, so the button is always the full labelled control. */
 .out-icon {
   display: none;
-}
-
-.layout.nav-collapsed .out-icon {
-  display: inline;
 }
 
 .account .theme-chip {

@@ -90,15 +90,16 @@ export default function App() {
         <div className="shell-ground" aria-hidden />
         <div className="shell-glow" aria-hidden />
         <div className="shell-grain" aria-hidden />
-        <aside className="sidebar">
-          <button
-            className="nav-toggle"
-            onClick={() => setNavOpen((v) => !v)}
-            title={navOpen ? 'Collapse the sidebar (⌘B)' : 'Expand the sidebar (⌘B)'}
-            aria-label={navOpen ? 'Collapse the sidebar' : 'Expand the sidebar'}
-          >
-            {navOpen ? '⟨' : '⟩'}
-          </button>
+        <button
+          className="nav-toggle"
+          onClick={() => setNavOpen((v) => !v)}
+          title={navOpen ? 'Hide the menu (⌘B)' : 'Show the menu (⌘B)'}
+          aria-label={navOpen ? 'Hide the menu' : 'Show the menu'}
+          aria-expanded={navOpen}
+        >
+          {navOpen ? '⟨' : '☰'}
+        </button>
+        <aside className="sidebar" aria-hidden={!navOpen}>
           <h1 className="brand">
             <span className="brand-mark" aria-hidden>
               ◉
