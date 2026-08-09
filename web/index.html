@@ -5,13 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cogitorium</title>
     <!--
-      No SVG favicon here on purpose. A browser that understands one prefers it
-      at EVERY size, and the vector we have is the simplified small form — so
-      the 256px tab on a retina panel would get the 16px drawing. PNGs let each
-      size be its own drawing: the medallion where there is room for it, the
-      reduced mark where there is not.
+      The medallion at every size, and deliberately over-supplied at the top.
+      A tab is 16 or 32 CSS pixels but twice that in device pixels, and this
+      artwork only resolves from about 48 real pixels up — so the browser is
+      given big rasters and left to reduce them itself, which it does better
+      than any pre-baked 16px bitmap of an illustration this detailed.
     -->
-    <link rel="icon" sizes="16x16 32x32 48x48" href="/favicon.ico" />
+    <link rel="icon" sizes="16x16 32x32 48x48 64x64" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/icon-96.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

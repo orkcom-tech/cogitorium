@@ -103,11 +103,7 @@ export default function App() {
         <aside className="sidebar" aria-hidden={!navOpen}>
           <div className="brand-block">
             <h1 className="brand">
-              <span
-                className="brand-mark"
-                style={{ maskImage: `url("${COG_MARK}")`, WebkitMaskImage: `url("${COG_MARK}")` }}
-                aria-hidden
-              />
+              <img className="brand-mark" src={COG_MARK} alt="" width={26} height={26} />
               <span className="wordmark">Cogitorium</span>
             </h1>
             {/* The maker, stated once and not repeated anywhere else. The mark

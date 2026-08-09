@@ -355,21 +355,16 @@ button.primary:hover:not(:disabled) {
   letter-spacing: -0.01em;
 }
 
-/* The product's own mark, as alpha over the accent rather than as a picture
-   with a colour of its own — so the name in the menu belongs to whatever
-   palette the operator has chosen, and there is one drawing behind the tab
-   icon, the dock icon and this. */
+/* The mark carries its own ground, so it reads on a light menu and a dark one
+   without a second file — and it is the artwork rather than a silhouette,
+   because the menu and the browser tab are the only two places anyone sees it
+   and a reduction there means the logo is nowhere. */
 .brand-mark {
   width: 26px;
   height: 26px;
   flex: 0 0 auto;
-  background: var(--accent);
-  mask-repeat: no-repeat;
-  -webkit-mask-repeat: no-repeat;
-  mask-size: contain;
-  -webkit-mask-size: contain;
-  mask-position: center;
-  -webkit-mask-position: center;
+  display: block;
+  border-radius: 6px;
 }
 
 .sidebar nav a {
@@ -655,8 +650,9 @@ button.primary:hover:not(:disabled) {
 }
 
 :root[data-look='instrument'] .brand-mark {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
+  border-radius: 0;
 }
 
 :root[data-look='instrument'] .brand-block {
@@ -839,8 +835,9 @@ button.primary:hover:not(:disabled) {
 }
 
 :root[data-look='canvas'] .brand-mark {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
 }
 
 :root[data-look='canvas'] .by-ork {
