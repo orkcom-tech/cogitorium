@@ -32,8 +32,35 @@ command; an archive brings nothing and says as much.
 | Docker | `docker compose up --build` | yes, in the image |
 | deb / rpm | from the [releases page](https://github.com/orkcom-tech/cogitorium/releases) | recommends it |
 | winget | `winget install OrkcomTech.Cogitorium` | declared, not resolved |
+| Desktop app | attached to each release | no — install contextd separately |
 | Archive | download and unpack | no |
-| Source | `make build` | no |
+| Source | `make build`, or `make desktop` for the window | no |
+
+**Desktop application.** Attached to each release for macOS (Apple silicon and
+Intel), Windows and Linux — the same server and the same interface in a native
+window instead of a browser tab. It is not a second application: it imports the
+same code, serves the same bundle and reads the same data directory, so there is
+nothing in it that can drift out of step with the web shell.
+
+It listens on a port the kernel picks rather than 8688, so a desktop window and
+a `cogitorium serve` can run side by side without either one deciding whether
+the other may start. Closing the window ends the session — a server still
+running with no window is a process nobody asked to keep.
+
+None of the builds are signed with a platform identity. There is no Apple
+Developer account and no Windows code-signing certificate for this project, so
+the first launch is refused by Gatekeeper on macOS and warned about by
+SmartScreen on Windows. Saying so is better than a signature that is not one:
+
+- **macOS** — the app is ad-hoc signed so it is not reported as damaged, but it
+  is not notarised. Open it once with a right-click → **Open**, or run
+  `xattr -dr com.apple.quarantine /Applications/Cogitorium.app`.
+- **Windows** — SmartScreen shows **More info → Run anyway** on first launch.
+  WebView2 supplies the window; it is part of Windows 11 and installed on most
+  Windows 10 machines, and Microsoft's Evergreen installer covers the rest.
+- **Linux** — unpack the tarball and run `./install.sh` for a per-user install
+  under `~/.local`, or `./install.sh --system` for everyone. The window needs
+  WebKitGTK (`libwebkit2gtk-4.1-0` on Debian and Ubuntu).
 
 **From source.** Go 1.25 and Node (the UI is built by Vite 7). Docker is
 optional but strongly recommended — without it, gears run with the server's own

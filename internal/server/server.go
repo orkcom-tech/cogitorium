@@ -265,6 +265,21 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 // long-lived SSE streams end promptly instead of blocking shutdown for the
 // full timeout.
 func (s *Server) Run(ctx context.Context) error {
+	ln, err := net.Listen("tcp", s.http.Addr)
+	if err != nil {
+		return err
+	}
+	return s.Serve(ctx, ln)
+}
+
+// Serve runs on a listener the caller already opened.
+//
+// This exists for the desktop shell, which has to bind port 0 and then learn
+// which port the kernel gave it before it can point a window at itself. Asking
+// for a fixed port instead would mean a second copy of the application, or a
+// machine where somebody else already holds 8688, deciding whether the app can
+// start at all.
+func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	baseCtx, cancelBase := context.WithCancel(context.Background())
 	defer cancelBase()
 	s.http.BaseContext = func(net.Listener) context.Context { return baseCtx }
@@ -272,8 +287,8 @@ func (s *Server) Run(ctx context.Context) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("http server listening", "addr", s.http.Addr, "version", version.Version)
-		errCh <- s.http.ListenAndServe()
+		slog.Info("http server listening", "addr", ln.Addr().String(), "version", version.Version)
+		errCh <- s.http.Serve(ln)
 	}()
 
 	select {

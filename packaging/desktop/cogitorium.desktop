@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Cogitorium
+GenericName=Agentic development workbench
+Comment=Your agents, your models, your machine. Local-first, no telemetry.
+Exec=cogitorium-desktop
+Icon=cogitorium
+Terminal=false
+Categories=Development;IDE;
+Keywords=ai;agents;llm;development;
+StartupWMClass=cogitorium-desktop

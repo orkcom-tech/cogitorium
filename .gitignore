@@ -15,3 +15,8 @@ web/tsconfig.tsbuildinfo
 
 # macOS writes these into every folder it has been looked at in.
 .DS_Store
+
+# A stray build output: `go build ./cmd/cogitorium` with no -o drops the
+# binary here, and an 18MB blob in a commit is noticed a release too late.
+/cogitorium
+/cogitorium-desktop

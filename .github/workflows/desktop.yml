@@ -1,0 +1,140 @@
+name: desktop
+
+# The desktop shell, built on native runners because it cannot be
+# cross-compiled: a system webview means cgo, and cgo means the machine that
+# builds it has to be the machine it runs on. The server binary stays pure Go
+# and keeps its six-target cross-build in release.yml — this workflow never
+# touches it.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and attach to (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macOS (Apple silicon), os: macos-14, goarch: arm64, artifact: darwin_arm64 }
+          - { name: macOS (Intel),         os: macos-13, goarch: amd64, artifact: darwin_amd64 }
+          - { name: Windows,               os: windows-latest, goarch: amd64, artifact: windows_amd64 }
+          - { name: Linux,                 os: ubuntu-22.04,   goarch: amd64, artifact: linux_amd64 }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache: true
+
+      # WebKitGTK is the webview on Linux. It is a build-time requirement, and
+      # naming it here is also what tells a packager what the .deb depends on.
+      - name: Linux webview headers
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Build the interface
+        run: cd web && npm ci --no-audit --no-fund && npm run build
+
+      - name: Resolve the version
+        id: v
+        shell: bash
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build the desktop binary
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist
+          go build -trimpath \
+            -ldflags "-s -w -X github.com/orkcom-tech/cogitorium/internal/version.Version=${{ steps.v.outputs.version }}" \
+            -o "dist/cogitorium-desktop${{ runner.os == 'Windows' && '.exe' || '' }}" \
+            ./cmd/cogitorium-desktop
+
+      - name: Assemble the macOS application
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          ./packaging/desktop/build-macos-app.sh dist/cogitorium-desktop "${{ steps.v.outputs.version }}" dist
+          rm dist/cogitorium-desktop
+          # Ad-hoc signature. It is not a Developer ID and it does not get past
+          # Gatekeeper on its own — it exists so the bundle has a stable
+          # identity and does not trip "damaged application" on arm64, where an
+          # unsigned binary is refused outright rather than merely warned about.
+          codesign --force --deep --sign - dist/Cogitorium.app
+          ditto -c -k --sequesterRsrc --keepParent dist/Cogitorium.app \
+            "dist/Cogitorium_${{ steps.v.outputs.version }}_${{ matrix.artifact }}.zip"
+          rm -rf dist/Cogitorium.app
+
+      - name: Assemble the Linux tarball
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          stage="Cogitorium_${{ steps.v.outputs.version }}_${{ matrix.artifact }}"
+          mkdir -p "$stage"
+          cp dist/cogitorium-desktop "$stage/"
+          cp packaging/desktop/cogitorium.desktop "$stage/"
+          cp packaging/desktop/cogitorium.png "$stage/"
+          cp packaging/desktop/install-linux.sh "$stage/install.sh"
+          cp LICENSE README.md "$stage/"
+          tar czf "dist/$stage.tar.gz" "$stage"
+          rm -rf "$stage" dist/cogitorium-desktop
+
+      - name: Assemble the Windows archive
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          stage="Cogitorium_${{ steps.v.outputs.version }}_${{ matrix.artifact }}"
+          mkdir -p "$stage"
+          cp dist/cogitorium-desktop.exe "$stage/Cogitorium.exe"
+          cp LICENSE README.md "$stage/"
+          cd "$stage" && 7z a "../dist/$stage.zip" . && cd ..
+          rm -rf "$stage" dist/cogitorium-desktop.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.artifact }}
+          path: dist/*
+
+  attach:
+    name: attach to the release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums for the desktop builds
+        run: |
+          cd dist
+          sha256sum * > desktop-checksums.txt
+          cat desktop-checksums.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: dist/*
+          fail_on_unmatched_files: true

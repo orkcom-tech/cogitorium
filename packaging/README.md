@@ -34,6 +34,34 @@ Shipped by GoReleaser on every tag (`.github/workflows/release.yml`):
 | `checksums.txt` | plus a cosign signature and certificate |
 | SBOM | one per archive |
 
+## The desktop application
+
+Built by `.github/workflows/desktop.yml` on native runners — macOS 14 for Apple
+silicon, macOS 13 for Intel, windows-latest, ubuntu-22.04 — because a system
+webview means cgo and cgo cannot be cross-compiled. The server's own release is
+untouched by this: it stays pure Go and still cross-builds six targets from one
+machine.
+
+| Platform | Artifact | Window comes from |
+|---|---|---|
+| macOS | `Cogitorium_<v>_darwin_arm64.zip` / `_amd64.zip` — a `.app` bundle | WebKit |
+| Windows | `Cogitorium_<v>_windows_amd64.zip` — `Cogitorium.exe` | WebView2 |
+| Linux | `Cogitorium_<v>_linux_amd64.tar.gz` — binary, `.desktop`, icon, `install.sh` | WebKitGTK |
+
+**Nothing is signed with a platform identity.** There is no Apple Developer
+account and no Windows code-signing certificate for this project, so the first
+launch is refused by Gatekeeper and warned about by SmartScreen. The macOS
+bundle is ad-hoc signed — `codesign --sign -` — which is not a Developer ID and
+does not get past Gatekeeper; it is there so an arm64 build is not reported as
+*damaged*, which is what an entirely unsigned bundle produces. The documentation
+says which click gets past each one. A signature that is not one would be worse
+than the paragraph.
+
+Contextverse is not bundled into the desktop builds. That is the one channel
+where requirement 15 is unmet and says so rather than pretending: the app
+reports context as unavailable and the documentation points at Homebrew, Scoop
+or the Contextverse releases.
+
 ## Taps and buckets
 
 | Manager | Repo | Install |

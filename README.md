@@ -96,6 +96,12 @@ systemd unit. They recommend `contextd` rather than requiring it, because it
 ships from GitHub rather than a distribution repository; the postinstall says
 what to run.
 
+**Desktop application** — attached to each release for macOS, Windows and
+Linux. The same server and interface in a native window; it picks a free port
+rather than 8688, so it and `cogitorium serve` can run at the same time. Not
+signed with a platform identity, so the first launch needs one extra click —
+[the documentation says exactly which](https://orkcom-tech.github.io/cogitorium/#install).
+
 **From source** — Go ≥1.25 and Node ≥22; Docker if you want gears and the
 terminal sandboxed:
 
