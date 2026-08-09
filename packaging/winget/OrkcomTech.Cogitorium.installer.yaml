@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+PackageIdentifier: OrkcomTech.Cogitorium
+PackageVersion: 0.0.1
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: cogitorium.exe
+    PortableCommandAlias: cogitorium
+Commands:
+  - cogitorium
+# Contextverse holds context and memory. winget has no dependency resolution
+# that installs another package for you the way brew and scoop do, so this is
+# declared and the locale manifest says what to run — the honest shape of
+# requirement 15 on a channel that cannot enforce it.
+Dependencies:
+  PackageDependencies:
+    - PackageIdentifier: OrkcomTech.Contextd
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/orkcom-tech/cogitorium/releases/download/v0.0.1/cogitorium_0.0.1_windows_amd64.zip
+    InstallerSha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  - Architecture: arm64
+    InstallerUrl: https://github.com/orkcom-tech/cogitorium/releases/download/v0.0.1/cogitorium_0.0.1_windows_arm64.zip
+    InstallerSha256: "0000000000000000000000000000000000000000000000000000000000000000"
+ManifestType: installer
+ManifestVersion: 1.6.0

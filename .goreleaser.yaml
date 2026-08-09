@@ -1,0 +1,148 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: cogitorium
+
+# The interface is embedded in the binary, so it has to exist before any Go
+# build runs. `go:embed all:dist` matching nothing is a compile error, not a
+# warning — which is deliberate, and which makes this hook load-bearing rather
+# than a convenience.
+before:
+  hooks:
+    - go mod tidy
+    - sh -c "cd web && npm ci --no-audit --no-fund && npm run build"
+
+builds:
+  - id: cogitorium
+    main: ./cmd/cogitorium
+    binary: cogitorium
+    # No cgo: modernc.org/sqlite is a pure-Go SQLite precisely so this holds,
+    # and it is what lets one machine cross-build all six targets. The desktop
+    # shell is the exception and is built separately on native runners, because
+    # a system webview cannot be cross-compiled.
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/orkcom-tech/cogitorium/internal/version.Version={{.Version}}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+# Signatures, because a checksum file signs nothing.
+#
+# Whoever can replace a binary on the release page can replace checksums.txt
+# beside it. The checksum proves the download was not corrupted in transit; it
+# says nothing about who produced it.
+#
+# Keyless: cosign takes a short-lived certificate from Fulcio bound to the
+# GitHub Actions identity that ran the release, and records the fact in the
+# Rekor transparency log. No private key exists for anyone to lose, and the
+# question a verifier can answer becomes "was this built by this repository's
+# release workflow" rather than "do I recognise this key".
+#
+#   cosign verify-blob --signature checksums.txt.sig \
+#     --certificate checksums.txt.pem \
+#     --certificate-identity-regexp 'https://github.com/orkcom-tech/cogitorium/.*' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     checksums.txt
+signs:
+  - cmd: cosign
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+      - "--yes"
+    # The checksum file covers every artifact, so signing it signs the release.
+    artifacts: checksum
+    output: true
+
+# What is actually inside each archive, in a format a scanner can read.
+# Without one, "is this release affected by CVE-x" means rebuilding it and
+# hoping the dependency graph has not moved since.
+sboms:
+  - id: archive
+    artifacts: archive
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  draft: false
+  replace_existing_draft: true
+  name_template: "v{{.Version}}"
+  header: |
+    Cogitorium {{ .Tag }} — a workbench for agentic development.
+
+    Install with Homebrew, Scoop, a Linux package, Docker, or the archive for
+    your platform below. Desktop applications are attached separately.
+  footer: |
+    **Verifying a download**
+
+    ```sh
+    cosign verify-blob --signature checksums.txt.sig \
+      --certificate checksums.txt.pem \
+      --certificate-identity-regexp 'https://github.com/orkcom-tech/cogitorium/.*' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      checksums.txt
+    sha256sum -c checksums.txt --ignore-missing
+    ```
+
+nfpms:
+  - id: linux-packages
+    package_name: cogitorium
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
+    homepage: https://github.com/orkcom-tech/cogitorium
+    maintainer: ORKCOM <https://github.com/orkcom-tech>
+    description: A workbench for agentic development. Local-first, no telemetry.
+    license: BUSL-1.1
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    section: utils
+    priority: optional
+    # Recommends rather than Depends, and the reason is not politeness.
+    # contextd ships from its own GitHub releases, not from any distro
+    # repository, so a hard dependency would make this package refuse to
+    # install on a machine that has no way to satisfy it. The postinstall says
+    # what to do instead, and the server reports the same thing at runtime.
+    recommends:
+      - contextd
+    scripts:
+      postinstall: packaging/nfpm/postinstall.sh
+    contents:
+      - src: deploy/cogitorium.service
+        dst: /usr/lib/systemd/system/cogitorium.service
+        type: config
+
+# Homebrew and Scoop are bumped after the release by
+# scripts/ci/publish-packages.sh — see packaging/README.md. They are not
+# generated here on purpose: the tap and the bucket are their own repositories
+# with their own history, and a release that half-succeeds must not leave them
+# pointing at artifacts that do not exist.

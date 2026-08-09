@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
+# Template. Submitted by hand to microsoft/winget-pkgs when a release is cut —
+# see packaging/README.md. Version and hashes are filled from the release.
+PackageIdentifier: OrkcomTech.Cogitorium
+PackageVersion: 0.0.1
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0

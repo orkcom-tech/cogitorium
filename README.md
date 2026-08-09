@@ -9,7 +9,7 @@
 One binary. Your models, your machine, your rules — and no telemetry, ever.
 
 [Documentation](https://orkcom-tech.github.io/cogitorium/) ·
-[Quick start](#quick-start) ·
+[Install](#install) ·
 [What it does](#what-it-does) ·
 [Licence](#licence)
 
@@ -64,10 +64,43 @@ rather it forgot.
 
 ---
 
-## Quick start
+## Install
 
-Requires Go ≥1.25 and Node ≥22 to build; Docker if you want gears and the
-terminal sandboxed.
+Every route installs the same binary. Context and memory are stored by
+[Contextverse](https://github.com/orkcom-tech/contextverse), so the channels
+that can bring it do.
+
+**macOS and Linux — Homebrew** (brings `contextd` with it):
+
+```sh
+brew install orkcom-tech/tap/cogitorium
+cogitorium serve
+```
+
+**Windows — Scoop** (brings `contextd` with it):
+
+```sh
+scoop bucket add contextverse https://github.com/orkcom-tech/scoop-bucket
+scoop install cogitorium
+```
+
+**Docker** — the image carries `contextd` and sets up its space on first start:
+
+```sh
+docker compose up --build
+```
+
+**Linux packages** — `.deb` and `.rpm` on the
+[releases page](https://github.com/orkcom-tech/cogitorium/releases), with a
+systemd unit. They recommend `contextd` rather than requiring it, because it
+ships from GitHub rather than a distribution repository; the postinstall says
+what to run.
+
+**Desktop applications** for macOS, Windows and Linux are attached to each
+release.
+
+**From source** — Go ≥1.25 and Node ≥22; Docker if you want gears and the
+terminal sandboxed:
 
 ```sh
 git clone https://github.com/orkcom-tech/cogitorium
@@ -76,11 +109,10 @@ make build
 ./bin/cogitorium serve
 ```
 
-Or with Docker:
-
-```sh
-docker compose up --build
-```
+Archives on the releases page are signed. `checksums.txt` carries a cosign
+signature and certificate, so a download can be traced to the workflow that
+built it rather than merely proven uncorrupted — the verification command is in
+the release notes.
 
 Then open <http://127.0.0.1:8688>. On a local install you are the admin and
 there is no login screen; the same binary asks for credentials the moment it

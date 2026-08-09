@@ -1,0 +1,41 @@
+{
+  "version": "0.0.1",
+  "description": "A workbench for agentic development. Local-first, no telemetry.",
+  "homepage": "https://orkcom-tech.github.io/cogitorium/",
+  "license": "BUSL-1.1",
+  "_comment": "Canonical manifest lives in https://github.com/orkcom-tech/scoop-bucket — this copy is for reference only. `depends` is Contextverse: context and memory are stored by contextd, and Scoop can express that, so it does.",
+  "depends": "contextverse/contextd",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/orkcom-tech/cogitorium/releases/download/v0.0.1/cogitorium_0.0.1_windows_amd64.zip",
+      "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "bin": "cogitorium.exe"
+    },
+    "arm64": {
+      "url": "https://github.com/orkcom-tech/cogitorium/releases/download/v0.0.1/cogitorium_0.0.1_windows_arm64.zip",
+      "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "bin": "cogitorium.exe"
+    }
+  },
+  "checkver": {
+    "github": "https://github.com/orkcom-tech/cogitorium"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/orkcom-tech/cogitorium/releases/download/v$version/cogitorium_$version_windows_amd64.zip"
+      },
+      "arm64": {
+        "url": "https://github.com/orkcom-tech/cogitorium/releases/download/v$version/cogitorium_$version_windows_arm64.zip"
+      }
+    },
+    "hash": {
+      "url": "$baseurl/checksums.txt"
+    }
+  },
+  "notes": [
+    "Start it with:  cogitorium serve",
+    "Then open http://127.0.0.1:8688",
+    "Gears and the terminal need Docker Desktop to be isolated. Without it, gears run with this server's own file access and the terminal refuses to open."
+  ]
+}

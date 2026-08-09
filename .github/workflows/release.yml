@@ -1,0 +1,79 @@
+name: release
+
+# Cut a release from a tag. Everything downstream — Homebrew, Scoop, winget,
+# the desktop installers — points at the artifacts this produces, so it runs
+# first and the rest follow it.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  # Keyless signing: cosign exchanges this for a short-lived Fulcio certificate
+  # bound to this workflow's identity, so there is no private key to lose and a
+  # verifier can ask "was this built by this repository's release workflow"
+  # rather than "do I recognise this key".
+  id-token: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache: true
+
+      - uses: sigstore/cosign-installer@v3
+      - uses: anchore/sbom-action/download-syft@v0
+
+      # GoReleaser's before-hook builds the interface, but installing its
+      # dependencies here keeps the npm cache above doing something and fails
+      # early rather than inside the release.
+      - name: Interface dependencies
+        run: cd web && npm ci --no-audit --no-fund
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  packages:
+    name: bump Homebrew and Scoop
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    # Only with a token: the tap and the bucket are separate repositories, and
+    # a release that cannot reach them should say so rather than half-publish.
+    if: ${{ github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bump the tap and the bucket
+        env:
+          PACKAGING_TOKEN: ${{ secrets.PACKAGING_TOKEN }}
+        run: |
+          if [ -z "$PACKAGING_TOKEN" ]; then
+            echo "PACKAGING_TOKEN is not set — skipping Homebrew and Scoop." >&2
+            echo "The release itself is published; the tap and the bucket stay on the previous version." >&2
+            exit 0
+          fi
+          ./scripts/ci/publish-packages.sh "${GITHUB_REF_NAME}"

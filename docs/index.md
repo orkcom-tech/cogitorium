@@ -13,9 +13,30 @@ absent or unfinished, it says so.
 
 ---
 
-## Quick start
+## Install
 
-Build requirements: Go 1.25 and Node (the UI is built by Vite 7). Docker is
+Every route installs the same binary — one Go program with the interface
+embedded. What differs is who fetches it, and whether the channel can bring
+Contextverse along.
+
+**Contextverse is a real dependency.** Context and memory are stored and
+versioned by its `contextd`. Without it the server starts, says so at
+`GET /api/v1/context/status`, and memory does nothing. Homebrew, Scoop and the
+container image bring it; the Linux packages recommend it and print the
+command; an archive brings nothing and says as much.
+
+| Route | Command | Brings contextd |
+|---|---|---|
+| Homebrew | `brew install orkcom-tech/tap/cogitorium` | yes |
+| Scoop | `scoop bucket add contextverse https://github.com/orkcom-tech/scoop-bucket` then `scoop install cogitorium` | yes |
+| Docker | `docker compose up --build` | yes, in the image |
+| deb / rpm | from the [releases page](https://github.com/orkcom-tech/cogitorium/releases) | recommends it |
+| winget | `winget install OrkcomTech.Cogitorium` | declared, not resolved |
+| Desktop app | installers attached to each release | yes, bundled |
+| Archive | download and unpack | no |
+| Source | `make build` | no |
+
+**From source.** Go 1.25 and Node (the UI is built by Vite 7). Docker is
 optional but strongly recommended — without it, gears run with the server's own
 file access and the terminal refuses to open at all.
 
@@ -24,6 +45,18 @@ git clone https://github.com/orkcom-tech/cogitorium
 cd cogitorium
 make build
 ./bin/cogitorium serve
+```
+
+**Verifying a download.** `checksums.txt` on each release is signed with cosign
+keylessly, so what can be checked is not merely that the file is uncorrupted
+but that it came from this repository's release workflow:
+
+```sh
+cosign verify-blob --signature checksums.txt.sig \
+  --certificate checksums.txt.pem \
+  --certificate-identity-regexp 'https://github.com/orkcom-tech/cogitorium/.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
 ```
 
 The server listens on `127.0.0.1:8688` and keeps its data in `~/.cogitorium`.

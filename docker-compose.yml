@@ -1,13 +1,25 @@
+# Cogitorium, with Contextverse inside the same image.
+#
+# Requirement 15 is that this installs together with Contextverse. On this
+# channel that means the image carries contextd and initialises its space on
+# first start: there is no published contextd container to pull, and a compose
+# file cannot ask a package manager for one. The Dockerfile builds it from
+# Contextverse's own module at a pinned tag.
 services:
   cogitorium:
     build: .
     ports:
-      # Loopback only — this server will hold provider API keys and has no
-      # auth of its own. Change deliberately if you need LAN access.
+      # Loopback only — this server holds provider API keys, and on any other
+      # address it requires a token. Change deliberately if you need LAN access.
       - "127.0.0.1:8688:8688"
     volumes:
       - cogitorium-data:/data
+      # The context space, at contextd's own default path because that is the
+      # one Cogitorium actually consults. It gets its own volume: this is
+      # Contextverse's data, with its own history and its own backup story.
+      - contextverse-space:/home/cogitorium/.context
     restart: unless-stopped
 
 volumes:
   cogitorium-data:
+  contextverse-space:

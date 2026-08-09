@@ -1,0 +1,121 @@
+name: ci
+
+# The interface is embedded in the binary, so a Go-only build proves nothing:
+# every job here builds the UI first. `go:embed all:dist` matching nothing is a
+# compile error, which is what makes a fresh clone either work or fail loudly.
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache: true
+
+      - name: Build the interface
+        run: cd web && npm ci --no-audit --no-fund && npm run build
+
+      - name: Typecheck the interface
+        run: cd web && npx tsc --noEmit
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... -count=1
+
+      - name: Build
+        run: go build -o bin/cogitorium ./cmd/cogitorium
+
+      - name: The binary starts and answers
+        run: |
+          ./bin/cogitorium serve --data "$RUNNER_TEMP/cogitorium" --listen 127.0.0.1:8688 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8688/health >/dev/null 2>&1; then
+              curl -fsS http://127.0.0.1:8688/health
+              # The UI has to be served too, not just the API — that is the
+              # half a Go-only build would silently lose.
+              curl -fsS http://127.0.0.1:8688/ | grep -q "<div id=\"root\">"
+              echo "ok: API and interface both answer"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "the server never became healthy" >&2
+          exit 1
+
+  cross:
+    name: cross-build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    # Requirement 7 is three platforms. Compiling for all six targets on every
+    # change is what keeps that true rather than aspirational — a Windows-only
+    # break otherwise surfaces at release time.
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - name: Build the interface
+        run: cd web && npm ci --no-audit --no-fund && npm run build
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build ./...
+
+  container:
+    name: container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t cogitorium:ci .
+      - name: It starts, and Contextverse works inside it
+        run: |
+          CID=$(docker run -d -p 127.0.0.1:8688:8688 cogitorium:ci)
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8688/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+          TOK=$(docker logs "$CID" 2>&1 | grep -oE 'cg-[a-zA-Z0-9-]+' | head -1)
+          STATUS=$(curl -fsS -H "Authorization: Bearer $TOK" http://127.0.0.1:8688/api/v1/context/status)
+          echo "$STATUS"
+          # The image ships contextd and initialises its space on first start.
+          # A container where context is unavailable is one where memory does
+          # nothing, which is exactly the failure that looks like it worked.
+          echo "$STATUS" | grep -q '"available":true' || { docker logs "$CID"; exit 1; }
+          docker rm -f "$CID" >/dev/null

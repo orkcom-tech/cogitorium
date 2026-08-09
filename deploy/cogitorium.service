@@ -1,0 +1,36 @@
+[Unit]
+Description=Cogitorium — a workbench for agentic development
+Documentation=https://orkcom-tech.github.io/cogitorium/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cogitorium
+Group=cogitorium
+# Loopback by default. This server holds provider API keys, and on any other
+# address it requires a token — that is the same binary behaving differently,
+# not a second mode, so widening the bind is a deliberate edit here.
+ExecStart=/usr/bin/cogitorium serve --listen 127.0.0.1:8688 --data /var/lib/cogitorium
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+KillSignal=SIGTERM
+KillMode=mixed
+LimitNOFILE=65536
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/cogitorium
+
+# Contextverse: context storage is delegated to contextd, which is a separate
+# program. The server starts without it and says so at /api/v1/context/status
+# rather than failing — but memory and bound documents do not work until it is
+# installed. The package recommends it; see packaging/README.md.
+
+# Readiness: GET /health → 200 {"status":"ok","version":"…"}
+
+[Install]
+WantedBy=multi-user.target
