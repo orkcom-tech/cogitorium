@@ -148,6 +148,31 @@ file and print a provider API key; that was demonstrated, and the sandbox is the
 fix. Without Docker the server says plainly that gears run unsandboxed rather
 than implying otherwise.
 
+**Running without Docker.** `sandbox: subprocess`, or `auto` on a machine where
+the daemon does not answer, drops to a plain subprocess. What that costs, and
+what still holds:
+
+- The gear runs as the account the server runs as, with its file access. It can
+  read the database and the provider keys in it. **Approval is then the only
+  control**, which is why the server logs a warning at startup and the gear
+  catalog says so on the page rather than in a footnote.
+- **Dry runs are refused entirely.** Unapproved code never runs at all here —
+  the one path that bypasses approval exists only because a container makes it
+  cheap, so without a container it is closed.
+- **The terminal is refused**, for the same reason: a shell would hold the
+  server's own access.
+- The environment is still minimal — `PATH`, `HOME` and the gear's name, never
+  the server's own environment, which may hold credentials.
+- A gear gets its own process group and the timeout kills the group, not just
+  the process it started. Before that, a gear that backgrounded anything
+  outlived its timeout *and* blocked the call forever, because the orphan held
+  the output pipes open and the wait never ended. On Windows the group kill is
+  not available — the call still returns, but a runaway can outlive its
+  timeout, which is one more reason this path is a fallback rather than a way
+  to run.
+- There are no memory, CPU or process-count ceilings. Docker supplies those;
+  nothing else does.
+
 **Watching a run.** A dry run reports its output as the gear produces it rather
 than in one lump at the end, so a gear with a sixty-second timeout is a visible
 process instead of a spinner. stdout and stderr are shown interleaved in the

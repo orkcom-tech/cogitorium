@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -164,8 +165,17 @@ func (e *Executor) RunStream(ctx context.Context, g Gear, argsJSON string, calle
 	}
 	cmd.Stdin = strings.NewReader(argsJSON)
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	// The same tap the sandboxed path has. Without it, live output silently
+	// did nothing on a server with no Docker — the sink was accepted and
+	// dropped, which is worse than not offering it.
+	cmd.Stdout = tap(&stdout, "stdout", onOutput)
+	cmd.Stderr = tap(&stderr, "stderr", onOutput)
+	// Kill the whole process group on timeout, and stop waiting on pipes an
+	// orphan is holding open. See procgroup_unix.go: without this a gear that
+	// backgrounds anything outlives its timeout AND blocks the call forever,
+	// which on this path means blocking the turn that called it.
+	isolateProcess(cmd)
+	cmd.WaitDelay = 3 * time.Second
 	// Keep the environment minimal: a forged tool has no business reading
 	// the server's environment (which may hold provider API keys).
 	cmd.Env = []string{
@@ -302,3 +312,20 @@ func truncate(s string) string {
 	}
 	return s[:maxOutputSize] + "\n…[output truncated]"
 }
+
+// tap returns a writer that fills buf and, when on is set, reports each chunk
+// as it arrives. Deliberately the same shape as the sandbox's own tap: one
+// idea, so the two paths cannot disagree about what "live output" means.
+func tap(buf *bytes.Buffer, stream string, on func(string, string)) io.Writer {
+	if on == nil {
+		return buf
+	}
+	return io.MultiWriter(buf, writerFunc(func(p []byte) (int, error) {
+		on(stream, string(p))
+		return len(p), nil
+	}))
+}
+
+type writerFunc func([]byte) (int, error)
+
+func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
