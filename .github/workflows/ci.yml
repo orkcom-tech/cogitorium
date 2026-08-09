@@ -254,7 +254,11 @@ jobs:
           echo "ok: the token is not in the pod log"
           STATUS=$(curl -fsS -H "Authorization: Bearer $ADMIN_TOKEN" http://127.0.0.1:8688/api/v1/context/status)
           echo "$STATUS"
-          echo "$STATUS" | grep -q '"available":true' || { kubectl -n cogitorium logs deploy/cogitorium | tail -40; exit 1; }
+          # The WHOLE log, not its tail. The entrypoint's account of what it did
+          # with the context space is printed before the server starts, so a
+          # tail is guaranteed to cut off the only lines that explain this
+          # particular failure — which is exactly what happened.
+          echo "$STATUS" | grep -q '"available":true' || { kubectl -n cogitorium logs deploy/cogitorium; exit 1; }
           echo "ok: Contextverse is available in the cluster"
 
       - name: One replica, and it cannot be raised

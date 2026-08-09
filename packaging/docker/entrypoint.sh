@@ -24,12 +24,19 @@ if command -v contextd >/dev/null 2>&1; then
         mkdir -p "$HOME" || echo "cogitorium: could not create HOME=$HOME; context will report unavailable" >&2
     fi
 
-    if ! contextd status --json >/dev/null 2>&1; then
+    # `contextd status` answers the question and exits 0 EITHER WAY — a missing
+    # space is a fact it reports, not an error. An earlier version tested its
+    # exit code, so the condition was never true, init never ran, and every
+    # container came up with context unavailable. The answer is in the payload:
+    # "exists": false.
+    if ! contextd status --json 2>/dev/null | grep -qE '"exists"[[:space:]]*:[[:space:]]*true'; then
         echo "cogitorium: initialising the Contextverse space (first start, HOME=$HOME)"
         # stderr is deliberately NOT discarded. An earlier version sent it to
-        # /dev/null and the result was a cluster where context was unavailable
+        # /dev/null and the result was a container where context was unavailable
         # for a reason nobody could read — the failure has to be in the log the
-        # operator already looks at.
+        # operator already looks at. `init solo` fetches its template from
+        # GitHub, so the likeliest failure is no outbound network, and that is
+        # exactly the message worth keeping.
         if contextd init solo --name cogitorium --role workbench >/dev/null; then
             echo "cogitorium: context space ready"
         else

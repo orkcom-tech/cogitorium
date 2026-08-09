@@ -70,9 +70,39 @@ func TestTimeoutStopsTheWholeProcessGroup(t *testing.T) {
 
 	// And the work itself must actually be dead, not merely unwaited-for.
 	time.Sleep(300 * time.Millisecond)
-	found, _ := exec.Command("bash", "-c", "pgrep -f "+marker+" | wc -l").Output()
-	if n := strings.TrimSpace(string(found)); n != "0" {
-		exec.Command("bash", "-c", "pkill -f "+marker).Run()
-		t.Fatalf("%s processes survived the timeout; the group was not killed", n)
+	if alive := survivors(t, marker); len(alive) != 0 {
+		for _, pid := range alive {
+			_ = exec.Command("kill", "-9", pid).Run()
+		}
+		t.Fatalf("%d process(es) survived the timeout (pids %s); the group was not killed",
+			len(alive), strings.Join(alive, ", "))
 	}
+}
+
+// survivors lists the processes still carrying the marker.
+//
+// It reads ps and filters in Go rather than asking pgrep, because the marker
+// must not appear in the argv of the command doing the looking. `pgrep -f M`
+// run through a shell puts M in that shell's own command line, and on Linux the
+// shell outlives the pipeline long enough to match itself — which reported one
+// survivor on every CI run while the group was in fact being killed correctly.
+// The bug was in the question, not the answer.
+func survivors(t *testing.T, marker string) []string {
+	t.Helper()
+	// -A -o is spelled the same on Linux and macOS. The marker is argv[0], so
+	// the width at which either one truncates a long command line is irrelevant.
+	out, err := exec.Command("ps", "-A", "-o", "pid=,args=").Output()
+	if err != nil {
+		t.Fatalf("ps: %v", err)
+	}
+	var pids []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.Contains(line, marker) {
+			continue
+		}
+		if pid, _, ok := strings.Cut(strings.TrimSpace(line), " "); ok {
+			pids = append(pids, pid)
+		}
+	}
+	return pids
 }
