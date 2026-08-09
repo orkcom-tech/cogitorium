@@ -119,3 +119,101 @@ jobs:
           # nothing, which is exactly the failure that looks like it worked.
           echo "$STATUS" | grep -q '"available":true' || { docker logs "$CID"; exit 1; }
           docker rm -f "$CID" >/dev/null
+
+  helm:
+    name: helm chart on a real cluster
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint the chart
+        run: |
+          helm lint deploy/helm/cogitorium
+
+      # Rendering is not deploying. These four are refusals the chart makes at
+      # template time, and a guard nobody exercises is a guard that rots.
+      - name: The chart must refuse what cannot work
+        run: |
+          set -e
+          TOK=$(head -c 32 /dev/urandom | base64 | tr -d '=+/' | head -c 30)
+          refuse() {
+            if helm template cog deploy/helm/cogitorium --set auth.adminToken="$TOK" $1 >/dev/null 2>&1; then
+              echo "FAIL: the chart accepted $1"; exit 1
+            fi
+            echo "ok: refused $1"
+          }
+          refuse "--set config.terminal=true"
+          refuse "--set config.egress=true"
+          refuse "--set persistence.enabled=false"
+          if helm template cog deploy/helm/cogitorium --set auth.adminToken=short >/dev/null 2>&1; then
+            echo "FAIL: the chart accepted a short admin token"; exit 1
+          fi
+          echo "ok: refused a short admin token"
+          # And the valid shape must still render, or the guards are just noise.
+          helm template cog deploy/helm/cogitorium --set auth.adminToken="$TOK" >/dev/null
+          echo "ok: a valid configuration renders"
+
+      - name: Build the image
+        run: docker build -t cogitorium:ci .
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: cogitorium
+
+      - name: Install it
+        run: |
+          kind load docker-image cogitorium:ci --name cogitorium
+          ADMIN_TOKEN=$(head -c 32 /dev/urandom | base64 | tr -d '=+/' | head -c 32)
+          echo "::add-mask::$ADMIN_TOKEN"
+          echo "ADMIN_TOKEN=$ADMIN_TOKEN" >> "$GITHUB_ENV"
+          helm install cogitorium deploy/helm/cogitorium \
+            --namespace cogitorium --create-namespace \
+            --set image.repository=cogitorium \
+            --set image.tag=ci \
+            --set image.pullPolicy=Never \
+            --set auth.adminToken="$ADMIN_TOKEN" \
+            --wait --timeout 5m
+
+      - name: It answers, and Contextverse works inside it
+        run: |
+          set -e
+          kubectl -n cogitorium port-forward svc/cogitorium 8688:8688 &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8688/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8688/health
+          # The interface, not just the API: a Go-only regression would pass a
+          # health check and serve nothing.
+          curl -fsS http://127.0.0.1:8688/ | grep -q '<div id="root">'
+          echo "ok: API and interface both answer"
+
+      - name: The seeded admin token works and was never logged
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $ADMIN_TOKEN" http://127.0.0.1:8688/api/v1/whoami | grep -q '"role":"admin"'
+          echo "ok: the seeded token authenticates as admin"
+          # The whole point of seeding it: a cluster log must not carry a
+          # credential. This assertion is why the feature exists.
+          if kubectl -n cogitorium logs deploy/cogitorium | grep -qF "$ADMIN_TOKEN"; then
+            echo "FAIL: the admin token appears in the pod log"; exit 1
+          fi
+          echo "ok: the token is not in the pod log"
+          STATUS=$(curl -fsS -H "Authorization: Bearer $ADMIN_TOKEN" http://127.0.0.1:8688/api/v1/context/status)
+          echo "$STATUS"
+          echo "$STATUS" | grep -q '"available":true' || { kubectl -n cogitorium logs deploy/cogitorium | tail -40; exit 1; }
+          echo "ok: Contextverse is available in the cluster"
+
+      - name: One replica, and it cannot be raised
+        run: |
+          set -e
+          test "$(kubectl -n cogitorium get deploy cogitorium -o jsonpath='{.spec.replicas}')" = "1"
+          test "$(kubectl -n cogitorium get deploy cogitorium -o jsonpath='{.spec.strategy.type}')" = "Recreate"
+          echo "ok: pinned to one replica with a Recreate strategy"
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          kubectl -n cogitorium get all
+          kubectl -n cogitorium describe pod -l app.kubernetes.io/name=cogitorium || true
+          kubectl -n cogitorium logs deploy/cogitorium --tail=200 || true

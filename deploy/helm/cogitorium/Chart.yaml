@@ -1,0 +1,27 @@
+apiVersion: v2
+name: cogitorium
+description: A workbench for agentic development. Local-first, no telemetry.
+type: application
+# The chart's own version. appVersion tracks the release it deploys and is
+# overridden by --set image.tag, so a chart bump and an application bump are
+# separate events rather than one number pretending to be two.
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://orkcom-tech.github.io/cogitorium/
+sources:
+  - https://github.com/orkcom-tech/cogitorium
+keywords:
+  - ai
+  - agents
+  - llm
+  - developer-tools
+maintainers:
+  - name: ORKCOM
+    url: https://github.com/orkcom-tech
+annotations:
+  # Stated here as well as in the README because a values file is where someone
+  # goes looking for a replica count, and this is the one that cannot be raised.
+  cogitorium.orkcom.tech/single-replica: >-
+    Cogitorium stores everything in SQLite with a single writer. Two pods on one
+    volume corrupt it, so the Deployment is pinned to one replica with a
+    Recreate strategy and a ReadWriteOnce volume.

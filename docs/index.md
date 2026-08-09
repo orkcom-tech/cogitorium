@@ -34,6 +34,7 @@ command; an archive brings nothing and says as much.
 | winget | `winget install OrkcomTech.Cogitorium` | declared, not resolved |
 | Desktop app | attached to each release | no — install contextd separately |
 | Archive | download and unpack | no |
+| Kubernetes | `helm install` from `deploy/helm/cogitorium` | yes, in the image |
 | Source | `make build`, or `make desktop` for the window | no |
 
 **Desktop application.** Attached to each release for macOS (Apple silicon and
@@ -61,6 +62,24 @@ SmartScreen on Windows. Saying so is better than a signature that is not one:
 - **Linux** — unpack the tarball and run `./install.sh` for a per-user install
   under `~/.local`, or `./install.sh --system` for everyone. The window needs
   WebKitGTK (`libwebkit2gtk-4.1-0` on Debian and Ubuntu).
+
+**Kubernetes.** A Helm chart is in `deploy/helm/cogitorium`:
+
+```sh
+helm install cogitorium ./deploy/helm/cogitorium \
+  --namespace cogitorium --create-namespace \
+  --set auth.adminToken="$(openssl rand -hex 24)"
+```
+
+Two things about that deployment are consequences rather than preferences, and
+the chart enforces both rather than documenting them. **One replica**: SQLite
+has a single writer, so two pods on one volume corrupt it — there is no
+`replicaCount` value and the strategy is `Recreate`. **Gears are not isolated
+there**: there is no Docker inside a pod, so a gear runs as a subprocess with
+the server's own file access, and approving one grants it everything the server
+has. Because of that the chart refuses, at template time, to enable the in-UI
+terminal or the outward gate. Gear execution as Kubernetes Jobs is the fix and
+is not built. `deploy/helm/cogitorium/README.md` has the rest.
 
 **From source.** Go 1.25 and Node (the UI is built by Vite 7). Docker is
 optional but strongly recommended — without it, gears run with the server's own

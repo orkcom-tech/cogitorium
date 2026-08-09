@@ -57,6 +57,20 @@ type Config struct {
 	// authentication each decision actually had, so a row is never mistaken
 	// for stronger evidence than it is.
 	EgressApprovalBearer bool `yaml:"egress_approval_bearer"`
+
+	// AdminToken seeds the first admin's token instead of generating one.
+	//
+	// Deliberately has NO yaml tag: it is readable from the environment and
+	// nowhere else. That is not a stylistic choice — on Kubernetes the config
+	// file is a ConfigMap, and a ConfigMap is not a secret. Leaving this out of
+	// the file means it cannot be put there by mistake; it comes from a Secret
+	// as an environment variable or it does not come at all.
+	//
+	// Without it the server generates a token and PRINTS it once, which is
+	// correct on a laptop and wrong in a cluster, where "printed once" means
+	// "in the pod log, for anyone who can read logs". With it, nothing
+	// sensitive is ever written to the log.
+	AdminToken string `yaml:"-"`
 }
 
 func Defaults() Config {
@@ -144,8 +158,22 @@ func Load(path, dataDirOverride string) (Config, error) {
 	if v := os.Getenv("COGITORIUM_EGRESS_APPROVAL_BEARER"); v != "" {
 		cfg.EgressApprovalBearer = v == "1" || strings.EqualFold(v, "true")
 	}
+	// Environment only — see the field. A short one is refused rather than
+	// accepted quietly: a seeded admin token is the whole front door, and
+	// "admin" as a token would be worse than the generated one it replaced.
+	if v := os.Getenv("COGITORIUM_ADMIN_TOKEN"); v != "" {
+		if len(v) < MinAdminTokenLen {
+			return Config{}, fmt.Errorf("COGITORIUM_ADMIN_TOKEN is %d characters; it seeds the admin's credential, so at least %d are required",
+				len(v), MinAdminTokenLen)
+		}
+		cfg.AdminToken = v
+	}
 	return cfg, nil
 }
+
+// MinAdminTokenLen is the floor for a seeded admin token. Generated tokens are
+// far longer; this exists so that a seeded one cannot be trivially guessable.
+const MinAdminTokenLen = 24
 
 // SlogLevel maps LogLevel to a slog.Level, defaulting to info on garbage.
 func (c Config) SlogLevel() slog.Level {

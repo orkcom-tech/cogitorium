@@ -1,0 +1,42 @@
+Cogitorium {{ .Chart.AppVersion }} is deploying as {{ include "cogitorium.fullname" . }}.
+
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "cogitorium.fullname" . }}
+
+Reach it:
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "cogitorium.fullname" . }} 8688:{{ .Values.service.port }}
+  # then open http://127.0.0.1:8688
+{{- end }}
+
+Sign in:
+{{- if or .Values.auth.adminToken .Values.auth.existingSecret }}
+  With the admin token you supplied. Nothing was printed to the log.
+{{- else }}
+  The admin token was GENERATED and written to the pod log, once:
+
+    kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "cogitorium.fullname" . }} | grep 'admin token'
+
+  It is in the log for as long as that log is kept, and readable by anyone who
+  can read logs in this namespace. Set auth.adminToken — or auth.existingSecret
+  — and redeploy onto a fresh volume if that matters here.
+{{- end }}
+
+Two things about this deployment that are not preferences:
+
+  1. One replica, always. Everything is stored in SQLite with a single writer,
+     so two pods on one volume corrupt it. The Deployment is pinned and the
+     strategy is Recreate.
+
+  2. Gears are NOT isolated here. Off-cluster they run in a throwaway container
+     with no network and none of the server's files; there is no Docker in a
+     pod, so in-cluster they run as a subprocess with the server's own access —
+     including the database and the provider keys in it. Approving a gear in
+     this deployment grants it everything the server has. Gear execution as
+     Kubernetes Jobs is the fix; it is designed and not built.
+
+     Because of that, this chart refuses to enable the in-UI terminal or the
+     outward gate at all.

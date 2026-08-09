@@ -1,0 +1,18 @@
+{{- include "cogitorium.validate" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cogitorium.fullname" . }}
+  labels: {{- include "cogitorium.labels" . | nindent 4 }}
+data:
+  # Everything here is readable by anything that can read this namespace, which
+  # is why no credential appears in it. Keys and the admin token arrive as
+  # environment variables from a Secret.
+  config.yaml: |
+    listen: 0.0.0.0:{{ .Values.service.port }}
+    data_dir: /data
+    log_level: {{ .Values.config.logLevel }}
+    contextd_path: contextd
+    sandbox: {{ .Values.config.sandbox }}
+    terminal: {{ .Values.config.terminal }}
+    egress: {{ .Values.config.egress }}

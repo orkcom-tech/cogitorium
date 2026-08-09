@@ -1,0 +1,156 @@
+# Cogitorium — Helm values.
+#
+# Read the two blocks marked "cannot be changed" before anything else. They are
+# not preferences; they are consequences of how the software stores its data and
+# how it executes agent-authored code.
+
+image:
+  repository: ghcr.io/orkcom-tech/cogitorium
+  # Empty means the chart's appVersion, so `helm upgrade` after a chart bump
+  # does not silently keep an old image.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CANNOT BE CHANGED: one replica
+#
+# Everything is stored in SQLite with a single writer. Two pods on one volume
+# corrupt the database — not "may", will. There is no replicaCount value here on
+# purpose: a number you can raise is a number somebody raises during an
+# incident. Horizontal scale needs a different store behind the same package,
+# which is a project rather than a flag.
+# ─────────────────────────────────────────────────────────────────────────────
+
+persistence:
+  enabled: true
+  # ReadWriteOnce, and it must stay that way for the same reason as the replica
+  # count. ReadWriteMany here would not enable scaling; it would only remove the
+  # thing currently preventing two writers.
+  accessMode: ReadWriteOnce
+  size: 20Gi
+  storageClass: ""
+  # An existing claim, if the data already exists and you are re-deploying.
+  existingClaim: ""
+
+service:
+  type: ClusterIP
+  port: 8688
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: cogitorium.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Credentials.
+#
+# Nothing sensitive belongs in the ConfigMap: a ConfigMap is not a secret, it is
+# readable by anything that can read the namespace, and it ends up in
+# `helm get values` output and in whatever GitOps repository rendered it.
+# ─────────────────────────────────────────────────────────────────────────────
+auth:
+  # The first admin's token. Supply it and nothing sensitive is ever printed;
+  # leave it empty and the server generates one and logs it ONCE at first
+  # start — which on Kubernetes means it sits in the pod log for anyone who can
+  # read logs. At least 24 characters; the server refuses to start otherwise.
+  #
+  #   kubectl create secret generic cogitorium-auth \
+  #     --from-literal=admin-token="$(openssl rand -hex 24)"
+  adminToken: ""
+  # Or point at a Secret you already made. Takes precedence over adminToken.
+  existingSecret: ""
+  existingSecretKey: admin-token
+
+config:
+  logLevel: info
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # CANNOT BE CHANGED (yet): gears are not isolated in this deployment
+  #
+  # Off-cluster, gears run in a throwaway Docker container with no network and
+  # none of the server's files. There is no Docker inside a pod, so in-cluster
+  # they run as a subprocess of the server — which means agent-authored code
+  # holds the server's own file access, including the SQLite database and the
+  # provider API keys in it.
+  #
+  # The fix is gear execution as Kubernetes Jobs, which is designed and not yet
+  # built. Until it is: the approval gate is the ONLY control, and this chart
+  # refuses to enable the terminal at all (see below). Treat approving a gear in
+  # a cluster as granting it everything the server has.
+  # ───────────────────────────────────────────────────────────────────────────
+  sandbox: subprocess
+
+  # The in-UI shell is refused in-cluster and this value cannot turn it on. It
+  # is interactive code execution with the server's file access and no sandbox
+  # to contain it; the server itself also refuses without a sandbox, so this is
+  # the second of two locks rather than the only one.
+  terminal: false
+
+  # Agents reaching the internet. Off by default. Turning it on ALSO requires a
+  # sandbox — the server refuses to start otherwise, because an unsandboxed gear
+  # can rewrite the configuration and the grants table, which would make the
+  # gate decorative. So in-cluster this cannot be enabled until gear Jobs exist.
+  egress: false
+  egressKey: ""
+  egressExistingSecret: ""
+  egressExistingSecretKey: egress-key
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    # No CPU limit by default: a turn is mostly waiting on a model API, and a
+    # limit here buys throttling rather than protection. Memory is capped
+    # because a runaway is the failure worth bounding.
+    memory: 2Gi
+
+# The server runs as an unprivileged user with a read-only root filesystem; the
+# data directory is the only writable path, and it is a volume.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# A default-deny ingress policy, so only what you name can reach the server.
+# Egress is left alone: the server has to reach the model providers you
+# configured, and this chart cannot know their addresses.
+networkPolicy:
+  enabled: false
+  # Namespaces and pods allowed to reach the service.
+  allowFrom: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  # The server does not talk to the Kubernetes API. Mounting a token would give
+  # agent-authored code — which runs in this pod today — a credential for the
+  # cluster.
+  automountServiceAccountToken: false
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}
+podLabels: {}

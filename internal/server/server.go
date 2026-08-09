@@ -62,6 +62,10 @@ type Server struct {
 	egressBearer   bool
 	egressKilledBy string
 	egressKilledAt string
+
+	// adminToken seeds the first admin instead of generating one. Empty is the
+	// normal case; see config.Config.AdminToken for why it is environment-only.
+	adminToken string
 }
 
 // New takes the whole config rather than trailing booleans. That is a
@@ -94,6 +98,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		searcher:        searcher,
 		broker:          broker,
 		egressBearer:    cfg.EgressApprovalBearer,
+		adminToken:      cfg.AdminToken,
 	}
 	// A terminal is only offered when the sandbox can host one: without it
 	// the shell would hold the server's own file access.
@@ -245,10 +250,14 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 		slog.Warn("search requests were awaiting approval when the server stopped; they are recorded as interrupted", "count", n)
 	}
 
-	_, token, err := s.identity.Bootstrap(ctx)
+	_, token, err := s.identity.Bootstrap(ctx, s.adminToken)
 	if err != nil {
 		return err
 	}
+	// Empty means there is nothing to show: either the admin already existed,
+	// or its token was seeded by the operator and printing it would only put a
+	// credential somewhere it was not before — which on Kubernetes is the pod
+	// log, readable by anyone with access to the namespace.
 	if token == "" {
 		return nil
 	}

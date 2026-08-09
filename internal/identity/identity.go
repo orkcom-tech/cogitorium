@@ -101,7 +101,13 @@ func newToken(userName string) (string, error) {
 // Bootstrap seeds the admin on first start and adopts any pre-existing
 // workspaces, so an install that predates users does not lose them. It
 // returns the admin's token exactly once — on the run that created it.
-func (s *Store) Bootstrap(ctx context.Context) (admin User, token string, err error) {
+// Bootstrap creates the first admin if there is none.
+//
+// seed, when non-empty, becomes the admin's token instead of a generated one,
+// and the returned token is empty because there is nothing for the caller to
+// print — the operator already has it. That distinction is the whole point on
+// Kubernetes, where "printed once at startup" means "in the pod log".
+func (s *Store) Bootstrap(ctx context.Context, seed string) (admin User, token string, err error) {
 	existing, err := s.GetUserByName(ctx, AdminName)
 	if err == nil {
 		return existing, "", nil
@@ -124,9 +130,14 @@ func (s *Store) Bootstrap(ctx context.Context) (admin User, token string, err er
 	}
 	id, _ := res.LastInsertId()
 
-	token, err = newToken(AdminName)
-	if err != nil {
-		return User{}, "", err
+	printable := true
+	if seed != "" {
+		token, printable = seed, false
+	} else {
+		token, err = newToken(AdminName)
+		if err != nil {
+			return User{}, "", err
+		}
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO tokens (user_id, name, token_hash, created_at) VALUES (?, 'bootstrap', ?, ?)`,
@@ -144,7 +155,12 @@ func (s *Store) Bootstrap(ctx context.Context) (admin User, token string, err er
 	if err := tx.Commit(); err != nil {
 		return User{}, "", fmt.Errorf("bootstrap: commit: %w", err)
 	}
-	slog.Info("admin user seeded", "id", id, "adopted_workspaces", n)
+	slog.Info("admin user seeded", "id", id, "adopted_workspaces", n, "token_source", tokenSource(printable))
+	if !printable {
+		// The caller has nothing to show: the operator supplied this token, so
+		// echoing it would only put it somewhere new.
+		return User{ID: id, Name: AdminName, Role: RoleAdmin}, "", nil
+	}
 	return User{ID: id, Name: AdminName, Role: RoleAdmin}, token, nil
 }
 
@@ -446,4 +462,12 @@ func (s *Store) RemoveTeamMember(ctx context.Context, teamID, userID int64) erro
 	}
 	slog.Info("team member removed", "team_id", teamID, "user_id", userID)
 	return nil
+}
+
+// tokenSource labels the log line without ever putting the token in it.
+func tokenSource(generated bool) string {
+	if generated {
+		return "generated"
+	}
+	return "seeded from the environment"
 }

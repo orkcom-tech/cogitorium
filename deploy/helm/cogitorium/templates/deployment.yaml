@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cogitorium.fullname" . }}
+  labels: {{- include "cogitorium.labels" . | nindent 4 }}
+spec:
+  # One. Not a value, not a variable — see values.yaml. SQLite has a single
+  # writer, and two pods on one volume corrupt the database.
+  replicas: 1
+  strategy:
+    # Recreate, because RollingUpdate would briefly run the new pod alongside
+    # the old one, which is the exact thing the replica count exists to prevent.
+    type: Recreate
+  selector:
+    matchLabels: {{- include "cogitorium.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cogitorium.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}{{- toYaml . | nindent 8 }}{{- end }}
+      annotations:
+        # A config change restarts the pod. Without this the ConfigMap updates
+        # and the running server keeps its old settings, which is the kind of
+        # divergence nobody thinks to check.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}{{- toYaml . | nindent 8 }}{{- end }}
+    spec:
+      serviceAccountName: {{ include "cogitorium.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: cogitorium
+          image: {{ include "cogitorium.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          args: ["serve", "--config", "/etc/cogitorium/config.yaml"]
+          env:
+            - name: HOME
+              # contextd keeps its space under HOME, and the root filesystem is
+              # read-only — so HOME has to be on the volume or the context layer
+              # has nowhere to write.
+              value: /data/home
+            {{- if or .Values.auth.adminToken .Values.auth.existingSecret }}
+            - name: COGITORIUM_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.existingSecret | default (printf "%s-auth" (include "cogitorium.fullname" .)) }}
+                  key: {{ .Values.auth.existingSecretKey }}
+            {{- end }}
+            {{- if or .Values.config.egressKey .Values.config.egressExistingSecret }}
+            - name: COGITORIUM_EGRESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.egressExistingSecret | default (printf "%s-auth" (include "cogitorium.fullname" .)) }}
+                  key: {{ .Values.config.egressExistingSecretKey }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          # /health answers only once the database is open and migrated, so it
+          # is a real readiness signal rather than "the process started".
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+            failureThreshold: 3
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/cogitorium
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          {{- if .Values.persistence.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim }}
+          {{- else }}
+          persistentVolumeClaim:
+            claimName: {{ include "cogitorium.fullname" . }}-data
+          {{- end }}
+        - name: config
+          configMap:
+            name: {{ include "cogitorium.fullname" . }}
+        - name: tmp
+          # The root filesystem is read-only; anything that needs scratch space
+          # gets this instead of a writable image.
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}

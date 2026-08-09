@@ -1,0 +1,21 @@
+{{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "cogitorium.fullname" . }}-data
+  labels: {{- include "cogitorium.labels" . | nindent 4 }}
+  annotations:
+    # Kept when the release is deleted. The database holds the workspaces, the
+    # agents and the conversations; losing it to a `helm uninstall` typo is not
+    # a recoverable mistake.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+  {{- with .Values.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}
