@@ -987,6 +987,13 @@ th {
 .editor-head {
   flex: 0 0 auto;
   gap: var(--s2);
+  /* The row must never wrap or overflow: the close button lives at its end,
+     and a close button pushed off the edge is a panel that cannot be closed. */
+  flex-wrap: nowrap;
+}
+
+.editor-head button {
+  flex: 0 0 auto;
 }
 
 .editor-path {
@@ -2033,5 +2040,97 @@ button.big {
 .run-live {
   border-left: 2px solid var(--accent);
   max-height: 20rem;
+  overflow: auto;
+}
+
+/* The diff.
+ *
+ * A grid rather than a flow: two line-number columns and a sign column that
+ * must stay aligned down the whole file, and a text column that owns the rest.
+ * Line numbers are dimmed on purpose — they are for pointing at, not reading —
+ * and the sign is what carries the meaning for anyone who cannot separate the
+ * two tints. */
+.diff-stack {
+  overflow: hidden;
+}
+
+.code-diff {
+  margin: 0;
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: var(--s2) 0;
+  font-family: var(--mono);
+  font-size: var(--t-mono);
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+.dl {
+  display: grid;
+  grid-template-columns: 3.2em 3.2em 1.4em minmax(0, 1fr);
+  white-space: pre;
+  padding-right: var(--s3);
+}
+
+.dl-n {
+  text-align: right;
+  padding-right: var(--s2);
+  color: color-mix(in srgb, var(--text) 32%, transparent);
+  user-select: none;
+}
+
+.dl-s {
+  text-align: center;
+  user-select: none;
+  color: color-mix(in srgb, var(--text) 55%, transparent);
+}
+
+.dl-t {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.dl-add {
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+}
+
+.dl-add .dl-s {
+  color: var(--ok);
+}
+
+.dl-del {
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+}
+
+.dl-del .dl-s {
+  color: var(--danger);
+}
+
+/* The break where unchanged lines were dropped. Drawn, because silently
+   joining two distant parts of a file is how a diff lies. */
+.dl-gap {
+  display: block;
+  text-align: center;
+  color: color-mix(in srgb, var(--text) 30%, transparent);
+  border-top: 1px dashed var(--border);
+  border-bottom: 1px dashed var(--border);
+  margin: 2px 0;
+  user-select: none;
+}
+
+.d-add {
+  color: var(--ok);
+}
+
+.d-del {
+  color: var(--danger);
+}
+
+/* The gear diff sits inside a <pre> that already has padding, so the rows
+   supply their own gutter rather than inheriting the code block's. */
+.gear-diff {
+  padding: var(--s2) 0;
+  max-height: 26rem;
   overflow: auto;
 }

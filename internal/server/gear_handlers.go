@@ -43,12 +43,25 @@ func (s *Server) handleGetGear(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	files, err := s.gears.Files(r.Context(), g.ID, g.Version)
+	// ?version=N reads an older revision's source. Every version's files are
+	// kept — an approval covers exact content, so the content it covered must
+	// stay retrievable — and this is what makes "what changed between v1 and
+	// v2" answerable rather than merely stored.
+	version := g.Version
+	if raw := r.URL.Query().Get("version"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > g.Version {
+			writeError(w, http.StatusBadRequest, "version must be a number between 1 and this gear's current version")
+			return
+		}
+		version = n
+	}
+	files, err := s.gears.Files(r.Context(), g.ID, version)
 	if err != nil {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"gear": g, "files": files})
+	writeJSON(w, http.StatusOK, map[string]any{"gear": g, "files": files, "version": version})
 }
 
 // handleCreateGear lets the operator author or correct a gear directly.

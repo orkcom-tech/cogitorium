@@ -214,6 +214,13 @@ editing what it produced is why both are on screen. Nothing is destroyed —
 every panel put away is one chip away in the top bar, and the editor floats out
 into its own window like any other panel.
 
+**Diffs.** With unsaved edits open, **changes** shows them against what is on
+disk — two line-number columns, a sign column, and long runs of unchanged lines
+collapsed with the break drawn rather than silently joined. A gear past its
+first version offers the same view against the previous one, which is the
+question that matters there: an approval covers exact content, so what you want
+before approving v3 is what changed since the v2 you already read.
+
 The editor highlights Go, TypeScript and JavaScript, Python, shell, SQL, JSON,
 YAML, TOML, CSS, HTML and Markdown. It is a lexer rather than a parser: it will
 not tell a generic from a comparison, and it does not try. `⌘S` saves, `Tab`

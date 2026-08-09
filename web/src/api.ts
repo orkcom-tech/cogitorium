@@ -244,7 +244,10 @@ export const api = {
       const qs = p.toString()
       return req<Gear[]>(`/api/v1/gears${qs ? `?${qs}` : ''}`)
     },
-    get: (id: number) => req<{ gear: Gear; files: GearFile[] }>(`/api/v1/gears/${id}`),
+    get: (id: number, version?: number) =>
+      req<{ gear: Gear; files: GearFile[]; version: number }>(
+        `/api/v1/gears/${id}${version ? `?version=${version}` : ''}`,
+      ),
     create: (g: {
       name: string
       description: string

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type Gear, type GearFile, type GearRun, type GearRunResult , gearRunStream } from '../api'
+import { api, type Gear, type GearFile, type GearRun, type GearRunResult, gearRunStream } from '../api'
+import { collapse, diff, stat, tooBig } from './diff'
 
 export default function GearsPage() {
   const [gears, setGears] = useState<Gear[]>([])
@@ -148,6 +149,29 @@ function GearCard({
   const [live, setLive] = useState('')
   const abort = useRef<AbortController | null>(null)
   const [runs, setRuns] = useState<GearRun[] | null>(null)
+  // The previous version's source, fetched only when asked for. An approval
+  // covers exact content, so "what changed since the version I approved" is
+  // the question this answers.
+  const [prev, setPrev] = useState<GearFile[] | null>(null)
+  const [comparing, setComparing] = useState(false)
+
+  const compare = () => {
+    if (comparing) {
+      setComparing(false)
+      return
+    }
+    if (prev) {
+      setComparing(true)
+      return
+    }
+    api.gears
+      .get(g.id, g.version - 1)
+      .then((r) => {
+        setPrev(r.files)
+        setComparing(true)
+      })
+      .catch((e: Error) => onError(e.message))
+  }
 
   const setStatus = (status: 'approved' | 'disabled') =>
     api.gears.setStatus(g.id, status).then(onChanged).catch((e: Error) => onError(e.message))
@@ -226,6 +250,28 @@ function GearCard({
 
       {open && (
         <>
+          {comparing &&
+            prev
+              ?.filter((old) => !source.some((f) => f.path === old.path))
+              .map((old) => (
+                <details key={'gone-' + old.path} open>
+                  <summary>
+                    <code>{old.path}</code>
+                    <span className="muted"> — removed in v{g.version}</span>
+                  </summary>
+                  <GearFileDiff before={old.content} after="" />
+                </details>
+              ))}
+          {g.version > 1 && (
+            <div className="row">
+              <button onClick={compare}>
+                {comparing ? `showing changes from v${g.version - 1}` : `compare with v${g.version - 1}`}
+              </button>
+              <span className="muted">
+                an approval covers exact content, so this is what changed since the version you last saw
+              </span>
+            </div>
+          )}
           {source.map((f) => (
             <details key={f.path} open={f.path === g.entrypoint && f.encoding !== 'base64'}>
               <summary>
@@ -242,6 +288,8 @@ function GearCard({
                   be read here. Approve it only if you trust where it came from, and use the dry run below to see
                   what it does.
                 </p>
+              ) : comparing ? (
+                <GearFileDiff before={prev?.find((x) => x.path === f.path)?.content ?? ''} after={f.content} />
               ) : (
                 <pre className="prompt-preview">{f.content}</pre>
               )}
@@ -497,5 +545,43 @@ function AuthorGearForm({ onDone, onError }: { onDone: () => void; onError: (m: 
         </button>
       </div>
     </form>
+  )
+}
+
+/**
+ * One file, before and after.
+ *
+ * A gear's approval covers exact content, so the useful question about a new
+ * version is not "what does it do" but "what is different from the one I
+ * already read". Same renderer as the file editor's diff — one algorithm, one
+ * set of colours, so the two never disagree about what a change looks like.
+ */
+function GearFileDiff({ before, after }: { before: string; after: string }) {
+  if (before === after) return <p className="hint">unchanged in this version</p>
+  if (tooBig(before, after)) return <p className="hint">too large to compare line by line</p>
+  const rows = diff(before, after)
+  const s = stat(rows)
+  const { rows: shown, gapAfter } = collapse(rows)
+  return (
+    <>
+      <p className="hint">
+        <span className="d-add">+{s.added}</span> <span className="d-del">−{s.removed}</span>
+        {before === '' && ' · new file'}
+        {after === '' && ' · file removed'}
+      </p>
+      <pre className="prompt-preview gear-diff">
+        {shown.map((r, i) => (
+          <span key={i}>
+            <span className={`dl dl-${r.op}`}>
+              <span className="dl-n">{r.left ?? ''}</span>
+              <span className="dl-n">{r.right ?? ''}</span>
+              <span className="dl-s">{r.op === 'add' ? '+' : r.op === 'del' ? '\u2212' : ' '}</span>
+              <span className="dl-t">{r.text || ' '}</span>
+            </span>
+            {gapAfter.has(i) && <span className="dl dl-gap">\u22ef</span>}
+          </span>
+        ))}
+      </pre>
+    </>
   )
 }

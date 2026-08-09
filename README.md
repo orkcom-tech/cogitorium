@@ -103,8 +103,11 @@ ready-made.
 
 Clicking a file in the tree hands the room to the editor: the blueprint and the
 rosters step aside, the conversation and the shell stay. The editor highlights
-the dozen languages a workspace actually contains, and it is written in the
-product rather than installed — no highlighter library, no editor component.
+the dozen languages a workspace actually contains, and shows unsaved edits as a
+diff against what is on disk. A gear past its first version diffs against the
+previous one — an approval covers exact content, so what you want before
+approving is what changed. All of it is written in the product rather than
+installed: no highlighter library, no diff library, no editor component.
 
 Nothing has to be docked at all. Any panel can be pulled off the grid into a
 window you move, resize, roll up or close.

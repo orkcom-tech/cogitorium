@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import { langOf, tokenize } from './highlight'
+import { collapse, diff, stat, tooBig } from './diff'
 
 /**
  * The file editor, as its own panel.
@@ -35,6 +36,9 @@ export default function CodeEditor({
   const [loading, setLoading] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const [wrap, setWrap] = useState(false)
+  // Showing the change rather than the result. Only ever offered when there is
+  // one — a diff of a file against itself is a blank panel that looks broken.
+  const [showDiff, setShowDiff] = useState(false)
   const area = useRef<HTMLTextAreaElement>(null)
   const back = useRef<HTMLPreElement>(null)
 
@@ -86,6 +90,15 @@ export default function CodeEditor({
   const lang = path ? langOf(path) : ''
   const tokens = useMemo(() => tokenize(text, lang), [text, lang])
 
+  // Against what is on disk, not against the last keystroke. The question the
+  // editor can answer is "what am I about to save", and that is the only one
+  // it has the data for — file history belongs to whatever stores the file.
+  const changes = useMemo(() => {
+    if (!showDiff || text === saved) return null
+    if (tooBig(saved, text)) return 'too-big' as const
+    return collapse(diff(saved, text))
+  }, [showDiff, saved, text])
+
   // The layers scroll as one. Without this the highlight sits still while the
   // text moves, which is worse than no highlighting at all.
   const sync = () => {
@@ -114,12 +127,35 @@ export default function CodeEditor({
         {!dirty && note && <span className="muted">{note}</span>}
         <span className="spacer" />
         <span className="muted editor-stat">
-          {lines} {lines === 1 ? 'line' : 'lines'}
-          {lang ? ` · ${lang}` : ''}
+          {changes && changes !== 'too-big' ? (
+            <>
+              <span className="d-add">+{stat(changes.rows).added}</span>{' '}
+              <span className="d-del">−{stat(changes.rows).removed}</span>
+            </>
+          ) : (
+            <>
+              {lines} {lines === 1 ? 'line' : 'lines'}
+              {lang ? ` · ${lang}` : ''}
+            </>
+          )}
         </span>
-        <button onClick={() => setWrap((w) => !w)} title="Wrap long lines">
-          {wrap ? 'no wrap' : 'wrap'}
-        </button>
+        {dirty && (
+          <button
+            onClick={() => setShowDiff((d) => !d)}
+            title="What you are about to save, against what is on disk"
+          >
+            {showDiff ? 'edit' : 'changes'}
+          </button>
+        )}
+        {/* Wrapping is a property of the editing surface; in the diff there
+            is no editing surface, and a control that does nothing is worse
+            than one that is absent. Dropping it also buys back the width the
+            close button was being clipped out of. */}
+        {!changes && (
+          <button onClick={() => setWrap((w) => !w)} title="Wrap long lines">
+            {wrap ? 'no wrap' : 'wrap'}
+          </button>
+        )}
         <button
           onClick={() => {
             setText(saved)
@@ -139,6 +175,29 @@ export default function CodeEditor({
 
       {loading ? (
         <p className="hint">opening…</p>
+      ) : changes ? (
+        changes === 'too-big' ? (
+          <p className="hint">
+            This file is too large to diff line by line. Saving still works; the comparison is refused rather than
+            freezing the panel for several seconds.
+          </p>
+        ) : (
+          <div className="code-stack diff-stack">
+            <pre className="code-diff">
+              {changes.rows.map((r, i) => (
+                <span key={i}>
+                  <span className={`dl dl-${r.op}`}>
+                    <span className="dl-n">{r.left ?? ''}</span>
+                    <span className="dl-n">{r.right ?? ''}</span>
+                    <span className="dl-s">{r.op === 'add' ? '+' : r.op === 'del' ? '−' : ' '}</span>
+                    <span className="dl-t">{r.text || ' '}</span>
+                  </span>
+                  {changes.gapAfter.has(i) && <span className="dl dl-gap">⋯</span>}
+                </span>
+              ))}
+            </pre>
+          </div>
+        )
       ) : (
         <div className={`code-stack ${wrap ? 'wrap' : ''}`}>
           <pre className="code-back" ref={back} aria-hidden>
