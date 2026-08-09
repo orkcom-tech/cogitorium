@@ -482,3 +482,137 @@ button.primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   flex: 0 0 auto;
 }
+
+/* ═══ INSTRUMENT ═══
+ * A bench instrument. Hairlines carry the structure, nothing is rounded, and
+ * every figure is monospaced so columns line up down the panel. The density
+ * is the feature: what is not spent on padding is spent on the transcript. */
+:root[data-look='instrument'] {
+  --r1: 2px;
+  --r2: 3px;
+  --r3: 3px;
+  --s3: 10px;
+  --s4: 13px;
+  --h-tabs: 30px;
+  --t-prose: 14px;
+  --border: color-mix(in srgb, var(--text) 20%, transparent);
+}
+
+:root[data-look='instrument'] .bn-panel,
+:root[data-look='instrument'] .card,
+:root[data-look='instrument'] .agent-card {
+  border-radius: 0;
+}
+
+:root[data-look='instrument'] .bn-chrome {
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+
+:root[data-look='instrument'] .bn-tab {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:root[data-look='instrument'] .bn-tab.active::after {
+  inset-inline: 0;
+  bottom: 0;
+  border-radius: 0;
+  height: 2px;
+}
+
+/* Numbers are the reason for the monospace: a column of spends that does not
+   line up is a column nobody compares. */
+:root[data-look='instrument'] .a-num,
+:root[data-look='instrument'] .agent-spend-big,
+:root[data-look='instrument'] .agent-spend,
+:root[data-look='instrument'] .agent-spend-detail {
+  font-family: var(--mono);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+:root[data-look='instrument'] .agent-card {
+  border-left: 2px solid transparent;
+}
+
+:root[data-look='instrument'] .agent-card.selected {
+  border-left-color: var(--accent);
+  background: transparent;
+}
+
+:root[data-look='instrument'] .share-bar,
+:root[data-look='instrument'] .share-bar > span {
+  border-radius: 0;
+}
+
+:root[data-look='instrument'] .msg.user .msg-body {
+  border-radius: 2px;
+}
+
+:root[data-look='instrument'] .sidebar nav a {
+  border-radius: 0;
+  border-left: 2px solid transparent;
+}
+
+:root[data-look='instrument'] .sidebar nav a.active {
+  border-left-color: var(--accent);
+}
+
+:root[data-look='instrument'] .transcript {
+  gap: var(--s3);
+}
+
+/* ═══ CANVAS-FIRST ═══
+ * The graph is the application. The menu becomes a rail of glyphs, and the
+ * conversation floats above the canvas rather than sitting beside it.
+ * This deliberately contradicts the rule that the chat is the way in — which
+ * is why it is a choice and not the default. */
+:root[data-look='canvas'] .layout {
+  grid-template-columns: 52px 1fr;
+}
+
+:root[data-look='canvas'] .sidebar {
+  width: 52px;
+  padding: var(--s2) 6px;
+}
+
+:root[data-look='canvas'] .sidebar nav a span:not(.nav-icon),
+:root[data-look='canvas'] .brand span:not(.brand-mark),
+:root[data-look='canvas'] .account-id,
+:root[data-look='canvas'] .account-server,
+:root[data-look='canvas'] .chip-label,
+:root[data-look='canvas'] .out-label {
+  display: none;
+}
+
+:root[data-look='canvas'] .sidebar nav a,
+:root[data-look='canvas'] .account,
+:root[data-look='canvas'] .theme-chip {
+  justify-content: center;
+  padding: var(--s2) 0;
+}
+
+:root[data-look='canvas'] .side-pane {
+  padding: var(--s1);
+}
+
+:root[data-look='canvas'] .nav-toggle {
+  display: none;
+}
+
+:root[data-look='canvas'] .ws-head,
+:root[data-look='canvas'] .page-head {
+  padding-left: 0;
+}
+
+/* Panels float over the canvas rather than dividing the space with it. */
+:root[data-look='canvas'] .bn-panel:not(.bn-parked) {
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.45);
+}
+
+:root[data-look='canvas'] .bn-panel .canvas {
+  background: transparent;
+}

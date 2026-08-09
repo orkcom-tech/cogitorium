@@ -1779,3 +1779,77 @@ button.big {
 .create-body .hint {
   font-size: var(--t-chrome);
 }
+
+.look-choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+
+.look-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  text-align: left;
+  padding: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: var(--r1);
+  background: transparent;
+  color: inherit;
+}
+
+.look-option.active {
+  border-color: var(--accent);
+  background: var(--selected);
+}
+
+.look-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--t-chrome);
+}
+
+.look-text strong {
+  font-size: var(--t-ui);
+}
+
+/* Each thumbnail is the arrangement it stands for, drawn in miniature —
+   a swatch would say nothing about a layout. */
+.look-thumb {
+  width: 46px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  display: grid;
+  gap: 2px;
+  padding: 3px;
+}
+
+.look-instrument {
+  grid-template-columns: 8px 1fr 1fr;
+}
+
+.look-canvas {
+  grid-template-columns: 5px 1fr 12px;
+}
+
+.look-thumb::before,
+.look-thumb::after {
+  content: '';
+  background: color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+.look-thumb::before {
+  grid-column: 1;
+}
+
+.look-thumb::after {
+  grid-column: 2 / -1;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.look-canvas::after {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}

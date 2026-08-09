@@ -7,6 +7,8 @@ import FilesPage from './FilesPage'
 import ApprovalDialog from './ApprovalDialog'
 import Bench, { type PanelDef } from '../bench/Bench'
 import { useLayout } from '../bench/store'
+import { loadTheme } from '../styles/theme'
+import { PRESETS } from '../bench/presets'
 import LayoutMenu from '../bench/LayoutMenu'
 
 // The set of ids the layout parser will accept. A restored layout naming a
@@ -199,6 +201,25 @@ export default function WorkspacePage() {
   }
 
   const layout = useLayout(1, (id) => PANEL_IDS.has(id))
+
+  // The look carries its own arrangement. Choosing "canvas-first" and then
+  // having to hunt for a matching layout preset would be two decisions for
+  // one intention.
+  const lookRef = useRef<string | null>(null)
+  useEffect(() => {
+    const apply = () => {
+      const look = loadTheme().look
+      if (lookRef.current === look) return
+      const first = lookRef.current === null
+      lookRef.current = look
+      if (first) return // never overwrite an arrangement on a plain reload
+      const preset = PRESETS.find((p) => (look === 'canvas' ? p.id === 'canvasfirst' : p.id === 'wire'))
+      if (preset) layout.apply(preset.build())
+    }
+    apply()
+    const t = setInterval(apply, 1200)
+    return () => clearInterval(t)
+  }, [layout])
 
   // The inspector opens by clicking an agent and closes when the selection
   // goes. A restored layout must not bring back an empty one — that is the

@@ -26,6 +26,18 @@ export type Theme = {
   blur: number
   /** how dark the fill is, 0…1 */
   dim: number
+  /**
+   * The interface's shape and density.
+   *
+   * `instrument` is a bench instrument: hairlines instead of cards, no corner
+   * radius, figures in monospace so columns line up, and the conversation in
+   * the centre. `canvas` inverts it — the wiring graph becomes the whole
+   * application and the conversation floats above it.
+   *
+   * This is one setting rather than two because the pair is a decision about
+   * how you work, not two sliders to reconcile.
+   */
+  look: 'instrument' | 'canvas'
   /** the operator's own backdrop: a picture or a looping clip */
   bg: { kind: 'none' | 'image' | 'video'; data: string; dim: number }
 }
@@ -49,6 +61,7 @@ export const DEFAULT_THEME: Theme = {
   surface: 'glass',
   blur: 14,
   dim: 0.62,
+  look: 'instrument',
   bg: { kind: 'none', data: '', dim: 0.55 },
 }
 
@@ -76,6 +89,7 @@ export function loadTheme(): Theme {
       surface: t.surface === 'solid' ? 'solid' : 'glass',
       blur: typeof t.blur === 'number' && t.blur >= 0 && t.blur <= 40 ? t.blur : DEFAULT_THEME.blur,
       dim: clamp01(typeof t.dim === 'number' ? t.dim : DEFAULT_THEME.dim),
+      look: t.look === 'canvas' ? 'canvas' : 'instrument',
       bg: {
         kind: t.bg?.kind === 'image' || t.bg?.kind === 'video' ? t.bg.kind : 'none',
         // Only a data: URL is ever accepted. A remote address here would make
@@ -158,6 +172,7 @@ export function applyTheme(t: Theme) {
   // still costs a compositing layer per panel, and on a laptop that is a fan
   // spinning for no visible reason.
   root.classList.toggle('solid-surfaces', t.surface === 'solid')
+  root.setAttribute('data-look', t.look)
   root.style.setProperty('--surface-blur', `${t.blur}px`)
   root.style.setProperty('--surface-dim', String(t.dim))
 

@@ -62,6 +62,13 @@ export const PRESETS: Preset[] = [
       layout({ main: dock(['chat'], 0), aux: dock(['blueprint'], 520), right: dock(['agents'], 220) }),
   },
   {
+    id: 'canvasfirst',
+    name: 'Canvas-first',
+    why: 'The graph takes the room; the conversation sits beside it, narrow.',
+    build: () =>
+      layout({ main: dock(['blueprint'], 0), aux: dock(['chat'], 380), right: dock(['agents'], 210) }),
+  },
+  {
     id: 'watch',
     name: 'Watch one agent',
     why: 'One agent under the microscope: its role, memory and spend next to the transcript.',

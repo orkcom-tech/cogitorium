@@ -59,6 +59,26 @@ export default function ThemeMenu() {
                 </button>
               </div>
               <div className="theme-body">
+          <span className="menu-head">Look</span>
+          <div className="look-choice">
+            {([
+              ['instrument', 'Instrument', 'Dense. Hairlines, no rounding, figures in monospace. The conversation stays in the centre.'],
+              ['canvas', 'Canvas-first', 'The wiring graph becomes the application; the conversation floats above it and the menu is a rail.'],
+            ] as const).map(([v, name, why]) => (
+              <button
+                key={v}
+                className={`look-option ${theme.look === v ? 'active' : ''}`}
+                onClick={() => setTheme({ ...theme, look: v })}
+              >
+                <span className={`look-thumb look-${v}`} aria-hidden />
+                <span className="look-text">
+                  <strong>{name}</strong>
+                  <span className="muted">{why}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+
           <span className="menu-head">Ready-made</span>
           <div className="theme-presets">
             {PRESET_THEMES.map((p) => (
