@@ -104,7 +104,11 @@ export default function TerminalPage({ workspaceId }: { workspaceId?: number }) 
         {!workspaceId && <h2>Terminal</h2>}
         <span className="muted">
           {connected ? 'connected' : 'connecting…'} · sandboxed, no network, nothing of the server's mounted
-          {workspaceId ? " · this workspace's files" : ''}
+          {/* "a copy of", not "this workspace's files". The container gets a
+              copy and nothing is carried back out, so a file written here is
+              gone when the session ends. Saying otherwise is how someone loses
+              an hour's work and only finds out afterwards. */}
+          {workspaceId ? " · a copy of this workspace's files, not carried back" : ''}
         </span>
       </div>
       <div className="terminal-holder" ref={holder} />

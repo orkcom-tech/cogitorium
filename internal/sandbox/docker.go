@@ -101,12 +101,38 @@ func (d *Docker) create(ctx context.Context, spec Spec, interactive bool) (strin
 	id := strings.TrimSpace(out.String())
 
 	if spec.Dir != "" {
-		cp := exec.CommandContext(ctx, d.bin, "cp", spec.Dir+"/.", id+":"+workDir)
+		// Streamed as a tar rather than `docker cp <dir>/.`, so the payload's
+		// ownership and modes are ours to state instead of the host's to leak.
+		// See payload.go: the plain copy is why the sandbox could not enter a
+		// subdirectory it had been handed, and why it owned nothing it was
+		// given and so could not write at all.
+		cp := exec.CommandContext(ctx, d.bin, "cp", "-", id+":/")
 		var cpErr bytes.Buffer
 		cp.Stderr = &cpErr
-		if err := cp.Run(); err != nil {
+		stdin, err := cp.StdinPipe()
+		if err != nil {
+			d.remove(context.WithoutCancel(ctx), id)
+			return "", fmt.Errorf("open the payload stream: %w", err)
+		}
+		if err := cp.Start(); err != nil {
+			d.remove(context.WithoutCancel(ctx), id)
+			return "", fmt.Errorf("copy code into container: %w", err)
+		}
+		writeErr := writePayload(stdin, spec.Dir, workDir)
+		// Close before Wait either way: docker only finishes once the stream
+		// ends, so returning early on a write error would deadlock.
+		closeErr := stdin.Close()
+		if err := cp.Wait(); err != nil {
 			d.remove(context.WithoutCancel(ctx), id)
 			return "", fmt.Errorf("copy code into container: %w: %s", err, strings.TrimSpace(cpErr.String()))
+		}
+		if writeErr != nil {
+			d.remove(context.WithoutCancel(ctx), id)
+			return "", fmt.Errorf("build the payload: %w", writeErr)
+		}
+		if closeErr != nil {
+			d.remove(context.WithoutCancel(ctx), id)
+			return "", fmt.Errorf("finish the payload stream: %w", closeErr)
 		}
 	}
 	return id, nil

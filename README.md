@@ -181,14 +181,11 @@ someone approved rather than a silent one.
 
 ## Known issues
 
-- **The sandbox cannot read the workspace files it is handed.** The terminal
-  lists them and then refuses to read inside a subdirectory: the server creates
-  workspace directories `0700` as its own user, the sandbox runs its container
-  as `65534`. Gears hit the same wall. Written up in the
-  [documentation](https://orkcom-tech.github.io/cogitorium/#known-issues).
 - **A shell does not survive a reload** — restoring a layout brings the panel
   back, not the session. Deliberate, and listed so it does not look like a
   fault.
+- **The shell works on a copy** of the workspace and nothing is carried back
+  out. Read and write freely; use the file tree for changes meant to last.
 
 ---
 
