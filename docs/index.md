@@ -301,8 +301,8 @@ you can save your own. `?layout=reset` in the URL recovers from anything.
 The interface has two, and they are whole designs rather than a density switch:
 each carries its own ground, accent, surface treatment and arrangement.
 
-**Instrument** — a bench instrument. Hairlines carry every boundary, nothing is
-rounded, panel names are stencilled in monospace, and every figure is monospaced
+**Instrument** — a bench instrument. No light at all, hairlines carrying every
+boundary, nothing rounded, panel names are stencilled in monospace, and every figure is monospaced
 so a column of token spends lines up down the panel. The conversation stays in
 the centre. Every screenshot above is Instrument.
 

@@ -56,6 +56,21 @@ export type Palette = Pick<Theme, 'colors' | 'grain' | 'tint'>
 export type Look = Theme['look']
 
 /**
+ * The accent, and it is the mark's own green.
+ *
+ * It used to be a mint — #5ec8a0 — which measures 9.4:1 on the dark ground and
+ * 1.8:1 on the light one, so in light mode the accent was very nearly
+ * invisible. This is the value the app icon was solved for: 4.5:1 on the
+ * Instrument ground, 4.3:1 on Canvas-first's, and 3.8:1 on a light ground —
+ * the only candidate that clears 3:1 at both ends.
+ *
+ * That it is also the colour of the mark is the point rather than a
+ * coincidence: one green in the product, in the icon and in the interface,
+ * instead of two that nearly match.
+ */
+const ACCENT = '#1a8a69'
+
+/**
  * What a look actually is.
  *
  * A look is not a density switch. Each one is a whole visual world — its own
@@ -67,32 +82,32 @@ export type Look = Theme['look']
  * not a cage. Pick a look, then change every colour in it if you like.
  */
 export const LOOK_SIGNATURE: Record<Look, Palette & Pick<Theme, 'surface' | 'dim' | 'blur' | 'glow' | 'glowStrength' | 'drift'>> = {
-  // Near-black with a mint instrument accent, and a glow low enough to read
-  // as the bezel of a lit panel rather than as weather.
+  // Near-black, and no light at all: an instrument has no weather. The wash
+  // was there because the glow could not be switched off, which is a bad
+  // reason for a design decision.
   instrument: {
-    colors: ['#0d0f11', '#151b1a', '#5ec8a0'],
+    colors: ['#0d0f11', '#151b1a', ACCENT],
     grain: 0.3,
     tint: 0.55,
     surface: 'solid',
     dim: 1,
     blur: 0,
     glow: { x: 50, y: 0 },
-    // An instrument has no weather. This is where the dim wash lives now,
-    // rather than as an opacity buried in a stylesheet the operator cannot see.
-    glowStrength: 0.22,
+    glowStrength: 0,
     drift: false,
   },
-  // Cooler and deeper, with the accent pushed brighter: on a dot grid the
-  // wires have to stay legible against the ground they cross.
+  // Cooler and deeper, with a low light rather than none: a drafting table is
+  // lit, and the dot grid reads better with somewhere for the light to come
+  // from. Low, though — this is a lamp, not weather.
   canvas: {
-    colors: ['#101318', '#1a2230', '#6ee7b7'],
+    colors: ['#101318', '#1a2230', ACCENT],
     grain: 0.4,
     tint: 0.45,
     surface: 'glass',
     dim: 0.82,
     blur: 16,
     glow: { x: 84, y: 6 },
-    glowStrength: 1,
+    glowStrength: 0.35,
     drift: false,
   },
 }

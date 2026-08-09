@@ -152,8 +152,8 @@ has spent.
 
 ### Two looks, and a palette under them
 
-Pick the room you want to work in. **Instrument** is a bench instrument —
-hairlines instead of cards, nothing rounded, every figure in monospace so a
+Pick the room you want to work in. **Instrument** is a bench instrument — no
+light at all, hairlines instead of cards, nothing rounded, every figure in monospace so a
 column of spends lines up, and the conversation in the centre. Everything above
 this line is Instrument.
 
