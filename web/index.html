@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cogitorium</title>
+    <!--
+      The SVG comes first because a browser that understands it prefers it and
+      never asks for the .ico. The .ico is still shipped: without a real file
+      there, /favicon.ico fell through to the single-page app's fallback and
+      every cold load downloaded index.html to draw a blank square.
+    -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" sizes="16x16 32x32 48x48" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0d0f11" />
   </head>
   <body>
     <div id="root"></div>

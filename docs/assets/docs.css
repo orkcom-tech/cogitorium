@@ -71,16 +71,14 @@ body {
   font-weight: 600;
 }
 
+/* The product's own mark, at the size it was drawn to survive. It carries its
+   own colour — one value chosen to clear 3:1 on both a light and a dark
+   ground — so it needs no tile behind it and no second file for dark mode. */
 .brand .mark {
-  display: grid;
-  place-items: center;
   width: 30px;
   height: 30px;
   flex: 0 0 auto;
-  border-radius: 9px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 14px;
+  display: block;
 }
 
 .brand small {

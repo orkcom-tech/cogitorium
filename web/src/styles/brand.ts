@@ -53,3 +53,15 @@ export const ORKCOM_URL = 'https://github.com/orkcom-tech'
 /** The documentation site, built from docs/ by GitHub Pages. */
 export const DOCS_URL = 'https://orkcom-tech.github.io/cogitorium/'
 
+/**
+ * The product's own mark, as a mask.
+ *
+ * The same drawing as the app icon, with `currentColor` for its fill, so in the
+ * interface it takes the operator's accent instead of carrying the icon's own
+ * green into every palette. The icon file keeps that green because a dock and a
+ * browser tab have no accent to inherit — there the mark has to solve its own
+ * contrast, and one value was chosen to clear 3:1 on a light and a dark ground
+ * alike.
+ */
+export const COG_MARK =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' width='512' height='512' role='img' aria-labelledby='cgmt'%3E%3Ctitle id='cgmt'%3ECogitorium%3C/title%3E%3Cpath fill='currentColor' d='M88 60H424L452 88V284H368V144H144V368H200V200H284V368H452V424L424 452H88L60 424V88Z'/%3E%3C/svg%3E"

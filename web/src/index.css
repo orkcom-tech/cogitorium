@@ -81,11 +81,17 @@ body {
 }
 
 /* With the menu open the button sits on the panel; closed, it floats over the
-   content, so it never covers the workspace title. */
+   content, so it never covers the workspace title.
+
+   It also gets its own gutter. The brand used to be a single glyph and the
+   transparent button simply sat on top of it; with a real mark there, the
+   chevron landed inside the drawing. The mark and the name move right by the
+   width of the button rather than the button moving somewhere unfindable. */
 .layout:not(.nav-collapsed) .nav-toggle {
   background: transparent;
   border-color: transparent;
 }
+
 
 .ws-head,
 .page-head,

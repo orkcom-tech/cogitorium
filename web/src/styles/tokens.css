@@ -355,15 +355,21 @@ button.primary:hover:not(:disabled) {
   letter-spacing: -0.01em;
 }
 
+/* The product's own mark, as alpha over the accent rather than as a picture
+   with a colour of its own — so the name in the menu belongs to whatever
+   palette the operator has chosen, and there is one drawing behind the tab
+   icon, the dock icon and this. */
 .brand-mark {
-  display: grid;
-  place-items: center;
   width: 26px;
   height: 26px;
-  border-radius: 8px;
+  flex: 0 0 auto;
   background: var(--accent);
-  color: #fff;
-  font-size: 13px;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-size: contain;
+  mask-position: center;
+  -webkit-mask-position: center;
 }
 
 .sidebar nav a {
@@ -587,6 +593,17 @@ button.primary:hover:not(:disabled) {
 }
 
 
+/* The collapse button gets its own gutter when the menu is open.
+ *
+ * The brand used to be a single glyph and the transparent button simply sat on
+ * top of it; with a real mark there, the chevron landed inside the drawing.
+ * The mark and the name move right by the button's width rather than the
+ * button moving somewhere nobody would look for it. Canvas-first resets this
+ * below — on a rail the button is hidden and there is no room to give away. */
+.layout:not(.nav-collapsed) .brand-block {
+  padding-left: 30px;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    INSTRUMENT
 
@@ -607,8 +624,8 @@ button.primary:hover:not(:disabled) {
   --s4: 13px;
   --h-tabs: 30px;
   --t-prose: 14px;
-  --nav-w: 190px;
-  --nav-w-open: 190px;
+  --nav-w: 204px;
+  --nav-w-open: 204px;
   --border: color-mix(in srgb, var(--text) 20%, transparent);
 
   /* Panels are the face itself, one shade off the ground, rather than cards
@@ -638,13 +655,8 @@ button.primary:hover:not(:disabled) {
 }
 
 :root[data-look='instrument'] .brand-mark {
-  border-radius: 0;
-  background: var(--accent);
-  /* The ground colour, so the glyph stays legible whatever accent is picked. */
-  color: var(--theme-a);
   width: 22px;
   height: 22px;
-  font-size: 11px;
 }
 
 :root[data-look='instrument'] .brand-block {
@@ -829,8 +841,6 @@ button.primary:hover:not(:disabled) {
 :root[data-look='canvas'] .brand-mark {
   width: 30px;
   height: 30px;
-  border-radius: var(--r1);
-  font-size: 14px;
 }
 
 :root[data-look='canvas'] .by-ork {

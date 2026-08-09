@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"sync/atomic"
@@ -308,6 +309,13 @@ func uiHandler() http.Handler {
 	if err != nil {
 		// Impossible with a correct embed; fail loudly, not silently.
 		panic("web/dist not embedded: " + err.Error())
+	}
+	// Go's table has no entry for .webmanifest, so the file went out as
+	// text/plain and a browser is entitled to ignore it. Registering it here
+	// rather than special-casing the path keeps the file server the only thing
+	// that decides content types.
+	if err := mime.AddExtensionType(".webmanifest", "application/manifest+json"); err != nil {
+		panic("registering the webmanifest media type: " + err.Error())
 	}
 	fileServer := http.FileServerFS(dist)
 

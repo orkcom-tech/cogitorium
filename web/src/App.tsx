@@ -13,7 +13,7 @@ import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
 import ThemeMenu from './pages/ThemeMenu'
 import { applyTheme, loadTheme } from './styles/theme'
-import { DOCS_URL, ORKCOM_URL, ORK_MARK } from './styles/brand'
+import { COG_MARK, DOCS_URL, ORKCOM_URL, ORK_MARK } from './styles/brand'
 
 type Health = { status: string; version: string }
 
@@ -103,9 +103,11 @@ export default function App() {
         <aside className="sidebar" aria-hidden={!navOpen}>
           <div className="brand-block">
             <h1 className="brand">
-              <span className="brand-mark" aria-hidden>
-                ◉
-              </span>
+              <span
+                className="brand-mark"
+                style={{ maskImage: `url("${COG_MARK}")`, WebkitMaskImage: `url("${COG_MARK}")` }}
+                aria-hidden
+              />
               <span className="wordmark">Cogitorium</span>
             </h1>
             {/* The maker, stated once and not repeated anywhere else. The mark
