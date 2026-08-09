@@ -34,6 +34,15 @@ jobs:
           go-version: "1.25.x"
           cache: true
 
+      # The race detector needs cgo, and with cgo on this runner `go test ./...`
+      # also compiles the desktop command, which needs the system webview's
+      # headers. Without them the suite fails on a package that has no tests —
+      # a confusing way to discover a build dependency.
+      - name: Linux webview headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
       - name: Build the interface
         run: cd web && npm ci --no-audit --no-fund && npm run build
 
@@ -43,8 +52,32 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      - name: Formatting
+        # gofmt -l prints what is unformatted and exits 0 either way, so the
+        # check has to be the emptiness of its output.
+        run: |
+          unformatted=$(gofmt -l . | grep -v '^web/node_modules' || true)
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt'd:"; echo "$unformatted"
+            gofmt -d $unformatted | head -60
+            exit 1
+          fi
+          echo "ok: everything is formatted"
+
       - name: Test
-        run: go test ./... -count=1
+        # -race, because the parts of this server most worth testing are the
+        # concurrent ones: an SSE turn running while another request writes, the
+        # egress broker parking a turn, the sandbox draining two pipes.
+        run: go test ./... -count=1 -race
+
+      - name: Coverage
+        # Reported, not gated. A percentage threshold rewards tests that touch
+        # lines, and the tests here are written to catch a rule being removed —
+        # the two are not the same thing, and only one of them is worth having.
+        run: |
+          go test ./... -count=1 -coverprofile=coverage.out >/dev/null
+          go tool cover -func=coverage.out | tail -1
+          go tool cover -func=coverage.out | sort -k3 -rn | head -20
 
       - name: Build
         run: go build -o bin/cogitorium ./cmd/cogitorium
