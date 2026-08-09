@@ -12,3 +12,6 @@ web/tsconfig.tsbuildinfo
 * 3.*
 * 4.*
 * 5.*
+
+# macOS writes these into every folder it has been looked at in.
+.DS_Store

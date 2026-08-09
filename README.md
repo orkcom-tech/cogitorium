@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/logo.png" alt="Cogitorium" width="200">
+
 # Cogitorium
 
 **A workbench for agentic development.**
@@ -174,6 +176,19 @@ Worth being straight about: this bounds and records outbound traffic, it does
 not prevent exfiltration. Any egress at all is a channel. What you get is a
 hard cap, a full record, and a human in the loop for every request — a leak
 someone approved rather than a silent one.
+
+---
+
+## Known issues
+
+- **The sandbox cannot read the workspace files it is handed.** The terminal
+  lists them and then refuses to read inside a subdirectory: the server creates
+  workspace directories `0700` as its own user, the sandbox runs its container
+  as `65534`. Gears hit the same wall. Written up in the
+  [documentation](https://orkcom-tech.github.io/cogitorium/#known-issues).
+- **A shell does not survive a reload** — restoring a layout brings the panel
+  back, not the session. Deliberate, and listed so it does not look like a
+  fault.
 
 ---
 

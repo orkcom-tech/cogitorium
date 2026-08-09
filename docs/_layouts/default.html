@@ -8,8 +8,8 @@
     <meta property="og:title" content="{{ page.title | default: site.title }}" />
     <meta property="og:description" content="{{ page.description | default: site.description }}" />
     <meta property="og:type" content="website" />
-    <link rel="icon" type="image/svg+xml" href="{{ '/assets/icon.svg' | relative_url }}" />
     <link rel="icon" sizes="16x16 32x32 48x48" href="{{ '/assets/favicon.ico' | relative_url }}" />
+    <link rel="icon" type="image/png" sizes="256x256" href="{{ '/assets/icon.png' | relative_url }}" />
     <link rel="stylesheet" href="{{ '/assets/docs.css' | relative_url }}" />
   </head>
   <body>
@@ -19,7 +19,7 @@
 
     <aside class="sidebar" id="sidebar">
       <a class="brand" href="{{ '/' | relative_url }}">
-        <img class="mark" src="{{ '/assets/icon.svg' | relative_url }}" alt="" width="30" height="30" />
+        <img class="mark" src="{{ '/assets/icon.png' | relative_url }}" alt="" width="30" height="30" />
         <span>
           Cogitorium
           <small>documentation</small>
@@ -45,6 +45,7 @@
         <a href="#the-terminal">The terminal</a>
         <a href="#configuration-reference">Configuration</a>
         <a href="#security-model">Security model</a>
+        <a href="#known-issues">Known issues</a>
       </nav>
 
       <div class="side-foot">

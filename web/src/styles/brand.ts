@@ -54,14 +54,17 @@ export const ORKCOM_URL = 'https://github.com/orkcom-tech'
 export const DOCS_URL = 'https://orkcom-tech.github.io/cogitorium/'
 
 /**
- * The product's own mark, as a mask.
+ * The product's own mark, reduced, as a mask.
  *
- * The same drawing as the app icon, with `currentColor` for its fill, so in the
- * interface it takes the operator's accent instead of carrying the icon's own
- * green into every palette. The icon file keeps that green because a dock and a
- * browser tab have no accent to inherit — there the mark has to solve its own
- * contrast, and one value was chosen to clear 3:1 on a light and a dark ground
- * alike.
+ * The full logo is an illustration — a gear ring, an ork in profile, small
+ * gears and a C. It carries all of that at 128px and none of it at 26px, which
+ * is the size it is drawn at in the menu. So this is the reduced form: the ring
+ * and the head, and nothing that stops resolving. `currentColor` throughout,
+ * so the mark takes whatever accent the operator's palette is set to instead of
+ * carrying the logo's own black-and-bone into every theme.
+ *
+ * The tab and dock icons are the opposite choice: there is no accent to inherit
+ * out there, so those ship as the artwork on its own ground.
  */
 export const COG_MARK =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' width='512' height='512' role='img' aria-labelledby='cgmt'%3E%3Ctitle id='cgmt'%3ECogitorium%3C/title%3E%3Cpath fill='currentColor' d='M88 60H424L452 88V284H368V144H144V368H200V200H284V368H452V424L424 452H88L60 424V88Z'/%3E%3C/svg%3E"
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' role='img' aria-labelledby='cgm'%3E%3Ctitle id='cgm'%3ECogitorium%3C/title%3E%3Cpath fill='currentColor' fill-rule='evenodd' d='M14.38 3.71 L14.04 1.13 L17.96 1.13 L17.62 3.71 L20.75 4.54 L21.74 2.14 L25.13 4.10 L23.55 6.16 L25.84 8.45 L27.90 6.87 L29.86 10.26 L27.46 11.25 L28.29 14.38 L30.87 14.04 L30.87 17.96 L28.29 17.62 L27.46 20.75 L29.86 21.74 L27.90 25.13 L25.84 23.55 L23.55 25.84 L25.13 27.90 L21.74 29.86 L20.75 27.46 L17.62 28.29 L17.96 30.87 L14.04 30.87 L14.38 28.29 L11.25 27.46 L10.26 29.86 L6.87 27.90 L8.45 25.84 L6.16 23.55 L4.10 25.13 L2.14 21.74 L4.54 20.75 L3.71 17.62 L1.13 17.96 L1.13 14.04 L3.71 14.38 L4.54 11.25 L2.14 10.26 L4.10 6.87 L6.16 8.45 L8.45 6.16 L6.87 4.10 L10.26 2.14 L11.25 4.54 Z M6.20 16.00 A9.80 9.80 0 1 0 25.80 16.00 A9.80 9.80 0 1 0 6.20 16.00 Z'/%3E%3Cpath fill='currentColor' d='M16.66 9.73 L20.09 13.03 L20.36 18.31 L17.98 22.07 L14.15 22.27 L11.91 19.43 L14.02 17.58 L10.32 15.60 L13.76 13.76 L13.10 10.85 Z'/%3E%3C/svg%3E"

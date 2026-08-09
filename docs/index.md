@@ -403,6 +403,29 @@ What is actually true, without softening:
 
 ---
 
+## Known issues
+
+Open defects, stated rather than discovered. Each one is real, reproduced, and
+has a fix that deserves its own thinking rather than a quick loosening.
+
+**The sandbox cannot read the workspace files it is handed.** The terminal says
+"this workspace's files" and lists them, but reading inside a subdirectory
+fails: `cat notes/hello.md` returns *Permission denied*. The server creates
+workspace directories with mode `0700` owned by the account it runs as, while
+the sandbox starts its container as `--user 65534:65534`, so nothing inside can
+traverse them. Gears run in the same sandbox and hit the same wall. The fix is a
+choice between running the sandbox as the owning uid and relaxing the
+per-workspace mode while relying on the data directory for host-side privacy —
+so it is not a one-line change, and loosening `0700` on its own would be the
+wrong one.
+
+**A shell does not survive a reload.** Restoring a layout brings the terminal
+panel back, not the session — the previous shell is gone along with its
+scrollback and working directory. This is deliberate rather than broken, and it
+is stated here because the panel coming back empty looks like a fault.
+
+---
+
 ## Licence
 
 [Business Source License 1.1](https://github.com/orkcom-tech/cogitorium/blob/main/LICENSE).

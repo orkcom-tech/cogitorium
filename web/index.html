@@ -5,16 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cogitorium</title>
     <!--
-      The SVG comes first because a browser that understands it prefers it and
-      never asks for the .ico. The .ico is still shipped: without a real file
-      there, /favicon.ico fell through to the single-page app's fallback and
-      every cold load downloaded index.html to draw a blank square.
+      No SVG favicon here on purpose. A browser that understands one prefers it
+      at EVERY size, and the vector we have is the simplified small form — so
+      the 256px tab on a retina panel would get the 16px drawing. PNGs let each
+      size be its own drawing: the medallion where there is room for it, the
+      reduced mark where there is not.
     -->
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="icon" sizes="16x16 32x32 48x48" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#0d0f11" />
+    <meta name="theme-color" content="#0B0B0C" />
   </head>
   <body>
     <div id="root"></div>
