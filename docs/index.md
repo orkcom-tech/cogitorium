@@ -198,11 +198,27 @@ the agent inspector.
 - **Maximize** with `⌘↵`, toggle the sidebar with `⌘B`, the bottom dock with
   `⌘J`.
 
+**Opening a file clears the bench for it.** The tree and the editor are two
+panels, not two halves of one — a tree is a narrow thing and a file is a wide
+one, and sharing a width meant the file got whatever the tree left over.
+Clicking a file puts the blueprint and the rosters away and hands the room to
+the editor; the conversation and the shell stay, because watching a turn while
+editing what it produced is why both are on screen. Nothing is destroyed —
+every panel put away is one chip away in the top bar, and the editor floats out
+into its own window like any other panel.
+
+The editor highlights Go, TypeScript and JavaScript, Python, shell, SQL, JSON,
+YAML, TOML, CSS, HTML and Markdown. It is a lexer rather than a parser: it will
+not tell a generic from a comparison, and it does not try. `⌘S` saves, `Tab`
+indents rather than leaving the field, and long lines wrap on request. Like
+everything else here it is written in the product rather than installed — there
+is no highlighter library and no editor component behind it.
+
 Layouts persist per browser tab, with a seed for new tabs. Five arrangements
 ship ready-made — Converse, Build, Wire up, Canvas-first, Watch one agent — and
 you can save your own. `?layout=reset` in the URL recovers from anything.
 
-![Files, chat and a terminal](assets/03-build-layout.png)
+![The tree, the conversation, a file open in the editor and a shell underneath](assets/03-build-layout.png)
 
 ![The conversation and the file tree as floating windows](assets/11-floats.png)
 

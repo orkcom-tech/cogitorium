@@ -4,6 +4,7 @@ import BlueprintEditor from './BlueprintEditor'
 import TerminalPage from './TerminalPage'
 import AgentMemory from './AgentMemory'
 import FilesPage from './FilesPage'
+import CodeEditor from './CodeEditor'
 import ApprovalDialog from './ApprovalDialog'
 import Bench, { type PanelDef } from '../bench/Bench'
 import { useLayout } from '../bench/store'
@@ -13,7 +14,7 @@ import LayoutMenu from '../bench/LayoutMenu'
 
 // The set of ids the layout parser will accept. A restored layout naming a
 // panel nothing can render would otherwise be a permanent white screen.
-const PANEL_IDS = new Set(['chat', 'blueprint', 'files', 'terminal', 'agents', 'agent'])
+const PANEL_IDS = new Set(['chat', 'blueprint', 'files', 'editor', 'terminal', 'agents', 'agent'])
 import {
   api,
   wsChatStream,
@@ -41,6 +42,12 @@ export default function WorkspacePage() {
   const [statuses, setStatuses] = useState<Map<number, AgentStatus>>(new Map())
   const [streams, setStreams] = useState<Map<number, string>>(new Map())
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
+  // The file the editor panel holds. It lives here rather than in either panel
+  // because the tree and the editor are two panels that have to agree on it.
+  const [openPath, setOpenPath] = useState<string | null>(null)
+  // Bumped on every save so the tree can re-read the directory and stop
+  // reporting a stale size.
+  const [savedTick, setSavedTick] = useState(0)
   const [usage, setUsage] = useState<Map<number, AgentUsage>>(new Map())
   // A paused turn waiting for permission to search the web. The SSE event is
   // a latency optimisation; the poll below is the mechanism, so a buffering
@@ -221,12 +228,46 @@ export default function WorkspacePage() {
     return () => clearInterval(t)
   }, [layout])
 
+  // Opening a file clears the bench for it.
+  //
+  // A file wants width. Everything except the conversation, the shell and the
+  // tree you clicked in is put away, and the conversation simply narrows
+  // rather than closing — watching a turn while editing what it produced is
+  // the whole reason both are on screen. Nothing is destroyed: every panel put
+  // away here is one chip away in the top bar, and the editor itself can be
+  // floated out like any other.
+  const KEEP_WITH_EDITOR = new Set(['chat', 'terminal', 'files', 'editor'])
+  const openFile = useCallback(
+    (path: string) => {
+      setOpenPath(path)
+      for (const id of PANEL_IDS) if (!KEEP_WITH_EDITOR.has(id)) layout.close(id)
+      setSelectedAgent(null)
+      layout.show('editor', 'aux')
+      // A file needs width, and the side slot arrives at whatever the last
+      // panel to sit in it left behind — 460px from the blueprint, which is
+      // not a file. Ask for a generous one; the bench clamps stored sizes at
+      // paint time against its own box, so this is an intent rather than a
+      // measurement, and it survives being asked for on a small screen.
+      layout.resize('aux', 760)
+    },
+    // KEEP_WITH_EDITOR is a module-level constant in spirit; rebuilding it per
+    // render costs nothing and keeps it beside the rule it encodes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [layout],
+  )
+
   // The inspector opens by clicking an agent and closes when the selection
   // goes. A restored layout must not bring back an empty one — that is the
   // "Agents / Agent, which is which?" confusion, rebuilt on every reload.
   useEffect(() => {
     if (!selectedAgent && layout.slotOf('agent')) layout.close('agent')
   }, [selectedAgent, layout])
+
+  // Same rule as the agent inspector: a restored layout must not bring back an
+  // editor with no file in it.
+  useEffect(() => {
+    if (!openPath && layout.slotOf('editor')) layout.close('editor')
+  }, [openPath, layout])
 
   // ⌘↵ maximizes the focused panel; Escape is deliberately NOT bound here —
   // the approval dialog owns it, so one keypress can never both dismiss chrome
@@ -302,13 +343,32 @@ export default function WorkspacePage() {
     },
     {
       id: 'files',
-      minW: 380,
+      minW: 200,
       title: 'Files',
       home: 'left',
       node: (
-        <div className="bn-body">
-          <FilesPage wsId={wsId} onError={setError} />
+        <div className="bn-body bn-scroll">
+          <FilesPage wsId={wsId} openPath={openPath} savedTick={savedTick} onOpen={openFile} onError={setError} />
         </div>
+      ),
+    },
+    {
+      id: 'editor',
+      minW: 460,
+      // The title is the file, so a tab strip never says "Editor" twice.
+      title: openPath ? openPath.slice(openPath.lastIndexOf('/') + 1) : 'Editor',
+      home: 'aux',
+      node: (
+        <CodeEditor
+          wsId={wsId}
+          path={openPath}
+          onClose={() => {
+            setOpenPath(null)
+            layout.close('editor')
+          }}
+          onSaved={() => setSavedTick((n) => n + 1)}
+          onError={setError}
+        />
       ),
     },
     {

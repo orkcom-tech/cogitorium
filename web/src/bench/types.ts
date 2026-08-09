@@ -173,13 +173,21 @@ export function fit(layout: Layout, vw: number, vh: number, minMain = MIN_MAIN):
     // never squeeze the panel it is covering.
     return d.mode === 'overlay' ? RAIL : d.size
   }
+  // LEFT belongs in this sum. The grid is four columns — left, main, aux,
+  // right — and this budget used to count only two of them, so a wide aux
+  // beside an open left dock produced tracks that added up to more than the
+  // bench and the last column was simply clipped. Opening a file made it
+  // obvious: the editor's save button was cut off the right-hand edge while
+  // every number in the layout said it fitted.
+  const wLeft = trackOf(s.left)
   const wRight = trackOf(s.right)
   const wAux = trackOf(s.aux)
   const hBottom = trackOf(s.bottom)
 
+  let left = wLeft
   let right = wRight
   let aux = wAux
-  const horizontal = right + aux
+  const horizontal = left + right + aux
   // Clamp against the SAME floor the grid enforces. Using the global constant
   // while the grid used the active panel's own minimum let the side docks be
   // sized on one number and then squeezed by another — the agent roster ended
@@ -187,11 +195,13 @@ export function fit(layout: Layout, vw: number, vh: number, minMain = MIN_MAIN):
   const room = Math.max(0, vw - minMain)
   if (horizontal > room && horizontal > 0) {
     const scale = room / horizontal
+    left = Math.floor(left * scale)
     right = Math.floor(right * scale)
     aux = Math.floor(aux * scale)
   }
   const bottom = Math.min(hBottom, Math.max(0, vh - 160))
   // A dock never shrinks below the rail; below that it is not a panel.
+  if (left > 0) left = Math.max(left, RAIL)
   if (right > 0) right = Math.max(right, RAIL)
   if (aux > 0) aux = Math.max(aux, RAIL)
 
@@ -199,6 +209,7 @@ export function fit(layout: Layout, vw: number, vh: number, minMain = MIN_MAIN):
     ...layout,
     slots: {
       ...s,
+      left: { ...s.left, size: s.left.open ? left : s.left.size },
       right: { ...s.right, size: s.right.open ? right : s.right.size },
       aux: { ...s.aux, size: s.aux.open ? aux : s.aux.size },
       bottom: { ...s.bottom, size: s.bottom.open ? bottom : s.bottom.size },

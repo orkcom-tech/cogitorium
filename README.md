@@ -97,7 +97,12 @@ inspector are panels on a grid: put one at any edge, slide it out over the
 centre, float it, or hide it. Arrangements can be saved, and five are
 ready-made.
 
-![Files, chat and a terminal, arranged for building](docs/assets/03-build-layout.png)
+![The tree, the conversation, a file open in the editor and a shell underneath](docs/assets/03-build-layout.png)
+
+Clicking a file in the tree hands the room to the editor: the blueprint and the
+rosters step aside, the conversation and the shell stay. The editor highlights
+the dozen languages a workspace actually contains, and it is written in the
+product rather than installed — no highlighter library, no editor component.
 
 Nothing has to be docked at all. Any panel can be pulled off the grid into a
 window you move, resize, roll up or close.
