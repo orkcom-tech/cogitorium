@@ -206,20 +206,42 @@ export default function ThemeMenu() {
           </label>
 
           <span className="menu-head">Light source</span>
-          <GlowPad
-            glow={theme.glow}
-            disabled={theme.drift}
-            onMove={(glow) => setTheme({ ...theme, glow })}
-          />
+          {/* Strength first, and off is one drag away. Everything below it is
+              about WHERE the light is, which is a question that only matters
+              once there is any — so the position pad and the drift are hidden
+              when it is off rather than sitting there doing nothing. */}
           <label className="dial">
+            strength
             <input
-              type="checkbox"
-              checked={theme.drift}
-              onChange={(e) => setTheme({ ...theme, drift: e.target.checked })}
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={theme.glowStrength}
+              onChange={(e) => setTheme({ ...theme, glowStrength: Number(e.target.value) })}
             />
-            drift it around
+            <span className="muted dial-value">
+              {theme.glowStrength === 0 ? 'off' : `${Math.round(theme.glowStrength * 100)}%`}
+            </span>
           </label>
-          {theme.drift && (
+          {theme.glowStrength > 0 && (
+            <GlowPad
+              glow={theme.glow}
+              disabled={theme.drift}
+              onMove={(glow) => setTheme({ ...theme, glow })}
+            />
+          )}
+          {theme.glowStrength > 0 && (
+            <label className="dial">
+              <input
+                type="checkbox"
+                checked={theme.drift}
+                onChange={(e) => setTheme({ ...theme, drift: e.target.checked })}
+              />
+              drift it around
+            </label>
+          )}
+          {theme.glowStrength > 0 && theme.drift && (
             <label className="dial">
               speed
               <input

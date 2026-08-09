@@ -16,6 +16,15 @@ export type Theme = {
   mode: 'dark' | 'light' | 'system'
   /** where the glow sits, in percent of the viewport */
   glow: { x: number; y: number }
+  /**
+   * How strong the glow is, 0…1, where 0 is off.
+   *
+   * It was not adjustable at all: the light could be moved and set drifting,
+   * and the one thing an operator might actually want — none of it — had no
+   * control. A position dial for a thing you cannot switch off is a setting
+   * that assumes its own answer.
+   */
+  glowStrength: number
   /** drift it slowly around the screen, bouncing off the edges */
   drift: boolean
   /** seconds for one full circuit */
@@ -57,7 +66,7 @@ export type Look = Theme['look']
  * The palette controls stay live underneath: the signature is where you land,
  * not a cage. Pick a look, then change every colour in it if you like.
  */
-export const LOOK_SIGNATURE: Record<Look, Palette & Pick<Theme, 'surface' | 'dim' | 'blur' | 'glow' | 'drift'>> = {
+export const LOOK_SIGNATURE: Record<Look, Palette & Pick<Theme, 'surface' | 'dim' | 'blur' | 'glow' | 'glowStrength' | 'drift'>> = {
   // Near-black with a mint instrument accent, and a glow low enough to read
   // as the bezel of a lit panel rather than as weather.
   instrument: {
@@ -68,6 +77,9 @@ export const LOOK_SIGNATURE: Record<Look, Palette & Pick<Theme, 'surface' | 'dim
     dim: 1,
     blur: 0,
     glow: { x: 50, y: 0 },
+    // An instrument has no weather. This is where the dim wash lives now,
+    // rather than as an opacity buried in a stylesheet the operator cannot see.
+    glowStrength: 0.22,
     drift: false,
   },
   // Cooler and deeper, with the accent pushed brighter: on a dot grid the
@@ -80,6 +92,7 @@ export const LOOK_SIGNATURE: Record<Look, Palette & Pick<Theme, 'surface' | 'dim
     dim: 0.82,
     blur: 16,
     glow: { x: 84, y: 6 },
+    glowStrength: 1,
     drift: false,
   },
 }
@@ -101,6 +114,7 @@ export const DEFAULT_THEME: Theme = {
   ...PRESET_THEMES[0].theme,
   mode: 'system',
   glow: { x: 12, y: 4 },
+  glowStrength: 1,
   drift: false,
   driftSpeed: 90,
   surface: 'glass',
@@ -129,6 +143,9 @@ export function loadTheme(): Theme {
         x: clampPct(t.glow?.x, DEFAULT_THEME.glow.x),
         y: clampPct(t.glow?.y, DEFAULT_THEME.glow.y),
       },
+      // Themes stored before this existed have no strength; they get the
+      // default rather than 0, so nobody's ground goes flat on an upgrade.
+      glowStrength: clamp01(typeof t.glowStrength === 'number' ? t.glowStrength : DEFAULT_THEME.glowStrength),
       drift: t.drift === true,
       driftSpeed: typeof t.driftSpeed === 'number' && t.driftSpeed >= 10 && t.driftSpeed <= 600 ? t.driftSpeed : 90,
       surface: t.surface === 'solid' ? 'solid' : 'glass',
@@ -203,6 +220,7 @@ export function applyTheme(t: Theme) {
   if (c) root.style.setProperty('--accent', c)
   else root.style.removeProperty('--accent')
 
+  root.style.setProperty('--glow-strength', String(t.glowStrength))
   root.style.setProperty('--glow-x', `${t.glow.x}%`)
   root.style.setProperty('--glow-y', `${t.glow.y}%`)
   root.style.setProperty('--drift-speed', `${t.driftSpeed}s`)

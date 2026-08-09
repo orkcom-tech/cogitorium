@@ -2134,3 +2134,11 @@ button.big {
   max-height: 26rem;
   overflow: auto;
 }
+
+/* A dial that reports its own value. A slider with no number is a slider you
+   set by feel and cannot set back. */
+.dial-value {
+  min-width: 2.6em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

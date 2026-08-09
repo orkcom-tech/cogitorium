@@ -323,8 +323,11 @@ A plain reload never overwrites an arrangement you built by hand.
 Independent of the look, so either one can wear any of it.
 
 One to three colours make the background gradient, and when there is a third it
-becomes the accent. Dials control grain, tint, and where the light falls, and
-the light can drift slowly around the screen. Panels are frosted glass or solid
+becomes the accent. Dials control grain and tint; the light has a strength dial
+whose left end is **off**, and while there is any it can be placed by hand or
+set drifting slowly around the screen. Turning it off hides the position pad and
+the drift with it — where the light falls is not a question worth asking when
+there is none. Panels are frosted glass or solid
 fill — solid genuinely switches the compositing off rather than blurring by
 zero — with the blur and the fill darkness on their own sliders. Five palettes
 ship ready-made: Graphite, Lime, Cobalt, Ember, Moss.
