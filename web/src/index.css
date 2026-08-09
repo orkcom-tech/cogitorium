@@ -32,7 +32,7 @@ body {
   --nav-w: var(--nav-w-min);
 }
 
-.layout.nav-collapsed .sidebar nav a span,
+.layout.nav-collapsed .sidebar nav a span:not(.nav-icon),
 .layout.nav-collapsed .brand,
 .layout.nav-collapsed .account-id,
 .layout.nav-collapsed .account-server,
