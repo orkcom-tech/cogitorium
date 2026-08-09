@@ -156,13 +156,13 @@ func TestAllowIsDeliveredWithTheDecidersIdentity(t *testing.T) {
 	}
 	go func() {
 		time.Sleep(20 * time.Millisecond)
-		_, _ = b.Resolve(r.Token, Answer{Allow: true, UserID: 7, UserName: "eduard", Auth: "bearer"})
+		_, _ = b.Resolve(r.Token, Answer{Allow: true, UserID: 7, UserName: "the-operator", Auth: "bearer"})
 	}()
 	a, err := b.Wait(context.Background(), r)
 	if err != nil {
 		t.Fatalf("wait failed: %v", err)
 	}
-	if !a.Allow || a.UserID != 7 || a.UserName != "eduard" || a.Auth != "bearer" {
+	if !a.Allow || a.UserID != 7 || a.UserName != "the-operator" || a.Auth != "bearer" {
 		t.Fatalf("the waiter cannot write an honest audit row from %+v", a)
 	}
 }

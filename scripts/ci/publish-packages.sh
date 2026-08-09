@@ -54,11 +54,16 @@ push_repo() {
     cd "$dir"
     git config user.name "github-actions[bot]"
     git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-    if git diff --quiet; then
+    # Stage FIRST, then compare the index against HEAD. `git diff` alone looks
+    # only at tracked files, so on the very first publish — when the manifest
+    # does not exist in that repository yet — it reported no change and the
+    # script pushed nothing while announcing success. The one run that has to
+    # work was the one case it got wrong.
+    git add -A
+    if git diff --cached --quiet; then
       echo "==> No change in $repo (already at $TAG)"
       return 0
     fi
-    git add -A
     git commit -m "$message"
     git push origin HEAD
     echo "==> Pushed $repo"
