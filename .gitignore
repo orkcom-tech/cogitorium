@@ -20,3 +20,7 @@ web/tsconfig.tsbuildinfo
 # binary here, and an 18MB blob in a commit is noticed a release too late.
 /cogitorium
 /cogitorium-desktop
+
+# Agent worktrees and session scratch. These are checkouts of THIS repository,
+# so committing them records gitlinks nobody can resolve.
+.claude/
