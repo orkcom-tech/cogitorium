@@ -37,43 +37,65 @@
         <a href="{{ '/' | relative_url }}" {% unless on_guide %}class="current"{% endunless %}>Reference</a>
         <a href="{{ '/guide/' | relative_url }}" {% if on_guide %}class="current"{% endif %}>Guide</a>
 
+        {%- comment -%}
+          Grouped by the question a reader is holding, not by the order the
+          sections happen to be written in — a single list of ten is a list
+          nobody scans. No group runs past four entries for the same reason.
+
+          The ids keep their leading numbers because that is what the build
+          produces: kramdown here does NOT strip a leading digit, which was
+          settled by reading the published HTML after a "fix" based on an older
+          kramdown turned twelve working links into twelve dead ones.
+        {%- endcomment -%}
         {%- if on_guide -%}
-        <span class="group">Walkthrough</span>
-        <a href="#from-nothing-to-an-answer">From nothing to an answer</a>
-        <a href="#a-second-agent">A second agent</a>
-        <a href="#gears--tools-your-agents-keep">Gears</a>
-        <a href="#rules-an-agent-must-not-break">Prohibitions</a>
-        <a href="#moving-a-workspace-to-another-install">Export &amp; import</a>
-        <a href="#files-the-editor-and-diffs">Files &amp; diffs</a>
-        <a href="#memory">Memory</a>
-        <a href="#letting-an-agent-search-the-web">Web access</a>
-        <a href="#the-terminal">The terminal</a>
-        <a href="#more-than-one-person">More than one person</a>
+        <span class="group">Start here</span>
+        <a href="#1-from-nothing-to-an-answer">From nothing to an answer</a>
+
+        <span class="group">Build something</span>
+        <a href="#2-a-second-agent">A second agent</a>
+        <a href="#3-gears--tools-your-agents-keep">Gears</a>
+        <a href="#4-rules-an-agent-must-not-break">Prohibitions</a>
+
+        <span class="group">Keep and move it</span>
+        <a href="#5-moving-a-workspace-to-another-install">Export &amp; import</a>
+        <a href="#6-files-the-editor-and-diffs">Files &amp; diffs</a>
+        <a href="#7-memory">Memory</a>
+
+        <span class="group">Open it up</span>
+        <a href="#8-letting-an-agent-search-the-web">Web access</a>
+        <a href="#9-the-terminal">The terminal</a>
+        <a href="#10-more-than-one-person">More than one person</a>
 
         <span class="group">When it refuses</span>
-        <a href="#when-it-refuses">Error messages</a>
-        <a href="#what-is-not-here">What is not here</a>
+        <a href="#11-when-it-refuses">Error messages</a>
+        <a href="#12-what-is-not-here">What is not here</a>
         {%- else -%}
-        <span class="group">Start</span>
+        <span class="group">Start here</span>
         <a href="#install">Install</a>
         <a href="#the-idea-in-five-minutes">The idea</a>
 
-        <span class="group">Using it</span>
+        <span class="group">Agents</span>
         <a href="#workspaces-agents-and-the-orchestrator">Workspaces &amp; agents</a>
         <a href="#the-blueprint">The blueprint</a>
-        <a href="#gears--tools-your-agents-build">Gears</a>
         <a href="#prohibitions">Prohibitions</a>
-        <a href="#export-and-import">Export &amp; import</a>
+
+        <span class="group">Tools &amp; memory</span>
+        <a href="#gears--tools-your-agents-build">Gears</a>
         <a href="#context-and-memory">Context &amp; memory</a>
-        <a href="#the-interface">The interface</a>
+        <a href="#export-and-import">Export &amp; import</a>
+
+        <span class="group">The interface</span>
+        <a href="#the-interface">Panels &amp; layouts</a>
         <a href="#looks">Looks</a>
         <a href="#palette">Palette</a>
 
-        <span class="group">Running it</span>
+        <span class="group">Operating it</span>
         <a href="#teams-and-access">Teams &amp; access</a>
         <a href="#letting-agents-reach-the-web">Web access</a>
         <a href="#the-terminal">The terminal</a>
         <a href="#configuration-reference">Configuration</a>
+
+        <span class="group">Before you rely on it</span>
         <a href="#security-model">Security model</a>
         <a href="#known-issues">Known issues</a>
         {%- endif -%}

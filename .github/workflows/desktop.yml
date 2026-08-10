@@ -98,14 +98,14 @@ jobs:
           # unsigned binary is refused outright rather than merely warned about.
           codesign --force --deep --sign - dist/Cogitorium.app
           ditto -c -k --sequesterRsrc --keepParent dist/Cogitorium.app \
-            "dist/Cogitorium_${{ steps.v.outputs.version }}_${{ matrix.artifact }}.zip"
+            "dist/Cogitorium-desktop_${{ steps.v.outputs.version }}_${{ matrix.artifact }}.zip"
           rm -rf dist/Cogitorium.app
 
       - name: Assemble the Linux tarball
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          stage="Cogitorium_${{ steps.v.outputs.version }}_${{ matrix.artifact }}"
+          stage="Cogitorium-desktop_${{ steps.v.outputs.version }}_${{ matrix.artifact }}"
           mkdir -p "$stage"
           cp dist/cogitorium-desktop "$stage/"
           cp packaging/desktop/cogitorium.desktop "$stage/"
@@ -119,7 +119,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          stage="Cogitorium_${{ steps.v.outputs.version }}_${{ matrix.artifact }}"
+          stage="Cogitorium-desktop_${{ steps.v.outputs.version }}_${{ matrix.artifact }}"
           mkdir -p "$stage"
           cp dist/cogitorium-desktop.exe "$stage/Cogitorium.exe"
           cp LICENSE README.md "$stage/"
@@ -134,6 +134,15 @@ jobs:
   attach:
     name: attach to the release
     needs: build
+    # The artifacts are named Cogitorium-desktop_… and not Cogitorium_…, which
+    # is not cosmetic. GitHub compares release asset names WITHOUT regard to
+    # case, so "Cogitorium_0.1.2_linux_amd64.tar.gz" and the server's
+    # "cogitorium_0.1.2_linux_amd64.tar.gz" are one name to it. This workflow
+    # and release.yml run at the same time on the same tag; whichever uploaded
+    # first won, and the other got 422 already_exists and failed the whole
+    # release. It went unnoticed until this job got fast enough to win the race.
+    # Distinct names also spare a human deciding between two files that differ
+    # by one capital letter.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Every in-page link in the documentation sidebar must reach a real heading.
 
-This exists because twelve of them did not, and nothing said so. A dead anchor
-does not 404 and does not warn — the page simply fails to scroll, which nobody
-notices while writing and everybody notices while reading. The cause is that
-GitHub Pages builds these with kramdown, and kramdown STRIPS a leading number
-from a heading when it makes the id: "## 4. Rules an agent must not break"
-becomes "rules-an-agent-must-not-break", not "4-rules-...". A numbered
-walkthrough is exactly the shape that gets this wrong.
+A dead anchor does not 404 and does not warn — the page simply fails to scroll,
+which nobody notices while writing and everybody notices while reading. So it
+gets checked here.
+
+The slug rule below was NOT reasoned out. An earlier version of this script
+transcribed an old kramdown, which strips a leading digit out of a heading id,
+and on that evidence twelve working links were "fixed" into twelve dead ones.
+The rule here is the one the published site actually produces, read back out of
+its own HTML, and SELF_TEST pins the cases that settled it.
 
 Run: python3 scripts/ci/check-docs-anchors.py
-Exits non-zero, naming each broken link and the ids that do exist.
 """
 
 import re
@@ -19,37 +20,49 @@ from pathlib import Path
 
 DOCS = Path(__file__).resolve().parents[2] / "docs"
 
+# Heading text -> the id GitHub Pages published for it, copied from the built
+# page. Each entry is here because it distinguishes a candidate rule from a
+# wrong one: the leading number is KEPT; an em dash is dropped and leaves the
+# two spaces around it, which become two hyphens; a comma is dropped and leaves
+# the single space beside it, which becomes one hyphen.
+SELF_TEST = {
+    "1. From nothing to an answer": "1-from-nothing-to-an-answer",
+    "3. Gears — tools your agents keep": "3-gears--tools-your-agents-keep",
+    "The token, and when you need it": "the-token-and-when-you-need-it",
+    "10. More than one person": "10-more-than-one-person",
+}
 
-def kramdown_id(text: str) -> str:
-    """kramdown's generate_id, transcribed from its source.
 
-    Leading non-letters are dropped, anything outside [a-zA-Z0-9 -] is removed,
-    then EACH space becomes a hyphen — which is why an em dash surrounded by
-    spaces yields a double hyphen rather than a single one.
-    """
-    s = re.sub(r"^[^a-zA-Z]+", "", text)
-    s = re.sub(r"[^a-zA-Z0-9 -]", "", s)
-    return s.replace(" ", "-").lower()
+def slug(text: str) -> str:
+    """The id the site gives a heading: drop anything outside [a-zA-Z0-9 -],
+    turn EACH space into a hyphen, lowercase."""
+    return re.sub(r"[^a-zA-Z0-9 -]", "", text).replace(" ", "-").lower()
 
 
 def heading_ids(path: Path) -> dict[str, str]:
     ids: dict[str, str] = {}
     fenced = False
     for line in path.read_text().splitlines():
-        # A "## " inside a fenced block is sample output, not a heading. The
-        # guide quotes the prompt section verbatim, so this matters.
+        # A "## " inside a fenced block is sample output, not a heading — the
+        # guide quotes the prompt's own section headings verbatim.
         if line.startswith("```"):
             fenced = not fenced
             continue
         if fenced:
             continue
-        m = re.match(r"^(#{1,6})\s+(.*?)\s*$", line)
+        m = re.match(r"^#{1,6}\s+(.*?)\s*$", line)
         if m:
-            ids[kramdown_id(m.group(2))] = m.group(2)
+            ids[slug(m.group(1))] = m.group(1)
     return ids
 
 
 def main() -> int:
+    for text, want in SELF_TEST.items():
+        if slug(text) != want:
+            print(f"the slug rule is wrong before it checked anything: {text!r} -> {slug(text)!r}, "
+                  f"but the site publishes {want!r}", file=sys.stderr)
+            return 1
+
     layout = (DOCS / "_layouts" / "default.html").read_text()
     # The sidebar renders one anchor list per page, chosen by a Liquid
     # conditional; each branch is checked against the page it belongs to.
