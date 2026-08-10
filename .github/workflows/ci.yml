@@ -72,6 +72,13 @@ jobs:
           CGO_ENABLED: "1"
         run: go build -o /dev/null ./cmd/cogitorium-desktop
 
+      # A dead in-page anchor neither 404s nor warns: the page just fails to
+      # scroll. Twelve of them shipped at once because kramdown strips a
+      # leading number out of a heading id and a numbered walkthrough is
+      # exactly the shape that trips on it.
+      - name: Documentation anchors
+        run: python3 scripts/ci/check-docs-anchors.py
+
       - name: Formatting
         # gofmt -l prints what is unformatted and exits 0 either way, so the
         # check has to be the emptiness of its output.

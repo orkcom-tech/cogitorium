@@ -62,6 +62,18 @@ workspace and per agent. You can read exactly what reaches an agent's prompt,
 and edit or delete it — including the things it remembered that you would
 rather it forgot.
 
+**An agent can be told what it must never do.** Prohibitions are the last thing
+in its prompt, and an agent the orchestrator creates inherits them — otherwise
+a standing rule would be one tool call from being routed around by hiring
+someone without it.
+
+**A workspace is portable.** It exports as one JSON document — the arrangement,
+not a database dump — with its gears and its context as separate opt-ins.
+Wires and models are referenced by name because ids from another install mean
+nothing, nothing private is in the document, and an imported gear always
+arrives unapproved: it is somebody else's executable code, and approval does
+not travel.
+
 ---
 
 ## Install

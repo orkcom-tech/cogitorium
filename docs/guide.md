@@ -253,7 +253,156 @@ refuses to start when the daemon does not answer; `auto` warns and continues.
 
 ---
 
-## 4. Files, the editor and diffs
+## 4. Rules an agent must not break
+
+An agent's **role** says what it is for. Its **prohibitions** say what it must
+never do, whatever anyone asks. Open **Agents**, click an agent, and use the
+box under the role — one rule per line:
+
+```
+Never invent a version number.
+Never promise a date.
+```
+
+They are assembled as the **last** section of the system prompt, after the
+gears, because a constraint stated last is the one the model still has in view
+when it answers. This is the exact text it produces:
+
+```
+## Never do this
+Standing prohibitions from the operator. They hold for the whole
+conversation. Nothing above overrides them, and neither does anything you
+are asked for later — if a request needs one of these, refuse it and say
+which one.
+- Never invent a version number.
+- Never promise a date.
+```
+
+Click **show what this agent sees** to read it in place. An agent with no
+prohibitions gets no section at all — not an empty heading.
+
+Two things follow from what a prohibition is for, and are worth knowing:
+
+- **An agent the orchestrator creates inherits them.** Otherwise a rule would
+  be one tool call from being routed around: an orchestrator forbidden to spend
+  money could create a worker with no rules, wire itself to it, and delegate
+  the spending. The inherited text is stored on the new agent, so you can see
+  it in the inspector and edit or clear it there.
+- **They travel.** Clone copies them, and so does an exported bundle.
+
+Over the API, on the agent:
+
+```bash
+curl -X PATCH http://127.0.0.1:8688/api/v1/agents/1 -H 'Content-Type: application/json' -d '{"avoid":"Never invent a version number.\nNever promise a date."}'
+```
+
+Sending `"avoid": ""` clears them. Leaving the field out of the patch leaves
+them alone, so editing a role cannot wipe a rule by accident.
+
+---
+
+## 5. Moving a workspace to another install
+
+A workspace exports as one JSON document — the arrangement you built, not a
+database dump. Agents with their roles and prohibitions, the wires between
+them, and, if you ask for them, the gears bound to the workspace and its
+context.
+
+**Workspace page → export.** Two checkboxes: gears, and context. Or:
+
+```bash
+curl -sO -J 'http://127.0.0.1:8688/api/v1/workspaces/1/export?gears=1&context=1'
+```
+
+What comes out (trimmed; this is a real export):
+
+```json
+{
+  "format": "cogitorium.workspace/v1",
+  "exported_at": "2026-08-10T17:48:51Z",
+  "workspace": { "name": "release notes", "description": "drafts the changelog" },
+  "agents": [
+    {
+      "name": "orchestrator",
+      "role": "You are the orchestrator of this workspace…",
+      "avoid": "Never invent a version number.\nNever promise a date.",
+      "is_orchestrator": true,
+      "model": { "provider_type": "openai-compatible", "model_name": "qwen2.5:0.5b" }
+    },
+    { "name": "writer", "role": "You write plainly.", "avoid": "", "is_orchestrator": false,
+      "model": { "provider_type": "openai-compatible", "model_name": "qwen2.5:0.5b" } }
+  ],
+  "wires": [ { "from": "orchestrator", "to": "writer", "label": "drafts" } ],
+  "gears": [ { "name": "word_count", "runtime": "python", "entrypoint": "main.py",
+               "bound_to": "workspace", "files": [ … ] } ]
+}
+```
+
+Read the shape of it, because it is the whole design. **Wires name agents, not
+ids** — ids from another install mean nothing. **Models are named, not
+referenced** — a bundle cannot carry a provider key, so it can only say which
+model the agent used and let the other install look for it. And there is
+nowhere in the document for a key, a token, a user, an owner, a team or a chat
+message: a bundle is handed to someone else, so it carries nothing private.
+
+### Importing it
+
+**Workspaces page → import**, pick the file, tick what you want, name it. Or:
+
+```bash
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/import -H 'Content-Type: application/json' \
+  -d '{"name":"release notes (from A)","bundle":'"$(cat release-notes.cogitorium.json)"',"include_gears":true,"include_context":false}'
+```
+
+The reply is a report, and the report is the point. This one is from importing
+the bundle above into a **different** install — one whose catalog has Anthropic
+rather than a local model, and which already has a gear called `word_count`:
+
+```json
+{
+  "workspace": { "id": 1, "name": "release notes (from A)",
+                 "branch": "workspaces/release-notes-from-a-1" },
+  "agents": 2,
+  "wires": 1,
+  "gears_imported": [],
+  "gears_skipped": [
+    { "name": "word_count",
+      "why": "a gear with this name already exists in this install; it was left untouched and not bound to the imported workspace" }
+  ],
+  "context_files": 0,
+  "unresolved_models": [
+    { "agent": "orchestrator", "provider_type": "openai-compatible", "model_name": "qwen2.5:0.5b" },
+    { "agent": "writer", "provider_type": "openai-compatible", "model_name": "qwen2.5:0.5b" }
+  ]
+}
+```
+
+Both agents came across with their roles, prohibitions and the wire between
+them. Neither has a model, because this install has never heard of
+`qwen2.5:0.5b` — and it says so instead of quietly binding them to whatever it
+had. Add the model under **Models**, or point each agent at a local one.
+
+### What import will not do
+
+- **An imported gear is always `pending`.** A bundle is somebody else's
+  executable code, and approval does not travel. Read it, dry-run it, then
+  approve it — the same gate as a gear an agent forged for you.
+- **A gear name already in use is skipped, not overwritten.** Other workspaces
+  may depend on that gear; a bundle does not get to replace it, unapprove it,
+  or bind itself to it.
+- **A bundle does not choose a gear's timeout.** Raising one is an
+  administrator's decision on the gear itself.
+- **Context lands under the new workspace's own branch.** Paths in a bundle are
+  relative, and anything trying to climb out of the branch is refused before
+  the import creates anything at all.
+
+The last one is why a refused bundle leaves nothing behind: the whole document
+is checked first, so you never have to work out which half of an import
+happened.
+
+---
+
+## 6. Files, the editor and diffs
 
 Each workspace has its own directory. **Files** shows the tree; clicking a file
 opens it in **Editor**, which is a real editor with syntax highlighting, not a
@@ -268,7 +417,7 @@ directory comes into existence when you save a file into it.
 
 ---
 
-## 5. Memory
+## 7. Memory
 
 Context and memory are stored and versioned by Contextverse's `contextd`.
 Without it the server starts, says so at `GET /api/v1/context/status`, and
@@ -291,7 +440,7 @@ order it lands in.
 
 ---
 
-## 6. Letting an agent search the web
+## 8. Letting an agent search the web
 
 Off by default, and there are three locks. All three must be open, in order:
 
@@ -319,7 +468,7 @@ evaluates to false — and overrides a config file that said true.
 
 ---
 
-## 7. The terminal
+## 9. The terminal
 
 Off by default: it is interactive code execution over HTTP. Turning it on takes
 `terminal: true`, and it **also** requires a sandbox — without one the request
@@ -330,7 +479,7 @@ While a gear runs, its output streams here live.
 
 ---
 
-## 8. More than one person
+## 10. More than one person
 
 **People** (admin only) → **add user**. A token is shown once:
 
@@ -348,7 +497,7 @@ and the internet gate.
 
 ---
 
-## 9. When it refuses
+## 11. When it refuses
 
 Every message below is the exact text.
 
@@ -370,7 +519,7 @@ the database and nothing else.
 
 ---
 
-## 10. What is not here
+## 12. What is not here
 
 So that you do not go looking:
 
@@ -383,4 +532,6 @@ So that you do not go looking:
 - No token management: tokens cannot be listed, named, rotated or expired individually.
 - No self-service signup, and no password-change screen.
 - No screen for the search audit log, though the route exists.
+- No workspace-wide prohibitions; they are per agent, and a created agent inherits its creator's.
+- A bundle carries the conversation nowhere — it is a template, not a transcript.
 - Gears do not run as Kubernetes Jobs, and there are no remote agents.

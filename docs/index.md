@@ -275,6 +275,84 @@ never changes what is stored.
 
 ---
 
+## Prohibitions
+
+An agent's role says what it is for; its prohibitions say what it must never
+do. They are free text, one rule per line, edited in the agent inspector or
+patched with `{"avoid": "…"}` on `PATCH /api/v1/agents/{id}`.
+
+They are assembled as the **last** section of the system prompt, after the
+gears and the library note, under the heading `## Never do this` and a preamble
+that says the rules hold for the whole conversation and are not overridden by
+anything asked later. An agent with none gets no section at all. What the
+inspector's *show what this agent sees* renders is the same string the model
+receives, including the delegation contract a worker gets — a preview that
+omitted a paragraph would send an operator debugging a prompt nobody sent.
+
+Two behaviours follow from what a prohibition is for:
+
+- **A created agent inherits them.** When the orchestrator calls `agent_create`,
+  the new agent is given its creator's prohibitions. Without that, a rule was
+  one tool call from being routed around — create a worker with no rules, take
+  the automatic wire, delegate the forbidden thing. The value is stored on the
+  new agent, so it is visible and editable like any other.
+- **They travel.** Clone copies them; so does an exported bundle.
+
+Prohibitions are per agent. There is no workspace-wide setting.
+
+---
+
+## Export and import
+
+A workspace exports as one JSON document in the format
+`cogitorium.workspace/v1`: the workspace, its agents with roles, prohibitions
+and canvas positions, and the wires between them. Gears bound to the workspace
+and its context documents are separate opt-ins.
+
+```
+GET  /api/v1/workspaces/{id}/export?gears=1&context=1
+POST /api/v1/workspaces/import
+     {"name": "…", "bundle": {…}, "include_gears": true, "include_context": true}
+```
+
+Export needs the same access as reading the workspace. Import is open to any
+signed-in caller and the new workspace belongs to them.
+
+**The format's rules are the design, not details.**
+
+*Everything references agents by name.* Wires and gear bindings name their
+endpoints, because ids from another install mean nothing here.
+
+*Models are named, not carried.* An entry is `provider_type` plus `model_name`,
+resolved against the importing install's own catalog. A miss creates the agent
+with no model and names it in the report under `unresolved_models` — it never
+substitutes one.
+
+*Nothing private is in the document.* There is no field for a provider key, a
+token, a user, an owner, a team, or a chat message. A bundle is handed to
+someone else; it is a template, not a dump.
+
+*An imported gear is always `pending`.* Approval covers exact content on the
+install that granted it, and does not travel. A name already taken is skipped
+and reported rather than superseded — other workspaces depend on that gear, and
+a bundle does not get to replace it, unapprove it, or bind itself to it. A
+bundle also does not choose a gear's timeout: raising one is an
+administrator's decision on the gear.
+
+*Context is confined to the new workspace's branch.* Paths in a bundle are
+relative, and anything absolute, containing `..`, or collapsing to nothing is
+refused. The whole document is validated before anything is created, so a
+refused bundle leaves no workspace behind — being refused halfway is worse than
+being refused.
+
+The import reply is a report: agents and wires created, gears imported, gears
+skipped with the reason, context files written, and every model that could not
+be resolved. It is worth reading rather than dismissing — an imported workspace
+whose agents have no model looks fine on the blueprint and does nothing on the
+first turn.
+
+---
+
 ## Context and memory
 
 Context is stored and versioned by
