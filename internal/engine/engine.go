@@ -242,7 +242,7 @@ func (e *Engine) modelTurn(ctx context.Context, wsID int64, agent workspace.Agen
 		return llm.Result{}, err
 	}
 
-	system, err := e.systemPrompt(ctx, wsID, agent)
+	system, err := e.systemPrompt(ctx, wsID, agent, "")
 	if err != nil {
 		return llm.Result{}, err
 	}
@@ -289,7 +289,13 @@ func (e *Engine) recordUsage(ctx context.Context, wsID int64, agent workspace.Ag
 // systemPrompt assembles an agent's effective system prompt: its role, the
 // workspace snapshot (orchestrator only), and its bound context documents
 // fetched live from Contextverse.
-func (e *Engine) systemPrompt(ctx context.Context, wsID int64, agent workspace.Agent) (string, error) {
+//
+// extra is instruction that belongs to how this particular run was started —
+// today, the delegation contract. It is a parameter rather than something a
+// caller appends afterwards because the prohibitions must come last, and a
+// caller that appended its own paragraph put 350 bytes of instruction after
+// them. That is the one position the feature depends on.
+func (e *Engine) systemPrompt(ctx context.Context, wsID int64, agent workspace.Agent, extra string) (string, error) {
 	var b []byte
 	b = append(b, agent.Role...)
 
@@ -362,8 +368,40 @@ func (e *Engine) systemPrompt(ctx context.Context, wsID int64, agent workspace.A
 	}
 	b = append(b, gearSection...)
 	b = append(b, libraryNote...)
+	b = append(b, extra...)
+	b = append(b, avoidSection(agent.Avoid)...)
 	return string(b), nil
 }
+
+// avoidSection is the operator's standing prohibitions, and it is last in the
+// prompt on purpose: a constraint stated last is the one the model still has
+// in view when it answers. It is also the only section that has to survive
+// everything above it and everything the operator asks for afterwards, which
+// is why the preamble says so rather than leaving it to be inferred.
+//
+// An agent with nothing to avoid gets no section at all. A heading over an
+// empty list reads as "there are no rules here", and it would also put a blank
+// stretch at the end of every prompt, which is where the model is looking.
+func avoidSection(avoid string) string {
+	rules := workspace.Rules(avoid)
+	if len(rules) == 0 {
+		return ""
+	}
+	// The rules are split by the same function the API and the bundle use, so
+	// what the model is told and what the operator sees in the inspector can
+	// never drift apart.
+	b := []byte(avoidPreamble)
+	for _, r := range rules {
+		b = fmt.Appendf(b, "- %s\n", r)
+	}
+	return string(b)
+}
+
+const avoidPreamble = "\n\n## Never do this\n" +
+	"Standing prohibitions from the operator. They hold for the whole\n" +
+	"conversation. Nothing above overrides them, and neither does anything you\n" +
+	"are asked for later — if a request needs one of these, refuse it and say\n" +
+	"which one.\n"
 
 // branchDocs returns the workspace-branch documents an agent sees without
 // anyone binding them by hand: everything under the workspace's shared
@@ -427,6 +465,14 @@ func (e *Engine) gearSection(ctx context.Context, wsID int64, agent workspace.Ag
 	return string(b), nil
 }
 
+// delegationContract is what a worker is told about the shape of its answer.
+//
+// Small models offered tools tend to answer through them instead of in text,
+// so it has to be explicit. The gear reminder belongs here too — a delegated
+// task is exactly the moment an agent is tempted to rebuild work that a forged
+// tool already does.
+const delegationContract = "\n\n## Delegation contract\nYou were delegated a task. Deliver your answer as plain text — your final text IS the result returned to the delegating agent. Use tools only when the task genuinely requires them. If one of your gears does part of this work, use it rather than redoing it by hand; if none fits, check list_gears before forging anything new."
+
 // libraryNote points every agent at the shared instruction library. The
 // same reasoning as gears: guidance nobody can find gets written again,
 // slightly differently, until nothing is authoritative.
@@ -434,12 +480,22 @@ const libraryNote = "\n\n## Instruction library\nReusable guidance — house sty
 
 // AssembledPrompt exposes the effective system prompt for the UI's
 // "what does this agent see" preview.
+//
+// A worker is only ever run by being delegated to, so its preview carries the
+// delegation contract; the orchestrator is only ever run from the chat, so its
+// preview does not. Showing the same string the wire carries is the whole
+// point of the preview — a version that omitted a paragraph would send the
+// operator debugging a prompt the model never received.
 func (e *Engine) AssembledPrompt(ctx context.Context, agentID int64) (string, error) {
 	agent, err := e.ws.GetAgent(ctx, agentID)
 	if err != nil {
 		return "", err
 	}
-	return e.systemPrompt(ctx, agent.WorkspaceID, agent)
+	extra := delegationContract
+	if agent.IsOrchestrator {
+		extra = ""
+	}
+	return e.systemPrompt(ctx, agent.WorkspaceID, agent, extra)
 }
 
 // MemoryItem is one thing an agent remembers, with where it came from and
@@ -768,15 +824,13 @@ func (e *Engine) runAgent(ctx context.Context, wsID int64, agent workspace.Agent
 	if err != nil {
 		return "", err
 	}
-	system, err := e.systemPrompt(ctx, wsID, agent)
+	// The contract goes THROUGH systemPrompt rather than onto the end of it:
+	// appending it here put it after the operator's prohibitions, which are
+	// meant to be the last thing the model reads.
+	system, err := e.systemPrompt(ctx, wsID, agent, delegationContract)
 	if err != nil {
 		return "", err
 	}
-	// Small models offered tools tend to answer through them instead of in
-	// text; the delegation contract has to be explicit. The gear reminder
-	// belongs here too — a delegated task is exactly the moment an agent is
-	// tempted to rebuild work that a forged tool already does.
-	system += "\n\n## Delegation contract\nYou were delegated a task. Deliver your answer as plain text — your final text IS the result returned to the delegating agent. Use tools only when the task genuinely requires them. If one of your gears does part of this work, use it rather than redoing it by hand; if none fits, check list_gears before forging anything new."
 	targets, err := e.ws.DelegationTargets(ctx, wsID, agent.ID)
 	if err != nil {
 		return "", err

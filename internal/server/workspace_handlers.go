@@ -182,6 +182,7 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Name    *string  `json:"name"`
 		Role    *string  `json:"role"`
+		Avoid   *string  `json:"avoid"`
 		ModelID *int64   `json:"model_id"`
 		PosX    *float64 `json:"pos_x"`
 		PosY    *float64 `json:"pos_y"`
@@ -201,8 +202,17 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// A pure position patch must not trigger a read-modify-write of the
-	// other fields — that write could resurrect values stale since read.
+	// Prohibitions are written on their own, like the position, so clearing
+	// them is possible ("avoid": "") and so a patch that only touches them
+	// cannot write back a role somebody else changed in the meantime.
+	if in.Avoid != nil {
+		if _, err := s.workspaces.SetAgentAvoid(r.Context(), id, *in.Avoid); err != nil {
+			fail(w, r, err)
+			return
+		}
+	}
+	// A patch that touched none of these must not trigger a read-modify-write
+	// of them — that write could resurrect values stale since read.
 	if in.Name == nil && in.Role == nil && in.ModelID == nil {
 		agent, err := s.workspaces.GetAgent(r.Context(), id)
 		if err != nil {

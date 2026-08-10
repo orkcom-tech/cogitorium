@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, auth, type Model, type Team, type User, type Workspace } from '../api'
+import {
+  api,
+  auth,
+  type ImportReport,
+  type Model,
+  type Team,
+  type User,
+  type Workspace,
+  type WorkspaceBundle,
+} from '../api'
 
 export default function WorkspacesPage({ me }: { me: User }) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [models, setModels] = useState<Model[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [creating, setCreating] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(() => {
@@ -29,6 +39,14 @@ export default function WorkspacesPage({ me }: { me: User }) {
       <div className="row page-head">
         <h2>Workspaces</h2>
         <span className="spacer" />
+        {/* Import is not disabled with an empty catalog, unlike creating one.
+            A bundle names its models by provider and model name and resolves
+            them here, so importing without them is a real thing to do: the
+            workspace arrives whole and the report says which agents came in
+            with nothing bound. */}
+        <button onClick={() => setImporting(true)} title="Build a workspace from a bundle someone exported">
+          import
+        </button>
         {/* One obvious way in. The form used to be four controls in a row above
             the list, which read as part of the page furniture rather than as
             the thing you came here to do. */}
@@ -55,6 +73,8 @@ export default function WorkspacesPage({ me }: { me: User }) {
           }}
         />
       )}
+
+      {importing && <ImportDialog onClose={() => setImporting(false)} onImported={reload} />}
 
       {workspaces.length === 0 && !noModels ? (
         <div className="empty-state">
@@ -173,6 +193,250 @@ function WorkspaceCard({
               </option>
             ))}
           </select>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ImportDialog builds a workspace out of a bundle file.
+//
+// The report at the end is why this is a dialog and not a file button. An
+// import can succeed and still differ from what the operator handed it: a
+// model this install does not have leaves an agent with nothing bound, and a
+// gear whose name is already in the catalog is left alone rather than
+// overwritten. Neither one fails the import, so both are put in front of the
+// operator here — the alternative is finding out when an agent fails a turn
+// next week.
+function ImportDialog({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
+  const [bundle, setBundle] = useState<WorkspaceBundle | null>(null)
+  const [name, setName] = useState('')
+  const [gears, setGears] = useState(false)
+  const [withContext, setWithContext] = useState(false)
+  const [report, setReport] = useState<ImportReport | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  // The file is read here rather than posted as it arrived, so the dialog can
+  // say what is in it before anything is created — including which of the two
+  // optional parts it carries at all. What a bundle MEANS is still the
+  // server's judgement; this only answers "can I read this file".
+  const read = (f: File) => {
+    setError(null)
+    f.text()
+      .then((text) => {
+        const parsed: unknown = JSON.parse(text)
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          throw new Error('it holds JSON, but not an object')
+        }
+        const b = parsed as WorkspaceBundle
+        setBundle(b)
+        setName(b.workspace?.name ?? '')
+        setGears((b.gears?.length ?? 0) > 0)
+        setWithContext((b.context?.length ?? 0) > 0)
+      })
+      .catch((e: Error) => {
+        setBundle(null)
+        setError(
+          `${f.name} is not a bundle this can read: ${e.message}. Bundles come from the "export" button on a workspace.`,
+        )
+      })
+  }
+
+  const counts = {
+    agents: bundle?.agents?.length ?? 0,
+    wires: bundle?.wires?.length ?? 0,
+    gears: bundle?.gears?.length ?? 0,
+    context: bundle?.context?.length ?? 0,
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal create-dialog" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <div className="row theme-head">
+          <h3>{report ? 'Imported' : 'Import a workspace'}</h3>
+          <span className="spacer" />
+          <button onClick={onClose} title="Close">
+            ×
+          </button>
+        </div>
+
+        {report ? (
+          <div className="create-body">
+            <p>
+              <Link to={`/workspaces/${report.workspace.id}`}>{report.workspace.name}</Link> —{' '}
+              {report.agents} {report.agents === 1 ? 'agent' : 'agents'}, {report.wires}{' '}
+              {report.wires === 1 ? 'wire' : 'wires'}
+              {report.context_files > 0 &&
+                `, ${report.context_files} context ${report.context_files === 1 ? 'document' : 'documents'}`}
+              . It belongs to you.
+            </p>
+
+            {report.unresolved_models.length > 0 && (
+              <>
+                <p className="warn">
+                  {report.unresolved_models.length}{' '}
+                  {report.unresolved_models.length === 1 ? 'agent has' : 'agents have'} no model: this install
+                  does not have the one the bundle named. They were created anyway, and cannot run until you
+                  bind one.
+                </p>
+                {report.unresolved_models.map((u) => (
+                  <div key={`${u.agent}/${u.model_name}`} className="row binding">
+                    <code>{u.agent}</code>
+                    <span className="muted">
+                      wanted {u.provider_type} / {u.model_name}
+                    </span>
+                  </div>
+                ))}
+                <p className="hint">
+                  Add it under <Link to="/models">Models</Link>, then pick it in the agent's inspector.
+                </p>
+              </>
+            )}
+
+            {report.gears_skipped.length > 0 && (
+              <>
+                <p className="warn">
+                  {report.gears_skipped.length} {report.gears_skipped.length === 1 ? 'gear was' : 'gears were'}{' '}
+                  skipped. The workspace expects them, so check that what you already have does the same thing.
+                </p>
+                {report.gears_skipped.map((g) => (
+                  <div key={g.name} className="row binding">
+                    <code>{g.name}</code>
+                    <span className="muted">{g.why}</span>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {report.gears_imported.length > 0 && (
+              <>
+                <p>
+                  {report.gears_imported.length} {report.gears_imported.length === 1 ? 'gear' : 'gears'} forged
+                  here and left pending: somebody else's code never arrives approved.
+                </p>
+                <div className="row">
+                  {report.gears_imported.map((g) => (
+                    <code key={g}>{g}</code>
+                  ))}
+                </div>
+                <p className="hint">
+                  Read them under <Link to="/gears">Gears</Link> and approve what you want to run.
+                </p>
+              </>
+            )}
+
+            <div className="row">
+              <span className="spacer" />
+              <Link to={`/workspaces/${report.workspace.id}`} className="linkish">
+                open it
+              </Link>
+              <button className="primary" onClick={onClose}>
+                done
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="create-body">
+            <label className="field">
+              <span className="muted">the bundle file</span>
+              <input
+                type="file"
+                accept="application/json,.json"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) read(f)
+                }}
+              />
+            </label>
+
+            {bundle && (
+              <>
+                <p className="hint">
+                  {counts.agents} {counts.agents === 1 ? 'agent' : 'agents'}, {counts.wires}{' '}
+                  {counts.wires === 1 ? 'wire' : 'wires'}, {counts.gears}{' '}
+                  {counts.gears === 1 ? 'gear' : 'gears'}, {counts.context} context{' '}
+                  {counts.context === 1 ? 'document' : 'documents'}.
+                </p>
+                <label className="field">
+                  name
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="research" />
+                  <span className="hint">
+                    Names are unique here. Change it to import a bundle next to the workspace it came from.
+                  </span>
+                </label>
+                <label className="row">
+                  <input
+                    type="checkbox"
+                    checked={gears}
+                    disabled={counts.gears === 0}
+                    onChange={(e) => setGears(e.target.checked)}
+                  />
+                  forge its gears
+                </label>
+                <span className="hint">
+                  They arrive pending, whatever the bundle says — approval does not travel. A name you already
+                  use is left untouched and reported.
+                </span>
+                <label className="row">
+                  <input
+                    type="checkbox"
+                    checked={withContext}
+                    disabled={counts.context === 0}
+                    onChange={(e) => setWithContext(e.target.checked)}
+                  />
+                  write its context documents
+                </label>
+                <span className="hint">
+                  They land under the new workspace's own branches, never where the bundle says. Contextverse
+                  has to be reachable.
+                </span>
+              </>
+            )}
+
+            {error && <p className="error">{error}</p>}
+            <div className="row">
+              <span className="spacer" />
+              <button type="button" onClick={onClose}>
+                cancel
+              </button>
+              <button
+                className="primary"
+                disabled={busy || !bundle || !name.trim()}
+                onClick={() => {
+                  if (!bundle) return
+                  setBusy(true)
+                  setError(null)
+                  api.workspaces
+                    .importBundle({
+                      name: name.trim(),
+                      bundle,
+                      include_gears: gears,
+                      include_context: withContext,
+                    })
+                    .then((r) => {
+                      setReport(r)
+                      // The list behind the dialog is refreshed now, while the
+                      // report stays up: closing it must not be what makes the
+                      // new workspace appear.
+                      onImported()
+                    })
+                    .catch((e: Error) => setError(e.message))
+                    .finally(() => setBusy(false))
+                }}
+              >
+                {busy ? 'importing…' : 'import'}
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

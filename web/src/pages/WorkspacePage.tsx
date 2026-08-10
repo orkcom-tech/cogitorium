@@ -55,6 +55,7 @@ export default function WorkspacePage() {
   const [approval, setApproval] = useState<ApprovalRequest | null>(null)
   const [answering, setAnswering] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   // Fresh agent ids for stream callbacks — a stale closure over `agents`
@@ -464,6 +465,7 @@ export default function WorkspacePage() {
   return (
     <div className="ws-shell">
       {approval && <ApprovalDialog request={approval} onAnswer={answerApproval} busy={answering} />}
+      {exporting && <ExportDialog wsId={wsId} name={workspace.name} onClose={() => setExporting(false)} />}
       <div className="ws-head">
         <Link to="/workspaces" className="muted">
           ←
@@ -471,6 +473,12 @@ export default function WorkspacePage() {
         <h2>{workspace.name}</h2>
         <span className="muted">{workspace.description}</span>
         <span className="spacer" />
+        <button
+          onClick={() => setExporting(true)}
+          title="Download this workspace as a bundle another install can rebuild it from"
+        >
+          export
+        </button>
         <div className="row appearance">
           <LayoutMenu layout={layout} />
         </div>
@@ -495,6 +503,98 @@ export default function WorkspacePage() {
         </p>
       )}
       <Bench panels={panels} layout={layout} />
+    </div>
+  )
+}
+
+// ExportDialog downloads the workspace as a bundle: the agents, their roles
+// and prohibitions, the wiring, and — only if asked for — the source of its
+// gears and its context documents.
+//
+// Both extras are off until someone ticks them, because both are more than a
+// shape. Gear source is executable code, and context documents are the notes
+// the operator and the agents wrote; a workspace layout can be handed to a
+// stranger without thinking, and those two cannot.
+function ExportDialog({ wsId, name, onClose }: { wsId: number; name: string; onClose: () => void }) {
+  const [gears, setGears] = useState(false)
+  const [withContext, setWithContext] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const download = () => {
+    setBusy(true)
+    setError(null)
+    api.workspaces
+      .exportBundle(wsId, { gears, context: withContext })
+      .then(({ text, filename }) => {
+        const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        // The anchor is put in the document because a click on a detached one
+        // is ignored in Firefox, and the object URL is released on a later
+        // tick because revoking it in this one cancels the download it just
+        // started.
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        setTimeout(() => URL.revokeObjectURL(url), 0)
+        onClose()
+      })
+      .catch((e: Error) => {
+        setError(e.message)
+        setBusy(false)
+      })
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      {/* Closed by the backdrop, cancel, or ×, and deliberately not by Escape.
+          Escape on this page belongs to the approval dialog, and it only
+          reaches a dialog that holds focus — clicking a button on macOS does
+          not give it any — so a handler here would work sometimes, which is
+          worse than not having one. */}
+      <div className="modal create-dialog" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <div className="row theme-head">
+          <h3>Export {name}</h3>
+          <span className="spacer" />
+          <button onClick={onClose} title="Close">
+            ×
+          </button>
+        </div>
+        <div className="create-body">
+          <p className="hint">
+            A bundle is a template, not a copy: it carries the agents, their roles and prohibitions, and the
+            wiring — never a provider key, an owner, or a line of this conversation.
+          </p>
+          <label className="row">
+            <input autoFocus type="checkbox" checked={gears} onChange={(e) => setGears(e.target.checked)} />
+            include gears
+          </label>
+          <span className="hint">
+            The full source of every tool bound here. On the other install they arrive needing approval, and a
+            name it already uses is left alone.
+          </span>
+          <label className="row">
+            <input type="checkbox" checked={withContext} onChange={(e) => setWithContext(e.target.checked)} />
+            include context
+          </label>
+          <span className="hint">
+            The documents on this workspace's branches — shared notes and each agent's own memory. Read them
+            first if the bundle is leaving your machine.
+          </span>
+          {error && <p className="error">{error}</p>}
+          <div className="row">
+            <span className="spacer" />
+            <button type="button" onClick={onClose}>
+              cancel
+            </button>
+            <button className="primary" onClick={download} disabled={busy}>
+              {busy ? 'building…' : 'download bundle'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -750,6 +850,7 @@ function AgentPanel({
   onError: (msg: string) => void
 }) {
   const [role, setRole] = useState(agent.role)
+  const [avoid, setAvoid] = useState(agent.avoid)
   const [modelId, setModelId] = useState<number | ''>(agent.model_id ?? '')
   const [activity, setActivity] = useState<WSMessage[]>([])
   const [bindings, setBindings] = useState<ContextBinding[]>([])
@@ -777,6 +878,7 @@ function AgentPanel({
 
   useEffect(() => {
     setRole(agent.role)
+    setAvoid(agent.avoid)
     setModelId(agent.model_id ?? '')
     setPrompt(null)
     api.workspaces
@@ -798,7 +900,7 @@ function AgentPanel({
   const visible = bindings.filter((b) => b.agent_id === null || b.agent_id === agent.id)
   const boundPaths = new Set(visible.map((b) => b.path))
 
-  const dirty = role !== agent.role || modelId !== (agent.model_id ?? '')
+  const dirty = role !== agent.role || avoid !== agent.avoid || modelId !== (agent.model_id ?? '')
 
   return (
     <div className="agent-panel">
@@ -851,16 +953,43 @@ function AgentPanel({
         <textarea rows={8} value={role} onChange={(e) => setRole(e.target.value)} />
       </label>
 
+      {/* The prohibitions sit beside the role because they are the other half
+          of the same instruction, and they are a list rather than prose
+          because a list is what an operator actually writes. */}
+      <label className="field">
+        <span className="muted">never do this (one rule per line)</span>
+        <textarea
+          rows={4}
+          value={avoid}
+          onChange={(e) => setAvoid(e.target.value)}
+          placeholder={'never install packages\nnever email anyone outside the team'}
+        />
+        <span className="hint">
+          Goes last in the system prompt, after everything else, and holds for the whole conversation — a request
+          that needs one of these is refused. Leave it empty and nothing is added at all. "Show what this agent
+          sees", below, is the exact text.
+        </span>
+      </label>
+
       <div className="row">
         <button
           disabled={!dirty}
           onClick={() => {
-            const patch: { role?: string; model_id?: number } = {}
+            const patch: { role?: string; avoid?: string; model_id?: number } = {}
             if (role !== agent.role) patch.role = role
+            // Sent even when it is empty: "" is how the last rule is removed,
+            // and an omitted field leaves the prohibitions as they were.
+            if (avoid !== agent.avoid) patch.avoid = avoid
             if (modelId !== '' && modelId !== agent.model_id) patch.model_id = modelId
             api.agents
               .update(agent.id, patch)
-              .then(onChanged)
+              .then((a) => {
+                // The preview is the point of the field — a rule the operator
+                // cannot see is a rule they cannot debug — so a stale one must
+                // not survive the save that changed it.
+                setPrompt(null)
+                onChanged(a)
+              })
               .catch((e: Error) => onError(e.message))
           }}
         >

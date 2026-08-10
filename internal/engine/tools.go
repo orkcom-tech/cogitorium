@@ -316,7 +316,24 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 		if err != nil {
 			return "", err
 		}
-		created, err := e.ws.CreateAgent(ctx, wsID, name, role, modelID)
+		// The new agent inherits its creator's prohibitions.
+		//
+		// Without this, a standing rule was one tool call from being routed
+		// around: an orchestrator forbidden to spend money could create a
+		// worker with no prohibitions at all, wire itself to it on the next
+		// line, and delegate the spending — and the operator would not even
+		// know the agent existed until the turn was over. A prohibition that
+		// an agent can escape by hiring someone is not a prohibition.
+		//
+		// Inheritance, not a copy the operator cannot see: the value is stored
+		// on the new agent, so it shows in the inspector and can be edited or
+		// cleared there like any other.
+		created, err := e.ws.CreateAgentSpec(ctx, wsID, workspace.AgentSpec{
+			Name:    name,
+			Role:    role,
+			Avoid:   agent.Avoid,
+			ModelID: &modelID,
+		})
 		if err != nil {
 			return "", err
 		}

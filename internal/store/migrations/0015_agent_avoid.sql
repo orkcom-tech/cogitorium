@@ -1,0 +1,13 @@
+-- Standing prohibitions for one agent: free text, one rule per line, because
+-- a list is what an operator actually writes when asked what an agent must
+-- never do.
+--
+-- It is a column on the agent rather than an instruction document: a
+-- prohibition that can be unbound, emptied or forgotten is not a prohibition,
+-- and the whole point of this text is that nothing later in the conversation
+-- gets to override it.
+--
+-- NOT NULL DEFAULT '' so every existing agent already has the empty answer.
+-- An empty value adds nothing to the prompt at all — an empty "Never do this"
+-- heading would read as a section somebody deleted the contents of.
+ALTER TABLE agents ADD COLUMN avoid TEXT NOT NULL DEFAULT '';

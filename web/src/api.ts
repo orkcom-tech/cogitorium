@@ -33,6 +33,16 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T
 }
 
+// bundleFilename reads the name the server chose for a downloaded bundle. The
+// server owns that rule — it is the same code that keeps an operator-supplied
+// workspace name from closing the quoted header value — so the client asks
+// rather than deriving its own. A response that reaches us without the header
+// (a proxy that dropped it) still has to save as something, and this is the
+// name the server itself uses for a workspace whose name carries no letters.
+function bundleFilename(disposition: string | null): string {
+  return disposition?.match(/filename="([^"]+)"/)?.[1] ?? 'workspace.cogitorium.json'
+}
+
 export type User = { id: number; name: string; role: 'admin' | 'team-lead' | 'member'; teams: number[] }
 
 // The server assembles relationships into one graph because it is the only
@@ -210,6 +220,27 @@ export const api = {
       }),
     unshare: (id: number, teamId: number) =>
       req<Workspace>(`/api/v1/workspaces/${id}/teams/${teamId}`, { method: 'DELETE' }),
+    // The bundle is a download, and the token lives in localStorage rather
+    // than a cookie, so a plain link to this route would arrive unauthenticated
+    // — the document has to come back through the same authenticated path as
+    // everything else and be handed to the browser as a file.
+    exportBundle: (id: number, opts: { gears: boolean; context: boolean }) => {
+      const p = new URLSearchParams({ gears: opts.gears ? '1' : '0', context: opts.context ? '1' : '0' })
+      return fetch(session.url(`/api/v1/workspaces/${id}/export?${p}`), {
+        headers: session.headers(),
+      }).then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null)
+          throw new Error(body?.error?.message ?? `${r.status} ${r.statusText}`)
+        }
+        // The server's own bytes are what gets saved, never a re-serialization
+        // of them: what an operator hands to someone else should be the
+        // document this install produced, character for character.
+        return { text: await r.text(), filename: bundleFilename(r.headers.get('Content-Disposition')) }
+      })
+    },
+    importBundle: (b: { name: string; bundle: WorkspaceBundle; include_gears: boolean; include_context: boolean }) =>
+      req<ImportReport>('/api/v1/workspaces/import', { method: 'POST', body: JSON.stringify(b) }),
     agents: (id: number) => req<Agent[]>(`/api/v1/workspaces/${id}/agents`),
     createAgent: (id: number, a: { name: string; role: string; model_id: number }) =>
       req<Agent>(`/api/v1/workspaces/${id}/agents`, { method: 'POST', body: JSON.stringify(a) }),
@@ -218,7 +249,13 @@ export const api = {
     status: (id: number) => req<AgentStatus[]>(`/api/v1/workspaces/${id}/status`),
   },
   agents: {
-    update: (id: number, patch: { name?: string; role?: string; model_id?: number; pos_x?: number; pos_y?: number }) =>
+    update: (
+      id: number,
+      // avoid is sent as "" to clear it, so it is a value the caller means
+      // rather than a field it may omit — an absent avoid leaves the agent's
+      // prohibitions exactly as they were.
+      patch: { name?: string; role?: string; avoid?: string; model_id?: number; pos_x?: number; pos_y?: number },
+    ) =>
       req<Agent>(`/api/v1/agents/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
     remove: (id: number) => req<void>(`/api/v1/agents/${id}`, { method: 'DELETE' }),
     prompt: (id: number) => req<{ prompt: string }>(`/api/v1/agents/${id}/prompt`),
@@ -421,12 +458,43 @@ export type Workspace = {
   team_ids: number[]
 }
 
+// A portable workspace: agents, wiring, and optionally the source of its gears
+// and its context documents. Only the parts the client actually reads before
+// an import are declared — the name it offers as a default, and how much of
+// each kind is in the file. Every other field travels to the server untouched,
+// because the server is the only thing that decides what a bundle means, and a
+// second definition of the format here is a second one to keep in step.
+export type WorkspaceBundle = {
+  workspace?: { name?: string }
+  agents?: unknown[]
+  wires?: unknown[]
+  gears?: unknown[]
+  context?: unknown[]
+}
+
+// ImportReport is what an import actually did. unresolved_models and
+// gears_skipped are the reason it exists: neither one fails the import, and
+// both change what the new workspace can do, so an operator who is not shown
+// them finds out when an agent turns out to have no model bound.
+export type ImportReport = {
+  workspace: Workspace
+  agents: number
+  wires: number
+  gears_imported: string[]
+  gears_skipped: { name: string; why: string }[]
+  context_files: number
+  unresolved_models: { agent: string; provider_type: string; model_name: string }[]
+}
+
 export type Agent = {
   id: number
   workspace_id: number
   name: string
   kind: string
   role: string
+  // avoid is the operator's standing prohibitions, one rule per line. It is
+  // the last section of the agent's system prompt.
+  avoid: string
   model_id: number | null
   model_label: string
   is_orchestrator: boolean

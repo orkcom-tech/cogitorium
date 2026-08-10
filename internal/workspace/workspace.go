@@ -90,11 +90,16 @@ type Workspace struct {
 }
 
 type Agent struct {
-	ID             int64    `json:"id"`
-	WorkspaceID    int64    `json:"workspace_id"`
-	Name           string   `json:"name"`
-	Kind           string   `json:"kind"`
-	Role           string   `json:"role"`
+	ID          int64  `json:"id"`
+	WorkspaceID int64  `json:"workspace_id"`
+	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+	Role        string `json:"role"`
+	// Avoid is the operator's standing prohibitions for this agent, one rule
+	// per line. It reaches the prompt last, after everything the agent is
+	// asked to do, because a constraint stated last is the one still in view
+	// when the model answers.
+	Avoid          string   `json:"avoid"`
 	ModelID        *int64   `json:"model_id"`
 	ModelLabel     string   `json:"model_label"` // "provider / model" for display; empty if unbound
 	IsOrchestrator bool     `json:"is_orchestrator"`
@@ -103,6 +108,24 @@ type Agent struct {
 	// Branch is this agent's private context subtree, read without an
 	// explicit binding and frozen at creation.
 	Branch string `json:"branch"`
+}
+
+// AgentSpec is an agent described in full, for the callers that have every
+// field at once: a clone, or an import rebuilding a workspace from a bundle.
+// The narrow CreateAgent stays for the UI and the orchestrator's tools, which
+// only ever have a name, a role and a model — adding the rest as more
+// trailing arguments is how a caller ends up silently swapping two of them.
+type AgentSpec struct {
+	Name  string
+	Role  string
+	Avoid string
+	// ModelID is nil when no model is bound. That is a real state, not a
+	// missing value: a bundle can name a model this install does not have,
+	// and it has to be stored as NULL rather than as the zero id, which
+	// belongs to no model and which the foreign key would reject outright.
+	ModelID *int64
+	PosX    *float64
+	PosY    *float64
 }
 
 type Wire struct {
@@ -141,9 +164,23 @@ func asConflict(err error, what string) error {
 // CreateWorkspace creates the workspace and its orchestrator agent bound to
 // orchestratorModelID in one transaction, owned by ownerID.
 func (s *Store) CreateWorkspace(ctx context.Context, name, description string, orchestratorModelID, ownerID int64) (Workspace, error) {
+	return s.CreateWorkspaceSpec(ctx, name, description,
+		AgentSpec{Name: OrchestratorName, Role: DefaultOrchestratorRole, ModelID: &orchestratorModelID}, ownerID)
+}
+
+// CreateWorkspaceSpec is CreateWorkspace for a caller that describes the
+// orchestrator in full — a clone or an import, which carry its own role, its
+// prohibitions, and sometimes no model at all because the bundle named one
+// this install does not have.
+func (s *Store) CreateWorkspaceSpec(ctx context.Context, name, description string, orchestrator AgentSpec, ownerID int64) (Workspace, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return Workspace{}, errors.New("name is required")
+	}
+	// The orchestrator's name is fixed by the product, so a caller that does
+	// not care about it does not have to repeat it.
+	if strings.TrimSpace(orchestrator.Name) == "" {
+		orchestrator.Name = OrchestratorName
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -166,24 +203,59 @@ func (s *Store) CreateWorkspace(ctx context.Context, name, description string, o
 		return Workspace{}, fmt.Errorf("create workspace: set branch: %w", err)
 	}
 
-	agentRes, err := tx.ExecContext(ctx,
-		`INSERT INTO agents (workspace_id, name, kind, role, model_id, is_orchestrator, created_at, updated_at)
-		 VALUES (?, ?, 'model', ?, ?, 1, ?, ?)`,
-		wsID, OrchestratorName, DefaultOrchestratorRole, orchestratorModelID, now(), now())
-	if err != nil {
+	if _, err := insertAgent(ctx, tx, wsID, wsBranch, orchestrator, true); err != nil {
 		return Workspace{}, fmt.Errorf("create workspace: seed orchestrator: %w", err)
-	}
-	agentID, _ := agentRes.LastInsertId()
-	if _, err := tx.ExecContext(ctx, `UPDATE agents SET branch = ? WHERE id = ?`,
-		newAgentBranch(wsBranch, OrchestratorName, agentID), agentID); err != nil {
-		return Workspace{}, fmt.Errorf("create workspace: set orchestrator branch: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
 		return Workspace{}, fmt.Errorf("create workspace: commit: %w", err)
 	}
-	slog.Info("workspace created with orchestrator", "id", wsID, "name", name, "orchestrator_model_id", orchestratorModelID)
+	slog.Info("workspace created with orchestrator", "id", wsID, "name", name,
+		"orchestrator_model_id", modelForLog(orchestrator.ModelID))
 	return s.GetWorkspace(ctx, wsID)
+}
+
+// execer is satisfied by both *sql.DB and *sql.Tx, so an agent can be written
+// inside the transaction that creates its workspace or on its own afterwards
+// without two copies of the insert.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// insertAgent writes one agent row and freezes its branch. Every path that
+// creates an agent goes through it, so a column added to agents cannot be
+// filled in on one path and quietly left at its default on the other.
+func insertAgent(ctx context.Context, ex execer, wsID int64, wsBranch string, spec AgentSpec, isOrchestrator bool) (int64, error) {
+	name := strings.TrimSpace(spec.Name)
+	if name == "" {
+		return 0, errors.New("name is required")
+	}
+	orch := 0
+	if isOrchestrator {
+		orch = 1
+	}
+	res, err := ex.ExecContext(ctx,
+		`INSERT INTO agents (workspace_id, name, kind, role, avoid, model_id, is_orchestrator, pos_x, pos_y, created_at, updated_at)
+		 VALUES (?, ?, 'model', ?, ?, ?, ?, ?, ?, ?, ?)`,
+		wsID, name, spec.Role, spec.Avoid, spec.ModelID, orch, spec.PosX, spec.PosY, now(), now())
+	if err := asConflict(err, fmt.Sprintf("agent %q in this workspace", name)); err != nil {
+		return 0, err
+	}
+	id, _ := res.LastInsertId()
+	if _, err := ex.ExecContext(ctx, `UPDATE agents SET branch = ? WHERE id = ?`,
+		newAgentBranch(wsBranch, name, id), id); err != nil {
+		return 0, fmt.Errorf("set branch of agent %q: %w", name, err)
+	}
+	return id, nil
+}
+
+// modelForLog keeps a nil model out of the log as the word rather than as a
+// pointer address, which is what slog would otherwise print.
+func modelForLog(id *int64) any {
+	if id == nil {
+		return "none"
+	}
+	return *id
 }
 
 func (s *Store) GetWorkspace(ctx context.Context, id int64) (Workspace, error) {
@@ -390,13 +462,18 @@ func (s *Store) Clone(ctx context.Context, srcID int64, name string, ownerID int
 		return Workspace{}, err
 	}
 
-	var orchModel int64
+	// The orchestrator is created with the workspace, so its definition has to
+	// be in hand before the workspace exists. Its model travels as a pointer:
+	// an orchestrator with no model is a workspace that has not been finished
+	// yet, and the copy must be allowed to be in the same state rather than
+	// fail on a foreign key.
+	var orch AgentSpec
 	for _, a := range agents {
-		if a.IsOrchestrator && a.ModelID != nil {
-			orchModel = *a.ModelID
+		if a.IsOrchestrator {
+			orch = AgentSpec{Name: a.Name, Role: a.Role, Avoid: a.Avoid, ModelID: a.ModelID}
 		}
 	}
-	clone, err := s.CreateWorkspace(ctx, name, src.Description, orchModel, ownerID)
+	clone, err := s.CreateWorkspaceSpec(ctx, name, src.Description, orch, ownerID)
 	if err != nil {
 		return Workspace{}, err
 	}
@@ -412,18 +489,13 @@ func (s *Store) Clone(ctx context.Context, srcID int64, name string, ownerID int
 			for _, ca := range cloneAgents {
 				if ca.IsOrchestrator {
 					idMap[a.ID] = ca.ID
-					if _, err := s.UpdateAgent(ctx, ca.ID, nil, &a.Role, a.ModelID); err != nil {
-						return Workspace{}, fmt.Errorf("clone: copy orchestrator role: %w", err)
-					}
 				}
 			}
 			continue
 		}
-		var modelID int64
-		if a.ModelID != nil {
-			modelID = *a.ModelID
-		}
-		created, err := s.CreateAgent(ctx, clone.ID, a.Name, a.Role, modelID)
+		created, err := s.CreateAgentSpec(ctx, clone.ID, AgentSpec{
+			Name: a.Name, Role: a.Role, Avoid: a.Avoid, ModelID: a.ModelID,
+		})
 		if err != nil {
 			return Workspace{}, fmt.Errorf("clone: copy agent %q: %w", a.Name, err)
 		}
@@ -458,7 +530,7 @@ func (s *Store) DeleteWorkspace(ctx context.Context, id int64) error {
 }
 
 const agentSelect = `
-	SELECT a.id, a.workspace_id, a.name, a.kind, a.role, a.model_id, a.is_orchestrator,
+	SELECT a.id, a.workspace_id, a.name, a.kind, a.role, a.avoid, a.model_id, a.is_orchestrator,
 	       COALESCE(p.name || ' / ' || COALESCE(NULLIF(m.label, ''), m.model_name), ''),
 	       a.pos_x, a.pos_y, a.branch
 	FROM agents a
@@ -468,12 +540,41 @@ const agentSelect = `
 func scanAgent(row interface{ Scan(...any) error }) (Agent, error) {
 	var a Agent
 	var orch int
-	if err := row.Scan(&a.ID, &a.WorkspaceID, &a.Name, &a.Kind, &a.Role, &a.ModelID, &orch,
+	if err := row.Scan(&a.ID, &a.WorkspaceID, &a.Name, &a.Kind, &a.Role, &a.Avoid, &a.ModelID, &orch,
 		&a.ModelLabel, &a.PosX, &a.PosY, &a.Branch); err != nil {
 		return Agent{}, err
 	}
 	a.IsOrchestrator = orch == 1
 	return a, nil
+}
+
+// SetAgentAvoid replaces an agent's standing prohibitions. Like the canvas
+// position, it is its own call rather than a field of UpdateAgent: a patch
+// that only changes the rules must not read and write back a name, role and
+// model that somebody else may have changed in between.
+func (s *Store) SetAgentAvoid(ctx context.Context, id int64, avoid string) (Agent, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE agents SET avoid = ?, updated_at = ? WHERE id = ?`, avoid, now(), id)
+	if err != nil {
+		return Agent{}, fmt.Errorf("set agent %d prohibitions: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Agent{}, fmt.Errorf("agent %d: %w", id, ErrNotFound)
+	}
+	slog.Info("agent prohibitions changed", "agent_id", id, "rules", len(Rules(avoid)))
+	return s.GetAgent(ctx, id)
+}
+
+// Rules splits an avoid text into the prohibitions it states: one per
+// non-empty line, trimmed. Both the prompt and the log go through it, so what
+// an operator is told they wrote is what the agent is told to obey.
+func Rules(avoid string) []string {
+	out := []string{}
+	for _, line := range strings.Split(avoid, "\n") {
+		if l := strings.TrimSpace(line); l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // SetAgentPosition stores a blueprint canvas position.
@@ -521,32 +622,25 @@ func (s *Store) DelegationTargets(ctx context.Context, wsID, fromAgentID int64) 
 	return out, rows.Err()
 }
 
+// CreateAgent creates a worker agent bound to modelID — the shape the UI and
+// the orchestrator's own tools have, where a model has always been chosen
+// from the catalog first.
 func (s *Store) CreateAgent(ctx context.Context, wsID int64, name, role string, modelID int64) (Agent, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return Agent{}, errors.New("name is required")
-	}
-	if _, err := s.GetWorkspace(ctx, wsID); err != nil {
-		return Agent{}, err
-	}
+	return s.CreateAgentSpec(ctx, wsID, AgentSpec{Name: name, Role: role, ModelID: &modelID})
+}
 
+// CreateAgentSpec creates a worker agent from a full definition, including a
+// model that may be absent.
+func (s *Store) CreateAgentSpec(ctx context.Context, wsID int64, spec AgentSpec) (Agent, error) {
 	ws, err := s.GetWorkspace(ctx, wsID)
 	if err != nil {
 		return Agent{}, err
 	}
-	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO agents (workspace_id, name, kind, role, model_id, is_orchestrator, created_at, updated_at)
-		 VALUES (?, ?, 'model', ?, ?, 0, ?, ?)`,
-		wsID, name, role, modelID, now(), now())
-	if err := asConflict(err, fmt.Sprintf("agent %q in this workspace", name)); err != nil {
+	id, err := insertAgent(ctx, s.db, wsID, ws.Branch, spec, false)
+	if err != nil {
 		return Agent{}, fmt.Errorf("create agent: %w", err)
 	}
-	id, _ := res.LastInsertId()
-	if _, err := s.db.ExecContext(ctx, `UPDATE agents SET branch = ? WHERE id = ?`,
-		newAgentBranch(ws.Branch, name, id), id); err != nil {
-		return Agent{}, fmt.Errorf("create agent: set branch: %w", err)
-	}
-	slog.Info("agent created", "id", id, "workspace_id", wsID, "name", name, "model_id", modelID)
+	slog.Info("agent created", "id", id, "workspace_id", wsID, "name", spec.Name, "model_id", modelForLog(spec.ModelID))
 	return s.GetAgent(ctx, id)
 }
 
