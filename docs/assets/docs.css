@@ -20,6 +20,9 @@
 
   --sidebar-w: 264px;
   --measure: 46rem;
+  /* The column itself. Wider than the measure so screenshots and long
+     commands are legible; the prose inside stays at the measure. */
+  --wide: 64rem;
 }
 
 * {
@@ -88,18 +91,58 @@ body {
   color: var(--dim);
 }
 
+/* The sidebar's grouping has to be visible without being read.
+ *
+ * It was not: the group labels and the links were both var(--dim), one flat
+ * column with a 1px gap between every element, so the only thing distinguishing
+ * a heading from a destination was its size. Grouping you have to reconstruct
+ * by reading is not grouping.
+ *
+ * Three cues now do the work, and they are deliberately redundant — contrast
+ * alone fails a reader who has turned it down, and spacing alone disappears on
+ * a short list. Labels are QUIETER than the links they introduce, because they
+ * are structure rather than content. Each group's links share a hairline rail,
+ * so membership is drawn rather than inferred. And the space between groups is
+ * several times the space within one, which is the cue that works even out of
+ * focus. */
 .sidebar nav {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
+}
+
+/* Reference / Guide: a different kind of thing from an anchor — it changes the
+   page — so it sits above the rule and reads as a choice, not a destination. */
+.sidebar nav .page-link {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--text) 72%, transparent);
+  text-decoration: none;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+}
+
+.sidebar nav .page-link:last-of-type {
+  margin-bottom: 0.55rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .sidebar nav a {
-  color: var(--dim);
+  color: color-mix(in srgb, var(--text) 78%, transparent);
   text-decoration: none;
   font-size: 0.875rem;
-  padding: 0.4rem 0.6rem;
-  border-radius: 8px;
+  padding: 0.34rem 0.6rem;
+  border-radius: 0 8px 8px 0;
+}
+
+/* The rail. Consecutive links join into one continuous line under their label,
+   which is what makes a group look like a group; the label itself stays off it,
+   so each block reads as a bracket with a name. */
+.sidebar nav a:not(.page-link) {
+  margin-left: 0.6rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--border);
 }
 
 .sidebar nav a:hover {
@@ -110,15 +153,26 @@ body {
 .sidebar nav a.current {
   color: var(--text);
   background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-left-color: var(--accent);
+}
+
+/* The page links have no rail, so the current one needs its own marker. */
+.sidebar nav .page-link.current {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .sidebar .group {
-  font-size: 0.68rem;
+  font-size: 0.65rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--dim);
-  padding: 0.9rem 0.6rem 0.25rem;
+  letter-spacing: 0.11em;
+  color: color-mix(in srgb, var(--text) 42%, transparent);
+  padding: 0 0.6rem 0.3rem;
+  margin-top: 1.15rem;
+}
+
+.sidebar .group:first-of-type {
+  margin-top: 0.15rem;
 }
 
 .side-foot {
@@ -147,15 +201,30 @@ main {
   padding: 3rem 3rem 5rem;
 }
 
+/* Two widths, not one.
+ *
+ * Running text wants ~46rem — past that the eye loses the start of the next
+ * line. Screenshots and long curl commands want as much room as they can get.
+ * Before, everything was pinned to the prose width AND left-aligned against
+ * the sidebar, so on a wide display the right half of the screen was empty
+ * while the code blocks scrolled sideways. The column is the wider of the two
+ * and is centred in the space beside the sidebar; the prose inside it is
+ * capped at the measure. */
 article {
+  max-width: var(--wide);
+  margin-inline: auto;
+}
+
+article > :is(p, ul, ol, blockquote, h1, h2, h3, h4, h5, h6, hr) {
   max-width: var(--measure);
 }
 
-/* Images are the exception to the measure: a screenshot narrowed to prose
-   width is a screenshot nobody can read. */
+/* Images, code and tables take the full column: a screenshot narrowed to prose
+   width is a screenshot nobody can read, and a wrapped command is a command
+   nobody can copy. */
 article img {
   display: block;
-  max-width: min(100%, 62rem);
+  max-width: 100%;
   height: auto;
   margin: 1.5rem 0;
   border: 1px solid var(--border);
@@ -267,7 +336,7 @@ td code {
 }
 
 footer {
-  max-width: var(--measure);
+  max-width: var(--wide);
   margin-top: 4rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--border);

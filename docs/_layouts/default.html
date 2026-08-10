@@ -34,8 +34,8 @@
           links whose href starts with '#', so the page links keep their state
           instead of being cleared the first time anyone scrolls.
         {%- endcomment -%}
-        <a href="{{ '/' | relative_url }}" {% unless on_guide %}class="current"{% endunless %}>Reference</a>
-        <a href="{{ '/guide/' | relative_url }}" {% if on_guide %}class="current"{% endif %}>Guide</a>
+        <a class="page-link{% unless on_guide %} current{% endunless %}" href="{{ '/' | relative_url }}">Reference</a>
+        <a class="page-link{% if on_guide %} current{% endif %}" href="{{ '/guide/' | relative_url }}">Guide</a>
 
         {%- comment -%}
           Grouped by the question a reader is holding, not by the order the
