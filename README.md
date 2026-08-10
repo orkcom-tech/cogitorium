@@ -240,8 +240,12 @@ context and your agents stay on your machine.
 
 ## Documentation
 
-Full documentation, including a guided tour and the security model, is at
-**<https://orkcom-tech.github.io/cogitorium/>**.
+**<https://orkcom-tech.github.io/cogitorium/>** — the reference: every screen,
+every setting, the security model, and what is deliberately absent.
+
+**<https://orkcom-tech.github.io/cogitorium/guide/>** — the guide: a walkthrough
+from an empty install to agents with tools. Every command in it was run, and
+every error message quoted in it is the exact text the software emits.
 
 ## Testing end to end
 
