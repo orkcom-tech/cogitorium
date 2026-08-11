@@ -385,9 +385,7 @@ func safeFileName(name, contentType string) string {
 		// type gets no extension rather than a made-up one.
 		clean = "payload"
 		if base, _, err := mime.ParseMediaType(contentType); err == nil {
-			if exts, _ := mime.ExtensionsByType(base); len(exts) > 0 {
-				clean += exts[0]
-			}
+			clean += extensionFor(base)
 		}
 	}
 	return clean
@@ -608,4 +606,51 @@ func (s *Server) handleGetInletRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, run)
+}
+
+// extensionFor names a raw-body upload whose caller named nothing.
+//
+// mime.ExtensionsByType returns the system's whole list in no order anyone
+// promised, and taking the first is how a plain text file arrived as
+// "payload.conf" on this machine — .conf sorts ahead of .txt in the system
+// table. An operator opening their workspace saw a config file they never sent,
+// and a model reading that name drew the obvious wrong conclusion about what it
+// had been handed.
+//
+// So the common types are named here, deliberately, and the system table is the
+// fallback for everything else. An unknown type still gets no extension rather
+// than a made-up one.
+func extensionFor(mediaType string) string {
+	switch mediaType {
+	case "text/plain":
+		return ".txt"
+	case "text/csv":
+		return ".csv"
+	case "text/markdown":
+		return ".md"
+	case "text/html":
+		return ".html"
+	case "application/json":
+		return ".json"
+	case "application/xml", "text/xml":
+		return ".xml"
+	case "application/zip":
+		return ".zip"
+	case "application/gzip":
+		return ".gz"
+	case "application/pdf":
+		return ".pdf"
+	case "image/png":
+		return ".png"
+	case "image/jpeg":
+		return ".jpg"
+	case "image/gif":
+		return ".gif"
+	case "image/webp":
+		return ".webp"
+	}
+	if exts, _ := mime.ExtensionsByType(mediaType); len(exts) > 0 {
+		return exts[0]
+	}
+	return ""
 }
