@@ -380,6 +380,70 @@ th {
   opacity: 0.85;
 }
 
+/* Attachments: on the composer before they are sent, and on the message
+   afterwards. One appearance, because they are the same fact at two moments —
+   these files are in front of the agent. */
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.1rem 0.4rem;
+}
+
+/* A file the model cannot be shown is marked rather than hidden: it did not
+   fail, it took the other route, and the operator should be able to see which
+   is which without hovering every chip. */
+.attachment.to-gear {
+  border-style: dashed;
+}
+
+/* A file that would take the whole message down with it — the model this
+   workspace answers with was never declared able to take this kind. */
+.attachment.refused {
+  border-color: var(--danger);
+}
+
+.attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 16rem;
+}
+
+.attachment-drop {
+  border: none;
+  background: none;
+  padding: 0;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.attachment-drop:hover {
+  opacity: 1;
+}
+
+/* The picker is driven by the button beside it; a native file input in the
+   composer would be the widest and ugliest thing on the page. */
+.hidden-file {
+  display: none;
+}
+
 /* Workspace view */
 
 .ws-layout {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -36,34 +37,88 @@ const (
 	payloadGID = 65534
 )
 
+// payloadOwner decides who owns each entry inside the sandbox, and that is the
+// whole of what makes a directory read-only there.
+//
+// This is the mechanism, stated once: the process is 65534 and holds no
+// capabilities (--cap-drop=ALL), so a file it does not own and that grants no
+// write bit to "other" cannot be written, and — the part that actually matters
+// — a DIRECTORY it does not own cannot have entries created, renamed or
+// removed in it, whatever the modes of the files inside. Root owns the code and
+// the inputs; 65534 owns exactly one subtree, out/. No bind mount, no
+// --read-only flag, nothing the daemon has to support: ownership in a tar
+// header, which is the one lever this package already had.
+type payloadOwner struct {
+	// writable gives the whole payload to the sandbox user.
+	writable bool
+	// out is the single relative path (and everything under it) that stays the
+	// sandbox user's when writable is false. Empty means nothing is.
+	out string
+}
+
+// forEntry answers who owns one entry and what may be done to it. Executable
+// bits survive in every case — an uploaded binary gear is only a gear if it can
+// still be run, read-only or not.
+func (p payloadOwner) forEntry(rel string, isDir, isExec bool) (uid, gid int, mode int64) {
+	if p.writable || p.writableEntry(rel) {
+		switch {
+		case isDir:
+			return payloadUID, payloadGID, 0o755
+		case isExec:
+			return payloadUID, payloadGID, 0o755
+		default:
+			return payloadUID, payloadGID, 0o644
+		}
+	}
+	// Owned by root, and with no write bit anywhere: the sandbox user may read
+	// it, enter it and execute it, and may not change it or what is in it.
+	switch {
+	case isDir:
+		return 0, 0, 0o555
+	case isExec:
+		return 0, 0, 0o555
+	default:
+		return 0, 0, 0o444
+	}
+}
+
+func (p payloadOwner) writableEntry(rel string) bool {
+	if p.out == "" {
+		return false
+	}
+	out := path.Clean(p.out)
+	return rel == out || strings.HasPrefix(rel, out+"/")
+}
+
 // writePayload streams dir as a tar rooted at the container's working
 // directory, ready for `docker cp - <id>:/`.
 //
-// Every entry is rewritten to the sandbox user with modes it can act on:
-// directories traversable, files readable, and the executable bit preserved
-// where the host had one — an uploaded binary gear is only a gear if it can
-// still be run.
-func writePayload(w io.Writer, dir string, root string) error {
+// Every entry is rewritten by own: directories traversable, files readable, and
+// ownership set to whoever is meant to be able to change them.
+func writePayload(w io.Writer, dir string, root string, own payloadOwner) error {
 	tw := tar.NewWriter(w)
 	root = strings.TrimPrefix(root, "/")
 
-	// The working directory itself, so it exists owned by the sandbox user
-	// rather than by root. This is what makes a shell able to create a file.
+	// The working directory itself, so it exists owned by the intended user
+	// rather than by whoever Docker made it as. This is what makes a shell able
+	// to create a file — and, when the payload is read-only, what stops a gear
+	// dropping a file beside its own code.
+	uid, gid, mode := own.forEntry("", true, false)
 	if err := tw.WriteHeader(&tar.Header{
 		Name:     root + "/",
 		Typeflag: tar.TypeDir,
-		Mode:     0o755,
-		Uid:      payloadUID,
-		Gid:      payloadGID,
+		Mode:     mode,
+		Uid:      uid,
+		Gid:      gid,
 	}); err != nil {
 		return fmt.Errorf("write payload root: %w", err)
 	}
 
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(dir, path)
+		rel, err := filepath.Rel(dir, p)
 		if err != nil {
 			return err
 		}
@@ -74,48 +129,47 @@ func writePayload(w io.Writer, dir string, root string) error {
 		if err != nil {
 			return err
 		}
+		slash := filepath.ToSlash(rel)
+		isExec := info.Mode().Perm()&0o111 != 0
+		uid, gid, mode := own.forEntry(slash, d.IsDir(), isExec)
 
 		// Symlinks are carried across as symlinks rather than followed: a link
 		// that points outside the directory must not become a copy of whatever
 		// it pointed at on the host.
 		switch {
 		case info.Mode()&fs.ModeSymlink != 0:
-			target, err := os.Readlink(path)
+			target, err := os.Readlink(p)
 			if err != nil {
 				return err
 			}
 			return tw.WriteHeader(&tar.Header{
-				Name:     root + "/" + filepath.ToSlash(rel),
+				Name:     root + "/" + slash,
 				Linkname: target,
 				Typeflag: tar.TypeSymlink,
 				Mode:     0o777,
-				Uid:      payloadUID,
-				Gid:      payloadGID,
+				Uid:      uid,
+				Gid:      gid,
 			})
 		case d.IsDir():
 			return tw.WriteHeader(&tar.Header{
-				Name:     root + "/" + filepath.ToSlash(rel) + "/",
+				Name:     root + "/" + slash + "/",
 				Typeflag: tar.TypeDir,
-				Mode:     0o755,
-				Uid:      payloadUID,
-				Gid:      payloadGID,
+				Mode:     mode,
+				Uid:      uid,
+				Gid:      gid,
 			})
 		case info.Mode().IsRegular():
-			mode := int64(0o644)
-			if info.Mode().Perm()&0o111 != 0 {
-				mode = 0o755
-			}
 			if err := tw.WriteHeader(&tar.Header{
-				Name:     root + "/" + filepath.ToSlash(rel),
+				Name:     root + "/" + slash,
 				Typeflag: tar.TypeReg,
 				Mode:     mode,
 				Size:     info.Size(),
-				Uid:      payloadUID,
-				Gid:      payloadGID,
+				Uid:      uid,
+				Gid:      gid,
 			}); err != nil {
 				return err
 			}
-			f, err := os.Open(path)
+			f, err := os.Open(p)
 			if err != nil {
 				return err
 			}

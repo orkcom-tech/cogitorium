@@ -23,6 +23,7 @@ import {
   type AgentStatus,
   type AgentUsage,
   type ApprovalRequest,
+  type Attachment,
   type ContextBinding,
   type ContextFile,
   type Gear,
@@ -139,7 +140,7 @@ export default function WorkspacePage() {
     [approval],
   )
 
-  const send = async (text: string) => {
+  const send = async (text: string, attachments: string[]) => {
     setBusy(true)
     setError(null)
     const ac = new AbortController()
@@ -148,6 +149,7 @@ export default function WorkspacePage() {
       await wsChatStream(
         wsId,
         text,
+        attachments,
         (ev) => {
           if (ev.type === 'message' && ev.message) {
             const msg = ev.message
@@ -318,7 +320,12 @@ export default function WorkspacePage() {
       node: (
         <div className="bn-body chat-body">
           <Timeline messages={messages} streams={streams} agentName={agentName} busy={busy} onForget={forget} />
-          <Composer busy={busy} onSend={send} onStop={() => abortRef.current?.abort()} />
+          <Composer
+            busy={busy}
+            onSend={send}
+            onStop={() => abortRef.current?.abort()}
+            onAttach={(file) => api.workspaces.attach(wsId, file)}
+          />
         </div>
       ),
     },
@@ -740,12 +747,34 @@ function Timeline({
 
 function MessageRow({ m, agentName }: { m: WSMessage; agentName: (id: number | null) => string }) {
   switch (m.kind) {
-    case 'user':
+    case 'user': {
+      // What was attached is part of what was said, so it is shown on the
+      // message rather than in a panel somewhere: a conversation where the
+      // operator's file is invisible is one where nobody can tell why the
+      // answer talks about a diagram.
+      let attachments: Attachment[] = []
+      try {
+        attachments = (JSON.parse(m.meta)?.attachments as Attachment[]) ?? []
+      } catch {
+        /* display-only */
+      }
       return (
         <div className="msg user">
           <div className="msg-body">{m.content}</div>
+          {attachments.length > 0 && (
+            <div className="attachments">
+              {attachments.map((a) => (
+                <span key={a.path} className={`attachment ${a.kind ? '' : 'to-gear'}`} title={attachmentTitle(a)}>
+                  <span className="attachment-name">{fileName(a.path)}</span>
+                  <span className="muted">{bytes(a.bytes)}</span>
+                  {!a.kind && <span className="muted">→ gear</span>}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )
+    }
     case 'assistant': {
       let calls: { name: string }[] = []
       try {
@@ -814,36 +843,156 @@ function MessageRow({ m, agentName }: { m: WSMessage; agentName: (id: number | n
   }
 }
 
-function Composer({ busy, onSend, onStop }: { busy: boolean; onSend: (text: string) => void; onStop: () => void }) {
+// Composer takes the operator's words and their files.
+//
+// A file is uploaded the moment it is picked, not when send is pressed. That is
+// what lets the server answer what will become of it — shown to the model, or
+// handed to the agent as a path — while there is still time to do something
+// about it. The message itself then carries only paths.
+function Composer({
+  busy,
+  onSend,
+  onStop,
+  onAttach,
+}: {
+  busy: boolean
+  onSend: (text: string, attachments: string[]) => void
+  onStop: () => void
+  onAttach: (file: File) => Promise<Attachment>
+}) {
   const [input, setInput] = useState('')
+  const [attached, setAttached] = useState<Attachment[]>([])
+  const [uploading, setUploading] = useState(0)
+  const [attachError, setAttachError] = useState<string | null>(null)
+  const picker = useRef<HTMLInputElement>(null)
+
+  const take = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    setAttachError(null)
+    // One at a time, and each one kept as it lands: a fourth file the server
+    // refuses must not take the three that worked with it.
+    for (const file of Array.from(files)) {
+      setUploading((n) => n + 1)
+      try {
+        const att = await onAttach(file)
+        setAttached((all) => [...all, att])
+      } catch (err) {
+        setAttachError(`${file.name}: ${err instanceof Error ? err.message : String(err)}`)
+      } finally {
+        setUploading((n) => n - 1)
+      }
+    }
+  }
+
+  const sendable = (input.trim() !== '' || attached.length > 0) && uploading === 0
+
   return (
     <form
-      className="row composer"
+      className="composer"
       onSubmit={(e) => {
         e.preventDefault()
-        if (!input.trim() || busy) return
-        onSend(input.trim())
+        if (!sendable || busy) return
+        onSend(
+          input.trim(),
+          attached.map((a) => a.path),
+        )
         setInput('')
+        setAttached([])
+        setAttachError(null)
       }}
     >
-      <input
-        className="grow"
-        placeholder="tell the orchestrator what you need…"
-        value={input}
-        disabled={busy}
-        onChange={(e) => setInput(e.target.value)}
-      />
-      {busy ? (
-        <button type="button" onClick={onStop}>
-          stop
-        </button>
-      ) : (
-        <button type="submit" disabled={!input.trim()}>
-          send
-        </button>
+      {attached.length > 0 && (
+        <div className="attachments">
+          {attached.map((a) => (
+            <span
+              key={a.path}
+              className={`attachment ${a.kind ? '' : 'to-gear'} ${a.warning ? 'refused' : ''}`}
+              title={attachmentTitle(a)}
+            >
+              <span className="attachment-name">{fileName(a.path)}</span>
+              <span className="muted">{bytes(a.bytes)}</span>
+              {/* The one thing the operator cannot see for themselves: whether
+                  the model is going to look at this, or whether it is going to
+                  their agents as a path for a gear to open. */}
+              {!a.kind && <span className="muted">→ gear</span>}
+              {/* A file this model was never said to accept would take the
+                  whole message down with it, so it is marked before send
+                  rather than explained afterwards. */}
+              {a.warning && <span className="warn">⚠</span>}
+              <button
+                type="button"
+                className="attachment-drop"
+                title="Take this off the message. The file stays in the workspace."
+                onClick={() => setAttached((all) => all.filter((x) => x.path !== a.path))}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
       )}
+      {attachError && <p className="error">{attachError}</p>}
+      <div className="row">
+        <input
+          type="file"
+          multiple
+          ref={picker}
+          className="hidden-file"
+          onChange={(e) => {
+            void take(e.target.files)
+            // Cleared so that picking the same file again is still a change
+            // event — attaching one file twice is a thing people do.
+            e.target.value = ''
+          }}
+        />
+        <button
+          type="button"
+          title="Attach files. Anything at all: what the model can read it is shown, and everything else your agents get as a path."
+          disabled={busy}
+          onClick={() => picker.current?.click()}
+        >
+          {uploading > 0 ? '…' : '+'}
+        </button>
+        <input
+          className="grow"
+          placeholder="tell the orchestrator what you need…"
+          value={input}
+          disabled={busy}
+          onChange={(e) => setInput(e.target.value)}
+        />
+        {busy ? (
+          <button type="button" onClick={onStop}>
+            stop
+          </button>
+        ) : (
+          <button type="submit" disabled={!sendable}>
+            send
+          </button>
+        )}
+      </div>
     </form>
   )
+}
+
+function fileName(path: string) {
+  return path.slice(path.lastIndexOf('/') + 1)
+}
+
+function bytes(n: number) {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// The tooltip carries the whole truth: the path an agent can be told, and the
+// server's own sentence about why the model is not being shown it. That
+// sentence is the server's rather than this file's on purpose — it is the same
+// one the agent is given, so operator and agent are never told two stories.
+function attachmentTitle(a: Attachment) {
+  const lines = [a.path, a.media_type || 'type unknown']
+  lines.push(a.kind ? `the model is shown this, as ${a.kind}` : (a.skipped ?? 'the model is not shown this'))
+  if (a.warning) lines.push(a.warning)
+  return lines.join('\n')
 }
 
 // AgentPanel is the per-agent view: identity, role editor, model binding,

@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
+	"github.com/orkcom-tech/cogitorium/internal/workdir"
 )
 
 // The terminal is deliberately hard to switch on. It is interactive code
@@ -109,14 +108,12 @@ func (s *Server) handleWorkspaceTerminal(w http.ResponseWriter, r *http.Request)
 }
 
 // workspaceDir is the per-workspace scratch directory copied into the
-// session, so work done in a workspace's terminal is that workspace's.
+// session, so work done in a workspace's terminal is that workspace's. The
+// same directory is the Files page's, the inlet's landing ground, and what
+// agents and gears now read and write — so where it is lives in workdir, and
+// this is the server's spelling of it.
 func (s *Server) workspaceDir(wsID int64) string {
-	dir := filepath.Join(s.dataDir, "workspaces", strconv.FormatInt(wsID, 10))
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		slog.Error("could not create workspace directory", "workspace_id", wsID, "err", err)
-		return ""
-	}
-	return dir
+	return workdir.Dir(s.dataDir, wsID)
 }
 
 func (s *Server) terminalReady(w http.ResponseWriter, r *http.Request) bool {

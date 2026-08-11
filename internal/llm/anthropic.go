@@ -3,6 +3,7 @@ package llm
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -76,6 +77,16 @@ func anthropicContent(t Turn) (any, error) {
 			"is_error":    tr.IsError,
 		})
 	}
+	// Files come before the prose that asks about them: Anthropic documents
+	// that an image placed ahead of the question is answered better, and the
+	// question is almost always "what is in this".
+	for _, p := range t.Parts {
+		block, err := anthropicBlock(p)
+		if err != nil {
+			return nil, err
+		}
+		blocks = append(blocks, block)
+	}
 	if t.Text != "" {
 		blocks = append(blocks, map[string]any{"type": "text", "text": t.Text})
 	}
@@ -100,7 +111,42 @@ func anthropicContent(t Turn) (any, error) {
 	return blocks, nil
 }
 
+// anthropicBlock renders one content part as a Messages-API block. Files go as
+// a base64 source: the API takes a URL source too, but the file is on this
+// machine and Anthropic has no way to fetch it from here.
+func anthropicBlock(p Part) (map[string]any, error) {
+	switch p.Kind {
+	case PartText:
+		return map[string]any{"type": "text", "text": p.Text}, nil
+	case PartImage, PartDocument:
+		// The block type is the part kind by another name: an image is an
+		// "image", a PDF is a "document", and both carry the same source.
+		blockType := "image"
+		if p.Kind == PartDocument {
+			blockType = "document"
+		}
+		return map[string]any{
+			"type": blockType,
+			"source": map[string]any{
+				"type":       "base64",
+				"media_type": p.MediaType,
+				"data":       base64.StdEncoding.EncodeToString(p.Data),
+			},
+		}, nil
+	}
+	// checkRequestParts runs first and rejects every other kind, so reaching
+	// here means a caller built a Part this package does not know.
+	_, err := p.check()
+	if err == nil {
+		err = fmt.Errorf("content kind %q cannot be sent to an Anthropic model", p.Kind)
+	}
+	return nil, err
+}
+
 func (c *anthropicClient) Chat(ctx context.Context, r Request, onDelta func(string) error) (Result, error) {
+	if err := checkRequestParts(r.Messages); err != nil {
+		return Result{}, err
+	}
 	msgs := make([]map[string]any, 0, len(r.Messages))
 	for _, t := range r.Messages {
 		content, err := anthropicContent(t)

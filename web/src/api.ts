@@ -33,6 +33,15 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T
 }
 
+// form wraps one file as the multipart body the server reads. The field name
+// is irrelevant to the server — it takes the first part that has a filename —
+// so it says what it is for the benefit of anyone reading a request log.
+function form(file: File): FormData {
+  const fd = new FormData()
+  fd.append('file', file, file.name)
+  return fd
+}
+
 // bundleFilename reads the name the server chose for a downloaded bundle. The
 // server owns that rule — it is the same code that keeps an operator-supplied
 // workspace name from closing the quoted header value — so the client asks
@@ -326,6 +335,28 @@ export const api = {
     messages: (id: number, agentId?: number) =>
       req<WSMessage[]>(`/api/v1/workspaces/${id}/messages${agentId ? `?agent_id=${agentId}` : ''}`),
     status: (id: number) => req<AgentStatus[]>(`/api/v1/workspaces/${id}/status`),
+    // attach uploads one file into the workspace and answers with what will
+    // become of it. The body is the file itself rather than JSON, so this
+    // cannot go through req(): the Content-Type req() sets would be a lie, and
+    // base64 in a JSON field would cost a third of the bytes for nothing.
+    //
+    // One file per call. Several attachments are several calls, which is also
+    // how the composer can report the third one failing while keeping the two
+    // that landed.
+    attach: (id: number, file: File) =>
+      fetch(session.url(`/api/v1/workspaces/${id}/attachments`), {
+        method: 'POST',
+        // The filename travels in the multipart part, which is the only place
+        // the server can learn it — a raw body has no name, and the name is
+        // what gives the file its extension in the workspace.
+        headers: session.headers(),
+        body: form(file),
+      }).then(async (r) => {
+        if (r.status === 401) throw new Unauthorized('sign in required')
+        const body = await r.json().catch(() => null)
+        if (!r.ok) throw new Error(body?.error?.message ?? `${r.status} ${r.statusText}`)
+        return body as Attachment
+      }),
   },
   agents: {
     update: (
@@ -522,13 +553,17 @@ export const api = {
 export async function wsChatStream(
   workspaceId: number,
   text: string,
+  // Workspace-relative paths of files already uploaded with api.workspaces
+  // .attach. The bytes are in the workspace, not in this request — the
+  // message points at them.
+  attachments: string[],
   onEvent: (ev: WSEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const r = await fetch(session.url(`/api/v1/workspaces/${workspaceId}/chat`), {
     method: 'POST',
     headers: session.headers({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, attachments }),
     signal,
   })
   if (!r.ok || !r.body) {
@@ -632,6 +667,22 @@ export type WSMessage = {
 }
 
 export type AgentStatus = { agent_id: number; state: string; detail: string; since?: string }
+
+// A file attached to a message: where it is in the workspace, and what became
+// of it. kind is empty when the model was not shown the bytes, and skipped
+// then says why — a zip nobody's model can look inside, or a file past the
+// size a model may be sent. Either way the agent has the path.
+export type Attachment = {
+  path: string
+  media_type: string
+  bytes: number
+  kind?: string
+  skipped?: string
+  // Set only on a freshly uploaded file, and only when the model this
+  // workspace answers with was never declared able to take this kind: the
+  // message would be refused, and this says so while it can still be changed.
+  warning?: string
+}
 
 export type ContextFile = { path: string; version: string }
 

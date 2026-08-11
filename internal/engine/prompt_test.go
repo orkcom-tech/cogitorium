@@ -76,9 +76,9 @@ func newPromptFixture(t *testing.T, avoid string) promptFixture {
 		t.Fatalf("create agent: %v", err)
 	}
 
-	// gearExec, the library, the searcher and the broker take no part in
-	// assembling a prompt; passing them would only hide that.
-	return promptFixture{engine: New(ws, cat, cs, gears, nil, nil, nil, nil), ws: ws, agent: agent}
+	// gearExec, the library, the searcher, the broker and the data directory
+	// take no part in assembling a prompt; passing them would only hide that.
+	return promptFixture{engine: New(ws, cat, cs, gears, nil, nil, nil, nil, ""), ws: ws, agent: agent}
 }
 
 func (f promptFixture) prompt(t *testing.T) string {

@@ -386,12 +386,19 @@ func (s *Server) handleWorkspaceChat(w http.ResponseWriter, r *http.Request) {
 	}
 	var in struct {
 		Text string `json:"text"`
+		// Attachments are workspace-relative paths, already landed by
+		// POST .../attachments. The bytes are not in this request: a file the
+		// operator attached is a file in the workspace that this message points
+		// at, which is what lets an agent hand the very same path to a gear.
+		Attachments []string `json:"attachments"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	if in.Text == "" {
-		writeError(w, http.StatusBadRequest, "text must not be empty")
+	// A file with nothing typed is an ordinary message — "here" and a
+	// photograph — so emptiness is only a mistake when there is nothing at all.
+	if in.Text == "" && len(in.Attachments) == 0 {
+		writeError(w, http.StatusBadRequest, "send something: some text, a file, or both")
 		return
 	}
 	if _, err := s.workspaces.GetWorkspace(r.Context(), id); err != nil {
@@ -418,7 +425,7 @@ func (s *Server) handleWorkspaceChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := s.engine.HandleUserMessage(r.Context(), id, in.Text, emit); err != nil {
+	if err := s.engine.HandleUserMessage(r.Context(), id, in.Text, emit, in.Attachments...); err != nil {
 		// Pre-stream failures (busy workspace, no orchestrator) surface as
 		// an SSE error event since headers are already out.
 		emit(engine.Event{Type: "error", Error: err.Error()})

@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
-	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/orkcom-tech/cogitorium/internal/engine"
 	"github.com/orkcom-tech/cogitorium/internal/inlet"
+	"github.com/orkcom-tech/cogitorium/internal/workdir"
 )
 
 // Inlets have two halves, and the whole security model is that they stay
@@ -264,20 +264,10 @@ func (s *Server) readInletFile(r *http.Request, in inlet.Inlet, task inlet.Task,
 	// The run number is part of the filename, so two deliveries never write the
 	// same path. Without it a second caller could replace the bytes under an
 	// agent that has already been given the path and is about to read them.
-	rel := path.Join("inlets", in.Address, fmt.Sprintf("%d-%s", runID, safeFileName(name, contentType)))
-	root := s.workspaceDir(in.WorkspaceID)
-	full, err := resolveInside(root, rel)
+	rel := path.Join(workdir.InletDir, in.Address, fmt.Sprintf("%d-%s", runID, safeFileName(name, contentType)))
+	full, err := s.landFile(in.WorkspaceID, rel, body)
 	if err != nil {
-		return inletPayload{}, failPayload(http.StatusInternalServerError,
-			fmt.Errorf("the file could not be placed in this workspace: %w", err))
-	}
-	if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
-		return inletPayload{}, failPayload(http.StatusInternalServerError,
-			fmt.Errorf("the workspace directory could not be prepared: %w", err))
-	}
-	if err := os.WriteFile(full, body, 0o600); err != nil {
-		return inletPayload{}, failPayload(http.StatusInternalServerError,
-			fmt.Errorf("the file could not be written into this workspace: %w", err))
+		return inletPayload{}, failPayload(http.StatusInternalServerError, err)
 	}
 	slog.Info("inlet file landed", "run_id", runID, "workspace_id", in.WorkspaceID, "path", rel, "bytes", len(body))
 
@@ -296,6 +286,11 @@ func (s *Server) readInletFile(r *http.Request, in inlet.Inlet, task inlet.Task,
 // body, or the first file part of a multipart form. Both are supported because
 // both are what the tools people already have will send — curl --data-binary
 // and an HTML form respectively.
+//
+// It is shared with the operator's attachment upload, which is why its
+// refusals below say "upload" rather than "inlet task": the same sentence is
+// read by a pipeline author and by somebody who just dragged a file into the
+// composer, and only one of them has a task to fix.
 func fileFromRequest(r *http.Request) (body []byte, name, contentType string, refusal *deliveryRefusal) {
 	ct := r.Header.Get("Content-Type")
 	base, _, _ := mime.ParseMediaType(ct)
@@ -335,7 +330,7 @@ func fileFromRequest(r *http.Request) (body []byte, name, contentType string, re
 		return nil, "", "", refusal
 	}
 	if len(b) == 0 {
-		return nil, "", "", refuse(errors.New("the body is empty; this task expects a file"))
+		return nil, "", "", refuse(errors.New("the body is empty — send the file as the request body, or as a multipart part with a filename"))
 	}
 	return b, "", base, nil
 }
@@ -349,7 +344,7 @@ func readCapped(r io.Reader) ([]byte, *deliveryRefusal) {
 	if int64(len(b)) > inlet.MaxFilePayload {
 		return nil, &deliveryRefusal{
 			state: inlet.StateRefusedSchema, code: http.StatusRequestEntityTooLarge,
-			err: fmt.Errorf("the file is larger than the %d bytes an inlet accepts", inlet.MaxFilePayload),
+			err: fmt.Errorf("the file is larger than the %d bytes one upload may carry", inlet.MaxFilePayload),
 		}
 	}
 	return b, nil

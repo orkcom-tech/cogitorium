@@ -462,6 +462,34 @@ func renderResults(results []websearch.Result) string {
 // — must not be able to write itself into the global instruction library, the
 // gear catalog or the workspace graph, where it would reach every agent on
 // every later turn.
+//
+// write_file is deliberately NOT here, and the reasoning is the reasoning for
+// the whole list rather than an exception to it.
+//
+// What every tool below has in common is not that it writes something durable.
+// It is that what it writes is READ AUTOMATICALLY BY SOMEBODY ELSE LATER: a
+// saved instruction can be bound into any agent's system prompt, a forged gear
+// becomes a tool the catalog offers, a wire or an updated role changes what
+// runs on every future turn. That is the propagation the latch exists to break.
+// A file in the workspace directory propagates to nothing. It is injected into
+// no prompt, offered as no tool, and read only when a person or an agent goes
+// and asks for it by name — at which point, if it came from an inlet,
+// engine/files.go latches the turn that read it.
+//
+// And closing it would close the one workflow the file tools were built for.
+// An inlet run is tainted before its first model call, by construction: the
+// payload IS third-party text. So a tainted write_file means every inlet
+// delivery — the CSV to summarise, the image to caption, the ticket to
+// triage — can be read and never answered in the place the answer belongs. A
+// rule that fires on every legitimate use and none of the dangerous ones is not
+// a safeguard, it is a reason people switch it off.
+//
+// The residual risk is stated rather than waved away: third-party text can
+// choose a filename and its contents inside one workspace. That is the same
+// blast radius the inlet already has — it writes attacker-chosen bytes into
+// that directory before any agent runs — and the operator sees the result in
+// the Files page. What it must never do is escape the workspace, and that is
+// workdir.ResolveInside's job, not this map's.
 var taintedTools = map[string]bool{
 	"save_instruction": true,
 	"forge_gear":       true,
@@ -505,6 +533,26 @@ func egressJSON(v any) string {
 // another. save_instruction is deliberately NOT here — it writes, so
 // taintedTools already refuses it, and duplicating the rule would let the two
 // lists drift.
+//
+// list_files and read_file are not here either, and the difference is the
+// boundary, not the direction. What closed the catalogue readers is that they
+// cross OUT of the workspace the inlet was put on: a key for workspace 3 could
+// pull back gear descriptions and instruction bodies belonging to workspace 7,
+// which no operator granting an inlet has agreed to. The file tools cannot do
+// that. workdir.ResolveInside proves every path stays inside this workspace's
+// own directory, so what a keyholder can reach through them is exactly the
+// workspace they were already given a door into — the same directory their own
+// delivery just landed in, and the same one that workspace's terminal opens on.
+//
+// That is not nothing, and it should be said in the open: an inlet on a
+// workspace exposes that workspace's files to whoever holds the key, because
+// an agent can be talked into reading one and quoting it in an answer that goes
+// back through the door. The answer to that is where the inlet is put, not a
+// half-measure here — and an operator keeping something private in a workspace
+// should not put an inlet on it. Closing reads instead would leave the file
+// task — deliver a file, have an agent work on it — unable to do the one thing
+// it exists to do, while the workspace's files stayed just as reachable through
+// a gear.
 var unattendedClosedTools = map[string]bool{
 	"list_gears":        true,
 	"list_instructions": true,

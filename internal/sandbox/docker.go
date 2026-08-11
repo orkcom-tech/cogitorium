@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os/exec"
+	"path/filepath"
 
 	"strings"
 	"time"
@@ -119,7 +120,7 @@ func (d *Docker) create(ctx context.Context, spec Spec, interactive bool) (strin
 			d.remove(context.WithoutCancel(ctx), id)
 			return "", fmt.Errorf("copy code into container: %w", err)
 		}
-		writeErr := writePayload(stdin, spec.Dir, workDir)
+		writeErr := writePayload(stdin, spec.Dir, workDir, payloadOwner{writable: spec.Writable, out: spec.Out})
 		// Close before Wait either way: docker only finishes once the stream
 		// ends, so returning early on a write error would deadlock.
 		closeErr := stdin.Close()
@@ -137,6 +138,42 @@ func (d *Docker) create(ctx context.Context, spec Spec, interactive bool) (strin
 		}
 	}
 	return id, nil
+}
+
+// collect copies the writable subdirectory back out of the container, into the
+// place on the host that the process saw as it: <Dir>/<Out>. The caller made
+// that directory empty before the run, so what is in it afterwards is exactly
+// what the process left behind — and a caller with no sandbox reads the same
+// directory without any of this happening, which is why the two backends need
+// no separate handling further up.
+//
+// The trailing "/." is the documented form for "the contents of this directory,
+// not the directory itself", and is what puts the files where the caller
+// expects rather than one level down.
+//
+// Extraction is docker's own, which refuses an entry whose name escapes the
+// destination; and the daemon builds the archive by walking real directory
+// entries, so no member can be named ".." in the first place. What CAN come
+// across is a symlink the process created, pointing anywhere it likes —
+// including at the host's own files. That is not defended here: it is defended
+// where it can be, in the caller that walks the collected directory and takes
+// nothing but regular files.
+func (d *Docker) collect(ctx context.Context, id string, spec Spec) error {
+	if spec.Out == "" {
+		return nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	var errOut bytes.Buffer
+	cmd := exec.CommandContext(cctx, d.bin, "cp",
+		id+":"+workDir+"/"+spec.Out+"/.", filepath.Join(spec.Dir, spec.Out))
+	cmd.Stderr = &errOut
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("could not copy %s/ back out of the sandbox, so any files it holds were lost: %w: %s",
+			spec.Out, err, strings.TrimSpace(errOut.String()))
+	}
+	return nil
 }
 
 func (d *Docker) remove(ctx context.Context, id string) {
@@ -182,8 +219,17 @@ func (d *Docker) Run(ctx context.Context, spec Spec) (Result, error) {
 	slog.Info("sandboxed run", "backend", d.Name(), "exit_code", res.ExitCode,
 		"timed_out", res.TimedOut, "duration_ms", time.Since(start).Milliseconds())
 
+	// Collected whatever the exit code was, and whether or not it timed out: a
+	// gear that wrote its result and then failed still wrote its result, and the
+	// caller is owed the truth about what is there. The container still exists —
+	// removal is deferred above — and this must happen before it goes.
+	collectErr := d.collect(context.WithoutCancel(ctx), id, spec)
+
 	if res.TimedOut {
 		return res, fmt.Errorf("timed out after %ds", timeout)
+	}
+	if collectErr != nil {
+		return res, collectErr
 	}
 	// A non-zero exit is the program's own result, not a failure to run.
 	if runErr != nil && res.ExitCode < 0 {

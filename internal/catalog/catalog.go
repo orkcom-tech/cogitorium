@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,6 +50,36 @@ type Model struct {
 	ProviderType string `json:"provider_type"`
 	ModelName    string `json:"model_name"`
 	Label        string `json:"label"`
+	// Accepts is what this model can be shown besides text, as the operator
+	// declared it when adding it: llm.PartImage, llm.PartDocument, or neither.
+	// Empty is text-only, and text-only is the default for the reason spelled
+	// out in migration 0017 — nothing here is probed or inferred.
+	Accepts []string `json:"accepts"`
+}
+
+// Takes reports whether this model was declared able to take a part of this
+// kind. Text needs no declaration: every model takes text.
+func (m Model) Takes(kind string) bool {
+	if kind == llm.PartText {
+		return true
+	}
+	for _, a := range m.Accepts {
+		if a == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// display is how a model is named to an operator choosing between several.
+// The label is what they typed and recognise; without one, the provider and
+// the model name together are unambiguous where the model name alone is not —
+// two providers can both serve "llama3".
+func (m Model) display() string {
+	if l := strings.TrimSpace(m.Label); l != "" {
+		return l
+	}
+	return m.ProviderName + " / " + m.ModelName
 }
 
 type Store struct {
@@ -193,45 +225,188 @@ func (s *Store) Client(ctx context.Context, providerID int64) (llm.Client, Provi
 	return c, p, nil
 }
 
-func (s *Store) CreateModel(ctx context.Context, providerID int64, modelName, label string) (Model, error) {
+// CreateModel adds a model to the catalog. accepts is what the operator says
+// this model can be shown besides text — llm.PartImage, llm.PartDocument —
+// and giving none means text only, which is the honest default for a model
+// nobody has said anything about.
+//
+// It is variadic rather than a slice parameter so that adding a text-only
+// model, which is most of them, still reads as one line and every existing
+// caller says exactly what it always said.
+func (s *Store) CreateModel(ctx context.Context, providerID int64, modelName, label string, accepts ...string) (Model, error) {
 	modelName = strings.TrimSpace(modelName)
 	if modelName == "" {
 		return Model{}, errors.New("model_name is required")
+	}
+	stored, err := encodeAccepts(accepts)
+	if err != nil {
+		return Model{}, err
 	}
 	if _, err := s.GetProvider(ctx, providerID); err != nil {
 		return Model{}, err
 	}
 
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO models (provider_id, model_name, label, created_at) VALUES (?, ?, ?, ?)`,
-		providerID, modelName, label, now())
+		`INSERT INTO models (provider_id, model_name, label, accepts, created_at) VALUES (?, ?, ?, ?, ?)`,
+		providerID, modelName, label, stored, now())
 	if err := asConflict(err, fmt.Sprintf("model %q on this provider", modelName)); err != nil {
 		return Model{}, fmt.Errorf("create model: %w", err)
 	}
 	id, _ := res.LastInsertId()
-	slog.Info("model added to catalog", "id", id, "provider_id", providerID, "model_name", modelName)
+	slog.Info("model added to catalog", "id", id, "provider_id", providerID, "model_name", modelName, "accepts", stored)
 	return s.GetModel(ctx, id)
 }
 
+// SetModelAccepts changes what an existing model may be shown. It exists
+// because the alternative is deleting the model and adding it again, and the
+// model's id is what every agent is bound by: correcting a modality would
+// silently unbind every agent using it.
+func (s *Store) SetModelAccepts(ctx context.Context, id int64, accepts []string) (Model, error) {
+	stored, err := encodeAccepts(accepts)
+	if err != nil {
+		return Model{}, err
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE models SET accepts = ? WHERE id = ?`, stored, id)
+	if err != nil {
+		return Model{}, fmt.Errorf("update model %d: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Model{}, fmt.Errorf("model %d: %w", id, ErrNotFound)
+	}
+	slog.Info("model modality changed", "id", id, "accepts", stored)
+	return s.GetModel(ctx, id)
+}
+
+// CheckAccepts refuses a turn's attachments before any request is built, when
+// they include something the operator never said this model could take. The
+// error names the model and the models that could take it, because "this
+// model does not accept images" tells an operator what went wrong and nothing
+// about what to do next.
+func (s *Store) CheckAccepts(ctx context.Context, m Model, parts []llm.Part) error {
+	for _, p := range parts {
+		if m.Takes(p.Kind) {
+			continue
+		}
+		file := "this file"
+		if strings.TrimSpace(p.Name) != "" {
+			file = strconv.Quote(p.Name)
+		}
+		return fmt.Errorf("%s cannot be sent to model %s: it was added to the catalog as %s, and the catalog is the only thing that says what a model can be shown. %s",
+			file, strconv.Quote(m.display()), describeAccepts(m.Accepts), s.alternatives(ctx, p.Kind))
+	}
+	return nil
+}
+
+// alternatives names the models that were declared able to take this kind, so
+// the operator can move the agent instead of guessing. A catalog with none is
+// said so plainly rather than left as an empty list.
+func (s *Store) alternatives(ctx context.Context, kind string) string {
+	models, err := s.ListModels(ctx)
+	if err != nil {
+		// The refusal is the answer; a second failure while decorating it must
+		// not replace it with a database error the operator cannot connect to
+		// the file they attached.
+		slog.Warn("could not list models to suggest an alternative", "err", err)
+		models = nil
+	}
+	names := []string{}
+	for _, m := range models {
+		if m.Takes(kind) && kind != llm.PartText {
+			names = append(names, strconv.Quote(m.display()))
+		}
+	}
+	if len(names) == 0 {
+		return fmt.Sprintf("No model in this catalog accepts %s. Add one and say so when adding it, or give the file's path to a gear instead — it is in the workspace either way.", plural(kind))
+	}
+	return fmt.Sprintf("Models that accept %s: %s. Bind this agent to one of those, or — if this model does take %s — say so on the model in the catalog.",
+		plural(kind), strings.Join(names, ", "), plural(kind))
+}
+
+// encodeAccepts normalizes what the operator said a model can be shown into
+// the stored form, and refuses anything the adapters cannot actually encode:
+// an operator who types "audio" has to be told now, not by a model that
+// answers nothing at the moment a file is in front of it.
+func encodeAccepts(kinds []string) (string, error) {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, k := range kinds {
+		k = strings.ToLower(strings.TrimSpace(k))
+		switch k {
+		case "":
+			continue
+		case llm.PartText:
+			// Not a capability. Every model takes text, so storing it would
+			// make the empty value mean two different things.
+			continue
+		case llm.PartImage, llm.PartDocument:
+		default:
+			return "", fmt.Errorf("accepts %q: a model can be declared able to take %q (png, jpeg, gif, webp) or %q (PDF) — text needs no declaration, every model takes it",
+				k, llm.PartImage, llm.PartDocument)
+		}
+		if !seen[k] {
+			seen[k] = true
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return strings.Join(out, ","), nil
+}
+
+func decodeAccepts(stored string) []string {
+	out := []string{}
+	for _, k := range strings.Split(stored, ",") {
+		if k = strings.TrimSpace(k); k != "" {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+func describeAccepts(accepts []string) string {
+	if len(accepts) == 0 {
+		return "text-only"
+	}
+	words := make([]string, 0, len(accepts))
+	for _, a := range accepts {
+		words = append(words, plural(a))
+	}
+	return "accepting text and " + strings.Join(words, " and ")
+}
+
+// plural names a part kind the way an operator would say it in a sentence.
+func plural(kind string) string {
+	switch kind {
+	case llm.PartImage:
+		return "images"
+	case llm.PartDocument:
+		return "PDF documents"
+	}
+	return kind
+}
+
 func (s *Store) GetModel(ctx context.Context, id int64) (Model, error) {
-	var m Model
+	var (
+		m       Model
+		accepts string
+	)
 	err := s.db.QueryRowContext(ctx, `
-		SELECT m.id, m.provider_id, p.name, p.type, m.model_name, m.label
+		SELECT m.id, m.provider_id, p.name, p.type, m.model_name, m.label, m.accepts
 		FROM models m JOIN providers p ON p.id = m.provider_id
 		WHERE m.id = ?`, id).
-		Scan(&m.ID, &m.ProviderID, &m.ProviderName, &m.ProviderType, &m.ModelName, &m.Label)
+		Scan(&m.ID, &m.ProviderID, &m.ProviderName, &m.ProviderType, &m.ModelName, &m.Label, &accepts)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Model{}, fmt.Errorf("model %d: %w", id, ErrNotFound)
 	}
 	if err != nil {
 		return Model{}, fmt.Errorf("get model %d: %w", id, err)
 	}
+	m.Accepts = decodeAccepts(accepts)
 	return m, nil
 }
 
 func (s *Store) ListModels(ctx context.Context) ([]Model, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT m.id, m.provider_id, p.name, p.type, m.model_name, m.label
+		SELECT m.id, m.provider_id, p.name, p.type, m.model_name, m.label, m.accepts
 		FROM models m JOIN providers p ON p.id = m.provider_id
 		ORDER BY p.name, m.model_name`)
 	if err != nil {
@@ -241,10 +416,14 @@ func (s *Store) ListModels(ctx context.Context) ([]Model, error) {
 
 	out := []Model{}
 	for rows.Next() {
-		var m Model
-		if err := rows.Scan(&m.ID, &m.ProviderID, &m.ProviderName, &m.ProviderType, &m.ModelName, &m.Label); err != nil {
+		var (
+			m       Model
+			accepts string
+		)
+		if err := rows.Scan(&m.ID, &m.ProviderID, &m.ProviderName, &m.ProviderType, &m.ModelName, &m.Label, &accepts); err != nil {
 			return nil, fmt.Errorf("scan model: %w", err)
 		}
+		m.Accepts = decodeAccepts(accepts)
 		out = append(out, m)
 	}
 	return out, rows.Err()

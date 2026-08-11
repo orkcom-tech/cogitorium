@@ -10,6 +10,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
+	"github.com/orkcom-tech/cogitorium/internal/workdir"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
 
@@ -28,6 +29,17 @@ func str(desc string) map[string]any {
 // gearToolPrefix namespaces forged gears so they can never collide with a
 // built-in tool (built-ins are verb-first: forge_gear, grant_gear, …).
 const gearToolPrefix = "gear_"
+
+// gearFilesArg is the one argument the engine adds to a gear's own schema: the
+// workspace files this call hands over. It leads with an underscore because a
+// gear's schema is written by whoever forged it and this has to sit beside
+// those names without ever being one of them — a gear taking an argument called
+// "files" is entirely reasonable, and must keep meaning what its author meant.
+//
+// It never reaches the gear. What arrives on stdin is the gear's own arguments,
+// with this removed — and, when it was not supplied, the exact bytes the model
+// produced, untouched.
+const gearFilesArg = "_files"
 
 // toolsFor returns the tools an agent may use: built-ins by role, delegation
 // along its outgoing wires, and every approved gear bound to it.
@@ -223,6 +235,41 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 		})
 	}
 
+	// The workspace's own files. Offered to every agent, worker as much as
+	// orchestrator: a worker delegated "summarise the CSV that came in" is
+	// exactly the agent that needs them, and an orchestrator-only file tool
+	// would mean every read went through a delegation round-trip.
+	tools = append(tools,
+		llm.Tool{
+			Name: "list_files",
+			Description: "List the files in your workspace's own directory — where files delivered to this workspace land, " +
+				"where gears leave what they produce, and what the operator sees in the Files page. Paths are relative to " +
+				"that directory and are what read_file, write_file and a gear's " + gearFilesArg + " argument take.",
+			InputSchema: obj(map[string]any{
+				"path": str("optional subdirectory to list; omit for the whole workspace"),
+			}),
+		},
+		llm.Tool{
+			Name: "read_file",
+			Description: "Read a text file from your workspace. Text only: anything else is refused rather than mangled, " +
+				"and a long file comes back truncated with the size stated. To work on a file instead of reading it — a " +
+				"spreadsheet, an image, something large — name it in a gear's " + gearFilesArg + " argument and let the gear open it.",
+			InputSchema: obj(map[string]any{
+				"path": str("workspace-relative path, e.g. 'inlets/tickets/12-report.csv'"),
+			}, "path"),
+		},
+		llm.Tool{
+			Name: "write_file",
+			Description: "Create or replace a text file in your workspace. The operator sees it in the Files page, and it " +
+				"can be handed to a gear by name. This replaces the whole file — it does not append — and you are told when " +
+				"something was already there.",
+			InputSchema: obj(map[string]any{
+				"path":    str("workspace-relative path, e.g. 'summary.md'"),
+				"content": str("the file's complete content"),
+			}, "path", "content"),
+		},
+	)
+
 	for _, g := range gears {
 		schema := map[string]any{"type": "object", "properties": map[string]any{}}
 		if g.ArgsSchema != "" && g.ArgsSchema != "{}" {
@@ -236,10 +283,56 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 		tools = append(tools, llm.Tool{
 			Name:        gearToolPrefix + g.Name,
 			Description: fmt.Sprintf("%s (gear v%d, forged in %s)", g.Description, g.Version, originLabel(g)),
-			InputSchema: schema,
+			InputSchema: withFilesArg(schema, g.Name),
 		})
 	}
 	return tools
+}
+
+// withFilesArg adds the file argument to a gear's own schema.
+//
+// It is added to properties rather than alongside them, so a schema that says
+// additionalProperties: false still accepts it — a gear whose author was strict
+// about arguments should not thereby be a gear that cannot be given a file.
+//
+// A gear that already declares this name keeps it, whatever it means to that
+// gear, and simply cannot be handed files. The alternative — quietly taking the
+// name over — would change what an approved gear's arguments mean without the
+// operator who approved them being asked.
+func withFilesArg(schema map[string]any, gearName string) map[string]any {
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		// A schema without a properties object is one this engine cannot extend
+		// without guessing at its shape. Left exactly as forged.
+		return schema
+	}
+	if _, taken := props[gearFilesArg]; taken {
+		slog.Warn("gear declares the file argument itself, so it cannot be handed workspace files",
+			"gear", gearName, "argument", gearFilesArg)
+		return schema
+	}
+
+	// Copied, not edited in place: schema is this gear's parsed args_schema and
+	// is rebuilt per turn, but a shallow map is exactly the kind of thing that
+	// starts being shared later.
+	out := make(map[string]any, len(schema)+1)
+	for k, v := range schema {
+		out[k] = v
+	}
+	nextProps := make(map[string]any, len(props)+1)
+	for k, v := range props {
+		nextProps[k] = v
+	}
+	nextProps[gearFilesArg] = map[string]any{
+		"type":  "array",
+		"items": map[string]any{"type": "string"},
+		"description": "Optional. Workspace files to hand this gear, as paths from list_files. Each appears beside the " +
+			"gear's code at in/<the same path>, read-only. The gear may write results into out/, and whatever it leaves " +
+			"there is copied into your workspace and reported back to you with its new path. Pass [] for a gear that " +
+			"produces a file without being given one. Omit it and the gear runs as it always has.",
+	}
+	out["properties"] = nextProps
+	return out
 }
 
 func originLabel(g gear.Gear) string {
@@ -280,7 +373,8 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 	// asks for a management tool gets a clear refusal.
 	switch call.Name {
 	case "delegate", "forge_gear", "list_gears",
-		"list_instructions", "read_instruction", "save_instruction", "web_search":
+		"list_instructions", "read_instruction", "save_instruction", "web_search",
+		"list_files", "read_file", "write_file":
 		// Available to every agent. web_search belongs here because the grant
 		// is the gate: leaving it out would let a granted WORKER see the tool
 		// and be refused by the orchestrator-only rule on all sixteen of its
@@ -309,6 +403,33 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 	}
 
 	switch call.Name {
+	case "list_files":
+		p, err := args.str("path")
+		if err != nil {
+			return "", err
+		}
+		return e.listFiles(wsID, p)
+
+	case "read_file":
+		p, err := args.reqStr("path")
+		if err != nil {
+			return "", err
+		}
+		return e.readFile(wsID, p)
+
+	case "write_file":
+		p, err := args.reqStr("path")
+		if err != nil {
+			return "", err
+		}
+		// Not reqStr: writing an empty file is a legitimate thing to want, and
+		// "content is required" would be a lie about what happened.
+		body, err := args.str("content")
+		if err != nil {
+			return "", err
+		}
+		return e.writeFile(wsID, p, body)
+
 	case "web_search":
 		q, err := args.str("query")
 		if err != nil {
@@ -663,12 +784,42 @@ func (e *Engine) runGear(ctx context.Context, wsID int64, agent workspace.Agent,
 		if g.Name != name {
 			continue
 		}
-		res, err := e.gearExec.Run(ctx, g, argsJSON, gear.Caller{AgentID: &agent.ID, WorkspaceID: &wsID})
+		files, gearArgs, err := splitFilesArg(argsJSON)
+		if err != nil {
+			return "", err
+		}
+		// Handing a gear a file an inlet delivered puts that caller's bytes in
+		// reach of whatever the gear prints, so the latch closes now, before the
+		// run, rather than after the output is already in the context.
+		for _, f := range files {
+			if thirdParty(workdir.Clean(f)) {
+				e.turn(wsID).tainted = true
+				break
+			}
+		}
+
+		res, err := e.gearExec.RunWithFiles(ctx, g, gearArgs, files, gear.Caller{AgentID: &agent.ID, WorkspaceID: &wsID})
 		if err != nil {
 			return "", err
 		}
 		if res.ExitCode != 0 {
 			return "", fmt.Errorf("gear %q exited %d: %s", name, res.ExitCode, strings.TrimSpace(res.Stderr))
+		}
+		// A call that carried no files gets back exactly what it always did:
+		// the gear's stdout, or stdout and stderr together when the gear wrote
+		// to both. The file report is additional, and only when there is one.
+		if len(res.Produced) > 0 || len(res.Ignored) > 0 {
+			out := map[string]any{"output": res.Stdout}
+			if strings.TrimSpace(res.Stderr) != "" {
+				out["stderr"] = res.Stderr
+			}
+			if len(res.Produced) > 0 {
+				out["files"] = res.Produced
+			}
+			if len(res.Ignored) > 0 {
+				out["not_taken"] = res.Ignored
+			}
+			return marshal(out)
 		}
 		if strings.TrimSpace(res.Stderr) != "" {
 			return marshal(map[string]any{"output": res.Stdout, "stderr": res.Stderr})
@@ -676,6 +827,52 @@ func (e *Engine) runGear(ctx context.Context, wsID int64, agent workspace.Agent,
 		return res.Stdout, nil
 	}
 	return "", fmt.Errorf("gear %q is not available to you — it is unbound, or awaiting operator approval", name)
+}
+
+// splitFilesArg separates the engine's file argument from the gear's own.
+//
+// The second return value is the gear's arguments, and for a call that did not
+// name files it is the input string ITSELF — not a re-encoding of it. That is
+// the point: re-marshalling would reorder keys, drop whitespace and rewrite
+// numbers, and the promise is that a gear which names no files sees on stdin
+// exactly the bytes it sees today. Arguments that are not a JSON object are
+// passed through for the same reason: they are what today's gear would get.
+//
+// A nil first return means the argument was absent, which is not the same as
+// an empty list — see gear.Executor.RunWithFiles.
+func splitFilesArg(argsJSON string) ([]string, string, error) {
+	if !strings.Contains(argsJSON, gearFilesArg) {
+		return nil, argsJSON, nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(argsJSON), &fields); err != nil {
+		return nil, argsJSON, nil
+	}
+	raw, ok := fields[gearFilesArg]
+	if !ok || string(raw) == "null" {
+		return nil, argsJSON, nil
+	}
+
+	var files []string
+	if err := json.Unmarshal(raw, &files); err != nil {
+		// A single path where a list was expected is unambiguous, and models
+		// send it constantly.
+		var one string
+		if err := json.Unmarshal(raw, &one); err != nil {
+			return nil, "", fmt.Errorf("argument %q must be an array of workspace file paths, got %s", gearFilesArg, string(raw))
+		}
+		files = []string{one}
+	}
+	if files == nil {
+		files = []string{}
+	}
+
+	delete(fields, gearFilesArg)
+	rest, err := json.Marshal(fields)
+	if err != nil {
+		return nil, "", fmt.Errorf("rebuild the gear's arguments without %q: %w", gearFilesArg, err)
+	}
+	return files, string(rest), nil
 }
 
 // bindScope resolves an optional agent name to a binding scope (nil =

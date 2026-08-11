@@ -1,7 +1,6 @@
 package server
 
 import (
-	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -10,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/orkcom-tech/cogitorium/internal/workdir"
 )
 
 // The file tree exists so a quick look or a small correction does not mean
@@ -31,61 +32,10 @@ type fileEntry struct {
 	Mtime string `json:"mtime"`
 }
 
-// resolveInside turns a client-supplied relative path into an absolute one and
-// proves it stays inside root. Symlinks are resolved first: a link pointing
-// out of the workspace would otherwise pass a textual prefix check and hand
-// out the server's own files.
-func resolveInside(root, rel string) (string, error) {
-	if root == "" {
-		return "", errors.New("this workspace has no working directory")
-	}
-	clean := path.Clean("/" + strings.ReplaceAll(rel, "\\", "/"))
-	full := filepath.Join(root, filepath.FromSlash(clean))
-
-	realRoot, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		return "", err
-	}
-	real, err := filepath.EvalSymlinks(full)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return "", err
-		}
-		// Nothing at that path yet — saving "docs/notes.md" into an empty
-		// workspace must work, so containment is proved against the deepest
-		// ancestor that does exist. The remainder cannot escape: Clean has
-		// already collapsed every "..".
-		anc := filepath.Dir(full)
-		for {
-			realAnc, err := filepath.EvalSymlinks(anc)
-			if err == nil {
-				if !within(realRoot, realAnc) {
-					return "", errors.New("path leaves the workspace")
-				}
-				return full, nil
-			}
-			if !os.IsNotExist(err) {
-				return "", err
-			}
-			parent := filepath.Dir(anc)
-			if parent == anc {
-				return "", errors.New("path leaves the workspace")
-			}
-			anc = parent
-		}
-	}
-	if !within(realRoot, real) {
-		return "", errors.New("path leaves the workspace")
-	}
-	return real, nil
-}
-
-func within(root, p string) bool {
-	if p == root {
-		return true
-	}
-	return strings.HasPrefix(p, root+string(filepath.Separator))
-}
+// The path validation these handlers run on is workdir.ResolveInside. It used
+// to live here, and moved out when agents and gears gained access to the same
+// directory: three packages proving containment three times is three chances
+// to prove it slightly differently.
 
 // handleListFiles lists one directory rather than walking the whole tree: a
 // deep node_modules would otherwise turn opening the panel into a stall, and
@@ -97,7 +47,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	root := s.workspaceDir(id)
 	rel := r.URL.Query().Get("path")
-	dir, err := resolveInside(root, rel)
+	dir, err := workdir.ResolveInside(root, rel)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -153,7 +103,7 @@ func (s *Server) handleReadFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "path is required")
 		return
 	}
-	full, err := resolveInside(s.workspaceDir(id), rel)
+	full, err := workdir.ResolveInside(s.workspaceDir(id), rel)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -208,7 +158,7 @@ func (s *Server) handleWriteFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "path is required")
 		return
 	}
-	full, err := resolveInside(s.workspaceDir(id), rel)
+	full, err := workdir.ResolveInside(s.workspaceDir(id), rel)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

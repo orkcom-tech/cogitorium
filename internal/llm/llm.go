@@ -14,8 +14,14 @@ import (
 
 // Turn is one conversation turn in provider-neutral form.
 type Turn struct {
-	Role        string       // user | assistant
-	Text        string       // may be empty on tool-only turns
+	Role string // user | assistant
+	Text string // may be empty on tool-only turns
+	// Parts are the files this turn puts in front of the model: an image, a
+	// PDF, or the text read out of a file. Text above stays the whole of the
+	// common case, so a plain turn is still written Turn{Role: "user",
+	// Text: "hi"} and still crosses the wire byte for byte as it always did.
+	// See content.go for what a model can and cannot be shown.
+	Parts       []Part
 	ToolCalls   []ToolCall   // assistant turns: tools the model invoked
 	ToolResults []ToolResult // user turns: results being returned to the model
 }

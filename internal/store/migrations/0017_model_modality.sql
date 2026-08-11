@@ -1,0 +1,19 @@
+-- What a model can be shown besides text, as the OPERATOR declared it.
+--
+-- Empty means text only, which is what every model already in this catalog was
+-- added as. A capability nobody stated is not a capability: a 0.5b local text
+-- model handed an image returns a provider error that names neither the model
+-- nor the file, and the operator is left guessing which of the two was wrong.
+--
+-- It is not probed and it is not guessed from the name. A probe would spend a
+-- real request against a real key to answer a question the operator already
+-- knows, and it would have to be repeated because a base URL can be repointed
+-- at anything. A name is not evidence either: a gateway is free to serve
+-- "gpt-4o" from whatever it likes, and a guess that is wrong is worse than a
+-- question, because it fails at the moment a file is in front of it.
+--
+-- Stored as a comma-separated list of the part kinds in internal/llm
+-- ('image', 'document') rather than one boolean column per kind, so a kind an
+-- API grows later is a value and not another migration. 'text' is never
+-- stored: every model takes text, so a declaration would mean nothing.
+ALTER TABLE models ADD COLUMN accepts TEXT NOT NULL DEFAULT '';

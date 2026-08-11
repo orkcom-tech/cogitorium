@@ -39,6 +39,11 @@ type modelCall struct {
 	System   string
 	Messages []map[string]any
 	Tools    []string
+	// Raw is the request body exactly as it arrived, before anything decoded
+	// it. A test that has to prove something is ABSENT — that a later turn
+	// carries no file bytes under any part name — cannot ask a decoded shape
+	// it already knows the names of; it has to search what was actually sent.
+	Raw string
 }
 
 // toolResults returns what the engine handed back for the tool calls of the
@@ -157,6 +162,11 @@ func (p *provider) reset() {
 }
 
 func (p *provider) chat(w http.ResponseWriter, r *http.Request) {
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "the engine's request body could not be read: "+err.Error(), http.StatusBadRequest)
+		return
+	}
 	var body struct {
 		Messages []map[string]any `json:"messages"`
 		Tools    []struct {
@@ -165,11 +175,11 @@ func (p *provider) chat(w http.ResponseWriter, r *http.Request) {
 			} `json:"function"`
 		} `json:"tools"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.Unmarshal(raw, &body); err != nil {
 		http.Error(w, "the engine sent something that is not a chat request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	call := modelCall{Messages: body.Messages}
+	call := modelCall{Messages: body.Messages, Raw: string(raw)}
 	for _, tool := range body.Tools {
 		call.Tools = append(call.Tools, tool.Function.Name)
 	}

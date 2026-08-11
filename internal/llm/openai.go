@@ -105,20 +105,66 @@ func openAIMessages(system string, turns []Turn) []map[string]any {
 				})
 			}
 			m := map[string]any{"role": "assistant", "tool_calls": calls}
-			if t.Text != "" {
-				m["content"] = t.Text
+			if t.Text != "" || len(t.Parts) > 0 {
+				m["content"] = openAIContent(t)
 			}
 			msgs = append(msgs, m)
 			continue
 		}
-		if t.Text != "" || len(t.ToolResults) == 0 {
-			msgs = append(msgs, map[string]any{"role": t.Role, "content": t.Text})
+		if t.Text != "" || len(t.Parts) > 0 || len(t.ToolResults) == 0 {
+			msgs = append(msgs, map[string]any{"role": t.Role, "content": openAIContent(t)})
 		}
 	}
 	return msgs
 }
 
+// openAIContent is a turn's content field: a plain string when the turn is
+// text, an array of parts when it carries files. The string case is not an
+// array of one — a text-only turn crosses the wire exactly as it did before
+// parts existed, and every OpenAI-compatible server in the field accepts a
+// string, while some local ones do not accept the array form at all.
+func openAIContent(t Turn) any {
+	if len(t.Parts) == 0 {
+		return t.Text
+	}
+	// Files first, then the prose, for the same reason as the Anthropic
+	// adapter: the question refers to what precedes it.
+	parts := make([]map[string]any, 0, len(t.Parts)+1)
+	for _, p := range t.Parts {
+		parts = append(parts, openAIPart(p))
+	}
+	if t.Text != "" {
+		parts = append(parts, map[string]any{"type": "text", "text": t.Text})
+	}
+	return parts
+}
+
+// openAIPart renders one content part in the chat-completions vocabulary.
+// Both file kinds carry the same data: URL — the protocol has no base64 field
+// of its own — under the part type each is read from.
+func openAIPart(p Part) map[string]any {
+	switch p.Kind {
+	case PartImage:
+		return map[string]any{"type": "image_url", "image_url": map[string]any{"url": p.dataURL()}}
+	case PartDocument:
+		// A "file" part is how OpenAI itself takes a PDF. Local servers behind
+		// this same protocol mostly do not implement it, which is exactly why
+		// a model is not sent a document until the operator has said in the
+		// catalog that it takes one — this adapter cannot know what is on the
+		// other end of a base URL, and guessing costs a failed turn.
+		return map[string]any{"type": "file", "file": map[string]any{
+			"filename":  p.fileName(),
+			"file_data": p.dataURL(),
+		}}
+	default:
+		return map[string]any{"type": "text", "text": p.Text}
+	}
+}
+
 func (c *openAIClient) Chat(ctx context.Context, r Request, onDelta func(string) error) (Result, error) {
+	if err := checkRequestParts(r.Messages); err != nil {
+		return Result{}, err
+	}
 	payload := map[string]any{
 		"model":    r.Model,
 		"stream":   true,

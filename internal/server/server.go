@@ -92,7 +92,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		library:    lib,
 		identity:   identity.NewStore(db),
 		inlets:     inlet.NewStore(db),
-		engine:     engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker),
+		engine:     engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, cfg.DataDir),
 		// A server reachable beyond this machine must not hand out admin
 		// to anyone who can open a socket to it.
 		trustLoopback:   isLoopbackListen(cfg.Listen),
@@ -123,6 +123,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 
 	mux.HandleFunc("GET /api/v1/models", s.handleListModels)
 	mux.HandleFunc("POST /api/v1/models", s.handleCreateModel)
+	mux.HandleFunc("PATCH /api/v1/models/{id}", s.handleSetModelAccepts)
 	mux.HandleFunc("DELETE /api/v1/models/{id}", s.handleDeleteModel)
 
 	mux.HandleFunc("GET /api/v1/workspaces", s.handleListWorkspaces)
@@ -144,6 +145,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/messages", s.handleListWSMessages)
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/status", s.handleWorkspaceStatus)
 	mux.HandleFunc("POST /api/v1/workspaces/{id}/chat", s.handleWorkspaceChat)
+	mux.HandleFunc("POST /api/v1/workspaces/{id}/attachments", s.handleAttachFile)
 
 	mux.HandleFunc("GET /api/v1/context/status", s.handleContextStatus)
 	mux.HandleFunc("GET /api/v1/context/files", s.handleContextList)

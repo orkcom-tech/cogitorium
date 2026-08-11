@@ -26,7 +26,7 @@ func TestPayloadOwnershipAndModes(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := writePayload(&buf, dir, "/work"); err != nil {
+	if err := writePayload(&buf, dir, "/work", payloadOwner{writable: true}); err != nil {
 		t.Fatalf("writePayload: %v", err)
 	}
 
@@ -68,6 +68,81 @@ func TestPayloadOwnershipAndModes(t *testing.T) {
 	}
 }
 
+// A call that carries files asks for the other shape, and this is the whole of
+// what makes in/ read-only inside the sandbox: root owns the code and the
+// inputs, 65534 owns out/ and nothing else. The modes matter less than the
+// ownership — a directory the process does not own cannot have entries created
+// or removed in it, whatever the files inside say — so both are asserted.
+//
+// The sandboxed end of this is proved by running: internal/gear's
+// TestSandboxedGearOwnsOutAndNothingElse asks a real container what it can do
+// with exactly this payload.
+func TestPayloadKeepsOnlyOutWritable(t *testing.T) {
+	dir := t.TempDir()
+	for _, sub := range []string{"in/data", "out/sub", "outside"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for path, mode := range map[string]os.FileMode{
+		"main.sh":            0o700,
+		"in/data/report.bin": 0o400,
+		"out/sub/keep":       0o600,
+		"outside/notes.md":   0o600,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(path)), []byte("x"), mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var buf bytes.Buffer
+	if err := writePayload(&buf, dir, "/work", payloadOwner{writable: false, out: "out"}); err != nil {
+		t.Fatalf("writePayload: %v", err)
+	}
+	seen := map[string]*tar.Header{}
+	tr := tar.NewReader(&buf)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("read payload: %v", err)
+		}
+		seen[h.Name] = h
+	}
+
+	// uid 0 and no write bit anywhere is the read-only half; 65534 with a write
+	// bit is the writable half. The numbers are literals on purpose — asserting
+	// payloadUID against itself passes however wrong it is.
+	for name, want := range map[string]struct {
+		uid  int
+		mode int64
+	}{
+		"work/":                   {0, 0o555}, // nothing may be created beside the code
+		"work/main.sh":            {0, 0o555}, // still executable, no longer writable
+		"work/in/":                {0, 0o555}, // no file may be planted in the inputs
+		"work/in/data/":           {0, 0o555},
+		"work/in/data/report.bin": {0, 0o444},
+		"work/outside/":           {0, 0o555}, // "out" is not a prefix match on "outside"
+		"work/outside/notes.md":   {0, 0o444},
+		"work/out/":               {65534, 0o755}, // the one directory the gear owns
+		"work/out/sub/":           {65534, 0o755},
+		"work/out/sub/keep":       {65534, 0o644},
+	} {
+		h, ok := seen[name]
+		if !ok {
+			t.Fatalf("payload is missing %q; it has %v", name, keys(seen))
+		}
+		if h.Uid != want.uid || h.Gid != want.uid {
+			t.Errorf("%s: owned by %d:%d, want %d:%d", name, h.Uid, h.Gid, want.uid, want.uid)
+		}
+		if h.Mode != want.mode {
+			t.Errorf("%s: mode %o, want %o", name, h.Mode, want.mode)
+		}
+	}
+}
+
 // A symlink out of the tree must stay a symlink. Following it would copy
 // whatever it pointed at on the host into a container that was given one
 // directory.
@@ -82,7 +157,7 @@ func TestPayloadDoesNotFollowSymlinks(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := writePayload(&buf, dir, "/work"); err != nil {
+	if err := writePayload(&buf, dir, "/work", payloadOwner{writable: true}); err != nil {
 		t.Fatalf("writePayload: %v", err)
 	}
 	tr := tar.NewReader(&buf)

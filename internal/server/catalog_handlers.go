@@ -128,19 +128,48 @@ func (s *Server) handleListModels(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreateModel(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		ProviderID int64  `json:"provider_id"`
-		ModelName  string `json:"model_name"`
-		Label      string `json:"label"`
+		ProviderID int64    `json:"provider_id"`
+		ModelName  string   `json:"model_name"`
+		Label      string   `json:"label"`
+		Accepts    []string `json:"accepts"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	m, err := s.catalog.CreateModel(r.Context(), in.ProviderID, in.ModelName, in.Label)
+	m, err := s.catalog.CreateModel(r.Context(), in.ProviderID, in.ModelName, in.Label, in.Accepts...)
 	if err != nil {
 		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, m)
+}
+
+// handleSetModelAccepts records what a model can be shown besides text.
+//
+// It exists because the refusal that sends an operator here has to lead
+// somewhere. When an image is refused, the message says to declare the model's
+// modality in the catalog — and for a while there was no route that could,
+// which made the advice a dead end and the feature unreachable. Nothing probes
+// the provider and nothing is inferred from a model name: a wrong guess about
+// what a model accepts is worse than asking, because it fails at the provider
+// with an error the operator cannot act on.
+func (s *Server) handleSetModelAccepts(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		Accepts []string `json:"accepts"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	m, err := s.catalog.SetModelAccepts(r.Context(), id, in.Accepts)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, m)
 }
 
 func (s *Server) handleDeleteModel(w http.ResponseWriter, r *http.Request) {

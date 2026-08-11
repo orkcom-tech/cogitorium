@@ -35,9 +35,22 @@ type Spec struct {
 	// Off by default, because most gears do not need it and the ones that
 	// do should say so.
 	Network bool
-	// Writable makes Dir writable; otherwise the sandbox is read-only apart
-	// from a scratch space.
+	// Writable hands the whole payload to the process to do as it likes with.
+	// A terminal needs it — a shell that cannot create a file is not a shell —
+	// and so does a plain gear run, which has always had it in fact if not in
+	// name (see payload.go).
+	//
+	// False means the payload is the process's to read and run, and nothing
+	// more. Only Out is writable then.
 	Writable bool
+	// Out names a subdirectory of Dir that stays writable when Writable is
+	// false, and whose contents are copied back into Dir on the host when the
+	// process finishes — so the caller reads the results at the same path the
+	// process wrote them to.
+	//
+	// Empty means the process produces no files and nothing is copied back,
+	// which is every call that existed before gears could be handed one.
+	Out string
 	// OnOutput, when set, is called with each chunk as it arrives rather than
 	// only at the end. The buffered Result is unaffected — this is an extra
 	// tap on the same stream, not a replacement — so a caller that does not

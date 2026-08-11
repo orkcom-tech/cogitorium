@@ -73,6 +73,11 @@ type Engine struct {
 	gearExec *gear.Executor
 	library  *library.Store
 
+	// dataDir is where the workspace directories live. The engine holds it
+	// because agents now read and write their workspace's own files, and
+	// workdir.Dir is the one place that knows which directory that is.
+	dataDir string
+
 	// The internet gate. searcher is nil when the master switch is off, and
 	// every path checks for nil rather than carrying a disabled object that
 	// might dial by accident. egressKilled is the runtime close-only switch,
@@ -87,7 +92,7 @@ type Engine struct {
 	turns   map[int64]*turnState
 }
 
-func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears *gear.Store, gearExec *gear.Executor, lib *library.Store, searcher *websearch.Searcher, broker *egress.Broker) *Engine {
+func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears *gear.Store, gearExec *gear.Executor, lib *library.Store, searcher *websearch.Searcher, broker *egress.Broker, dataDir string) *Engine {
 	return &Engine{
 		ws:       ws,
 		cat:      cat,
@@ -95,6 +100,7 @@ func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears 
 		gears:    gears,
 		gearExec: gearExec,
 		library:  lib,
+		dataDir:  dataDir,
 		searcher: searcher,
 		broker:   broker,
 		status:   map[int64]AgentStatus{},
@@ -138,7 +144,14 @@ func (e *Engine) setStatus(agentID int64, state, detail string, emit func(Event)
 // HandleUserMessage runs one full orchestrator turn. Every emitted event has
 // already been persisted where it needs to be — emit is display, the
 // timeline is truth.
-func (e *Engine) HandleUserMessage(ctx context.Context, wsID int64, text string, emit func(Event)) error {
+//
+// attachments are workspace-relative paths of files the operator put in front
+// of the orchestrator; they are already in the workspace directory by the time
+// this is called. It is variadic so that every existing caller of a plain text
+// turn — the chat handler before this, and the tests that drive a turn — reads
+// and compiles exactly as it did: a message with no files on it must be the
+// same message it always was, all the way to the wire.
+func (e *Engine) HandleUserMessage(ctx context.Context, wsID int64, text string, emit func(Event), attachments ...string) error {
 	e.mu.Lock()
 	if e.running[wsID] {
 		e.mu.Unlock()
@@ -163,7 +176,19 @@ func (e *Engine) HandleUserMessage(ctx context.Context, wsID int64, text string,
 		return err
 	}
 
-	userMsg, err := e.ws.AppendMessage(ctx, wsID, nil, "user", text, "")
+	// The files are read and classified before the message is persisted, so a
+	// path that names nothing leaves no half-message on the timeline for the
+	// operator to wonder about — they fix the attachment and send again.
+	atts, parts, err := e.collectAttachments(wsID, attachments)
+	if err != nil {
+		return err
+	}
+	meta, err := attachmentMeta(atts)
+	if err != nil {
+		return err
+	}
+
+	userMsg, err := e.ws.AppendMessage(ctx, wsID, nil, "user", text, meta)
 	if err != nil {
 		return err
 	}
@@ -172,6 +197,24 @@ func (e *Engine) HandleUserMessage(ctx context.Context, wsID int64, text string,
 	history, err := e.buildHistory(ctx, wsID, orch.ID)
 	if err != nil {
 		return err
+	}
+	// The bytes go on the turn they were attached to, and only there.
+	// buildHistory has just replayed the row appended above — with the note
+	// naming the files and without their content — so the last turn IS this
+	// message, and this is where the files it carries are put in front of the
+	// model for the one and only time (see buildHistory for why once).
+	//
+	// "Once" means once per turn, not once per request: the tool loop below
+	// resends this history on every iteration, as every tool loop does, so an
+	// orchestrator that calls four tools while looking at a photograph carries
+	// it four times. That is the cost of the model still being able to see it
+	// while it works, and it ends when the turn does.
+	if len(parts) > 0 {
+		last := len(history) - 1
+		if last < 0 || history[last].Role != "user" {
+			return fmt.Errorf("the message carrying %d attached files did not come back as the last turn of the replayed conversation, so the files would be shown against the wrong message; nothing was sent", len(parts))
+		}
+		history[last].Parts = parts
 	}
 
 	defer e.setStatus(orch.ID, "idle", "", emit)
@@ -248,6 +291,15 @@ func (e *Engine) modelTurn(ctx context.Context, wsID int64, agent workspace.Agen
 	model, err := e.cat.GetModel(ctx, *agent.ModelID)
 	if err != nil {
 		return llm.Result{}, fmt.Errorf("agent %q: %w", agent.Name, err)
+	}
+	// Asked before the request is built, because the catalog is the only thing
+	// that knows whether this model can be shown a picture and a provider that
+	// is sent one it cannot take answers with a 400 naming neither the file nor
+	// the model. A turn with no files asks nothing and costs nothing.
+	if parts := attachedParts(history); len(parts) > 0 {
+		if err := e.cat.CheckAccepts(ctx, model, parts); err != nil {
+			return llm.Result{}, err
+		}
 	}
 	client, _, err := e.cat.Client(ctx, model.ProviderID)
 	if err != nil {
@@ -658,8 +710,27 @@ func (e *Engine) buildHistory(ctx context.Context, wsID, orchID int64) ([]llm.Tu
 		switch {
 		case m.Kind == "user" && m.AgentID == nil:
 			flushResults()
-			if m.Content != "" {
-				turns = append(turns, llm.Turn{Role: "user", Text: m.Content})
+			// A replayed attachment is its path and its description, never its
+			// bytes again.
+			//
+			// The alternative is a cost multiplier nobody asked for: a 4 MB
+			// photograph re-encoded into every later request means the twentieth
+			// turn of that conversation pays for it for the twentieth time, and
+			// providers bill an image by its pixels whether or not the question
+			// is still about it. What the model needs after the turn it arrived
+			// on is that the file exists and where — and the note carries
+			// exactly that, so an agent asked about it three turns later reads
+			// the file with read_file or hands the path to a gear, which is the
+			// route every file too big to show has taken all along.
+			//
+			// The cost of the decision, stated rather than hidden: the model
+			// cannot LOOK at the image again. It saw it once and whatever it
+			// said about it is in the transcript. An operator who needs another
+			// look attaches it again — the file is still in the workspace, so
+			// that is one click and one deliberate charge.
+			text := withAttachments(m.Content, attachmentsOf(m.Meta))
+			if text != "" {
+				turns = append(turns, llm.Turn{Role: "user", Text: text})
 			}
 		case m.Kind == "assistant" && m.AgentID != nil && *m.AgentID == orchID:
 			flushResults()
