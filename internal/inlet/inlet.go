@@ -88,8 +88,14 @@ type Task struct {
 	ContentType string `json:"content_type"`
 	AgentName   string `json:"agent_name"`
 	Instruction string `json:"instruction"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	// Expect is what this task declares success to be: which gear must have
+	// run, how many files must have appeared, what shape the answer must have.
+	// It is checked against the run's RECORD, never against what the agent
+	// wrote. The zero value declares nothing and is what every task carried
+	// before this existed.
+	Expect    Expect `json:"expect"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 type Store struct {
@@ -338,26 +344,49 @@ func (s *Store) AddTask(ctx context.Context, inletID int64, t Task) (Task, error
 		return Task{}, fmt.Errorf("a task accepts %q or %q (got %q)", AcceptsJSON, AcceptsFile, t.Accepts)
 	}
 
+	// check normalises as well as refuses, so what is stored is what will be
+	// compared: a gear name with a stray space would otherwise match nothing
+	// and read, in the ledger, as work that never happened.
+	if err := t.Expect.check(); err != nil {
+		return Task{}, err
+	}
+	expect, err := t.Expect.encode()
+	if err != nil {
+		return Task{}, err
+	}
+
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO inlet_tasks (inlet_id, name, accepts, payload_schema, content_type, agent_name, instruction, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		inletID, t.Name, t.Accepts, t.Schema, t.ContentType, t.AgentName, t.Instruction, now(), now())
+		`INSERT INTO inlet_tasks (inlet_id, name, accepts, payload_schema, content_type, agent_name, instruction, expect, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		inletID, t.Name, t.Accepts, t.Schema, t.ContentType, t.AgentName, t.Instruction, expect, now(), now())
 	if err := asConflict(err, fmt.Sprintf("task %q already exists on this inlet", t.Name)); err != nil {
 		return Task{}, fmt.Errorf("add inlet task: %w", err)
 	}
 	id, _ := res.LastInsertId()
-	slog.Info("inlet task added", "id", id, "inlet_id", inletID, "task", t.Name, "accepts", t.Accepts, "agent", t.AgentName)
+	slog.Info("inlet task added", "id", id, "inlet_id", inletID, "task", t.Name, "accepts", t.Accepts,
+		"agent", t.AgentName, "expects", t.Expect.Declared())
 	return s.GetTask(ctx, id)
 }
 
-const taskSelect = `SELECT id, inlet_id, name, accepts, payload_schema, content_type, agent_name, instruction, created_at, updated_at
+const taskSelect = `SELECT id, inlet_id, name, accepts, payload_schema, content_type, agent_name, instruction, expect, created_at, updated_at
   FROM inlet_tasks`
 
 func scanTask(row interface{ Scan(...any) error }) (Task, error) {
 	var t Task
-	err := row.Scan(&t.ID, &t.InletID, &t.Name, &t.Accepts, &t.Schema, &t.ContentType,
-		&t.AgentName, &t.Instruction, &t.CreatedAt, &t.UpdatedAt)
-	return t, err
+	var expect string
+	if err := row.Scan(&t.ID, &t.InletID, &t.Name, &t.Accepts, &t.Schema, &t.ContentType,
+		&t.AgentName, &t.Instruction, &expect, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		return Task{}, err
+	}
+	// A block that will not decode fails the read rather than resolving to "no
+	// expectations". A task whose requirements quietly vanished would go on
+	// answering 200 for runs that did nothing, which is the failure this whole
+	// feature exists to end.
+	var err error
+	if t.Expect, err = decodeExpect(expect); err != nil {
+		return Task{}, fmt.Errorf("inlet task %q (%d): %w", t.Name, t.ID, err)
+	}
+	return t, nil
 }
 
 func (s *Store) GetTask(ctx context.Context, id int64) (Task, error) {

@@ -3,6 +3,7 @@ package inlet
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,7 +16,7 @@ import (
 // writers cannot leave a row claiming both that the agent answered and that the
 // payload was refused.
 
-// Run states. Two are live and four are terminal; nothing else may be written,
+// Run states. Two are live and six are terminal; nothing else may be written,
 // because the CHECK on the table enumerates exactly these.
 const (
 	// StateAccepted: the key opened the door and the task exists. Written
@@ -36,6 +37,17 @@ const (
 	// process that held it, and a row left saying "running" forever would read
 	// as a job still going.
 	StateInterrupted = "interrupted"
+	// StateRefusedExpectation: the run's RECORD did not meet what the task
+	// declared success to be — the gear it names never ran, or the files it
+	// requires never appeared. The agent may well have answered beautifully;
+	// that is not what was checked, and a beautiful answer over an empty record
+	// is the exact failure this state exists to name.
+	StateRefusedExpectation = "refused_expectation"
+	// StateRefusedOutputSchema: the answer did not fit the shape the task
+	// declared. Kept apart from the one above because they want different
+	// reactions from whoever is paged: "the model produced garbage" is a
+	// prompting or model problem, "the work did not happen" is an outage.
+	StateRefusedOutputSchema = "refused_output_schema"
 )
 
 // Run is one delivery, whatever became of it.
@@ -52,8 +64,21 @@ type Run struct {
 	State        string `json:"state"`
 	Result       string `json:"result"`
 	Error        string `json:"error"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
+	// Did is the record of what the run actually did — which tools ran, which
+	// files appeared, what it cost — passed through exactly as the engine
+	// produced it. It is raw JSON rather than a typed field because the ledger
+	// is not the thing that decides what a run does: a package that stores
+	// deliveries has no business importing the engine to spell out the shape,
+	// and re-declaring it here would give the record two definitions, which is
+	// how they drift.
+	//
+	// Null means no record was kept: the run has not settled yet, or the row
+	// predates the column. That is deliberately NOT the same as a record
+	// showing nothing happened — which is an object with empty lists, and is
+	// itself the answer to "did it do anything".
+	Did       json.RawMessage `json:"did"`
+	CreatedAt string          `json:"created_at"`
+	UpdatedAt string          `json:"updated_at"`
 }
 
 // Accept records a delivery that got past the door, before the payload is
@@ -92,12 +117,20 @@ func (s *Store) Begin(ctx context.Context, id, agentID, payloadBytes int64, payl
 // Settle writes the outcome exactly once. A second attempt affects no rows and
 // returns ErrNotFound, which the caller logs: it means two things tried to
 // finish one run, and that is worth seeing rather than silently overwriting.
-func (s *Store) Settle(ctx context.Context, id int64, state, result, errText string) error {
+//
+// did is the record of what the run did, as the engine produced it. It is a
+// parameter of settling rather than a later update because the outcome and the
+// record are one fact: a row that said "completed" for even a moment without
+// the record beside it is the state this whole ledger exists to abolish. A run
+// that never reached an agent passes the empty record — nothing ran, and saying
+// so is an answer. Passing nil leaves the column empty, which reads as "no
+// record was kept" and is reserved for exactly that.
+func (s *Store) Settle(ctx context.Context, id int64, state, result, errText string, did []byte) error {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE inlet_runs
-		    SET state = ?, result = ?, error = ?, updated_at = ?
+		    SET state = ?, result = ?, error = ?, did = ?, updated_at = ?
 		  WHERE id = ? AND state IN (?, ?)`,
-		state, result, errText, now(), id, StateAccepted, StateRunning)
+		state, result, errText, string(did), now(), id, StateAccepted, StateRunning)
 	if err != nil {
 		return fmt.Errorf("settle inlet run %d: %w", id, err)
 	}
@@ -111,8 +144,8 @@ func (s *Store) Settle(ctx context.Context, id int64, state, result, errText str
 // the caller. The answer is in hand by then, so a ledger hiccup is logged and
 // swallowed rather than turned into a failure the caller sees for a job that
 // actually ran.
-func (s *Store) SettleOrLog(ctx context.Context, id int64, state, result, errText string) {
-	if err := s.Settle(ctx, id, state, result, errText); err != nil {
+func (s *Store) SettleOrLog(ctx context.Context, id int64, state, result, errText string, did []byte) {
+	if err := s.Settle(ctx, id, state, result, errText, did); err != nil {
 		slog.Warn("could not settle the inlet run record", "run_id", id, "state", state, "err", err)
 	}
 }
@@ -141,14 +174,15 @@ func (s *Store) WorkspaceOfRun(ctx context.Context, id int64) (int64, error) {
 }
 
 const runSelect = `SELECT id, workspace_id, inlet_id, inlet_address, task_name, agent_id, agent_name,
-       payload_bytes, payload_path, state, result, error, created_at, updated_at
+       payload_bytes, payload_path, state, result, error, did, created_at, updated_at
   FROM inlet_runs`
 
 func scanRun(row interface{ Scan(...any) error }) (Run, error) {
 	var r Run
 	var inletID, agentID sql.NullInt64
+	var did string
 	if err := row.Scan(&r.ID, &r.WorkspaceID, &inletID, &r.InletAddress, &r.TaskName, &agentID, &r.AgentName,
-		&r.PayloadBytes, &r.PayloadPath, &r.State, &r.Result, &r.Error, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		&r.PayloadBytes, &r.PayloadPath, &r.State, &r.Result, &r.Error, &did, &r.CreatedAt, &r.UpdatedAt); err != nil {
 		return Run{}, err
 	}
 	if inletID.Valid {
@@ -156,6 +190,18 @@ func scanRun(row interface{ Scan(...any) error }) (Run, error) {
 	}
 	if agentID.Valid {
 		r.AgentID = &agentID.Int64
+	}
+	// The column is spliced verbatim into an API response, so anything in it
+	// that is not JSON would come back out as a broken body rather than as a
+	// row somebody can read. A record is a few hundred bytes and this check
+	// costs nothing; the warning is how an operator finds out the column has
+	// been written by something other than the engine.
+	if did != "" {
+		if json.Valid([]byte(did)) {
+			r.Did = json.RawMessage(did)
+		} else {
+			slog.Warn("inlet run has an unreadable record; reporting it as absent", "run_id", r.ID)
+		}
 	}
 	return r, nil
 }

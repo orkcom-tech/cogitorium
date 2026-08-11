@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/orkcom-tech/cogitorium/internal/engine"
+	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/inlet"
 	"github.com/orkcom-tech/cogitorium/internal/workdir"
 )
@@ -48,6 +49,30 @@ type deliveryResponse struct {
 	State  string `json:"state"`
 	Result string `json:"result,omitempty"`
 	Error  string `json:"error,omitempty"`
+	// Did is the record: which tools ran, which files appeared, what it cost.
+	// No omitempty and no flag to turn it off — Result used to be the whole of
+	// what a caller got back, and an agent's prose cannot distinguish a job
+	// that was done from one that was claimed. A delivery that refused the
+	// payload carries an empty record, which is the honest answer to "did
+	// anything happen": no.
+	Did engine.Record `json:"did"`
+}
+
+// ledgerRecord renders a run's record for the ledger column, where it is stored
+// as the JSON text the caller was given, so the row and the response can never
+// tell two different stories about one run.
+//
+// A marshalling failure leaves the column empty — reading as "no record was
+// kept" — rather than failing a job that has already run. It cannot happen with
+// the record's fixed shape of strings and numbers, which is why the log line is
+// loud: if it ever does, something has changed that nobody meant to change.
+func ledgerRecord(did engine.Record) []byte {
+	raw, err := json.Marshal(did)
+	if err != nil {
+		slog.Error("could not render an inlet run's record for the ledger", "err", err)
+		return nil
+	}
+	return raw
 }
 
 // handleInletDelivery is the whole outside-facing path: prove the key, find the
@@ -101,6 +126,12 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 	// forever is exactly what this table exists to prevent.
 	ledgerCtx := context.WithoutCancel(r.Context())
 
+	// Every path from here to a refusal below ran nothing at all, and says so
+	// with the same empty record the caller is shown. It is built once, from
+	// the engine's own type, so the shape a refusal reports and the shape a
+	// completed run reports cannot drift apart.
+	nothingRan := ledgerRecord(engine.Record{})
+
 	// The target is resolved here as well as inside the engine, because the
 	// ledger records which agent did the work, and because "this task points at
 	// an agent that is gone" is a different answer from "no such task" — the
@@ -111,7 +142,7 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 		cause := fmt.Errorf("this task targets agent %q, which its workspace no longer has: %w",
 			task.AgentName, err)
 		slog.Error("inlet run failed", "run_id", runID, "address", in.Address, "task", task.Name, "err", cause)
-		s.inlets.SettleOrLog(ledgerCtx, runID, inlet.StateFailed, "", cause.Error())
+		s.inlets.SettleOrLog(ledgerCtx, runID, inlet.StateFailed, "", cause.Error(), nothingRan)
 		writeJSON(w, http.StatusServiceUnavailable, deliveryResponse{
 			Run: runID, State: inlet.StateFailed, Error: cause.Error(),
 		})
@@ -126,7 +157,7 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 	// from 2 MiB to 592 MiB and left 256 MiB of files behind, and seven of the
 	// eight were refused anyway.
 	if s.engine.WorkspaceBusy(in.WorkspaceID) {
-		s.inlets.SettleOrLog(ledgerCtx, runID, inlet.StateFailed, "", engine.ErrBusy.Error())
+		s.inlets.SettleOrLog(ledgerCtx, runID, inlet.StateFailed, "", engine.ErrBusy.Error(), nothingRan)
 		writeJSON(w, http.StatusTooManyRequests, deliveryResponse{
 			Run: runID, State: inlet.StateFailed, Error: engine.ErrBusy.Error(),
 		})
@@ -135,7 +166,7 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 
 	payload, refusal := s.readInletPayload(r, in, task, runID)
 	if refusal != nil {
-		s.inlets.SettleOrLog(ledgerCtx, runID, refusal.state, "", refusal.err.Error())
+		s.inlets.SettleOrLog(ledgerCtx, runID, refusal.state, "", refusal.err.Error(), nothingRan)
 		slog.Info("inlet payload not run", "run_id", runID, "address", in.Address, "task", task.Name,
 			"state", refusal.state, "err", refusal.err)
 		writeJSON(w, refusal.code, deliveryResponse{
@@ -149,20 +180,51 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	answer, err := s.engine.RunUnattended(r.Context(), in.WorkspaceID, task.AgentName, payload.prompt)
+	// The run's record comes back whether or not the run succeeded, which is why
+	// out is read on both branches below rather than only on the happy one.
+	out, err := s.engine.RunUnattended(r.Context(), in.WorkspaceID, task.AgentName, payload.prompt)
 	if err != nil {
-		s.failedDelivery(w, ledgerCtx, r, runID, err)
+		s.failedDelivery(w, ledgerCtx, r, runID, err, out.Did)
 		return
 	}
 
-	s.inlets.SettleOrLog(ledgerCtx, runID, inlet.StateCompleted, answer, "")
-	writeJSON(w, http.StatusOK, deliveryResponse{Run: runID, State: inlet.StateCompleted, Result: answer})
+	// What the task declared success to be, held against what the run recorded.
+	// A task that declares nothing is not judged and reaches the two lines at
+	// the bottom exactly as it did before any of this existed.
+	v := judge(task.Expect, out)
+	if v.refused() {
+		slog.Warn("inlet run refused by what its task requires", "run_id", runID, "state", v.state,
+			"address", in.Address, "task", task.Name, "tools", len(out.Did.Tools),
+			"files", len(out.Did.Files), "err", v.err)
+		s.inlets.SettleOrLog(ledgerCtx, runID, v.state, "", v.err.Error(), ledgerRecord(out.Did))
+		// 500 for both refusals, because the caller sent a valid payload and
+		// this install did not produce what its own task requires: nothing the
+		// caller can change would fix it, which is what a 4xx would tell them.
+		// Which of the two it was is in `state`, where a pipeline can branch on
+		// it — "the work did not happen" is worth retrying and paging about,
+		// "the model produced garbage" is worth retrying and reading.
+		writeJSON(w, http.StatusInternalServerError, deliveryResponse{
+			Run: runID, State: v.state, Error: v.err.Error(), Did: out.Did,
+		})
+		return
+	}
+
+	s.inlets.SettleOrLog(ledgerCtx, runID, v.state, v.result, "", ledgerRecord(out.Did))
+	writeJSON(w, http.StatusOK, deliveryResponse{
+		Run: runID, State: v.state, Result: v.result, Did: out.Did,
+	})
 }
 
 // failedDelivery settles a run that did not produce an answer and tells the
 // caller which kind of failure it was, because the three kinds want three
 // different reactions: wait and retry, fix the workspace, or stop.
-func (s *Server) failedDelivery(w http.ResponseWriter, ledgerCtx context.Context, r *http.Request, runID int64, cause error) {
+//
+// did is carried through rather than left out, and this is the case it matters
+// most for: a run that unpacked an archive and wrote four files before falling
+// over did that work, and whoever is deciding whether to retry needs to know
+// what is already on disk. A failure with an empty record and a failure after
+// half the job are two different pages at 3am.
+func (s *Server) failedDelivery(w http.ResponseWriter, ledgerCtx context.Context, r *http.Request, runID int64, cause error, did engine.Record) {
 	state, code := inlet.StateFailed, http.StatusInternalServerError
 	switch {
 	case errors.Is(r.Context().Err(), context.Canceled):
@@ -178,12 +240,13 @@ func (s *Server) failedDelivery(w http.ResponseWriter, ledgerCtx context.Context
 		// but it is not permanent either.
 		code = http.StatusServiceUnavailable
 	}
-	slog.Error("inlet run failed", "run_id", runID, "state", state, "err", cause)
-	s.inlets.SettleOrLog(ledgerCtx, runID, state, "", cause.Error())
+	slog.Error("inlet run failed", "run_id", runID, "state", state,
+		"tools", len(did.Tools), "files", len(did.Files), "err", cause)
+	s.inlets.SettleOrLog(ledgerCtx, runID, state, "", cause.Error(), ledgerRecord(did))
 	if state == inlet.StateInterrupted {
 		return // the connection is gone; writing to it would only log an error
 	}
-	writeJSON(w, code, deliveryResponse{Run: runID, State: state, Error: cause.Error()})
+	writeJSON(w, code, deliveryResponse{Run: runID, State: state, Error: cause.Error(), Did: did})
 }
 
 // inletPayload is what a delivery turned into: the single user turn the agent
@@ -526,6 +589,10 @@ func (s *Server) handleAddInletTask(w http.ResponseWriter, r *http.Request) {
 		ContentType string          `json:"content_type"`
 		Agent       string          `json:"agent"`
 		Instruction string          `json:"instruction"`
+		// Expect is what this task declares success to be. Every field in it is
+		// optional and a task sent without it behaves exactly as tasks did
+		// before it existed.
+		Expect inlet.Expect `json:"expect"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
@@ -540,6 +607,24 @@ func (s *Server) handleAddInletTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// And so is the gear the task requires, for the same reason and one worse:
+	// a name with a typo in it does not fail loudly. It refuses every delivery
+	// for the rest of the task's life with a message about work that never
+	// happened — which reads exactly like a broken pipeline, and sends whoever
+	// is paged to look at everything except the one word that is wrong.
+	if want := strings.TrimSpace(body.Expect.RunsGear); want != "" {
+		if _, err := s.gears.GetByName(r.Context(), want); err != nil {
+			if errors.Is(err, gear.ErrNotFound) {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf(
+					"this task requires the gear %q, and no gear by that name has been forged in this install. "+
+						"Forge it first, or fix the name — the gear's own name is what goes here, not the tool name a model calls it by", want))
+				return
+			}
+			fail(w, r, err)
+			return
+		}
+	}
+
 	task, err := s.inlets.AddTask(r.Context(), id, inlet.Task{
 		Name:        body.Name,
 		Accepts:     body.Accepts,
@@ -547,6 +632,7 @@ func (s *Server) handleAddInletTask(w http.ResponseWriter, r *http.Request) {
 		ContentType: body.ContentType,
 		AgentName:   body.Agent,
 		Instruction: body.Instruction,
+		Expect:      body.Expect,
 	})
 	if err != nil {
 		if errors.Is(err, inlet.ErrConflict) {

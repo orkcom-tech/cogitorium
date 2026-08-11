@@ -56,6 +56,15 @@ type turnState struct {
 	// does: the whole delegation tree shares one turn, and a worker four levels
 	// down is just as unattended as the agent the payload was handed to.
 	unattended bool
+
+	// did is the record of what this turn actually did, and gearOut is the
+	// stdout of the last gear in it that exited zero. They live here for the
+	// third time for the same reason: one turn, one record, delegation tree
+	// included — a file a worker four levels down produced was produced by this
+	// run, and a caller asking what happened is asking about the run. See
+	// record.go for what they are and why they exist at all.
+	did     Record
+	gearOut string
 }
 
 func (e *Engine) beginTurn(wsID int64) *turnState {

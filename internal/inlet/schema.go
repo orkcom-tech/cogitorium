@@ -166,6 +166,17 @@ func checkNode(node map[string]any, path string) error {
 	return nil
 }
 
+// subject is what a complaint is ABOUT. The same validator runs over a payload
+// arriving and over an answer leaving, and a field complaint that named the
+// wrong one would send an operator to read what their caller sent when the
+// thing that failed was what their agent produced.
+type subject string
+
+const (
+	thePayload subject = "the payload"
+	theAnswer  subject = "the answer"
+)
+
 // ValidatePayload checks a delivered body against a task's schema. Its errors
 // are what the caller gets in the 400, so they name the field and say what was
 // expected rather than reporting that something, somewhere, was wrong.
@@ -196,42 +207,72 @@ func ValidatePayload(schema string, body []byte) error {
 		// corruption of the row rather than anything the caller did.
 		return fmt.Errorf("this task's stored schema is unreadable, so nothing can be checked against it: %w", err)
 	}
-	return validate(node, value, "")
+	return validate(thePayload, node, value, "")
 }
 
-func validate(schema map[string]any, v any, path string) error {
+// ValidateAnswer checks a run's ANSWER against the shape a task's expect block
+// declares. It is the same validator over the same subset — one dialect of
+// JSON Schema in this server, and one set of complaints to read — because an
+// operator who wrote a payload schema already knows what these say.
+//
+// What differs is only what a failure means. A payload that does not fit is the
+// caller's mistake and is refused before anything is spent; an answer that does
+// not fit is a run that already happened, so the record of what it did is
+// reported beside this complaint rather than in place of it.
+func ValidateAnswer(schema, answer string) error {
+	if strings.TrimSpace(answer) == "" {
+		return fmt.Errorf("the answer is empty, and this task declares a shape it has to have")
+	}
+	dec := json.NewDecoder(strings.NewReader(answer))
+	dec.UseNumber()
+	var value any
+	if err := dec.Decode(&value); err != nil {
+		return fmt.Errorf("the answer is not valid JSON: %w", err)
+	}
+	if dec.More() {
+		return fmt.Errorf("the answer has more than one JSON document in it; this task declares a single one")
+	}
+	node, err := decodeObject(schema)
+	if err != nil {
+		// Checked when the task was written, so this is corruption of the row.
+		return fmt.Errorf("this task's stored expect.schema is unreadable, so nothing can be checked against it: %w", err)
+	}
+	return validate(theAnswer, node, value, "")
+}
+
+func validate(subj subject, schema map[string]any, v any, path string) error {
 	if t, ok := schema["type"].(string); ok {
 		if !matchesType(t, v) {
-			return fmt.Errorf("%s: expected %s, got %s", at(path), article(t), describe(v))
+			return fmt.Errorf("%s: expected %s, got %s", at(subj, path), article(t), describe(v))
 		}
 	}
 
 	if raw, ok := schema["enum"]; ok {
 		list, _ := raw.([]any)
 		if !inEnum(list, v) {
-			return fmt.Errorf("%s: %s is not one of the allowed values (%s)", at(path), render(v), renderList(list))
+			return fmt.Errorf("%s: %s is not one of the allowed values (%s)", at(subj, path), render(v), renderList(list))
 		}
 	}
 
 	switch typed := v.(type) {
 	case string:
 		if n, ok := numberOf(schema, "minLength"); ok && utf8.RuneCountInString(typed) < int(n) {
-			return fmt.Errorf("%s: needs at least %s, got %d", at(path), count(int(n), "character"), utf8.RuneCountInString(typed))
+			return fmt.Errorf("%s: needs at least %s, got %d", at(subj, path), count(int(n), "character"), utf8.RuneCountInString(typed))
 		}
 		if n, ok := numberOf(schema, "maxLength"); ok && utf8.RuneCountInString(typed) > int(n) {
-			return fmt.Errorf("%s: allows at most %s, got %d", at(path), count(int(n), "character"), utf8.RuneCountInString(typed))
+			return fmt.Errorf("%s: allows at most %s, got %d", at(subj, path), count(int(n), "character"), utf8.RuneCountInString(typed))
 		}
 
 	case json.Number:
 		f, err := typed.Float64()
 		if err != nil {
-			return fmt.Errorf("%s: %q is not a number this server can compare", at(path), typed.String())
+			return fmt.Errorf("%s: %q is not a number this server can compare", at(subj, path), typed.String())
 		}
 		if n, ok := numberOf(schema, "minimum"); ok && f < n {
-			return fmt.Errorf("%s: must be at least %s, got %s", at(path), trimNum(n), typed.String())
+			return fmt.Errorf("%s: must be at least %s, got %s", at(subj, path), trimNum(n), typed.String())
 		}
 		if n, ok := numberOf(schema, "maximum"); ok && f > n {
-			return fmt.Errorf("%s: must be at most %s, got %s", at(path), trimNum(n), typed.String())
+			return fmt.Errorf("%s: must be at most %s, got %s", at(subj, path), trimNum(n), typed.String())
 		}
 
 	case map[string]any:
@@ -240,7 +281,7 @@ func validate(schema map[string]any, v any, path string) error {
 			for _, item := range list {
 				name, _ := item.(string)
 				if _, present := typed[name]; !present {
-					return fmt.Errorf("%s is required but was not sent", at(join(path, name)))
+					return fmt.Errorf("%s is required but %s", at(subj, join(path, name)), subj.absent())
 				}
 			}
 		}
@@ -248,8 +289,8 @@ func validate(schema map[string]any, v any, path string) error {
 		if allow, ok := schema["additionalProperties"].(bool); ok && !allow {
 			for name := range typed {
 				if _, declared := props[name]; !declared {
-					return fmt.Errorf("%s: %q is not a field this task accepts (it allows only: %s)",
-						at(path), name, strings.Join(sortedKeys(anyKeys(props)), ", "))
+					return fmt.Errorf("%s: %q is not a field %s (it allows only: %s)",
+						at(subj, path), name, subj.undeclared(), strings.Join(sortedKeys(anyKeys(props)), ", "))
 				}
 			}
 		}
@@ -262,21 +303,21 @@ func validate(schema map[string]any, v any, path string) error {
 				continue // absence is "required"'s business, checked above
 			}
 			sub, _ := props[name].(map[string]any)
-			if err := validate(sub, child, join(path, name)); err != nil {
+			if err := validate(subj, sub, child, join(path, name)); err != nil {
 				return err
 			}
 		}
 
 	case []any:
 		if n, ok := numberOf(schema, "minItems"); ok && len(typed) < int(n) {
-			return fmt.Errorf("%s: needs at least %s, got %d", at(path), count(int(n), "item"), len(typed))
+			return fmt.Errorf("%s: needs at least %s, got %d", at(subj, path), count(int(n), "item"), len(typed))
 		}
 		if n, ok := numberOf(schema, "maxItems"); ok && len(typed) > int(n) {
-			return fmt.Errorf("%s: allows at most %s, got %d", at(path), count(int(n), "item"), len(typed))
+			return fmt.Errorf("%s: allows at most %s, got %d", at(subj, path), count(int(n), "item"), len(typed))
 		}
 		if sub, ok := schema["items"].(map[string]any); ok {
 			for i, item := range typed {
-				if err := validate(sub, item, fmt.Sprintf("%s[%d]", at(path), i)); err != nil {
+				if err := validate(subj, sub, item, fmt.Sprintf("%s[%d]", at(subj, path), i)); err != nil {
 					return err
 				}
 			}
@@ -416,12 +457,30 @@ func join(path, name string) string {
 }
 
 // at names the place a complaint is about. The root has no field name, so it is
-// called what the caller sent rather than being left blank.
-func at(path string) string {
+// called what was checked rather than being left blank.
+func at(subj subject, path string) string {
 	if path == "" {
-		return "the payload"
+		return string(subj)
 	}
 	return path
+}
+
+// absent and undeclared are the two complaints whose wording cannot be shared
+// between the directions. A missing field means "your caller did not send it"
+// coming in and "your agent did not produce it" going out, and an operator
+// reading the wrong one of those goes looking in the wrong place.
+func (s subject) absent() string {
+	if s == theAnswer {
+		return "the answer does not have it"
+	}
+	return "was not sent"
+}
+
+func (s subject) undeclared() string {
+	if s == theAnswer {
+		return "this task's expect.schema declares"
+	}
+	return "this task accepts"
 }
 
 // schemaAt is at() for complaints about the schema itself, which an operator

@@ -2246,6 +2246,19 @@ button.big {
   margin-right: 0.5rem;
 }
 
+/* The state is one word to the eye even when it is three to the parser. In a
+   narrow panel "refused output schema" wrapped mid-pill and the line below it
+   began with "schema", which reads as a different state than the one it is.
+   The summary around it then has to be able to break anywhere, or the widest
+   state name is what makes the whole panel scroll sideways. */
+.inlet-run summary {
+  overflow-wrap: anywhere;
+}
+
+.inlet-run summary .status {
+  white-space: nowrap;
+}
+
 .inlet-run-body {
   display: flex;
   flex-direction: column;
@@ -2253,10 +2266,11 @@ button.big {
   padding: 0.35rem 0 0.35rem 1.1rem;
 }
 
-/* The six ledger states, coloured by what the operator has to do about them.
-   Refused and failed are both red because both mean nothing was produced; the
-   difference between "your caller sent the wrong thing" and "this workspace is
-   broken" is in the row, where there is room to say it. */
+/* The eight ledger states, coloured by what the operator has to do about them.
+   Refused and failed are all red because all of them mean nothing usable came
+   back; the difference between "your caller sent the wrong thing", "this
+   workspace is broken" and "the work did not happen" is in the row, where
+   there is room to say it. */
 .status.completed {
   color: var(--ok);
   border-color: currentColor;
@@ -2269,6 +2283,8 @@ button.big {
 }
 
 .status.refused_schema,
+.status.refused_expectation,
+.status.refused_output_schema,
 .status.failed {
   color: var(--danger);
   border-color: currentColor;
@@ -2277,4 +2293,40 @@ button.big {
 .status.interrupted {
   color: var(--warn);
   border-color: currentColor;
+}
+
+/* What a task requires, and what a run did. Both are lists of short facts read
+   under pressure, so they are set tight and in the same monospace the paths and
+   tool names inside them are already in. */
+.inlet-expect ul,
+.inlet-did ul {
+  margin: 0.15rem 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.inlet-did {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  border-left: 2px solid var(--border);
+  padding-left: 0.6rem;
+}
+
+/* A tool that did not succeed, and the empty tool list itself: the two things
+   on this panel somebody is looking for when they open a run at all. */
+.inlet-did .run-failed {
+  color: var(--danger);
+}
+
+.inlet-expect-form summary {
+  cursor: pointer;
+}
+
+/* Spacing between the fields comes from the fields, not from making the
+   <details> a flex container: a details that is its own flex box is the one
+   layout Chrome renders with the disclosure triangle gone and, in some
+   versions, with the closed content showing anyway. */
+.inlet-expect-form > *:not(summary) {
+  margin-top: 0.5rem;
 }

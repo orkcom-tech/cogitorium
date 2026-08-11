@@ -708,7 +708,7 @@ func assertSettledOnce(t *testing.T, d *door, runID int64, want string) {
 		t.Fatalf("run %d ended as %q, want %q (error: %q)", runID, row.State, want, row.Error)
 	}
 
-	err := d.srv.inlets.Settle(ctx, runID, inlet.StateFailed, "", "a second writer finished this run")
+	err := d.srv.inlets.Settle(ctx, runID, inlet.StateFailed, "", "a second writer finished this run", nil)
 	if err == nil {
 		t.Fatalf("run %d was settled a second time, so a finished run can be overwritten", runID)
 	}

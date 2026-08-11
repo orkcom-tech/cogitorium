@@ -341,7 +341,7 @@ func TestARunIsRecordedBeforeTheWorkAndSettledExactlyOnce(t *testing.T) {
 		t.Fatalf("after Begin: state=%q payload_bytes=%d", run.State, run.PayloadBytes)
 	}
 
-	if err := s.Settle(ctx, runID, StateCompleted, "the answer", ""); err != nil {
+	if err := s.Settle(ctx, runID, StateCompleted, "the answer", "", nil); err != nil {
 		t.Fatalf("settle: %v", err)
 	}
 	if run = get(t, s, runID); run.State != StateCompleted || run.Result != "the answer" {
@@ -350,7 +350,7 @@ func TestARunIsRecordedBeforeTheWorkAndSettledExactlyOnce(t *testing.T) {
 
 	// A second settle must affect nothing and say so. Reported rather than
 	// swallowed, because it means two things tried to finish one run.
-	if err := s.Settle(ctx, runID, StateFailed, "", "something else finished it"); err == nil {
+	if err := s.Settle(ctx, runID, StateFailed, "", "something else finished it", nil); err == nil {
 		t.Fatal("a run was settled twice, so a completed run can be overwritten with a failure")
 	}
 	if run = get(t, s, runID); run.State != StateCompleted || run.Result != "the answer" || run.Error != "" {
@@ -363,7 +363,7 @@ func TestARunIsRecordedBeforeTheWorkAndSettledExactlyOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
-	if err := s.Settle(ctx, refusedID, StateRefusedSchema, "", "id is required but was not sent"); err != nil {
+	if err := s.Settle(ctx, refusedID, StateRefusedSchema, "", "id is required but was not sent", nil); err != nil {
 		t.Fatalf("settle refusal: %v", err)
 	}
 	if err := s.Begin(ctx, refusedID, 3, 128, ""); err == nil {

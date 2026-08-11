@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/library"
@@ -349,7 +350,14 @@ func (e *Engine) execToolAs(ctx context.Context, wsID int64, agent workspace.Age
 	slog.Info("tool call", "workspace_id", wsID, "agent", agent.Name, "tool", call.Name, "input", call.InputJSON)
 	e.setStatus(agent.ID, "working", call.Name, emit)
 
+	started := time.Now()
 	out, err := e.dispatchTool(ctx, wsID, agent, chain, call, emit)
+	// Recorded here because this is the one funnel every tool call passes
+	// through — the orchestrator's loop and every delegated agent's — so a run
+	// whose record shows no tools made no tool calls, full stop. A refusal
+	// counts as a call: the model asked for it, and "it tried and was refused"
+	// is a different thing to read at 3am than "it never tried".
+	e.noteTool(wsID, call.Name, err == nil, time.Since(started))
 	if err != nil {
 		slog.Warn("tool call failed", "workspace_id", wsID, "agent", agent.Name, "tool", call.Name, "err", err)
 		return err.Error(), true
@@ -821,9 +829,21 @@ func (e *Engine) runGear(ctx context.Context, wsID int64, agent workspace.Agent,
 		if err != nil {
 			return "", err
 		}
+		// The files go into the record BEFORE the exit code is judged, because
+		// the executor collects out/ whatever happened and a gear that wrote
+		// three files and then exited non-zero wrote three files. A record that
+		// hid them would be silent about precisely the run somebody is being
+		// paged for.
+		for _, p := range res.Produced {
+			e.noteFile(wsID, p.Path, p.Bytes)
+		}
 		if res.ExitCode != 0 {
 			return "", fmt.Errorf("gear %q exited %d: %s", name, res.ExitCode, strings.TrimSpace(res.Stderr))
 		}
+		// Kept as the candidate answer for a task that says its result is the
+		// gear's output rather than the agent's account of it — see
+		// Outcome.GearOutput.
+		e.noteGearOutput(wsID, res.Stdout)
 		// A call that carried no files gets back exactly what it always did:
 		// the gear's stdout, or stdout and stderr together when the gear wrote
 		// to both. The file report is additional, and only when there is one.

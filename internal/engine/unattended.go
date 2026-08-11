@@ -6,7 +6,11 @@ import (
 	"log/slog"
 )
 
-// RunUnattended runs one named agent on one payload and returns its answer.
+// RunUnattended runs one named agent on one payload and returns what the agent
+// said together with the record of what the run actually did. Both, always: the
+// prose alone cannot distinguish a job that was done from one that was claimed,
+// which is the failure the record exists for (see record.go).
+//
 // This is the door an inlet delivery comes through, and it differs from the
 // operator's turn in three ways that all follow from the same fact — nobody is
 // at a screen.
@@ -31,13 +35,13 @@ import (
 //     minute for a person to approve that exact query, so on this path it is a
 //     stall followed by a failure. The turn state carries the fact, so an agent
 //     the payload reaches by delegation is covered too.
-func (e *Engine) RunUnattended(ctx context.Context, wsID int64, agentName, task string) (string, error) {
+func (e *Engine) RunUnattended(ctx context.Context, wsID int64, agentName, task string) (Outcome, error) {
 	agent, err := e.ws.GetAgentByName(ctx, wsID, agentName)
 	if err != nil {
-		return "", err
+		return Outcome{}, err
 	}
 	if agent.ModelID == nil {
-		return "", fmt.Errorf("agent %q: %w", agent.Name, ErrNoModel)
+		return Outcome{}, fmt.Errorf("agent %q: %w", agent.Name, ErrNoModel)
 	}
 
 	// One run per workspace, the same rule the operator's turn follows. The
@@ -46,7 +50,7 @@ func (e *Engine) RunUnattended(ctx context.Context, wsID int64, agentName, task 
 	e.mu.Lock()
 	if e.running[wsID] {
 		e.mu.Unlock()
-		return "", ErrBusy
+		return Outcome{}, ErrBusy
 	}
 	e.running[wsID] = true
 	e.mu.Unlock()
@@ -72,12 +76,23 @@ func (e *Engine) RunUnattended(ctx context.Context, wsID int64, agentName, task 
 	defer e.setStatus(agent.ID, "idle", "", discard)
 
 	slog.Info("unattended run started", "workspace_id", wsID, "agent", agent.Name, "task_len", len(task))
-	answer, err := e.runAgent(ctx, wsID, agent, nil, task, discard)
-	if err != nil {
-		return "", err
+	answer, runErr := e.runAgent(ctx, wsID, agent, nil, task, discard)
+
+	// Read here, on both paths, and before the deferred endTurn takes the turn
+	// state away. On the failing path especially: a run that unpacked an
+	// archive, wrote four files and then fell over did that work, and the
+	// moment somebody is woken up is the moment they need to know it.
+	out := e.outcome(wsID, answer)
+	if runErr != nil {
+		slog.Info("unattended run failed", "workspace_id", wsID, "agent", agent.Name,
+			"tools", len(out.Did.Tools), "files", len(out.Did.Files),
+			"model_calls", out.Did.ModelCalls, "err", runErr)
+		return out, runErr
 	}
-	slog.Info("unattended run finished", "workspace_id", wsID, "agent", agent.Name, "answer_len", len(answer))
-	return answer, nil
+	slog.Info("unattended run finished", "workspace_id", wsID, "agent", agent.Name,
+		"answer_len", len(answer), "tools", len(out.Did.Tools), "files", len(out.Did.Files),
+		"model_calls", out.Did.ModelCalls)
+	return out, nil
 }
 
 // UnattendedTargetError checks a task's target agent without running it, so the

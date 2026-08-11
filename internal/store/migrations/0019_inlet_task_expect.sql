@@ -1,0 +1,14 @@
+-- A task says what success IS, so a delivery can be judged rather than believed.
+--
+-- 0018 gave the ledger `did` — the record of what a run actually did. This is
+-- the other side of the same vocabulary: the operator writes down what has to
+-- have happened, and every check reads that record. A task expecting the gear
+-- "unpack" fails when the record shows no such call, however well the agent
+-- describes the unpacking it did not do.
+--
+-- One nullable-free column with a default, added in place: unlike 0018 there is
+-- no CHECK to widen here, so the table is not rebuilt and existing tasks are
+-- untouched. Empty is "this task declares nothing", which is every task that
+-- exists today and every task written without an expect block — and a task with
+-- nothing declared runs exactly as it did before this migration.
+ALTER TABLE inlet_tasks ADD COLUMN expect TEXT NOT NULL DEFAULT '';

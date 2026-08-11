@@ -198,13 +198,61 @@ export type InletTask = {
   content_type: string
   agent_name: string
   instruction: string
+  expect: InletExpect
   created_at: string
   updated_at: string
 }
 
-// The six states the ledger enumerates, and nothing else — the table's CHECK
-// says so. Two are live (accepted, running) and four are terminal.
-export type InletRunState = 'accepted' | 'refused_schema' | 'running' | 'completed' | 'failed' | 'interrupted'
+// What a task declares success to be. Every field is optional, and a task that
+// declares nothing runs exactly as tasks ran before any of this existed.
+//
+// The first two are checked against the run's RECORD and never against what the
+// agent wrote, which is the whole point: a run whose answer is beautiful and
+// whose record is empty fails. produces_files counts a file the agent typed out
+// itself as well as a gear's output — both are files that appeared — so it is
+// runs_gear, not a file count, that answers "did the real work happen".
+export type InletExpect = {
+  /** the least number of files that must appear during the run */
+  produces_files?: number
+  /** a gear that must have run and exited successfully, by its own name */
+  runs_gear?: string
+  /** a JSON Schema the answer must satisfy, in the subset payload schemas use */
+  schema?: unknown
+  /** where the result comes from; the agent's own words unless it is "gear" */
+  answer_from?: 'agent' | 'gear'
+}
+
+// The record of what a run actually did, threaded out of the engine's own
+// bookkeeping — which tools were called and how each ended, every file that
+// appeared with its path and size, how many times a model was asked and what it
+// cost. Nothing in it is written by a model, and nothing in it can be.
+//
+// An empty tools list is not a gap in the record: it is the answer to "did it
+// do anything", and it is the shape of the failure this whole thing exists to
+// make visible.
+export type InletRunRecord = {
+  tools: { name: string; ok: boolean; ms: number }[]
+  files: { path: string; bytes: number }[]
+  model_calls: number
+  tokens: { in: number; out: number }
+}
+
+// The eight states the ledger enumerates, and nothing else — the table's CHECK
+// says so. Two are live (accepted, running) and six are terminal.
+//
+// The last two are what a task's expect block produces, and they are separate
+// on purpose: refused_expectation means the work did not happen, and
+// refused_output_schema means it happened and the answer came back the wrong
+// shape. Different people, different fixes, different hours of the night.
+export type InletRunState =
+  | 'accepted'
+  | 'refused_schema'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'interrupted'
+  | 'refused_expectation'
+  | 'refused_output_schema'
 
 // One delivery, whatever became of it. inlet_id and agent_id are nullable
 // because the row outlives both: a ledger that disappeared when the door was
@@ -223,6 +271,10 @@ export type InletRun = {
   state: InletRunState
   result: string
   error: string
+  // What the run did. Null means no record was kept — the row is still in
+  // flight, or it predates the record entirely — which is deliberately NOT the
+  // same as a record showing nothing happened.
+  did: InletRunRecord | null
   created_at: string
   updated_at: string
 }
@@ -496,6 +548,9 @@ export const api = {
         content_type?: string
         agent: string
         instruction: string
+        // What this task requires of a run before its answer counts. Left out
+        // entirely, the task is never judged and behaves as it always did.
+        expect?: InletExpect
       },
     ) => req<InletTask>(`/api/v1/inlets/${inletId}/tasks`, { method: 'POST', body: JSON.stringify(t) }),
     removeTask: (id: number) => req<void>(`/api/v1/inlet-tasks/${id}`, { method: 'DELETE' }),

@@ -221,6 +221,13 @@ func (e *Engine) writeFile(wsID int64, rel, content string) (string, error) {
 	if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
 		return "", err
 	}
+	// A file the agent typed out itself is still a file that appeared, so it is
+	// in the run's record beside the ones gears produced. Worth stating what
+	// that does and does not prove: counting files says work landed on disk, it
+	// does not say a particular gear ran — the tool list is what answers that,
+	// and it is the thing to check when the question is whether the real work
+	// happened or the model wrote a summary of it.
+	e.noteFile(wsID, clean, int64(len(content)))
 	out := map[string]any{"path": clean, "bytes": len(content), "replaced": replaced}
 	if replaced {
 		out["notice"] = fmt.Sprintf("%s already existed and its previous contents are gone. "+

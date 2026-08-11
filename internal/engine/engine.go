@@ -342,6 +342,15 @@ func (e *Engine) modelTurn(ctx context.Context, wsID int64, agent workspace.Agen
 // and swallowed: losing a reply because the ledger hiccuped would be a worse
 // bug than an incomplete ledger.
 func (e *Engine) recordUsage(ctx context.Context, wsID int64, agent workspace.Agent, u llm.Usage) {
+	// The run's own record is written first, and unconditionally. It is the
+	// same fact the workspace ledger below books per agent, counted for the run
+	// as a whole — and a caller asking "how many times did this go to a model"
+	// must get an answer even when the token ledger is having a bad day.
+	//
+	// Only calls that came back are counted. A provider error returns before
+	// this line, and what happened to that attempt is in the run's error rather
+	// than dressed up as work.
+	e.noteModelCall(wsID, u)
 	if err := e.ws.RecordTurn(context.WithoutCancel(ctx), wsID, agent.ID, agent.ModelLabel, u.InputTokens, u.OutputTokens, u.Reported); err != nil {
 		slog.Warn("could not record token usage", "workspace_id", wsID, "agent", agent.Name, "err", err)
 	}
