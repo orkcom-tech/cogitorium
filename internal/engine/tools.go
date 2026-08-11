@@ -788,6 +788,25 @@ func (e *Engine) runGear(ctx context.Context, wsID int64, agent workspace.Agent,
 		if err != nil {
 			return "", err
 		}
+		// A call that names a workspace file in an ordinary argument and leaves
+		// _files empty is a mistake with no good outcome, so it is refused here
+		// rather than run.
+		//
+		// Watched happening: a model was told a file's path, wrote it into the
+		// gear's own "archive" argument, and passed no _files. Nothing was
+		// staged, no out/ was collected — and the gear, running unsandboxed with
+		// the server's file access, opened the host path anyway, unpacked it
+		// into a directory nobody reads, and printed success. The agent reported
+		// that success truthfully. The answer was right and the work was gone,
+		// which is the one failure a pipeline must never have.
+		if len(files) == 0 {
+			if stray := strayWorkspacePath(gearArgs); stray != "" {
+				return "", fmt.Errorf("this call names %q, which is a file in the workspace, but its \"%s\" argument is empty — "+
+					"so nothing would be given to the gear and it would run against nothing. "+
+					"Put that path in \"%s\" and call again; the gear finds it under in/ at the same path",
+					stray, gearFilesArg, gearFilesArg)
+			}
+		}
 		// Handing a gear a file an inlet delivered puts that caller's bytes in
 		// reach of whatever the gear prints, so the latch closes now, before the
 		// run, rather than after the output is already in the context.
@@ -928,4 +947,39 @@ func marshal(v any) (string, error) {
 		return "", fmt.Errorf("marshal tool result: %w", err)
 	}
 	return string(raw), nil
+}
+
+// strayWorkspacePath finds a gear argument whose value looks like a path into
+// the workspace, so a call that meant to hand over a file but forgot to can be
+// refused with a sentence that says how.
+//
+// The test is deliberately narrow: it fires on a value that names one of the
+// directories files actually arrive in. A gear taking a string that merely
+// contains a slash — a URL, a glob, a regex — is ordinary and must not be
+// refused, so the cost of being wrong here is paid in the direction of letting
+// the call through.
+func strayWorkspacePath(argsJSON string) string {
+	var args map[string]any
+	if json.Unmarshal([]byte(argsJSON), &args) != nil {
+		return ""
+	}
+	for _, v := range args {
+		s, ok := v.(string)
+		if !ok {
+			continue
+		}
+		// An absolute path is always wrong here: a gear runs somewhere else
+		// entirely, and the value can only have come from the machine's own
+		// layout leaking into the conversation.
+		if strings.HasPrefix(s, "/") && strings.Contains(s, "/"+workdir.InletDir+"/") {
+			return s
+		}
+		clean := workdir.Clean(s)
+		for _, dir := range []string{workdir.InletDir, workdir.AttachmentDir, workdir.GearOutDir} {
+			if strings.HasPrefix(clean, dir+"/") {
+				return s
+			}
+		}
+	}
+	return ""
 }

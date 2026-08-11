@@ -577,7 +577,7 @@ func (d *door) gearCall(id, gearName, rel string) modelReply {
 // workspacePathFromTurn reads the delivered file's path out of the turn the
 // delivery handler wrote for the agent.
 func workspacePathFromTurn(turn string) string {
-	const marker = "path in the workspace: "
+	const marker = "\n  path: "
 	i := strings.Index(turn, marker)
 	if i < 0 {
 		return ""

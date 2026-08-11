@@ -362,14 +362,25 @@ func TestAFilePayloadLandsInTheWorkspaceAndTheAgentGetsThePath(t *testing.T) {
 		t.Fatalf("the file on disk is not what was delivered: %q", landed)
 	}
 
-	// The agent is given the path — both forms, because the workspace terminal
-	// starts in that directory and the file API takes the relative one — and
-	// is NOT given the bytes.
+	// The agent is given ONE path, the workspace-relative one, and not the
+	// bytes.
+	//
+	// It used to be given the absolute path on the machine as well. A live run
+	// showed the cost: the model chose the absolute form — it looks more like a
+	// real path — put it in an ordinary gear argument, and passed no _files. So
+	// nothing was staged, no out/ was collected, and the gear (unsandboxed, with
+	// the server's file access) opened the host file anyway, wrote its results
+	// where nobody collects them, and printed success. The agent then reported
+	// that success truthfully. Handing over two forms of the same thing is an
+	// invitation to pick the wrong one.
 	turn := d.provider.call(t, 1).userText()
-	for _, want := range []string{"File this screenshot.", row.PayloadPath, full, "image/png"} {
+	for _, want := range []string{"File this screenshot.", row.PayloadPath, "image/png"} {
 		if !strings.Contains(turn, want) {
 			t.Fatalf("the agent's turn is missing %q:\n%s", want, turn)
 		}
+	}
+	if strings.Contains(turn, full) {
+		t.Errorf("the agent's turn carries the absolute path %q, which no gear can use and which puts this machine's layout in the model's context:\n%s", full, turn)
 	}
 	if strings.Contains(turn, "SECRET-PIXELS") {
 		t.Fatalf("the file's bytes were put in the agent's prompt instead of its path:\n%s", turn)

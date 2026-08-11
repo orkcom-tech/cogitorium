@@ -91,13 +91,45 @@ func (d *Docker) createArgs(spec Spec, interactive bool) []string {
 
 const workDir = "/work"
 
+// cliTimeout bounds a docker CLI call that is plumbing rather than the gear's
+// own work: create, cp, rm. The gear's timeout covers `start`, where the code
+// actually runs; these have no business taking any length of time at all, and
+// a daemon that is not answering must fail rather than wait.
+const cliTimeout = 30 * time.Second
+
+// dockerCLI runs one docker command with a deadline and, more importantly, a
+// WaitDelay.
+//
+// Every call here already used CommandContext, so cancelling the context did
+// kill the process — and Wait still blocked forever in awaitGoroutines,
+// draining stdout and stderr pipes that a surviving descendant of the docker
+// CLI still held open. Observed, not theorised: a wedged daemon left `docker
+// create` hanging inside a gear call, which held the workspace's one-run latch
+// for as long as the server lived, so every later delivery to that workspace
+// answered 429 with nothing running. One sick daemon closed a door permanently.
+//
+// WaitDelay is the same medicine already applied to gear subprocesses: once the
+// context is done, give the pipes a moment and then give up on them. Losing the
+// tail of a killed command's output is the correct trade against never
+// returning.
+func (d *Docker) cli(ctx context.Context, stdout, stderr *bytes.Buffer, args ...string) error {
+	cctx, cancel := context.WithTimeout(ctx, cliTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(cctx, d.bin, args...)
+	cmd.WaitDelay = 5 * time.Second
+	if stdout != nil {
+		cmd.Stdout = stdout
+	}
+	if stderr != nil {
+		cmd.Stderr = stderr
+	}
+	return cmd.Run()
+}
+
 // create makes the container and copies the code into it, returning its id.
 func (d *Docker) create(ctx context.Context, spec Spec, interactive bool) (string, error) {
 	var out, errOut bytes.Buffer
-	cmd := exec.CommandContext(ctx, d.bin, d.createArgs(spec, interactive)...)
-	cmd.Stdout = &out
-	cmd.Stderr = &errOut
-	if err := cmd.Run(); err != nil {
+	if err := d.cli(ctx, &out, &errOut, d.createArgs(spec, interactive)...); err != nil {
 		return "", fmt.Errorf("create container: %w: %s", err, strings.TrimSpace(errOut.String()))
 	}
 	id := strings.TrimSpace(out.String())
@@ -162,14 +194,9 @@ func (d *Docker) collect(ctx context.Context, id string, spec Spec) error {
 	if spec.Out == "" {
 		return nil
 	}
-	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
 	var errOut bytes.Buffer
-	cmd := exec.CommandContext(cctx, d.bin, "cp",
-		id+":"+workDir+"/"+spec.Out+"/.", filepath.Join(spec.Dir, spec.Out))
-	cmd.Stderr = &errOut
-	if err := cmd.Run(); err != nil {
+	if err := d.cli(ctx, nil, &errOut, "cp",
+		id+":"+workDir+"/"+spec.Out+"/.", filepath.Join(spec.Dir, spec.Out)); err != nil {
 		return fmt.Errorf("could not copy %s/ back out of the sandbox, so any files it holds were lost: %w: %s",
 			spec.Out, err, strings.TrimSpace(errOut.String()))
 	}
@@ -177,7 +204,7 @@ func (d *Docker) collect(ctx context.Context, id string, spec Spec) error {
 }
 
 func (d *Docker) remove(ctx context.Context, id string) {
-	if err := exec.CommandContext(ctx, d.bin, "rm", "-f", id).Run(); err != nil {
+	if err := d.cli(ctx, nil, nil, "rm", "-f", id); err != nil {
 		slog.Warn("could not remove sandbox container", "id", id, "err", err)
 	}
 }
@@ -197,6 +224,11 @@ func (d *Docker) Run(ctx context.Context, spec Spec) (Result, error) {
 	defer d.remove(context.WithoutCancel(ctx), id)
 
 	cmd := exec.CommandContext(runCtx, d.bin, "start", "-a", "-i", id)
+	// The gear's timeout stops the container; this stops the WAIT on it. They
+	// are not the same thing: killing the CLI leaves Wait draining pipes that a
+	// surviving descendant still holds, and the run's own deadline expiring is
+	// exactly when that happens. Without this a timeout does not time out.
+	cmd.WaitDelay = 5 * time.Second
 	if spec.Stdin != nil {
 		cmd.Stdin = spec.Stdin
 	}
