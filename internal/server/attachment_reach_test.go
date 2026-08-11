@@ -201,17 +201,20 @@ func TestEveryAttachedTypeLandsAndTheAgentReachesItInATurn(t *testing.T) {
 // catalog". This test does exactly that, through the API an operator has, and
 // then sends the image again.
 //
-// IT FAILS, and the defect is real: there is no way to say so. POST
-// /api/v1/models ignores an accepts field (handleCreateModel's input struct has
-// three fields and modality is not one of them), and there is no PATCH on a
-// model at all — catalog.SetModelAccepts exists and nothing is wired to it. So
-// the refusal names a remedy that cannot be carried out, an operator who
-// attaches an image can only ever be told no, and the only way to declare a
-// model's modality today is to open the database and write the column by hand.
+// It is here because the remedy was once unreachable. POST /api/v1/models
+// dropped an accepts field on the way in (handleCreateModel's input struct had
+// three fields and modality was not one of them), and there was no PATCH on a
+// model at all — catalog.SetModelAccepts existed with nothing wired to it. So
+// the refusal named a step that could not be taken, an operator who attached an
+// image could only ever be told no, and the only way to declare a model's
+// modality was to open the database and write the column by hand. Both halves
+// are wired now: PATCH /api/v1/models/{id} answers, and a model can be added
+// with its modality already declared.
 //
-// It is left failing rather than trimmed to what passes: a refusal whose
-// instruction cannot be followed is a worse bug than the modality check being
-// absent, and a green suite here would say the loop is closed when it is open.
+// What this guards is the loop and not either route on its own — refused,
+// declared through the operator's own API, sent. A route that answered 200 and
+// recorded nothing would satisfy a test of the route and fail here, on the
+// image that still does not go.
 func TestAnOperatorCanSayInTheCatalogThatAModelTakesImages(t *testing.T) {
 	d := newDoor(t)
 	ctx := context.Background()

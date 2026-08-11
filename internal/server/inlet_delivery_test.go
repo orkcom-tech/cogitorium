@@ -269,21 +269,23 @@ func TestADeliveryAppendsNothingToTheWorkspaceTimeline(t *testing.T) {
 // TestADeliveryThatDelegatesAlsoAppendsNothing is the same rule for the case
 // the agent does not handle the payload alone.
 //
-// THIS TEST FAILS, and the defect is in internal/engine, not here. delegate()
-// appends a "delegation" message to the timeline unconditionally
-// (engine.go:819), and RunUnattended reaches it through runAgent like any other
-// turn — so a delivery whose agent delegates writes a row after all, against
-// what RunUnattended's own comment promises ("the timeline is deliberately
-// untouched").
+// It is here because the rule was once broken exactly here, and the defect was
+// in internal/engine rather than in this package. delegate() appended a
+// "delegation" message to the timeline unconditionally, and RunUnattended
+// reaches it through runAgent like any other turn — so a delivery whose agent
+// delegated wrote a row after all, against what RunUnattended's own comment
+// promises ("the timeline is deliberately untouched"). It is fixed: delegate()
+// now appends only when the turn is not unattended, and says why where it does
+// it ("the delegation row belongs to the operator's conversation").
 //
-// What it costs: buildHistory replays the LAST 500 timeline rows into every
-// orchestrator turn (ListMessages orders by id DESC and reverses). Delegation
-// rows are not themselves replayed as turns, so this is not the runaway cost
-// the design was avoiding — but they do occupy that window. A workspace behind
-// a busy door therefore pushes the operator's own conversation out of its
-// model's context, silently, at the rate its callers deliver. The operator also
-// sees delegation entries in their timeline with no message before them saying
-// where the work came from.
+// What it cost, and therefore what this test holds shut: buildHistory replays
+// the LAST 500 timeline rows into every orchestrator turn (ListMessages orders
+// by id DESC and reverses). Delegation rows are not themselves replayed as
+// turns, so this was never the runaway cost the design was avoiding — but they
+// did occupy that window. A workspace behind a busy door pushed the operator's
+// own conversation out of its model's context, silently, at the rate its
+// callers delivered, and the operator saw delegation entries in their timeline
+// with no message before them saying where the work had come from.
 func TestADeliveryThatDelegatesAlsoAppendsNothing(t *testing.T) {
 	t.Parallel()
 	d := newDoor(t)

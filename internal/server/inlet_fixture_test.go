@@ -276,10 +276,20 @@ func newDoor(t *testing.T) *door { return newDoorWithSearcher(t, nil) }
 // install where the unattended rule had been deleted.
 func newDoorWithSearcher(t *testing.T, searcher *websearch.Searcher) *door {
 	t.Helper()
+	return doorAround(t, newInstallWithSearcher(t, doorListen, searcher, nil))
+}
+
+// doorAround furnishes an install that is already built: a provider on a real
+// socket, a workspace bound to it, and one inlet with a key.
+//
+// It is separate from newDoor because which sandbox an install holds is decided
+// when the Server is constructed, and a test that has to execute a gear needs
+// that choice — everything below is the same either way.
+func doorAround(t *testing.T, in *install) *door {
+	t.Helper()
 	ctx := context.Background()
 
 	p := newProvider(t)
-	in := newInstallWithSearcher(t, doorListen, searcher, nil)
 
 	admin, err := in.users.GetUserByName(ctx, identity.AdminName)
 	if err != nil {

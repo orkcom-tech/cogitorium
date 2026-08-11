@@ -76,6 +76,23 @@ func newInstall(t *testing.T, listen string, tweak func(*config.Config)) *instal
 // Searcher — so the two cases cannot be told apart by a config flag, and the
 // dependency has to be handed in.
 func newInstallWithSearcher(t *testing.T, listen string, searcher *websearch.Searcher, tweak func(*config.Config)) *install {
+	// A sandbox that can host a terminal, so terminalReady lets the request
+	// reach the role check. No test on this path ever starts a session or runs
+	// a gear, so Docker is never invoked — the image is named after what would
+	// happen if one ever were.
+	return newInstallWithSandbox(t, listen, searcher,
+		&sandbox.Docker{Image: "cogitorium-tests-never-run-this"}, tweak)
+}
+
+// newInstallWithSandbox is newInstallWithSearcher for a test that cares which
+// backend gears actually run on.
+//
+// A nil runner IS the unsandboxed subprocess backend — the one an install
+// without Docker runs — and it is the only way a test can execute a gear
+// without a daemon, so the dependency has to be handed in rather than chosen
+// here. Every other caller keeps the Docker runner above, which stands in for
+// "a sandbox exists" without ever being asked to start a container.
+func newInstallWithSandbox(t *testing.T, listen string, searcher *websearch.Searcher, sb sandbox.Runner, tweak func(*config.Config)) *install {
 	t.Helper()
 	quiet.Do(func() {
 		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -105,10 +122,7 @@ func newInstallWithSearcher(t *testing.T, listen string, searcher *websearch.Sea
 		tweak(&cfg)
 	}
 
-	// A sandbox that can host a terminal, so terminalReady lets the request
-	// reach the role check. Nothing in these tests ever starts a session, so
-	// Docker is never invoked.
-	srv := New(cfg, db, &sandbox.Docker{Image: "cogitorium-tests-never-run-this"}, searcher)
+	srv := New(cfg, db, sb, searcher)
 
 	in := &install{
 		srv:    srv,
