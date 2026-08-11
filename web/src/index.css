@@ -2142,3 +2142,75 @@ button.big {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* Inlets */
+
+.inlets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.inlet-task {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border-left: 2px solid var(--border);
+  padding-left: 0.6rem;
+}
+
+/* The delivery URL is the one string on this panel that gets copied out of the
+   browser, so it must be readable whole rather than clipped by a narrow slot —
+   and it must not be what makes the bench scroll sideways. */
+.inlet-url {
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.inlet-task-form {
+  gap: 0.6rem;
+}
+
+.inlet-run summary {
+  cursor: pointer;
+}
+
+/* Spacing between the parts of a run's one-line summary comes from the items
+   themselves: a flex summary drops the disclosure triangle in Chrome, and a
+   details with nothing to click on is a details nobody opens. */
+.inlet-run summary > * {
+  margin-right: 0.5rem;
+}
+
+.inlet-run-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.35rem 0 0.35rem 1.1rem;
+}
+
+/* The six ledger states, coloured by what the operator has to do about them.
+   Refused and failed are both red because both mean nothing was produced; the
+   difference between "your caller sent the wrong thing" and "this workspace is
+   broken" is in the row, where there is room to say it. */
+.status.completed {
+  color: var(--ok);
+  border-color: currentColor;
+}
+
+.status.accepted,
+.status.running {
+  color: var(--accent);
+  border-color: currentColor;
+}
+
+.status.refused_schema,
+.status.failed {
+  color: var(--danger);
+  border-color: currentColor;
+}
+
+.status.interrupted {
+  color: var(--warn);
+  border-color: currentColor;
+}

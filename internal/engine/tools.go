@@ -31,7 +31,7 @@ const gearToolPrefix = "gear_"
 
 // toolsFor returns the tools an agent may use: built-ins by role, delegation
 // along its outgoing wires, and every approved gear bound to it.
-func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gears []gear.Gear, egressGranted bool) []llm.Tool {
+func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gears []gear.Gear, egressGranted, unattended bool) []llm.Tool {
 	var tools []llm.Tool
 
 	if agent.IsOrchestrator {
@@ -137,44 +137,64 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 		}, "name", "description", "runtime", "code"),
 	})
 
-	// Every agent can search the catalogues. An agent that cannot see what
-	// already exists has no choice but to reinvent it, which is exactly how
-	// both catalogues fill with near-duplicates.
-	tools = append(tools,
-		llm.Tool{
-			Name:        "list_gears",
-			Description: "Search the global gear catalog — tools forged in this or any other workspace. Call this before forging anything: if a gear already does the job, use it, or say that it exists and should be granted to you.",
-			InputSchema: obj(map[string]any{
-				"query": str("optional free-text filter over name and description"),
-				"tag":   str("optional tag filter"),
-			}),
-		},
-		llm.Tool{
-			Name:        "list_instructions",
-			Description: "Search the instruction library — reusable guidance written once and shared: house style, review checklists, how a particular job is done here. Check it before writing out guidance from scratch, and read one with read_instruction.",
-			InputSchema: obj(map[string]any{
-				"query": str("optional free-text filter over name and description"),
-				"tag":   str("optional tag filter"),
-			}),
-		},
-		llm.Tool{
-			Name:        "read_instruction",
-			Description: "Read an instruction from the library by name.",
-			InputSchema: obj(map[string]any{
-				"name": str("instruction name from the library"),
-			}, "name"),
-		},
-		llm.Tool{
-			Name:        "save_instruction",
-			Description: "Write reusable guidance into the shared library so it survives this conversation and anyone can bind it later. Use it for things that will be true next week — house style, a procedure, a checklist — not for notes about the task at hand. Saving an existing name replaces its text; Contextverse keeps the previous version.",
-			InputSchema: obj(map[string]any{
-				"name":        str("lowercase identifier, e.g. 'review-checklist'"),
-				"description": str("what this instruction is for — this is what others read when choosing it"),
-				"text":        str("the instruction itself, in markdown"),
-				"tags":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "classification tags"},
-			}, "name", "description", "text"),
-		},
-	)
+	// Every agent can search the catalogues — except on an unattended run.
+	//
+	// Both catalogues are install-wide, not workspace-scoped: list_gears and
+	// list_instructions return entries forged in any workspace, with their
+	// descriptions, and read_instruction returns a body by name. On an ordinary
+	// turn that is the point — an agent that cannot see what exists reinvents
+	// it, which is how both catalogues fill with near-duplicates.
+	//
+	// On an inlet run it is a read channel out of the install. The taint latch
+	// below closes the WRITES; nothing closed the reads, and the agent's final
+	// text goes back to whoever holds the key in the delivery response. A
+	// keyholder delivering into one workspace could ask for the catalogue and
+	// receive gear descriptions and instruction bodies belonging to another —
+	// demonstrated, not theorised. The operator's mental model is "it posts a
+	// ticket and gets a triage line back", so the reachable set has to match it.
+	if !unattended {
+		tools = append(tools,
+			llm.Tool{
+				Name:        "list_gears",
+				Description: "Search the global gear catalog — tools forged in this or any other workspace. Call this before forging anything: if a gear already does the job, use it, or say that it exists and should be granted to you.",
+				InputSchema: obj(map[string]any{
+					"query": str("optional free-text filter over name and description"),
+					"tag":   str("optional tag filter"),
+				}),
+			},
+			llm.Tool{
+				Name:        "list_instructions",
+				Description: "Search the instruction library — reusable guidance written once and shared: house style, review checklists, how a particular job is done here. Check it before writing out guidance from scratch, and read one with read_instruction.",
+				InputSchema: obj(map[string]any{
+					"query": str("optional free-text filter over name and description"),
+					"tag":   str("optional tag filter"),
+				}),
+			},
+			llm.Tool{
+				Name:        "read_instruction",
+				Description: "Read an instruction from the library by name.",
+				InputSchema: obj(map[string]any{
+					"name": str("instruction name from the library"),
+				}, "name"),
+			},
+		)
+	}
+
+	// save_instruction stays offered even on an unattended run, and is refused
+	// at dispatch by the taint latch. That is deliberate: the latch is the
+	// guard, and a rule enforced where it can be seen being enforced is worth
+	// more than a tool quietly missing from a list. Withdrawing it as well
+	// would leave the latch with no path that exercises it.
+	tools = append(tools, llm.Tool{
+		Name:        "save_instruction",
+		Description: "Write reusable guidance into the shared library so it survives this conversation and anyone can bind it later. Use it for things that will be true next week — house style, a procedure, a checklist — not for notes about the task at hand. Saving an existing name replaces its text; Contextverse keeps the previous version.",
+		InputSchema: obj(map[string]any{
+			"name":        str("lowercase identifier, e.g. 'review-checklist'"),
+			"description": str("what this instruction is for — this is what others read when choosing it"),
+			"text":        str("the instruction itself, in markdown"),
+			"tags":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "classification tags"},
+		}, "name", "description", "text"),
+	})
 
 	if agent.IsOrchestrator {
 		tools = append(tools, llm.Tool{
@@ -271,11 +291,21 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 		}
 	}
 
-	// Once fetched third-party text is in this turn's context, tools that
-	// write durable state are closed. Checked here rather than at each case
-	// so a new write tool cannot be added and quietly miss the rule.
+	// Once third-party text is in this turn's context, tools that write durable
+	// state are closed. Checked here rather than at each case so a new write
+	// tool cannot be added and quietly miss the rule.
 	if taintedTools[call.Name] && e.tainted(wsID) {
 		return "", taintRefusal(call.Name)
+	}
+
+	// The same discipline for the install-wide readers on an unattended run.
+	// toolsFor stops offering them, but not offering a tool is not the same as
+	// refusing it: a model can emit a call for a name it was never given, and
+	// the switch below would have run it. The answer goes back to whoever holds
+	// the inlet key, so the refusal has to be here, where it is enforced,
+	// rather than in the list of suggestions.
+	if unattendedClosedTools[call.Name] && e.turn(wsID).unattended {
+		return "", fmt.Errorf("%q is not available on an unattended run: it reads the whole install's catalogue, and this run's answer leaves the building", call.Name)
 	}
 
 	switch call.Name {

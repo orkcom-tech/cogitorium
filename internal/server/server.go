@@ -24,6 +24,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/engine"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
+	"github.com/orkcom-tech/cogitorium/internal/inlet"
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/version"
@@ -41,6 +42,7 @@ type Server struct {
 	gearExec   *gear.Executor
 	library    *library.Store
 	identity   *identity.Store
+	inlets     *inlet.Store
 	engine     *engine.Engine
 	http       *http.Server
 	// trustLoopback lets an unauthenticated local request act as the admin,
@@ -89,6 +91,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		gearExec:   gearExec,
 		library:    lib,
 		identity:   identity.NewStore(db),
+		inlets:     inlet.NewStore(db),
 		engine:     engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker),
 		// A server reachable beyond this machine must not hand out admin
 		// to anyone who can open a socket to it.
@@ -192,6 +195,20 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	mux.HandleFunc("POST /api/v1/workspaces/{id}/gears", s.handleCreateGearBinding)
 	mux.HandleFunc("DELETE /api/v1/gear-bindings/{id}", s.handleDeleteGearBinding)
 
+	// Inlet MANAGEMENT. It is under /api/ on purpose: creating a door, issuing
+	// its key and adding tasks to it are workspace administration, gated by the
+	// same access rule as everything else in that workspace. Only delivery
+	// lives outside the authentication middleware, and it lives at /i/.
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/inlets", s.handleListInlets)
+	mux.HandleFunc("POST /api/v1/workspaces/{id}/inlets", s.handleCreateInlet)
+	mux.HandleFunc("GET /api/v1/inlets/{id}", s.handleGetInlet)
+	mux.HandleFunc("DELETE /api/v1/inlets/{id}", s.handleDeleteInlet)
+	mux.HandleFunc("POST /api/v1/inlets/{id}/key", s.handleRotateInletKey)
+	mux.HandleFunc("POST /api/v1/inlets/{id}/tasks", s.handleAddInletTask)
+	mux.HandleFunc("DELETE /api/v1/inlet-tasks/{id}", s.handleDeleteInletTask)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/inlet-runs", s.handleListInletRuns)
+	mux.HandleFunc("GET /api/v1/inlet-runs/{id}", s.handleGetInletRun)
+
 	// Unmatched /api/* must answer JSON, not fall through to the SPA —
 	// otherwise wrong-method or typo'd API calls get 200 + index.html.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
@@ -210,6 +227,14 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	mux.HandleFunc("DELETE /api/v1/teams/{id}", s.handleDeleteTeam)
 	mux.HandleFunc("POST /api/v1/teams/{id}/members", s.handleAddTeamMember)
 	mux.HandleFunc("DELETE /api/v1/teams/{id}/members/{userId}", s.handleRemoveTeamMember)
+
+	// Inlet DELIVERY. The only route in this server that authenticates against
+	// something other than a user token, which is why it is not under /api/ —
+	// see inlet_handlers.go. Anything else under /i/ is answered with the rule
+	// rather than falling through to the SPA, which would serve index.html with
+	// a 200 to a pipeline that got the URL slightly wrong.
+	mux.HandleFunc("POST /i/{address}/{task}", s.handleInletDelivery)
+	mux.HandleFunc(inletDeliveryPrefix, handleInletDeliveryPath)
 
 	mux.Handle("/", uiHandler())
 
@@ -250,6 +275,15 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 		return err
 	} else if n > 0 {
 		slog.Warn("search requests were awaiting approval when the server stopped; they are recorded as interrupted", "count", n)
+	}
+
+	// The same reasoning for inlet runs: a run lives in one process, so a row
+	// still saying accepted or running is a job that stopped when the process
+	// did. Leaving it would make the ledger claim work is in flight.
+	if n, err := s.inlets.ReconcileRuns(ctx); err != nil {
+		return err
+	} else if n > 0 {
+		slog.Warn("inlet runs were in flight when the server stopped; they are recorded as interrupted", "count", n)
 	}
 
 	_, token, err := s.identity.Bootstrap(ctx, s.adminToken)

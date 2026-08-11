@@ -50,6 +50,12 @@ type turnState struct {
 	used    int
 	latched bool // a refusal or timeout happened; the gate is closed for this turn
 	tainted bool // fetched bytes have reached a model this turn
+	// unattended means nobody is waiting on the other end of this turn — it was
+	// started by a caller through an inlet, not by an operator at a screen. It
+	// lives here rather than in a parameter for the same reason the budget
+	// does: the whole delegation tree shares one turn, and a worker four levels
+	// down is just as unattended as the agent the payload was handed to.
+	unattended bool
 }
 
 func (e *Engine) beginTurn(wsID int64) *turnState {
@@ -87,6 +93,13 @@ func (e *Engine) tainted(wsID int64) bool { return e.turn(wsID).tainted }
 // turn and teaches the model nothing.
 func (e *Engine) egressAvailable(ctx context.Context, wsID int64, agent workspace.Agent) bool {
 	if e.searcher == nil {
+		return false
+	}
+	// A search stops the turn and waits up to a minute for a person to approve
+	// that exact query. On an unattended run there is nobody to ask, so the
+	// tool is not offered at all: offering it would buy a stalled turn and then
+	// a failure, once per iteration, at a paid provider call each.
+	if e.turn(wsID).unattended {
 		return false
 	}
 	if _, err := e.ws.EgressFingerprint(ctx, wsID, agent.ID); err != nil {
@@ -443,11 +456,12 @@ func renderResults(results []websearch.Result) string {
 	return b.String()
 }
 
-// taintedTools are refused for the rest of a turn once fetched text has
-// reached a model. This is what stops the worm: attacker-authored text
-// arriving from the web must not be able to write itself into the global
-// instruction library, the gear catalog or the workspace graph, where it
-// would reach every agent on every later turn.
+// taintedTools are refused for the rest of a turn once third-party text has
+// reached a model. This is what stops the worm: text written by a stranger —
+// fetched from the web, or delivered through an inlet as the opening user turn
+// — must not be able to write itself into the global instruction library, the
+// gear catalog or the workspace graph, where it would reach every agent on
+// every later turn.
 var taintedTools = map[string]bool{
 	"save_instruction": true,
 	"forge_gear":       true,
@@ -460,9 +474,14 @@ var taintedTools = map[string]bool{
 	"web_search":       true, // one approved search must not steer the next
 }
 
+// taintRefusal names the reason without naming a source, because there are now
+// two: text fetched from the web, and a payload delivered through an inlet.
+// Telling a model its context is tainted by a web search when it was actually
+// tainted by its own opening turn would be a false statement in the one place
+// the model is most likely to reason from.
 func taintRefusal(tool string) error {
-	return fmt.Errorf("%q is refused: text fetched from the web is in this turn's context, so tools that "+
-		"write durable state are closed until the next message", tool)
+	return fmt.Errorf("%q is refused: third-party text is in this turn's context, so tools that "+
+		"write durable state are closed for the rest of it", tool)
 }
 
 // egressJSON is a small helper for tool output that must stay machine-readable.
@@ -472,4 +491,22 @@ func egressJSON(v any) string {
 		return "{}"
 	}
 	return string(b)
+}
+
+// unattendedClosedTools read across the whole install and are refused on an
+// unattended run.
+//
+// list_gears and list_instructions are not workspace-scoped — they return
+// entries forged anywhere, with their descriptions — and read_instruction
+// returns a body by name. On an operator's turn that is the point. On an inlet
+// run the final text is returned to whoever holds the key, so these are a read
+// channel out of the install: a keyholder delivering into one workspace was
+// able to receive gear descriptions and instruction bodies belonging to
+// another. save_instruction is deliberately NOT here — it writes, so
+// taintedTools already refuses it, and duplicating the rule would let the two
+// lists drift.
+var unattendedClosedTools = map[string]bool{
+	"list_gears":        true,
+	"list_instructions": true,
+	"read_instruction":  true,
 }

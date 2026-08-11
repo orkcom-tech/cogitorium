@@ -31,6 +31,18 @@ const (
 	maxDelegationDepth = 4
 )
 
+// The two refusals a caller outside the engine has to be able to tell apart,
+// because each is a different answer to whoever is waiting: try again shortly,
+// or go and fix the workspace. Everything else the engine returns is either a
+// store error the HTTP layer already maps, or a failure of the run itself.
+var (
+	ErrBusy = errors.New("a turn is already in progress in this workspace")
+	// ErrNoModel is the state runAgent used to dereference straight through.
+	// An agent with no model is ordinary — an imported bundle can name a model
+	// this install does not have — so it must be an answer, not a panic.
+	ErrNoModel = errors.New("no model is bound to it; bind one on the blueprint before anything can be run through it")
+)
+
 type AgentStatus struct {
 	AgentID int64  `json:"agent_id"`
 	State   string `json:"state"` // idle | thinking | working | responding
@@ -130,7 +142,7 @@ func (e *Engine) HandleUserMessage(ctx context.Context, wsID int64, text string,
 	e.mu.Lock()
 	if e.running[wsID] {
 		e.mu.Unlock()
-		return errors.New("a turn is already in progress in this workspace")
+		return ErrBusy
 	}
 	e.running[wsID] = true
 	e.mu.Unlock()
@@ -260,7 +272,7 @@ func (e *Engine) modelTurn(ctx context.Context, wsID int64, agent workspace.Agen
 		Model:    model.ModelName,
 		System:   system,
 		Messages: history,
-		Tools:    e.toolsFor(agent, targets, gears, e.egressAvailable(ctx, wsID, agent)),
+		Tools:    e.toolsFor(agent, targets, gears, e.egressAvailable(ctx, wsID, agent), e.turn(wsID).unattended),
 	}, func(text string) error {
 		emit(Event{Type: "delta", AgentID: agent.ID, Text: text})
 		return ctx.Err()
@@ -803,19 +815,35 @@ func (e *Engine) delegate(ctx context.Context, wsID int64, caller workspace.Agen
 		return "", fmt.Errorf("delegation to %q failed: %w", target.Name, err)
 	}
 
-	meta, _ := json.Marshal(map[string]any{"task": task, "delegated_by": caller.Name})
-	msg, err := e.ws.AppendMessage(context.WithoutCancel(ctx), wsID, &target.ID, "delegation", answer, string(meta))
-	if err != nil {
-		return "", err
+	// The delegation row belongs to the operator's conversation, and an
+	// unattended run is not part of it. It is not replayed — buildHistory
+	// ignores this kind — so leaving it in would not cost tokens; it would
+	// simply fill the timeline the operator reads with pipeline traffic. A
+	// nightly job classifying four thousand tickets would write four thousand
+	// rows into a conversation nobody had. Where an unattended run went is
+	// recorded in its own ledger, which is the place to look for it.
+	if !e.turn(wsID).unattended {
+		meta, _ := json.Marshal(map[string]any{"task": task, "delegated_by": caller.Name})
+		msg, err := e.ws.AppendMessage(context.WithoutCancel(ctx), wsID, &target.ID, "delegation", answer, string(meta))
+		if err != nil {
+			return "", err
+		}
+		emit(Event{Type: "message", Message: &msg})
 	}
-	emit(Event{Type: "message", Message: &msg})
-	slog.Info("delegation finished", "workspace_id", wsID, "to", target.Name)
+	slog.Info("delegation finished", "workspace_id", wsID, "to", target.Name, "unattended", e.turn(wsID).unattended)
 	return answer, nil
 }
 
 // runAgent executes a delegated agent's turn, including its own tool loop
 // when the blueprint wires it to further agents. Returns its final text.
 func (e *Engine) runAgent(ctx context.Context, wsID int64, agent workspace.Agent, chain []int64, task string, emit func(Event)) (string, error) {
+	// Checked here rather than only at the call sites: an agent with no model
+	// is an ordinary state — a bundle can name a model this install does not
+	// have — and dereferencing the pointer for it would take the server down
+	// instead of telling somebody to bind a model.
+	if agent.ModelID == nil {
+		return "", fmt.Errorf("agent %q: %w", agent.Name, ErrNoModel)
+	}
 	model, err := e.cat.GetModel(ctx, *agent.ModelID)
 	if err != nil {
 		return "", err
@@ -839,7 +867,7 @@ func (e *Engine) runAgent(ctx context.Context, wsID int64, agent workspace.Agent
 	if err != nil {
 		return "", err
 	}
-	tools := e.toolsFor(agent, targets, gears, e.egressAvailable(ctx, wsID, agent))
+	tools := e.toolsFor(agent, targets, gears, e.egressAvailable(ctx, wsID, agent), e.turn(wsID).unattended)
 
 	history := []llm.Turn{{Role: "user", Text: task}}
 	for iter := 0; iter < maxToolIterations; iter++ {
@@ -857,6 +885,13 @@ func (e *Engine) runAgent(ctx context.Context, wsID int64, agent workspace.Agent
 		}
 		e.recordUsage(ctx, wsID, agent, res.Usage)
 		if res.StopReason != llm.StopToolUse || len(res.ToolCalls) == 0 {
+			// A reply the token ceiling cut short is not an answer. Returned as
+			// one it becomes a sentence that stops mid-word, handed back up the
+			// delegation chain — or out of an inlet to a caller who has no way
+			// to tell it apart from a complete one.
+			if res.StopReason == "max_tokens" || res.StopReason == "length" {
+				return "", fmt.Errorf("agent %q was cut off by the model's token limit (%s), so its partial answer was discarded", agent.Name, res.StopReason)
+			}
 			// An empty answer is a failure the caller must see, not a
 			// result to pass along silently.
 			if strings.TrimSpace(res.Text) == "" {

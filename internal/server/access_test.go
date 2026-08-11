@@ -33,6 +33,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/store"
+	"github.com/orkcom-tech/cogitorium/internal/websearch"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
 
@@ -67,6 +68,14 @@ type install struct {
 // real stores. listen decides whether an unauthenticated local request is
 // the admin, so it is the one thing every caller states explicitly.
 func newInstall(t *testing.T, listen string, tweak func(*config.Config)) *install {
+	return newInstallWithSearcher(t, listen, nil, tweak)
+}
+
+// newInstallWithSearcher is newInstall for a test that needs the outward gate
+// switched on. A nil searcher IS the gate being off — there is no disabled
+// Searcher — so the two cases cannot be told apart by a config flag, and the
+// dependency has to be handed in.
+func newInstallWithSearcher(t *testing.T, listen string, searcher *websearch.Searcher, tweak func(*config.Config)) *install {
 	t.Helper()
 	quiet.Do(func() {
 		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -99,7 +108,7 @@ func newInstall(t *testing.T, listen string, tweak func(*config.Config)) *instal
 	// A sandbox that can host a terminal, so terminalReady lets the request
 	// reach the role check. Nothing in these tests ever starts a session, so
 	// Docker is never invoked.
-	srv := New(cfg, db, &sandbox.Docker{Image: "cogitorium-tests-never-run-this"}, nil)
+	srv := New(cfg, db, &sandbox.Docker{Image: "cogitorium-tests-never-run-this"}, searcher)
 
 	in := &install{
 		srv:    srv,

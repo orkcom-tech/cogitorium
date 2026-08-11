@@ -154,6 +154,85 @@ export type SearchRecord = {
   created_at: string
 }
 
+// The other direction from egress: a door INTO a workspace. An inlet is not an
+// agent — no model, no role, no memory. It has an address, its own key and a
+// list of tasks, and a caller posting to POST /i/{address}/{task} runs one of
+// them on one agent.
+//
+// The key exists in full exactly once, at the moment it is issued; only its
+// hash is stored, and the hash never leaves the server. has_key is therefore
+// everything this client can know about whether the door opens at all — an
+// inlet with no key issued refuses every delivery.
+export type Inlet = {
+  id: number
+  workspace_id: number
+  address: string
+  description: string
+  has_key: boolean
+  key_issued_at: string
+  key_last_used_at: string
+  created_at: string
+  updated_at: string
+  tasks: InletTask[]
+}
+
+// A task is how a caller selects a job. `accepts` decides which of the next two
+// fields means anything: a JSON task is checked against `schema` before any
+// model is called, and a file task's body must match `content_type` and lands
+// in the workspace, where the agent is given its path rather than its bytes.
+export type InletTask = {
+  id: number
+  inlet_id: number
+  name: string
+  accepts: 'json' | 'file'
+  schema: string
+  content_type: string
+  agent_name: string
+  instruction: string
+  created_at: string
+  updated_at: string
+}
+
+// The six states the ledger enumerates, and nothing else — the table's CHECK
+// says so. Two are live (accepted, running) and four are terminal.
+export type InletRunState = 'accepted' | 'refused_schema' | 'running' | 'completed' | 'failed' | 'interrupted'
+
+// One delivery, whatever became of it. inlet_id and agent_id are nullable
+// because the row outlives both: a ledger that disappeared when the door was
+// deleted could not answer "did job 4471 happen", which is the only reason it
+// exists.
+export type InletRun = {
+  id: number
+  workspace_id: number
+  inlet_id: number | null
+  inlet_address: string
+  task_name: string
+  agent_id: number | null
+  agent_name: string
+  payload_bytes: number
+  payload_path: string
+  state: InletRunState
+  result: string
+  error: string
+  created_at: string
+  updated_at: string
+}
+
+// What comes back from issuing a key: the one copy of it, and the server's own
+// sentence about what that means. The notice differs between the first key and
+// a replacement, so it is shown rather than restated here.
+export type IssuedInletKey = { key: string; notice: string }
+
+// inletDeliveryUrl is the address an operator hands to whoever will be calling.
+// It is built from the server this client is talking to, because the inlet row
+// knows its own address and nothing about the host a caller has to reach — and
+// a path with no host is not something anyone can paste into curl.
+export function inletDeliveryUrl(address: string, taskName: string): string {
+  const path = `/i/${address}/${taskName}`
+  const base = session.server()
+  return base ? base + path : new URL(path, window.location.href).toString()
+}
+
 export type AgentUsage = {
   agent_id: number
   input_tokens: number
@@ -356,6 +435,43 @@ export const api = {
       }),
     log: (wsId: number, limit = 100) =>
       req<SearchRecord[]>(`/api/v1/workspaces/${wsId}/egress/log?limit=${limit}`),
+  },
+  // Management, all of it behind the same authentication and the same access
+  // rule as the workspace the inlet belongs to. Delivery is the other half and
+  // is not reachable from here: it lives at /i/… and proves itself with the
+  // inlet's own key rather than with this operator's token.
+  inlets: {
+    list: (wsId: number) => req<Inlet[]>(`/api/v1/workspaces/${wsId}/inlets`),
+    // Opening a door issues its first key in the same call, and this response
+    // is the only place that key will ever exist in full.
+    create: (wsId: number, address: string, description: string) =>
+      req<IssuedInletKey & { inlet: Inlet }>(`/api/v1/workspaces/${wsId}/inlets`, {
+        method: 'POST',
+        body: JSON.stringify({ address, description }),
+      }),
+    remove: (id: number) => req<void>(`/api/v1/inlets/${id}`, { method: 'DELETE' }),
+    // Issuing again is how a leaked key is closed: the previous string stops
+    // working the moment this returns, and the door keeps its tasks.
+    issueKey: (id: number) => req<IssuedInletKey>(`/api/v1/inlets/${id}/key`, { method: 'POST' }),
+    addTask: (
+      inletId: number,
+      t: {
+        name: string
+        accepts: 'json' | 'file'
+        // The schema travels as a JSON value, never as a string containing
+        // JSON: the server decodes this field as the schema object itself, so
+        // a string would arrive as a string and be refused as one.
+        schema?: unknown
+        content_type?: string
+        agent: string
+        instruction: string
+      },
+    ) => req<InletTask>(`/api/v1/inlets/${inletId}/tasks`, { method: 'POST', body: JSON.stringify(t) }),
+    removeTask: (id: number) => req<void>(`/api/v1/inlet-tasks/${id}`, { method: 'DELETE' }),
+    runs: (wsId: number, limit = 50) => req<InletRun[]>(`/api/v1/workspaces/${wsId}/inlet-runs?limit=${limit}`),
+    // One run by number. The list only reaches back so far, and the number a
+    // caller quotes is often older than that.
+    run: (id: number) => req<InletRun>(`/api/v1/inlet-runs/${id}`),
   },
   files: {
     list: (wsId: number, path: string) =>

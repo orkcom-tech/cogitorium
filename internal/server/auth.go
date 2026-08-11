@@ -31,8 +31,26 @@ func callerFrom(ctx context.Context) identity.User {
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Login is the one API route that must be reachable without
-		// credentials — it is where credentials come from.
-		if r.URL.Path == "/health" || r.URL.Path == "/api/v1/login" || !strings.HasPrefix(r.URL.Path, "/api/") {
+		// credentials — it is where credentials come from. Inlet delivery is
+		// exempt for the same reason: it proves itself against an inlet's own
+		// key rather than against a token, so there is nothing here to resolve.
+		// callerFrom then returns the zero user inside that handler, and any
+		// path from it into requireAdmin or requireWorkspace is refused rather
+		// than granted.
+		//
+		// The exemption matches by PREFIX, so /i/ must carry delivery and
+		// nothing else. Inlet management lives under
+		// /api/v1/workspaces/{id}/inlets and is authenticated here like the
+		// rest of the API. Getting that wrong is the whole security failure.
+		//
+		// The last term already exempts every non-/api/ path, because that is
+		// how the SPA and its assets are served. Delivery is named anyway: it
+		// must not be exempt only as a side effect of a rule about static
+		// files, which somebody tightening the SPA fallback would take away
+		// without ever seeing an inlet.
+		if r.URL.Path == "/health" || r.URL.Path == "/api/v1/login" ||
+			strings.HasPrefix(r.URL.Path, inletDeliveryPrefix) ||
+			!strings.HasPrefix(r.URL.Path, "/api/") {
 			next.ServeHTTP(w, r)
 			return
 		}

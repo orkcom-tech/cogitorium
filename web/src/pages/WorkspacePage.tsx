@@ -6,6 +6,7 @@ import AgentMemory from './AgentMemory'
 import FilesPage from './FilesPage'
 import CodeEditor from './CodeEditor'
 import ApprovalDialog from './ApprovalDialog'
+import InletsPanel from './InletsPanel'
 import Bench, { type PanelDef } from '../bench/Bench'
 import { useLayout } from '../bench/store'
 import { loadTheme } from '../styles/theme'
@@ -14,7 +15,7 @@ import LayoutMenu from '../bench/LayoutMenu'
 
 // The set of ids the layout parser will accept. A restored layout naming a
 // panel nothing can render would otherwise be a permanent white screen.
-const PANEL_IDS = new Set(['chat', 'blueprint', 'files', 'editor', 'terminal', 'agents', 'agent'])
+const PANEL_IDS = new Set(['chat', 'blueprint', 'files', 'editor', 'terminal', 'agents', 'agent', 'inlets'])
 import {
   api,
   wsChatStream,
@@ -426,6 +427,21 @@ export default function WorkspacePage() {
               </button>
             )
           })}
+        </div>
+      ),
+    },
+    {
+      id: 'inlets',
+      minW: 460,
+      title: 'Inlets',
+      home: 'aux',
+      node: (
+        <div className="bn-body bn-scroll">
+          {/* Whether the panel is placed at all decides whether it loads: the
+              bench keeps every panel mounted, and a workspace with no doors
+              should not pay two queries on every open for a feature it does
+              not use. */}
+          <InletsPanel wsId={wsId} agents={agents} shown={!!layout.slotOf('inlets')} onError={setError} />
         </div>
       ),
     },
