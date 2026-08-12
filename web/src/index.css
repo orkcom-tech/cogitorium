@@ -2330,3 +2330,107 @@ button.big {
 .inlet-expect-form > *:not(summary) {
   margin-top: 0.5rem;
 }
+
+/* Variables & secrets, and the two grants an approval makes.
+   ------------------------------------------------------------------------
+   Both halves of one decision are on the gear card, so they are set as one
+   block rather than as two unrelated controls that happen to be adjacent. */
+
+.env-panel table {
+  margin-top: 0.6rem;
+}
+
+/* A secret is not a warning and not an error — it is a different kind of
+   thing, and it has to be tellable from a variable at a glance in a table
+   where every other cell is muted. */
+.env-secret {
+  color: var(--warn);
+}
+
+/* The one-line summary under a gear's description: what it holds and where it
+   may reach, so the catalogue can be scanned without opening every card. */
+.gear-grants {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+
+.gear-grants .grant-on {
+  color: var(--accent);
+}
+
+.gear-grants .grant-sep {
+  color: var(--border);
+}
+
+.grants {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  margin: 0.6rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.grants h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.grant {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.grant-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.grant-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+/* The checkbox and its sentence read as one control, so the label does not
+   stretch across the card with the words a long way from the box. */
+.grant-check {
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.grant-check input {
+  width: auto;
+}
+
+/* The connection log's outcomes. A refusal is the gate doing its job, not a
+   fault, so it is not red: red here would train an operator to read a working
+   destination list as breakage. Failed is red because nothing came back. */
+.status.closed {
+  color: var(--ok);
+  border-color: currentColor;
+}
+
+.status.open {
+  color: var(--accent);
+  border-color: currentColor;
+}
+
+.status.refused_destination,
+.status.refused_local,
+.status.refused_no_grant,
+.status.refused_invalid {
+  color: var(--warn);
+  border-color: currentColor;
+}

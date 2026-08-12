@@ -21,6 +21,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
+	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
 
@@ -53,6 +54,12 @@ const (
 // in these types. A bundle is a template someone hands to someone else, so
 // the way to guarantee it never leaks a secret or a conversation is that it
 // has nowhere to put one.
+//
+// A gear's named values follow the same rule and are the sharpest example of
+// it: the bundle carries the NAMES a gear asks for, because the receiving
+// operator has to know what it will want, and it has nowhere at all to put a
+// value. An imported gear arrives declaring API_KEY and pending; what API_KEY
+// means is the importing install's own business.
 type Bundle struct {
 	Format     string        `json:"format"`
 	ExportedAt string        `json:"exported_at"`
@@ -105,6 +112,18 @@ type Gear struct {
 	ArgsSchema     string     `json:"args_schema"`
 	TimeoutSeconds int        `json:"timeout_seconds"`
 	Files          []GearFile `json:"files"`
+	// EnvNames are the named values this gear will ask for. Names, never
+	// values: what they mean is a property of the install it runs on, and
+	// carrying a value here would be carrying a credential between machines in
+	// a document people forward by email.
+	EnvNames []string `json:"env_names"`
+	// The network grant is deliberately NOT here and must never be added. An
+	// imported gear arrives pending, and it arrives with no network for exactly
+	// the same reason: both are decided by the operator of the install the code
+	// will run on, while they are reading it. A field here would let a bundle
+	// carry a permission across a machine boundary that nobody on the far side
+	// granted.
+	//
 	// BoundTo is "workspace" or the name of an agent in this bundle.
 	BoundTo string `json:"bound_to"`
 }
@@ -236,6 +255,13 @@ func (b Bundle) Validate() error {
 			if _, err := storeEncoding(f.Encoding); err != nil {
 				return fmt.Errorf("%w: gear %q file %q: %s", ErrMalformed, name, f.Path, err)
 			}
+		}
+		// Checked at the doorway rather than at Forge, so a bundle naming a
+		// value it cannot have is refused before a workspace has been created
+		// for it. Refusing halfway leaves the operator to work out which half
+		// happened — see Normalized for the last time that was allowed.
+		if _, err := secrets.NormalizeNames(g.EnvNames); err != nil {
+			return fmt.Errorf("%w: gear %q asks for a named value it cannot have: %s", ErrMalformed, name, err)
 		}
 		if g.BoundTo != BoundToWorkspace && !names[g.BoundTo] {
 			return fmt.Errorf("%w: gear %q says bound_to %q — use %q or the name of an agent in this bundle",

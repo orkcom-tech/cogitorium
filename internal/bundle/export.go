@@ -136,8 +136,13 @@ func exportGears(ctx context.Context, s Stores, wsID int64, nameOf map[int64]str
 			Entrypoint:     g.Entrypoint,
 			ArgsSchema:     g.ArgsSchema,
 			TimeoutSeconds: g.TimeoutSeconds,
-			Files:          make([]GearFile, 0, len(files)),
-			BoundTo:        boundTo,
+			// The names travel so the receiving operator knows what this gear
+			// will want before it runs and fails. Nothing here reads a value:
+			// the values live in env_values and the mounted directories, and
+			// neither is reachable from this function.
+			EnvNames: g.EnvNames,
+			Files:    make([]GearFile, 0, len(files)),
+			BoundTo:  boundTo,
 		}
 		for _, f := range files {
 			entry.Files = append(entry.Files, GearFile{

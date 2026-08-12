@@ -68,7 +68,18 @@ func newServeCmd() *cobra.Command {
 				return err
 			}
 
-			srv := server.New(cfg, db, sb, searcher)
+			env, err := appstart.BuildSecrets(ctx, cfg, db)
+			if err != nil {
+				return err
+			}
+
+			gate, err := appstart.BuildGearNet(cfg, db, sb)
+			if err != nil {
+				return err
+			}
+			defer gate.Close()
+
+			srv := server.New(cfg, db, sb, searcher, env, gate)
 			if err := srv.Bootstrap(ctx); err != nil {
 				return err
 			}

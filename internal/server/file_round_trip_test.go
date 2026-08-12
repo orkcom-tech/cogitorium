@@ -250,7 +250,7 @@ func (d *door) forge(t *testing.T, g forgedGear) gear.Gear {
 	// _files at all, and this test would then be asserting on an argument the
 	// model was never given.
 	forged, err := d.srv.gears.Forge(ctx, g.name, "opens the files it is given", nil,
-		g.runtime, g.entrypoint, `{"type":"object","properties":{}}`,
+		g.runtime, g.entrypoint, `{"type":"object","properties":{}}`, nil,
 		[]gear.File{{Path: g.entrypoint, Content: g.source}}, d.wsID, orch.ID)
 	if err != nil {
 		t.Fatalf("forge the %q gear: %v", g.name, err)

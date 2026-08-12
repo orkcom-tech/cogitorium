@@ -126,7 +126,7 @@ func (i *install) forgeApproved(name, description, content string, wsID int64) g
 	i.t.Helper()
 	ctx := context.Background()
 	g, err := i.stores.Gears.Forge(ctx, name, description, []string{"text"}, "python", "main.py",
-		`{"type":"object"}`, []gear.File{{Path: "main.py", Content: content, Encoding: gear.EncodingUTF8}}, wsID, 0)
+		`{"type":"object"}`, nil, []gear.File{{Path: "main.py", Content: content, Encoding: gear.EncodingUTF8}}, wsID, 0)
 	if err != nil {
 		i.t.Fatalf("forge gear %q: %v", name, err)
 	}

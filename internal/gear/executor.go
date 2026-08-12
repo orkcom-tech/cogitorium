@@ -8,14 +8,18 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/orkcom-tech/cogitorium/internal/gearnet"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
+	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/workdir"
 )
 
@@ -44,15 +48,30 @@ type Executor struct {
 	// API keys out of it — a subprocess cannot be stopped from that, since
 	// it holds the server's own filesystem access.
 	sandbox sandbox.Runner
+	// env resolves the names a gear declared into the values to inject. nil
+	// means this server has no such source at all, and a gear that declares a
+	// name is then refused rather than run without it.
+	env *secrets.Resolver
+	// gate carries the traffic of a gear the operator granted the network, and
+	// records every connection. nil means this server has no gate, and a
+	// granted gear is then refused rather than run with an unrecorded network.
+	gate *gearnet.Gate
 }
 
-func NewExecutor(store *Store, dataDir string, sb sandbox.Runner) *Executor {
+func NewExecutor(store *Store, dataDir string, sb sandbox.Runner, env *secrets.Resolver, gate *gearnet.Gate) *Executor {
 	if sb == nil {
 		slog.Warn("gears will run as unsandboxed subprocesses with this server's file access — " +
 			"an approved gear can read the database, including provider API keys; " +
 			"install Docker or set sandbox: docker to isolate them")
 	}
-	return &Executor{store: store, baseDir: filepath.Join(dataDir, "gears"), dataDir: dataDir, sandbox: sb}
+	return &Executor{
+		store:   store,
+		baseDir: filepath.Join(dataDir, "gears"),
+		dataDir: dataDir,
+		sandbox: sb,
+		env:     env,
+		gate:    gate,
+	}
 }
 
 // Backend names how gears are currently executed, so the operator can see
@@ -114,6 +133,11 @@ func command(g Gear) (string, []string) {
 type Caller struct {
 	AgentID     *int64
 	WorkspaceID *int64
+	// AgentName is carried so the connection log can name who a request was
+	// made for. The id alone is not enough: that log has no foreign key, on
+	// purpose, so a row outlives the agent — and SQLite recycles rowids, so an
+	// id read a month later may belong to somebody else entirely.
+	AgentName string
 	// DryRun lets the operator execute a gear that is not yet approved —
 	// so that approval is an informed decision rather than a leap of faith.
 	// Agents never set this.
@@ -185,6 +209,26 @@ func (e *Executor) run(ctx context.Context, g Gear, argsJSON string, files []str
 		}
 	}
 
+	// Resolved before anything is materialised, for the same reason the
+	// interpreter is checked there: a gear that cannot be given what it
+	// declared has not run, and must not appear in the audit trail as a run
+	// that happened.
+	env, red, err := e.resolveEnv(ctx, g, caller)
+	if err != nil {
+		return Result{}, err
+	}
+
+	// The network is the other half of the same approval, opened here for the
+	// same reason and before the same line: a run that cannot be given what it
+	// was granted has not run, and must not appear in the audit trail as one
+	// that did. Closing the ticket cuts every connection still open — a gear
+	// whose process has been killed must not leave a tunnel carrying bytes.
+	ticket, err := e.openNetwork(g, caller)
+	if err != nil {
+		return Result{}, err
+	}
+	defer ticket.Close()
+
 	dir, fc, cleanup, err := e.prepare(ctx, g, files, caller)
 	if err != nil {
 		return Result{}, err
@@ -199,6 +243,12 @@ func (e *Executor) run(ctx context.Context, g Gear, argsJSON string, files []str
 		argsJSON = "{}"
 	}
 
+	// The live tap is wrapped BEFORE the run, not the output cleaned after it:
+	// a watching operator's screen is a place a secret would otherwise reach
+	// ahead of the redacted record. flushTap releases the tail the wrapper holds
+	// back while it waits to see whether a secret straddles two chunks.
+	onOutput, flushTap := red.Tap(onOutput)
+
 	var (
 		res     Result
 		elapsed time.Duration
@@ -207,9 +257,23 @@ func (e *Executor) run(ctx context.Context, g Gear, argsJSON string, files []str
 	// From here a process was started, or was attempted with everything needed
 	// to start it present — so everything below records a run that happened.
 	if e.sandbox != nil {
-		res, elapsed, runErr = e.execSandboxed(ctx, g, dir, argsJSON, timeout, fc, onOutput)
+		res, elapsed, runErr = e.execSandboxed(ctx, g, dir, argsJSON, timeout, env, ticket, fc, onOutput)
 	} else {
-		res, elapsed, runErr = e.execSubprocess(ctx, g, dir, argsJSON, timeout, onOutput)
+		res, elapsed, runErr = e.execSubprocess(ctx, g, dir, argsJSON, timeout, env, ticket, onOutput)
+	}
+	flushTap()
+
+	// Everything that leaves this function passes through here, and this is the
+	// only place it does: the agent's tool result, the operator's stream, the
+	// recorded run, the log lines below and the error itself all read these
+	// fields. A gear that prints its own credential — by accident, in a stack
+	// trace, or on purpose — gets [redacted] in all of them.
+	//
+	// It cannot stop the gear from SENDING the value somewhere; nothing can,
+	// and the plan says so. It stops the value from being published by us.
+	if red.Active() {
+		res.Stdout, res.Stderr = red.String(res.Stdout), red.String(res.Stderr)
+		runErr = red.Error(runErr)
 	}
 
 	// Collected whatever happened: a gear that wrote its result and then exited
@@ -217,7 +281,20 @@ func (e *Executor) run(ctx context.Context, g Gear, argsJSON string, files []str
 	if fc != nil {
 		produced, ignored, cerr := collectOut(dir, fc.root, fc.destRel)
 		res.Produced, res.Ignored = produced, ignored
+		// File names go into the chat and into the record exactly as stdout
+		// does, and a gear chooses them. A gear that writes out/<the key>.json
+		// would otherwise publish the key in a field nobody thought to check.
+		if red.Active() {
+			for i := range res.Produced {
+				res.Produced[i].Name = red.String(res.Produced[i].Name)
+				res.Produced[i].Path = red.String(res.Produced[i].Path)
+			}
+			res.Ignored = red.Strings(res.Ignored)
+		}
 		if cerr != nil {
+			// Redacted for the same reason the names above are: this message
+			// quotes the paths the gear chose.
+			cerr = red.Error(cerr)
 			// Attached to the result as well as returned, so the caller learns
 			// what happened to its files even when a run error takes priority.
 			res.Ignored = append(res.Ignored, cerr.Error())
@@ -235,7 +312,7 @@ func (e *Executor) run(ctx context.Context, g Gear, argsJSON string, files []str
 
 	slog.Info("gear executed", "gear", g.Name, "version", g.Version, "backend", e.Backend(),
 		"exit_code", res.ExitCode, "timed_out", res.TimedOut, "dry_run", caller.DryRun,
-		"duration_ms", elapsed.Milliseconds())
+		"network", g.NetworkGranted, "duration_ms", elapsed.Milliseconds())
 
 	// Recorded even when the caller's context is done: an execution that
 	// happened must appear in the operator's audit trail.
@@ -247,6 +324,136 @@ func (e *Executor) run(ctx context.Context, g Gear, argsJSON string, files []str
 		slog.Error("could not record gear run", "gear", g.Name, "err", err)
 	}
 	return res, runErr
+}
+
+// resolveEnv turns the names a gear declared into the values to inject, and
+// into the redactor that keeps those values out of everything the run produces.
+//
+// The sandbox is given EXACTLY these names and nothing else — the server's own
+// environment is never inherited, so a gear sees the credentials it was
+// approved to hold and no others.
+//
+// A name that does not resolve stops the run, naming it. The alternative, an
+// empty string, fails later and elsewhere: inside somebody's HTTP client, with
+// a 401 and no hint that the credential was never there.
+func (e *Executor) resolveEnv(ctx context.Context, g Gear, caller Caller) (map[string]string, *secrets.Redactor, error) {
+	if len(g.EnvNames) == 0 {
+		return nil, nil, nil
+	}
+	// A dry run gets NO named values, secret or otherwise.
+	//
+	// The dry run exists so an operator can execute a gear BEFORE approving it,
+	// which means it is the one path that runs code nobody has agreed to. Handing
+	// it the install's credentials makes the approval decorative: an agent forges
+	// a gear that declares API_KEY and prints it, the operator presses the button
+	// that is meant to be the safe way to look, and the key is out — past the
+	// redactor, since the gear can encode it however it likes.
+	//
+	// So the dry run answers the question it is for — does this code run, what
+	// does it do with its arguments — and says plainly that the values are not
+	// there. A gear that cannot be judged without a live credential is a gear
+	// whose approval is a judgement about the source, which is what the operator
+	// is reading at that moment anyway.
+	if caller.DryRun {
+		slog.Info("dry run: named values withheld", "gear", g.Name, "names", g.EnvNames)
+		env := make(map[string]string, len(g.EnvNames))
+		for _, name := range g.EnvNames {
+			env[name] = ""
+		}
+		return env, nil, nil
+	}
+	if e.env == nil {
+		return nil, nil, fmt.Errorf("gear %q asks to be given %v, and this server has no store of named values to resolve them from — "+
+			"this is a build or configuration fault rather than something the gear did", g.Name, g.EnvNames)
+	}
+	values, err := e.env.Resolve(ctx, caller.WorkspaceID, g.EnvNames)
+	if err != nil {
+		return nil, nil, fmt.Errorf("gear %q cannot run: %w", g.Name, err)
+	}
+
+	env := make(map[string]string, len(values))
+	var toRedact []string
+	sources := make([]string, 0, len(values))
+	for _, v := range values {
+		env[v.Name] = v.Value
+		if v.IsSecret() {
+			toRedact = append(toRedact, v.Value)
+		}
+		sources = append(sources, v.Name+" from "+v.Source)
+	}
+	// Which names, from which source, for whom — and no values. This is the
+	// operator's record of a credential having been handed to running code.
+	slog.Info("gear given named values", "gear", g.Name, "version", g.Version,
+		"names", g.EnvNames, "resolved", sources, "secrets", len(toRedact))
+	return env, secrets.NewRedactor(toRedact...), nil
+}
+
+// openNetwork turns the operator's grant into a ticket for this run, or into a
+// refusal naming what is missing. A gear that was not granted the network gets
+// no ticket, and nil is a working ticket in every sense that matters here: it
+// adds no environment, and closing it does nothing.
+//
+// The grant is never inferred and never widened. A gear reaches the network
+// because an operator ticked a box while reading its source, or it does not
+// reach the network.
+func (e *Executor) openNetwork(g Gear, caller Caller) (*gearnet.Ticket, error) {
+	if !g.NetworkGranted {
+		return nil, nil
+	}
+	if e.gate == nil {
+		return nil, fmt.Errorf("gear %q was granted the network and this server has no gate to carry it through, "+
+			"so it was not run — this is a build or configuration fault rather than something the gear did", g.Name)
+	}
+	t, err := e.gate.Open(gearnet.Grant{
+		GearID: g.ID, GearName: g.Name, Version: g.Version,
+		WorkspaceID: caller.WorkspaceID, AgentID: caller.AgentID, AgentName: caller.AgentName,
+		Hosts: g.NetworkHosts,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("gear %q cannot run: %w", g.Name, err)
+	}
+	// The grant, at the moment it is used, in the operator's own words. "anywhere"
+	// is said out loud rather than shown as an empty list, because an empty list
+	// in a log reads as "nothing" and means the opposite.
+	where := strings.Join(g.NetworkHosts, ", ")
+	if where == "" {
+		where = "anywhere"
+	}
+	slog.Info("gear given the network", "gear", g.Name, "version", g.Version,
+		"destinations", where, "workspace_id", caller.WorkspaceID, "agent", caller.AgentName)
+	return t, nil
+}
+
+// withEnv adds the resolved names to the fixed environment a gear always gets.
+//
+// The fixed entries are written LAST so they cannot be displaced: a declared
+// name can never be PATH or HOME (secrets.ValidName refuses those, and every
+// COGITORIUM_ name), and writing them in this order means that even if that
+// rule were ever loosened the sandbox's own environment would still win.
+// fixedEnv is the environment the sandbox itself owns: the entries above plus,
+// for a granted run, the proxy the gate hands out. hostname is how this run
+// reaches the gate — a container has to name the host it is running on, a
+// subprocess is already on it.
+//
+// It goes in the FIXED half rather than beside the resolved names on purpose:
+// withEnv writes fixed last, so a gear cannot point its own HTTP_PROXY
+// somewhere the connection log does not see.
+func fixedEnv(base map[string]string, ticket *gearnet.Ticket, hostname string) map[string]string {
+	if ticket != nil {
+		maps.Copy(base, ticket.Env(hostname))
+	}
+	return base
+}
+
+func withEnv(fixed map[string]string, resolved map[string]string) map[string]string {
+	out := make(map[string]string, len(fixed)+len(resolved))
+	for k, v := range resolved {
+		out[k] = v
+	}
+	for k, v := range fixed {
+		out[k] = v
+	}
+	return out
 }
 
 // fileCall is what a call that carries files needs to remember for afterwards:
@@ -329,7 +536,7 @@ func (e *Executor) prepare(ctx context.Context, g Gear, files []string, caller C
 // courtesy, not a boundary — the process runs as the account that owns those
 // files and can chmod them back. The boundary is the sandbox, which is why
 // NewExecutor says so out loud when there isn't one.
-func (e *Executor) execSubprocess(ctx context.Context, g Gear, dir, argsJSON string, timeout time.Duration, onOutput func(stream, chunk string)) (Result, time.Duration, error) {
+func (e *Executor) execSubprocess(ctx context.Context, g Gear, dir, argsJSON string, timeout time.Duration, env map[string]string, ticket *gearnet.Ticket, onOutput func(stream, chunk string)) (Result, time.Duration, error) {
 	// The interpreter is known to exist: run checked before materialising, so
 	// that "this machine cannot run this gear" is not recorded as a run.
 	bin, preArgs := interpreter(g.Runtime)
@@ -358,12 +565,21 @@ func (e *Executor) execSubprocess(ctx context.Context, g Gear, dir, argsJSON str
 	defer releaseGroup()
 	cmd.WaitDelay = 3 * time.Second
 	// Keep the environment minimal: a forged tool has no business reading
-	// the server's environment (which may hold provider API keys).
-	cmd.Env = []string{
-		"PATH=" + os.Getenv("PATH"),
-		"HOME=" + dir,
-		"COGITORIUM_GEAR=" + g.Name,
-	}
+	// the server's environment (which may hold provider API keys). What the
+	// gear DECLARED is added to that minimum, and nothing else is — the
+	// server's own variables are still not inherited here.
+	//
+	// A note this path has to make, because it is the one place the guarantee is
+	// weaker: there is no --network none for a subprocess. It holds the server's
+	// network exactly as it holds the server's files, granted or not. The proxy
+	// is still given to a granted gear so its traffic is checked and recorded
+	// like everyone else's; for an ungranted one, the sandbox is what would have
+	// stopped it, and NewExecutor already says out loud that there isn't one.
+	cmd.Env = envList(withEnv(fixedEnv(map[string]string{
+		"PATH":            os.Getenv("PATH"),
+		"HOME":            dir,
+		"COGITORIUM_GEAR": g.Name,
+	}, ticket, ""), env))
 
 	// Start and Wait rather than Run: the containment hook has to land between
 	// the two, and Run does not offer a seam.
@@ -406,17 +622,23 @@ func (e *Executor) execSubprocess(ctx context.Context, g Gear, dir, argsJSON str
 //
 // A call that carries files opts into the stricter shape: the code and in/ are
 // root's and read-only, out/ is the sandbox user's, and out/ is what comes back.
-func (e *Executor) execSandboxed(ctx context.Context, g Gear, dir, argsJSON string, timeout time.Duration, fc *fileCall, onOutput func(stream, chunk string)) (Result, time.Duration, error) {
+func (e *Executor) execSandboxed(ctx context.Context, g Gear, dir, argsJSON string, timeout time.Duration, env map[string]string, ticket *gearnet.Ticket, fc *fileCall, onOutput func(stream, chunk string)) (Result, time.Duration, error) {
 	bin, args := command(g)
 	spec := sandbox.Spec{
-		Dir:            dir,
-		Command:        bin,
-		Args:           args,
-		Stdin:          strings.NewReader(argsJSON),
-		Env:            map[string]string{"COGITORIUM_GEAR": g.Name, "HOME": "/tmp"},
+		Dir:     dir,
+		Command: bin,
+		Args:    args,
+		Stdin:   strings.NewReader(argsJSON),
+		Env: withEnv(fixedEnv(map[string]string{"COGITORIUM_GEAR": g.Name, "HOME": "/tmp"},
+			ticket, sandbox.HostAlias), env),
 		TimeoutSeconds: int(timeout.Seconds()),
-		OnOutput:       onOutput,
-		Writable:       true,
+		// Declared for years and never set by anybody, which meant --network
+		// none on every run. This is the caller the flag was waiting for: a
+		// gear reaches the network when, and only when, the operator granted it
+		// while reading the gear's source.
+		Network:  g.NetworkGranted,
+		OnOutput: onOutput,
+		Writable: true,
 	}
 	if fc != nil {
 		spec.Writable = false
@@ -489,6 +711,17 @@ func (e *Executor) materialize(ctx context.Context, g Gear, dir string) error {
 		}
 	}
 	return nil
+}
+
+// envList flattens the environment for exec, sorted so that two identical runs
+// produce identical argv-adjacent state and a diff of two runs is readable.
+func envList(env map[string]string) []string {
+	out := make([]string, 0, len(env))
+	for k, v := range env {
+		out = append(out, k+"="+v)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func truncate(s string) string {

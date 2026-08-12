@@ -79,7 +79,15 @@ func (d *Docker) createArgs(spec Spec, interactive bool) []string {
 	if interactive {
 		a = append(a, "-t")
 	}
-	if !spec.Network {
+	if spec.Network {
+		// The gate that checks and records a granted gear's traffic runs in the
+		// server's own process, so the container has to have a name for the
+		// machine it is running on. Docker Desktop provides this name already;
+		// on Linux it does not exist unless it is asked for, and a gear whose
+		// proxy address does not resolve fails with a DNS error that says
+		// nothing about why.
+		a = append(a, "--add-host", HostAlias+":host-gateway")
+	} else {
 		a = append(a, "--network", "none")
 	}
 	for k, v := range spec.Env {

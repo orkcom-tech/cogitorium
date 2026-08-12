@@ -218,7 +218,11 @@ func importGears(ctx context.Context, s Stores, b Bundle, ws workspace.Workspace
 		// The new workspace is recorded as the gear's origin, and no agent as
 		// its author: nobody here forged it, and the workspace it arrived
 		// with is the honest answer to "where did this come from".
-		forged, err := s.Gears.Forge(ctx, g.Name, g.Description, g.Tags, g.Runtime, g.Entrypoint, g.ArgsSchema, files, ws.ID, 0)
+		// The declared names come across; what they mean does not. The gear
+		// arrives pending, as every imported gear does, so the operator reads
+		// both halves — this source, and these named credentials — before
+		// anything can run.
+		forged, err := s.Gears.Forge(ctx, g.Name, g.Description, g.Tags, g.Runtime, g.Entrypoint, g.ArgsSchema, g.EnvNames, files, ws.ID, 0)
 		if err != nil {
 			return fmt.Errorf("workspace %q was created (id %d) but its gear %q could not be: %w — delete the workspace and fix the bundle, or import it again without gears",
 				ws.Name, ws.ID, g.Name, err)

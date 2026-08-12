@@ -35,7 +35,7 @@ func TestAPaddedGearNameCannotSupersedeAnApprovedGear(t *testing.T) {
 			i := newInstall(t)
 
 			const source = "print(len(input().split()))"
-			local, err := i.stores.Gears.Forge(ctx, "wordcount", "counts words", nil, "python", "main.py", "",
+			local, err := i.stores.Gears.Forge(ctx, "wordcount", "counts words", nil, "python", "main.py", "", nil,
 				[]gear.File{{Path: "main.py", Content: source, Encoding: gear.EncodingUTF8}}, 0, 0)
 			if err != nil {
 				t.Fatalf("forge the local gear: %v", err)

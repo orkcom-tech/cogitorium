@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"io/fs"
 	"os"
@@ -13,9 +14,11 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
+	"github.com/orkcom-tech/cogitorium/internal/gearnet"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
+	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/store"
 	"github.com/orkcom-tech/cogitorium/internal/workdir"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
@@ -28,6 +31,31 @@ import (
 // Everything here goes through dispatchTool where the rule under test lives at
 // dispatch, because "not offered" and "refused" are different claims and only
 // one of them survives a model inventing a tool name.
+
+// envResolver builds the real lookup over the test's own database: no
+// encryption key and no mounted directories, which is the ordinary shape of an
+// install that has never set one. A gear declaring no names never reaches it.
+func envResolver(t *testing.T, db *sql.DB) *secrets.Resolver {
+	t.Helper()
+	r, err := secrets.NewResolver(secrets.NewStore(db, nil), "", "")
+	if err != nil {
+		t.Fatalf("build the named-value resolver: %v", err)
+	}
+	return r
+}
+
+// netGate opens a real outward gate over the test's own database, for the same
+// reason envResolver builds a real resolver: the executor under test must be
+// the one that ships, not one missing a branch.
+func netGate(t *testing.T, db *sql.DB) *gearnet.Gate {
+	t.Helper()
+	g, err := gearnet.New(db, "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("open the gear network gate: %v", err)
+	}
+	t.Cleanup(func() { g.Close() })
+	return g
+}
 
 // filesFixture is a real engine over a real SQLite database, with a real
 // workspace directory on disk. contextd is not installed — the ordinary case —
@@ -75,7 +103,8 @@ func newFilesFixture(t *testing.T) *filesFixture {
 
 	gears := gear.NewStore(db)
 	cs := contextstore.New(filepath.Join(t.TempDir(), "contextd-not-installed"))
-	e := New(ws, cat, cs, gears, gear.NewExecutor(gears, dataDir, nil), library.NewStore(db), nil, nil, dataDir)
+	e := New(ws, cat, cs, gears, gear.NewExecutor(gears, dataDir, nil, envResolver(t, db), netGate(t, db)),
+		library.NewStore(db), nil, nil, dataDir)
 
 	orch, err := e.orchestrator(ctx, space.ID)
 	if err != nil {
@@ -371,7 +400,7 @@ func TestUnattendedRunRefusesTheCatalogueReadersAtDispatch(t *testing.T) {
 	// Something for the readers to find, so a refusal cannot be an empty
 	// catalogue in disguise.
 	if _, err := f.gears.Forge(context.Background(), "somebody_elses_gear",
-		"a gear forged in another workspace", nil, "bash", "main.sh", "",
+		"a gear forged in another workspace", nil, "bash", "main.sh", "", nil,
 		[]gear.File{{Path: "main.sh", Content: "echo hi"}}, 0, 0); err != nil {
 		t.Fatalf("forge: %v", err)
 	}
@@ -526,7 +555,7 @@ func TestAGearHandedADeliveredFileLatchesTheTurnAndReportsWhatItMade(t *testing.
 	f.put(workdir.InletDir+"/tickets/12.csv", []byte("id,summary\n1,printer on fire\n"))
 
 	ctx := context.Background()
-	g, err := f.gears.Forge(ctx, "summarize", "counts the lines it is given", nil, "bash", "main.sh", "",
+	g, err := f.gears.Forge(ctx, "summarize", "counts the lines it is given", nil, "bash", "main.sh", "", nil,
 		[]gear.File{{Path: "main.sh", Content: "set -eu\nwc -l < in/inlets/tickets/12.csv | tr -d ' ' > out/count.txt\necho counted\n"}},
 		f.wsID, f.orch.ID)
 	if err != nil {

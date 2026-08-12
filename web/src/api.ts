@@ -443,8 +443,12 @@ export const api = {
       const qs = p.toString()
       return req<Gear[]>(`/api/v1/gears${qs ? `?${qs}` : ''}`)
     },
+    // One request, because it is one screen and one decision: the source, the
+    // credentials this code would be given, and whether it may reach out. Two
+    // requests that can fail independently is a way of showing them apart, and
+    // shown apart the decision is made blind.
     get: (id: number, version?: number) =>
-      req<{ gear: Gear; files: GearFile[]; version: number }>(
+      req<{ gear: Gear; files: GearFile[]; version: number; env: EnvStatus[] }>(
         `/api/v1/gears/${id}${version ? `?version=${version}` : ''}`,
       ),
     create: (g: {
@@ -456,14 +460,24 @@ export const api = {
       files?: GearFile[]
       tags?: string[]
       args_schema?: string
+      env_names?: string[]
     }) => req<Gear>('/api/v1/gears', { method: 'POST', body: JSON.stringify(g) }),
-    setStatus: (id: number, status: 'pending' | 'approved' | 'disabled') =>
-      req<Gear>(`/api/v1/gears/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    // Approving and granting travel together, for the same reason they are
+    // shown together: between two requests there is a moment when the code is
+    // runnable and the operator has not finished saying what it may do.
+    setStatus: (id: number, status: 'pending' | 'approved' | 'disabled', network?: GearNetwork) =>
+      req<Gear>(`/api/v1/gears/${id}`, { method: 'PATCH', body: JSON.stringify({ status, network }) }),
+    setNetwork: (id: number, network: GearNetwork) =>
+      req<Gear>(`/api/v1/gears/${id}`, { method: 'PATCH', body: JSON.stringify({ network }) }),
     setTimeout: (id: number, timeout_seconds: number) =>
       req<Gear>(`/api/v1/gears/${id}`, { method: 'PATCH', body: JSON.stringify({ timeout_seconds }) }),
-    run: (id: number, args: unknown) =>
-      req<GearRunResult>(`/api/v1/gears/${id}/run`, { method: 'POST', body: JSON.stringify({ args }) }),
+    // network is the grant being CONSIDERED, so a gear whose whole job is to
+    // fetch something can still be judged by what it does. Nothing is granted
+    // by trying it; the connections are recorded like any other.
+    run: (id: number, args: unknown, network?: GearNetwork) =>
+      req<GearRunResult>(`/api/v1/gears/${id}/run`, { method: 'POST', body: JSON.stringify({ args, network }) }),
     runs: (id: number) => req<GearRun[]>(`/api/v1/gears/${id}/runs`),
+    connections: (id: number) => req<GearConnection[]>(`/api/v1/gears/${id}/connections`),
     remove: (id: number) => req<void>(`/api/v1/gears/${id}`, { method: 'DELETE' }),
     bindings: (wsId: number) => req<GearBinding[]>(`/api/v1/workspaces/${wsId}/gears`),
     bind: (wsId: number, gearId: number, agentId: number | null) =>
@@ -472,6 +486,31 @@ export const api = {
         body: JSON.stringify({ gear_id: gearId, agent_id: agentId }),
       }),
     unbind: (bindingId: number) => req<void>(`/api/v1/gear-bindings/${bindingId}`, { method: 'DELETE' }),
+  },
+  // The named values a gear is given at run time. A gear is given NAMES and
+  // reads the VALUES from its own environment; nothing here ever sends a
+  // secret's value back, in either direction, after it has been set.
+  //
+  // The install-wide scope is the administrator's, on the same reasoning as
+  // gear approval: one name here reaches every workspace. A workspace's own
+  // overrides go through the same access rule as everything else in it.
+  env: {
+    list: () => req<{ values: EnvRecord[]; sources: EnvSources }>('/api/v1/env'),
+    set: (name: string, v: { kind: string; value: string; description?: string }) =>
+      req<EnvRecord>(`/api/v1/env/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(v) }),
+    remove: (name: string) => req<void>(`/api/v1/env/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+    listWorkspace: (wsId: number) =>
+      req<{ values: EnvRecord[]; sources: EnvSources }>(`/api/v1/workspaces/${wsId}/env`),
+    setWorkspace: (wsId: number, name: string, v: { kind: string; value: string; description?: string }) =>
+      req<EnvRecord>(`/api/v1/workspaces/${wsId}/env/${encodeURIComponent(name)}`, {
+        method: 'PUT',
+        body: JSON.stringify(v),
+      }),
+    // Removing an override uncovers the install-wide value again rather than
+    // leaving a hole: a gear here does not stop working, it starts seeing the
+    // other value. Worth knowing before deleting.
+    removeWorkspace: (wsId: number, name: string) =>
+      req<void>(`/api/v1/workspaces/${wsId}/env/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   },
   instructions: {
     list: (q = '', tag = '') => {
@@ -763,9 +802,73 @@ export type Gear = {
   runtime: string
   entrypoint: string
   args_schema: string
+  // The names this gear asks to be given at run time. Names only — a value
+  // never travels in this direction, which is what makes a gear safe to show.
+  env_names: string[]
+  // What the operator granted at approval: whether this code may reach out,
+  // and where. An empty hosts list with the grant on means anywhere.
+  network_granted: boolean
+  network_hosts: string[]
   status: 'pending' | 'approved' | 'disabled'
   timeout_seconds: number
   updated_at: string
+}
+
+export type GearNetwork = { granted: boolean; hosts: string[] }
+
+// What one declared name would resolve to on this install: whether anything
+// supplies it, which kind it would be, and which source would win. Never a
+// value — the type has nowhere to put one, and that is deliberate.
+export type EnvStatus = { name: string; found: boolean; kind: string; source: string }
+
+// One named value as the interface sees it. `value` carries a variable's value
+// and is ALWAYS empty for a secret: a secret is shown once, when it is set, and
+// never again. It is not optional, so "this is a secret" and "the server did
+// not send this field" stay tellable apart.
+export type EnvRecord = {
+  id: number
+  workspace_id: number | null
+  name: string
+  kind: 'variable' | 'secret'
+  value: string
+  description: string
+  created_at: string
+  updated_at: string
+}
+
+// Whether a secret can be stored here at all, and which directories are also
+// being read. An operator looking at a value that is not the one they set has
+// to know a directory exists before they can suspect it.
+export type EnvSources = { can_store_secrets: boolean; variables_dir: string; secrets_dir: string }
+
+// One connection a granted gear opened, whatever became of it. There is no
+// path, no query string and no header here on purpose: a gear that put a
+// credential in a URL would otherwise have written it into the audit log.
+export type GearConnection = {
+  id: number
+  gear_name: string
+  version: number
+  workspace_id: number | null
+  agent_name: string
+  host: string
+  port: number
+  method: string
+  // The grant as it was AT THE TIME, not as it is now — the gear's list will
+  // change, and the question afterwards is what the rule was.
+  allowed: string[]
+  state:
+    | 'open'
+    | 'closed'
+    | 'failed'
+    | 'interrupted'
+    | 'refused_destination'
+    | 'refused_local'
+    | 'refused_no_grant'
+    | 'refused_invalid'
+  bytes_sent: number
+  bytes_received: number
+  error: string
+  created_at: string
 }
 
 export type GearRun = {
@@ -861,11 +964,15 @@ export async function gearRunStream(
   args: unknown,
   onEvent: (ev: GearRunEvent) => void,
   signal?: AbortSignal,
+  // The grant being considered, so the run the operator judges is the run they
+  // are about to allow. Left out, the gear runs with no network, which is what
+  // every dry run did before there was anything to grant.
+  network?: GearNetwork,
 ): Promise<void> {
   const r = await fetch(session.url(`/api/v1/gears/${gearId}/run?stream=1`), {
     method: 'POST',
     headers: session.headers({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ args }),
+    body: JSON.stringify({ args, network }),
     signal,
   })
   if (!r.ok || !r.body) {

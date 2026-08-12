@@ -139,6 +139,18 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 			"tags":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "classification tags, e.g. ['data', 'csv']"},
 			"args_schema": str("optional JSON Schema describing the arguments the gear accepts on stdin"),
 			"entrypoint":  str("optional; only when supplying `files` instead of `code`"),
+			"env_names": map[string]any{
+				"type":  "array",
+				"items": map[string]any{"type": "string"},
+				// Written for the model, in the second person, because this is
+				// the one place the rule can be stated before it is broken: a
+				// gear that asks for a value and prints it has published it, and
+				// an agent that asks the operator to paste a key into the chat
+				// has done the same thing by hand.
+				"description": "optional; names of credentials or settings the gear reads from its environment at run time, e.g. ['API_KEY', 'BASE_URL']. " +
+					"Use A-Z, digits and underscores. You never see the values and must never ask anyone for one — the operator sets what each name means, " +
+					"and the sandbox puts exactly these names in the gear's environment. Anything the gear prints has them removed.",
+			},
 			"files": map[string]any{
 				"type":        "array",
 				"description": "optional; use instead of `code` only for a multi-file gear",
@@ -281,9 +293,29 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 				slog.Warn("gear has unparseable args_schema; offering it with an empty schema", "gear", g.Name, "err", err)
 			}
 		}
+		// The names a gear holds are part of what it is: an agent choosing
+		// between two gears needs to know which one already has the credential.
+		// Names only — the value is never in a prompt, because a prompt's
+		// answer leaves the building.
+		desc := fmt.Sprintf("%s (gear v%d, forged in %s)", g.Description, g.Version, originLabel(g))
+		if len(g.EnvNames) > 0 {
+			desc += fmt.Sprintf(". It is given %s from the environment; you never see their values.",
+				strings.Join(g.EnvNames, ", "))
+		}
+		// And whether it can reach out, for the same reason: choosing between
+		// two gears means knowing which one can actually fetch the thing. The
+		// destinations are named because "has the network" and "may reach
+		// api.example.com" lead to different choices.
+		if g.NetworkGranted {
+			if len(g.NetworkHosts) > 0 {
+				desc += " The operator allowed it to reach " + strings.Join(g.NetworkHosts, ", ") + "."
+			} else {
+				desc += " The operator allowed it to reach the network."
+			}
+		}
 		tools = append(tools, llm.Tool{
 			Name:        gearToolPrefix + g.Name,
-			Description: fmt.Sprintf("%s (gear v%d, forged in %s)", g.Description, g.Version, originLabel(g)),
+			Description: desc,
 			InputSchema: withFilesArg(schema, g.Name),
 		})
 	}
@@ -655,6 +687,10 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 		if err != nil {
 			return "", err
 		}
+		envNames, err := args.strSlice("env_names")
+		if err != nil {
+			return "", err
+		}
 		var files []gear.File
 		if err := args.decode("files", &files); err != nil {
 			return "", err
@@ -670,15 +706,29 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 		if entrypoint == "" && len(files) == 1 {
 			entrypoint = files[0].Path
 		}
-		g, err := e.gears.Forge(ctx, name, description, tags, runtime, entrypoint, schema, files, wsID, agent.ID)
+		g, err := e.gears.Forge(ctx, name, description, tags, runtime, entrypoint, schema, envNames, files, wsID, agent.ID)
 		if err != nil {
 			return "", err
 		}
-		return marshal(map[string]any{
-			"gear": g,
-			"notice": "Registered in the gear catalog and bound to you, but it cannot run until the operator approves it. " +
-				"Tell the operator what it does so they can review and approve it.",
-		})
+		notice := "Registered in the gear catalog and bound to you, but it cannot run until the operator approves it. " +
+			"Tell the operator what it does so they can review and approve it."
+		if len(g.EnvNames) > 0 {
+			// Said back to the agent because the operator has to be told, and
+			// the agent is the only one in this conversation who can tell them.
+			// A gear that names a credential nobody has set fails on its first
+			// call, and the operator reads that failure with no idea it was
+			// their move.
+			notice += " It asks to be given " + strings.Join(g.EnvNames, ", ") +
+				" — tell the operator, who must set what those names mean before it can run."
+		}
+		// The network is not something a gear can ask for — the operator grants
+		// it while reading the source, and there is no field here to request it
+		// through. Saying so plainly is the difference between an agent telling
+		// the operator what its gear needs and an agent quietly forging a gear
+		// that fails on every call with a DNS error.
+		notice += " A gear has no network unless the operator grants it one at approval, and names the hosts it may " +
+			"reach; if this gear needs to reach something, say so and say where."
+		return marshal(map[string]any{"gear": g, "notice": notice})
 
 	case "list_gears":
 		tag, err := args.str("tag")
@@ -825,7 +875,8 @@ func (e *Engine) runGear(ctx context.Context, wsID int64, agent workspace.Agent,
 			}
 		}
 
-		res, err := e.gearExec.RunWithFiles(ctx, g, gearArgs, files, gear.Caller{AgentID: &agent.ID, WorkspaceID: &wsID})
+		res, err := e.gearExec.RunWithFiles(ctx, g, gearArgs, files,
+			gear.Caller{AgentID: &agent.ID, WorkspaceID: &wsID, AgentName: agent.Name})
 		if err != nil {
 			return "", err
 		}

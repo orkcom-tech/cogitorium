@@ -109,7 +109,7 @@ func TestEveryAttachedFileReachesAGearByItsPath(t *testing.T) {
 	// rather than counting is deliberate: a byte count would pass on a file
 	// that was truncated and re-padded, and what has to be true is that the
 	// gear opened the operator's file and not a description of it.
-	g, err := f.gears.Forge(ctx, "carry", "copies every file it is given", nil, "bash", "main.sh", "",
+	g, err := f.gears.Forge(ctx, "carry", "copies every file it is given", nil, "bash", "main.sh", "", nil,
 		[]gear.File{{Path: "main.sh", Content: "set -eu\nn=0\nfor p in $(find in -type f | sort); do\n  cp \"$p\" \"out/$(basename \"$p\")\"\n  n=$((n+1))\ndone\necho \"$n\"\n"}},
 		f.wsID, f.orch.ID)
 	if err != nil {

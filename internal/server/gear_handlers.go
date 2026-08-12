@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/orkcom-tech/cogitorium/internal/gear"
+	"github.com/orkcom-tech/cogitorium/internal/gearnet"
 )
 
 // failGear maps gear validation errors (bad timeout, bad runtime) to 400
@@ -61,7 +62,27 @@ func (s *Server) handleGetGear(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"gear": g, "files": files, "version": version})
+	// The named values go out beside the source, in the same response, because
+	// this is the request the approval screen makes. An operator can only be
+	// responsible for what they can see, and "this code" and "these
+	// credentials" shown apart is a decision made blind.
+	//
+	// Statuses, never values: whether this install can supply each name and
+	// which source would win. A gear naming something nothing supplies is a
+	// gear that cannot run, and learning that at approval beats learning it at
+	// three in the morning.
+	env, err := s.env.Describe(r.Context(), nil, g.EnvNames)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	// The network grant travels on the gear itself, so it is already here. This
+	// response is deliberately the whole approval screen in one request: the
+	// source, the credentials this code would be given, and whether it may reach
+	// out and where. The plan is explicit that shown apart, the decision is made
+	// blind — and two requests that can fail independently is a way of showing
+	// them apart.
+	writeJSON(w, http.StatusOK, map[string]any{"gear": g, "files": files, "version": version, "env": env})
 }
 
 // handleCreateGear lets the operator author or correct a gear directly.
@@ -76,6 +97,7 @@ func (s *Server) handleCreateGear(w http.ResponseWriter, r *http.Request) {
 		Code        string   `json:"code"`
 		Entrypoint  string   `json:"entrypoint"`
 		ArgsSchema  string   `json:"args_schema"`
+		EnvNames    []string `json:"env_names"`
 		Files       []struct {
 			Path     string `json:"path"`
 			Content  string `json:"content"`
@@ -119,7 +141,7 @@ func (s *Server) handleCreateGear(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// wsID/agentID 0: authored by the operator, not forged by an agent.
-	g, err := s.gears.Forge(r.Context(), in.Name, in.Description, in.Tags, in.Runtime, entrypoint, in.ArgsSchema, files, 0, 0)
+	g, err := s.gears.Forge(r.Context(), in.Name, in.Description, in.Tags, in.Runtime, entrypoint, in.ArgsSchema, in.EnvNames, files, 0, 0)
 	if err != nil {
 		fail(w, r, err)
 		return
@@ -133,8 +155,10 @@ func (s *Server) handleCreateGear(w http.ResponseWriter, r *http.Request) {
 // This deliberately bypasses the approval gate, which makes it code
 // execution available to any signed-in user. That is acceptable only
 // because it runs in the sandbox: the blast radius is a throwaway container
-// with no network and none of the server's files. Without a sandbox it is
-// refused outright rather than run with the server's own access.
+// with none of the server's files, and no network unless one is asked for
+// below — which is an administrator's request, because it is half of that
+// radius. Without a sandbox it is refused outright rather than run with the
+// server's own access.
 func (s *Server) handleRunGear(w http.ResponseWriter, r *http.Request) {
 	if !s.gearExec.Sandboxed() {
 		writeError(w, http.StatusForbidden,
@@ -147,6 +171,12 @@ func (s *Server) handleRunGear(w http.ResponseWriter, r *http.Request) {
 	}
 	var in struct {
 		Args json.RawMessage `json:"args"`
+		// The grant the operator is CONSIDERING, so that "try it before
+		// approving it" still works for a gear whose whole job is to fetch
+		// something. Without this the dry run is the one thing a network gear
+		// cannot be judged by: the grant does not exist until approval, and
+		// approval is the decision the dry run exists to inform.
+		Network *networkInput `json:"network"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
@@ -155,6 +185,26 @@ func (s *Server) handleRunGear(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fail(w, r, err)
 		return
+	}
+	if in.Network != nil && in.Network.Granted {
+		// A dry run is open to any signed-in user because the sandbox is the
+		// blast radius — a throwaway container holding none of this server's
+		// files and, until here, no network at all. Handing it one takes half of
+		// that away, so this half is the administrator's, exactly like the
+		// approval it is standing in for.
+		if _, ok := requireAdmin(w, r); !ok {
+			return
+		}
+		hosts, err := gearnet.NormalizeHosts(in.Network.Hosts)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		// Applied to the copy this run uses and never written down: nothing is
+		// granted by trying it. The connections it makes are recorded like any
+		// other, which is the point — the log is part of what the operator is
+		// deciding on.
+		g.NetworkGranted, g.NetworkHosts = true, hosts
 	}
 	args := "{}"
 	if len(in.Args) > 0 {
@@ -240,10 +290,26 @@ func (s *Server) handleListGearRuns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, runs)
 }
 
+// networkInput is the operator's answer to "may this code reach out, and
+// where". An empty Hosts with Granted true is anywhere, and that is a choice
+// the operator is allowed to make — the list is what makes the connection log
+// auditable afterwards, not a gate on them.
+type networkInput struct {
+	Granted bool     `json:"granted"`
+	Hosts   []string `json:"hosts"`
+}
+
 // handleSetGearStatus is the operator's approval gate — the only path that
 // can make agent-authored code runnable. The catalog is global, so an
 // approval here reaches every agent the gear is bound to in every
 // workspace; that is an administrator's decision, not a member's.
+//
+// The network grant arrives through the same route and in the same request as
+// the approval, which is not tidiness: it is one decision. The screen shows the
+// source, the credentials and the destinations together, and this is what that
+// screen submits — approving with one request and granting with a second would
+// leave a window in which the code is runnable and the operator has not
+// finished deciding what it may do.
 func (s *Server) handleSetGearStatus(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requireAdmin(w, r); !ok {
 		return
@@ -253,39 +319,70 @@ func (s *Server) handleSetGearStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Status         *string `json:"status"`
-		TimeoutSeconds *int    `json:"timeout_seconds"`
+		Status         *string       `json:"status"`
+		TimeoutSeconds *int          `json:"timeout_seconds"`
+		Network        *networkInput `json:"network"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
+	if in.Status == nil && in.TimeoutSeconds == nil && in.Network == nil {
+		writeError(w, http.StatusBadRequest, "nothing to change: send status, timeout_seconds and/or network")
+		return
+	}
+	if in.Status != nil {
+		switch *in.Status {
+		case gear.StatusPending, gear.StatusApproved, gear.StatusDisabled:
+		default:
+			writeError(w, http.StatusBadRequest, "status must be pending, approved or disabled")
+			return
+		}
+	}
+
+	// Ordered so that the gear is never runnable for an instant under a grant
+	// the operator has not finished making: what it may do is written first,
+	// and the approval that lets it run at all is written last.
+	var g gear.Gear
+	var err error
 	if in.TimeoutSeconds != nil {
-		g, err := s.gears.SetTimeout(r.Context(), id, *in.TimeoutSeconds)
-		if err != nil {
+		if g, err = s.gears.SetTimeout(r.Context(), id, *in.TimeoutSeconds); err != nil {
 			failGear(w, r, err)
 			return
 		}
-		if in.Status == nil {
-			writeJSON(w, http.StatusOK, g)
+	}
+	if in.Network != nil {
+		if g, err = s.gears.SetNetwork(r.Context(), id, in.Network.Granted, in.Network.Hosts); err != nil {
+			failGear(w, r, err)
 			return
 		}
 	}
-	if in.Status == nil {
-		writeError(w, http.StatusBadRequest, "nothing to change: send status and/or timeout_seconds")
+	if in.Status != nil {
+		if g, err = s.gears.SetStatus(r.Context(), id, *in.Status); err != nil {
+			fail(w, r, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, g)
+}
+
+// handleListGearConnections is the other half of the execution history: what
+// this gear's code reached, when, and whether the grant let it.
+//
+// Behind the same rule as the run history rather than a stricter one — a run
+// record carries the gear's stdout, which is a great deal more than a list of
+// host names, so a tighter gate here would guard the smaller thing.
+func (s *Server) handleListGearConnections(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
 		return
 	}
-	switch *in.Status {
-	case gear.StatusPending, gear.StatusApproved, gear.StatusDisabled:
-	default:
-		writeError(w, http.StatusBadRequest, "status must be pending, approved or disabled")
-		return
-	}
-	g, err := s.gears.SetStatus(r.Context(), id, *in.Status)
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	conns, err := s.gearNet.Store().ForGear(r.Context(), id, limit)
 	if err != nil {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, g)
+	writeJSON(w, http.StatusOK, conns)
 }
 
 // handleDeleteGear removes a gear from the shared catalog, taking it away

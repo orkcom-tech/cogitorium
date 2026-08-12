@@ -10,6 +10,9 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/orkcom-tech/cogitorium/internal/gearnet"
+	"github.com/orkcom-tech/cogitorium/internal/secrets"
 )
 
 type Config struct {
@@ -58,6 +61,48 @@ type Config struct {
 	// for stronger evidence than it is.
 	EgressApprovalBearer bool `yaml:"egress_approval_bearer"`
 
+	// VariablesDir and SecretsDir are the directory source for the names a gear
+	// is given: one file per name, the file's contents being the value. Empty
+	// means this install has no such source, which is the ordinary case on a
+	// laptop.
+	//
+	// Two directories rather than one because a ConfigMap and a Secret are two
+	// mounts, and the difference is not cosmetic: a value from SecretsDir is
+	// redacted everywhere it could otherwise surface, and a value from
+	// VariablesDir is shown.
+	//
+	// These are paths, not values, so unlike SecretKey they belong in the
+	// config file — on Kubernetes the mount path is exactly the sort of thing a
+	// ConfigMap should say.
+	VariablesDir string `yaml:"variables_dir"`
+	SecretsDir   string `yaml:"secrets_dir"`
+
+	// GearProxyListen is where the outward gate for gears listens: the proxy a
+	// gear the operator granted the network reaches it through, and which
+	// records every connection.
+	//
+	// The default keeps it on this machine, which is right on a laptop — Docker
+	// Desktop's host.docker.internal reaches a host loopback service. On Linux
+	// that name is the docker bridge gateway instead, and a service bound to
+	// 127.0.0.1 is not reachable from it, so an install with granted gears sets
+	// this to the bridge gateway (commonly 172.17.0.1:0) or to a fixed port on
+	// it. Port 0 means the kernel picks, which is what a gate nobody has to
+	// firewall wants.
+	GearProxyListen string `yaml:"gear_proxy_listen"`
+
+	// SecretKey encrypts the secrets held in this install's own database.
+	//
+	// Deliberately has NO yaml tag, for the same reason AdminToken has none:
+	// on Kubernetes the config file is a ConfigMap, and a ConfigMap is not a
+	// secret. A key sitting in the same place as the ciphertext it opens
+	// protects nothing at all.
+	//
+	// Empty is a working install: variables work, and a secret mounted from
+	// SecretsDir works, because neither is stored here. Only writing a secret
+	// INTO the database is refused — with a message saying so — because the
+	// alternative is writing a credential to disk in plaintext.
+	SecretKey string `yaml:"-"`
+
 	// AdminToken seeds the first admin's token instead of generating one.
 	//
 	// Deliberately has NO yaml tag: it is readable from the environment and
@@ -80,11 +125,12 @@ func Defaults() Config {
 		home = "."
 	}
 	return Config{
-		Listen:       "127.0.0.1:8688",
-		DataDir:      filepath.Join(home, ".cogitorium"),
-		LogLevel:     "info",
-		ContextdPath: "contextd",
-		Sandbox:      "auto",
+		Listen:          "127.0.0.1:8688",
+		DataDir:         filepath.Join(home, ".cogitorium"),
+		LogLevel:        "info",
+		ContextdPath:    "contextd",
+		Sandbox:         "auto",
+		GearProxyListen: gearnet.DefaultListen,
 	}
 }
 
@@ -157,6 +203,25 @@ func Load(path, dataDirOverride string) (Config, error) {
 	}
 	if v := os.Getenv("COGITORIUM_EGRESS_APPROVAL_BEARER"); v != "" {
 		cfg.EgressApprovalBearer = v == "1" || strings.EqualFold(v, "true")
+	}
+	if v := os.Getenv("COGITORIUM_VARIABLES_DIR"); v != "" {
+		cfg.VariablesDir = v
+	}
+	if v := os.Getenv("COGITORIUM_SECRETS_DIR"); v != "" {
+		cfg.SecretsDir = v
+	}
+	if v := os.Getenv("COGITORIUM_GEAR_PROXY_LISTEN"); v != "" {
+		cfg.GearProxyListen = v
+	}
+	// Environment only — see the field. Length is checked here rather than at
+	// first use, so an operator who typed a short key learns at startup instead
+	// of when a gear finally needs a credential.
+	if v := os.Getenv("COGITORIUM_SECRET_KEY"); v != "" {
+		if len(v) < secrets.MinSecretKeyLen {
+			return Config{}, fmt.Errorf("COGITORIUM_SECRET_KEY is %d characters; it encrypts every secret in the database, so at least %d are required",
+				len(v), secrets.MinSecretKeyLen)
+		}
+		cfg.SecretKey = v
 	}
 	// Environment only — see the field. A short one is refused rather than
 	// accepted quietly: a seeded admin token is the whole front door, and

@@ -85,7 +85,7 @@ func TestAGearCallThatNamesAFileButHandsOverNoneIsRefused(t *testing.T) {
 
 	// A real gear, approved and bound, because the guard sits after the gear is
 	// resolved: without one the call would be refused for the wrong reason.
-	g, err := f.gears.Forge(ctx, "unpack", "unpacks an archive", nil, "bash", "main.sh", "",
+	g, err := f.gears.Forge(ctx, "unpack", "unpacks an archive", nil, "bash", "main.sh", "", nil,
 		[]gear.File{{Path: "main.sh", Content: "cat >/dev/null; echo '{\"ok\":true}'"}}, f.wsID, 0)
 	if err != nil {
 		t.Fatalf("forge: %v", err)

@@ -8,6 +8,7 @@ import WorkspacesPage from './pages/WorkspacesPage'
 import WorkspacePage from './pages/WorkspacePage'
 import ContextPage from './pages/ContextPage'
 import GearsPage from './pages/GearsPage'
+import EnvPage from './pages/EnvPage'
 import LibraryPage from './pages/LibraryPage'
 import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
@@ -148,6 +149,14 @@ export default function App() {
               <span className="nav-icon" aria-hidden>❏</span>
               <span>Instructions</span>
             </NavLink>
+            {/* One name set here reaches every workspace on the install, which
+                is the same reasoning that makes gear approval an admin's act. A
+                workspace's own overrides are on the workspace, where the people
+                who run its agents can reach them. */}
+            {user.role === 'admin' && <NavLink to="/env" title="Variables & Secrets">
+              <span className="nav-icon" aria-hidden>⚿</span>
+              <span>Variables</span>
+            </NavLink>}
             <NavLink to="/models" title="Models">
               <span className="nav-icon" aria-hidden>◈</span>
               <span>Models</span>
@@ -205,7 +214,8 @@ export default function App() {
             <Route path="/terminal" element={user.role === 'admin' ? <TerminalPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/workspaces/:id" element={<WorkspacePage />} />
             <Route path="/context" element={user.role === 'admin' ? <ContextPage /> : <Navigate to="/workspaces" replace />} />
-            <Route path="/gears" element={<GearsPage />} />
+            <Route path="/gears" element={<GearsPage me={user} />} />
+            <Route path="/env" element={user.role === 'admin' ? <EnvPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/instructions" element={<LibraryPage />} />
             <Route path="/models" element={<ModelsPage />} />
           </Routes>

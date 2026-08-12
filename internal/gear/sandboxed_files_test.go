@@ -128,6 +128,13 @@ func newSandboxed(t *testing.T) *sandboxed {
 // binary gear, which is how a compiled tool reaches an agent.
 func (s *sandboxed) approveBinary(name, entrypoint, source string) Gear {
 	s.t.Helper()
+	return s.approveBinaryWithEnv(name, entrypoint, source, nil)
+}
+
+// approveBinaryWithEnv is the same, for a gear that asks to be given named
+// values — the declaration an operator reads at approval.
+func (s *sandboxed) approveBinaryWithEnv(name, entrypoint, source string, envNames []string) Gear {
+	s.t.Helper()
 	src := s.t.TempDir()
 	write(s.t, filepath.Join(src, "main.go"), []byte(source))
 	write(s.t, filepath.Join(src, "go.mod"), []byte("module probe\n\ngo 1.25\n"))
@@ -145,7 +152,7 @@ func (s *sandboxed) approveBinary(name, entrypoint, source string) Gear {
 	}
 
 	ctx := context.Background()
-	g, err := s.gears.Forge(ctx, name, "a compiled test gear", nil, RuntimeBinary, entrypoint, "",
+	g, err := s.gears.Forge(ctx, name, "a compiled test gear", nil, RuntimeBinary, entrypoint, "", envNames,
 		[]File{{Path: entrypoint, Content: base64.StdEncoding.EncodeToString(body), Encoding: EncodingBase64}},
 		s.wsID, s.agentID)
 	if err != nil {

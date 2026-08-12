@@ -1,13 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type Gear, type GearFile, type GearRun, type GearRunResult, gearRunStream } from '../api'
+import {
+  api,
+  type EnvStatus,
+  type Gear,
+  type GearConnection,
+  type GearFile,
+  type GearRun,
+  type GearRunResult,
+  type User,
+  gearRunStream,
+} from '../api'
 import { collapse, diff, stat, tooBig } from './diff'
 
-export default function GearsPage() {
+export default function GearsPage({ me }: { me: User }) {
   const [gears, setGears] = useState<Gear[]>([])
   const [query, setQuery] = useState('')
   const [tag, setTag] = useState('')
   const [openId, setOpenId] = useState<number | null>(null)
   const [source, setSource] = useState<GearFile[]>([])
+  // What each declared name would resolve to on this install. It arrives with
+  // the source, in the same response, because it is half of the same decision.
+  const [env, setEnv] = useState<EnvStatus[]>([])
   const [authoring, setAuthoring] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Whether this server can actually isolate a gear; null until it answers.
@@ -48,6 +61,7 @@ export default function GearsPage() {
       .then((r) => {
         setOpenId(g.id)
         setSource(r.files)
+        setEnv(r.env ?? [])
       })
       .catch((e: Error) => setError(e.message))
   }
@@ -68,7 +82,7 @@ export default function GearsPage() {
         {sandboxed === null
           ? 'Read the source, and try it with the dry run, before approving it.'
           : sandboxed
-            ? 'Each gear runs in a throwaway container with no network and none of this server\u2019s files — read the source, and try it with the dry run, before approving it.'
+            ? 'Each gear runs in a throwaway container with none of this server\u2019s files, and no network unless you grant it one when you approve it — read the source, and try it with the dry run, first.'
             : 'This server has no sandbox, so a gear runs as a subprocess with the server\u2019s own file access — read the source before approving anything.'}{' '}
         Nothing an agent calls runs until you do.
       </p>
@@ -114,8 +128,10 @@ export default function GearsPage() {
           <GearCard
             key={g.id}
             gear={g}
+            me={me}
             open={openId === g.id}
             source={openId === g.id ? source : []}
+            env={openId === g.id ? env : []}
             onToggle={() => open(g)}
             onChanged={reload}
             onError={setError}
@@ -128,15 +144,19 @@ export default function GearsPage() {
 
 function GearCard({
   gear: g,
+  me,
   open,
   source,
+  env,
   onToggle,
   onChanged,
   onError,
 }: {
   gear: Gear
+  me: User
   open: boolean
   source: GearFile[]
+  env: EnvStatus[]
   onToggle: () => void
   onChanged: () => void
   onError: (m: string) => void
@@ -149,6 +169,13 @@ function GearCard({
   const [live, setLive] = useState('')
   const abort = useRef<AbortController | null>(null)
   const [runs, setRuns] = useState<GearRun[] | null>(null)
+  const [conns, setConns] = useState<GearConnection[] | null>(null)
+  // The grant as this screen currently states it. It starts as what the gear
+  // holds and becomes what the operator is about to decide — the dry run below
+  // uses it too, so what they judge is what they are about to allow.
+  const [netOn, setNetOn] = useState(g.network_granted)
+  const [hostsText, setHostsText] = useState(g.network_hosts.join('\n'))
+  const isAdmin = me.role === 'admin'
   // The previous version's source, fetched only when asked for. An approval
   // covers exact content, so "what changed since the version I approved" is
   // the question this answers.
@@ -173,8 +200,33 @@ function GearCard({
       .catch((e: Error) => onError(e.message))
   }
 
+  // The gear's own grant is the truth; the fields follow it when it changes
+  // under them — after a save here, or after an agent forged a new version,
+  // which withdraws the grant along with the approval.
+  const granted = g.network_granted
+  const grantedHosts = g.network_hosts.join('\n')
+  useEffect(() => {
+    setNetOn(granted)
+    setHostsText(grantedHosts)
+  }, [granted, grantedHosts])
+
+  const network = () => ({
+    granted: netOn,
+    hosts: hostsText.split('\n').map((h) => h.trim()).filter(Boolean),
+  })
+  const netChanged = netOn !== granted || network().hosts.join('\n') !== grantedHosts
+
   const setStatus = (status: 'approved' | 'disabled') =>
-    api.gears.setStatus(g.id, status).then(onChanged).catch((e: Error) => onError(e.message))
+    // Approving carries the grant with it: they are one decision, and between
+    // two requests there is a moment when the code runs and the operator has
+    // not finished saying what it may do.
+    api.gears
+      .setStatus(g.id, status, isAdmin ? network() : undefined)
+      .then(onChanged)
+      .catch((e: Error) => onError(e.message))
+
+  const saveNetwork = () =>
+    api.gears.setNetwork(g.id, network()).then(onChanged).catch((e: Error) => onError(e.message))
 
   const dryRun = () => {
     let parsed: unknown
@@ -200,6 +252,11 @@ function GearCard({
         if (ev.type === 'result') setDryResult(ev)
       },
       ac.signal,
+      // Only an administrator may try a gear WITH the network, for the same
+      // reason only an administrator may grant it: a dry run is open to anyone
+      // signed in because the sandbox is the blast radius, and the network is
+      // half of that radius.
+      isAdmin && netOn ? network() : undefined,
     )
       .catch((e: Error) => {
         if (!ac.signal.aborted) onError(e.message)
@@ -224,8 +281,14 @@ function GearCard({
           {g.origin_workspace ? ` in ${g.origin_workspace}` : ''}
         </span>
         <span className="spacer" />
-        <button onClick={onToggle}>{open ? 'hide' : 'review & run'}</button>
-        {g.status !== 'approved' && <button onClick={() => setStatus('approved')}>approve</button>}
+        {/* Approving is deliberately NOT here. It lives below, beside the two
+            things it grants — an approval given from a collapsed card is given
+            without seeing which credentials this code gets or whether it may
+            reach out, and that is the decision this whole screen exists to
+            make possible. Same single click, moved to where the facts are. */}
+        <button onClick={onToggle}>
+          {open ? 'hide' : g.status === 'approved' ? 'review & run' : 'review & approve'}
+        </button>
         {g.status === 'approved' && <button onClick={() => setStatus('disabled')}>disable</button>}
         <button
           className="danger"
@@ -238,6 +301,22 @@ function GearCard({
         </button>
       </div>
       <p className="gear-desc">{g.description}</p>
+      {/* Both grants in one line, so the catalogue can be scanned for the gears
+          that hold something without opening each one. */}
+      <p className="gear-grants">
+        <span className={g.env_names.length > 0 ? 'grant-on' : 'muted'}>
+          ⚿ {g.env_names.length > 0 ? g.env_names.join(', ') : 'no credentials'}
+        </span>
+        <span className="grant-sep">·</span>
+        <span className={g.network_granted ? 'grant-on' : 'muted'}>
+          ⇄{' '}
+          {!g.network_granted
+            ? 'no network'
+            : g.network_hosts.length > 0
+              ? g.network_hosts.join(', ')
+              : 'the network, anywhere'}
+        </span>
+      </p>
       {g.tags.length > 0 && (
         <div className="pick-list">
           {g.tags.map((t) => (
@@ -300,6 +379,105 @@ function GearCard({
             <pre className="prompt-preview">{g.args_schema}</pre>
           </details>
 
+          {/* The other half of the approval, in the same place as the source.
+              An operator can only be responsible for what they can see, and
+              "this code" and "what this code is given" shown apart is a
+              decision made blind. */}
+          <div className="grants">
+            <h4>What approving this grants</h4>
+
+            <div className="grant">
+              <span className="grant-label">credentials</span>
+              {g.env_names.length === 0 ? (
+                <p className="muted">
+                  None. This gear is given no named values, and its environment holds nothing but its own name.
+                </p>
+              ) : (
+                <ul className="grant-list">
+                  {g.env_names.map((n) => {
+                    const st = env.find((e) => e.name === n)
+                    return (
+                      <li key={n}>
+                        <code>{n}</code>{' '}
+                        {!st ? (
+                          <span className="muted">…</span>
+                        ) : st.found ? (
+                          <span className={st.kind === 'secret' ? 'env-secret' : 'muted'}>
+                            {st.kind} · from {st.source}
+                          </span>
+                        ) : (
+                          // Learning this at approval beats learning it at
+                          // three in the morning from a run that refused.
+                          <span className="error">
+                            nothing on this install supplies it, so every run of this gear will be refused
+                          </span>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="grant">
+              <span className="grant-label">network</span>
+              <label className="row grant-check">
+                <input
+                  type="checkbox"
+                  checked={netOn}
+                  disabled={!isAdmin}
+                  onChange={(e) => setNetOn(e.target.checked)}
+                />
+                <span>this code may reach out</span>
+              </label>
+              {netOn && (
+                <label className="field">
+                  <span className="muted">
+                    where — one host per line, <code>*.example.com</code> for any subdomain. Empty allows anywhere,
+                    which is a choice you may make; a list is what makes the connection log below worth reading.
+                  </span>
+                  <textarea
+                    rows={3}
+                    spellCheck={false}
+                    disabled={!isAdmin}
+                    value={hostsText}
+                    onChange={(e) => setHostsText(e.target.value)}
+                    placeholder={'api.example.com\n*.internal.example.com'}
+                  />
+                </label>
+              )}
+            </div>
+
+            {/* Stated rather than designed away, because it cannot be designed
+                away: this is what granting both means, and the plan records it
+                for exactly this moment. */}
+            {netOn && g.env_names.length > 0 && (
+              <p className="notice">
+                This gear gets both. Code that holds a credential and can reach out can send that credential to
+                wherever it is allowed to reach — nothing below this screen prevents that, and nothing can. Reading
+                the source above is the control.
+              </p>
+            )}
+
+            {isAdmin ? (
+              <div className="row">
+                {g.status !== 'approved' ? (
+                  <button onClick={() => setStatus('approved')}>approve, with these grants</button>
+                ) : (
+                  <button onClick={saveNetwork} disabled={!netChanged}>
+                    {netChanged ? 'save the network grant' : 'network grant saved'}
+                  </button>
+                )}
+                <span className="muted">
+                  A new version of this gear returns to pending and gives both grants back — an approval covers exact
+                  content.
+                </span>
+              </div>
+            ) : (
+              <p className="hint">Only an administrator can approve a gear or change what it may reach.</p>
+            )}
+          </div>
+
           <div className="field">
             <span className="muted">
               dry run — executes the gear right now, even while pending, so approval is an informed decision
@@ -361,7 +539,61 @@ function GearCard({
             >
               {runs === null ? 'execution history' : 'hide history'}
             </button>
+            {/* The other half of the history: what this code reached. Kept
+                beside the runs because "what did this gear do" is one question
+                and the answer is both. */}
+            <button
+              onClick={() =>
+                conns === null
+                  ? api.gears.connections(g.id).then(setConns).catch((e: Error) => onError(e.message))
+                  : setConns(null)
+              }
+            >
+              {conns === null ? 'connections' : 'hide connections'}
+            </button>
           </div>
+
+          {conns !== null &&
+            (conns.length === 0 ? (
+              <p className="hint">
+                This gear has never opened a connection. Every one it does open is written down before the socket is,
+                whether or not it was allowed.
+              </p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>when</th>
+                    <th>by</th>
+                    <th>where</th>
+                    <th>outcome</th>
+                    <th>up</th>
+                    <th>down</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {conns.map((c) => (
+                    <tr key={c.id}>
+                      <td className="muted">{c.created_at}</td>
+                      <td>{c.agent_name || 'you (dry run)'}</td>
+                      <td>
+                        <code>
+                          {c.host}:{c.port}
+                        </code>{' '}
+                        <span className="muted">{c.method}</span>
+                      </td>
+                      <td>
+                        <span className={`status ${c.state}`} title={c.error}>
+                          {c.state.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td className="muted">{bytes(c.bytes_sent)}</td>
+                      <td className="muted">{bytes(c.bytes_received)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ))}
 
           {runs !== null &&
             (runs.length === 0 ? (
@@ -410,6 +642,10 @@ function AuthorGearForm({ onDone, onError }: { onDone: () => void; onError: (m: 
   const [runtime, setRuntime] = useState('python')
   const [tags, setTags] = useState('')
   const [source, setSource] = useState<'write' | 'upload'>('write')
+  // Names, never values. What each name means is set under Variables &
+  // Secrets; whether this gear may reach out is decided at approval, on the
+  // card, beside the source.
+  const [envNames, setEnvNames] = useState('')
   const [code, setCode] = useState('import sys, json\nargs = json.load(sys.stdin)\nprint(args)\n')
   const [files, setFiles] = useState<GearFile[]>([])
   const [entrypoint, setEntrypoint] = useState('')
@@ -456,6 +692,7 @@ function AuthorGearForm({ onDone, onError }: { onDone: () => void; onError: (m: 
           description,
           runtime,
           tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+          env_names: envNames.split(',').map((n) => n.trim().toUpperCase()).filter(Boolean),
           ...(source === 'write' ? { code } : { files, entrypoint }),
         }
         api.gears
@@ -539,13 +776,32 @@ function AuthorGearForm({ onDone, onError }: { onDone: () => void; onError: (m: 
         </>
       )}
 
+      <label className="field">
+        <span className="muted">
+          named values this gear reads from its environment, comma separated — e.g. API_KEY, BASE_URL. What each one
+          means is set under Variables &amp; Secrets, and the gear never receives a value you type here.
+        </span>
+        <input placeholder="API_KEY, BASE_URL" value={envNames} onChange={(e) => setEnvNames(e.target.value)} />
+      </label>
+
       <div className="row">
         <button type="submit" disabled={source === 'upload' && (files.length === 0 || !entrypoint)}>
           create (lands pending, like a forged one)
         </button>
+        <span className="muted">
+          Whether it may reach the network is decided when you approve it, beside its source.
+        </span>
       </div>
     </form>
   )
+}
+
+// Bytes, in the shortest form that is still honest. A connection log is read
+// for shape — "it sent 4 KB and got 2 MB back" — not for exact counts.
+function bytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
 /**

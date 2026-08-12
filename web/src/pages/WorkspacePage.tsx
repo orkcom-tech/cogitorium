@@ -7,6 +7,7 @@ import FilesPage from './FilesPage'
 import CodeEditor from './CodeEditor'
 import ApprovalDialog from './ApprovalDialog'
 import InletsPanel from './InletsPanel'
+import EnvPanel from './EnvPanel'
 import Bench, { type PanelDef } from '../bench/Bench'
 import { useLayout } from '../bench/store'
 import { loadTheme } from '../styles/theme'
@@ -15,7 +16,7 @@ import LayoutMenu from '../bench/LayoutMenu'
 
 // The set of ids the layout parser will accept. A restored layout naming a
 // panel nothing can render would otherwise be a permanent white screen.
-const PANEL_IDS = new Set(['chat', 'blueprint', 'files', 'editor', 'terminal', 'agents', 'agent', 'inlets'])
+const PANEL_IDS = new Set(['chat', 'blueprint', 'files', 'editor', 'terminal', 'agents', 'agent', 'inlets', 'env'])
 import {
   api,
   wsChatStream,
@@ -449,6 +450,20 @@ export default function WorkspacePage() {
               should not pay two queries on every open for a feature it does
               not use. */}
           <InletsPanel wsId={wsId} agents={agents} shown={!!layout.slotOf('inlets')} onError={setError} />
+        </div>
+      ),
+    },
+    {
+      id: 'env',
+      minW: 460,
+      title: 'Variables',
+      home: 'aux',
+      node: (
+        <div className="bn-body bn-scroll">
+          {/* Placed or not decides whether it loads, exactly as the inlets
+              panel does: the bench keeps every panel mounted, and a workspace
+              that overrides no names should not pay a query on every open. */}
+          <EnvPanel wsId={wsId} shown={!!layout.slotOf('env')} onError={setError} />
         </div>
       ),
     },

@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
+	"github.com/orkcom-tech/cogitorium/internal/gearnet"
+	"github.com/orkcom-tech/cogitorium/internal/secrets"
 )
 
 var (
@@ -48,9 +50,21 @@ type Gear struct {
 	Runtime           string   `json:"runtime"`
 	Entrypoint        string   `json:"entrypoint"`
 	ArgsSchema        string   `json:"args_schema"`
-	Status            string   `json:"status"`
-	TimeoutSeconds    int      `json:"timeout_seconds"`
-	UpdatedAt         string   `json:"updated_at"`
+	// EnvNames are the named values this gear asks to be given at run time.
+	// Names only — a value never reaches this struct, which is what makes a
+	// Gear safe to marshal into an API response, a log line and a bundle.
+	EnvNames []string `json:"env_names"`
+	// NetworkGranted and NetworkHosts are the other half of what the operator
+	// decides at approval: whether this code may reach out, and where. They are
+	// not declared by the gear and cannot be — an agent asking for the network
+	// on its own behalf is the one request the forging side has no standing to
+	// make. Empty NetworkHosts with the grant on means anywhere, which is a
+	// choice the operator is allowed to make.
+	NetworkGranted bool     `json:"network_granted"`
+	NetworkHosts   []string `json:"network_hosts"`
+	Status         string   `json:"status"`
+	TimeoutSeconds int      `json:"timeout_seconds"`
+	UpdatedAt      string   `json:"updated_at"`
 }
 
 // Run is one recorded execution of a gear.
@@ -137,7 +151,16 @@ func DefaultEntrypoint(runtime string) string {
 // version. A new version always returns to pending: approval covers exact
 // content, never a moving target. wsID/agentID of 0 mean the operator
 // authored it directly rather than an agent forging it.
-func (s *Store) Forge(ctx context.Context, name, description string, tags []string, runtime, entrypoint, argsSchema string, files []File, wsID, agentID int64) (Gear, error) {
+//
+// envNames are the named values the gear asks for — part of forging, like its
+// args schema, and part of what returns to pending when the gear changes. A
+// gear that asks for a credential it did not ask for last time is a gear the
+// operator has not approved.
+//
+// The network grant returns with it, and for the same reason: approval covers
+// exact content, and a grant that survived a new version would be a permission
+// given to code nobody has read.
+func (s *Store) Forge(ctx context.Context, name, description string, tags []string, runtime, entrypoint, argsSchema string, envNames []string, files []File, wsID, agentID int64) (Gear, error) {
 	name = strings.TrimSpace(name)
 	if !nameRe.MatchString(name) {
 		return Gear{}, fmt.Errorf("gear name %q is invalid: use lowercase letters, digits and underscores (2-49 chars), starting with a letter", name)
@@ -170,6 +193,17 @@ func (s *Store) Forge(ctx context.Context, name, description string, tags []stri
 	if err := json.Unmarshal([]byte(argsSchema), &schemaObj); err != nil {
 		return Gear{}, fmt.Errorf("args_schema must be a JSON Schema object: %w", err)
 	}
+	// Judged here, at the doorway, rather than at run time: a gear declaring
+	// "api key" would forge cleanly and then fail on every call, and the
+	// operator would be reading the wrong file to find out why.
+	envNames, err := secrets.NormalizeNames(envNames)
+	if err != nil {
+		return Gear{}, fmt.Errorf("gear %q asks for a name it cannot have: %w", name, err)
+	}
+	envJSON, err := json.Marshal(envNames)
+	if err != nil {
+		return Gear{}, err
+	}
 	if tags == nil {
 		tags = []string{}
 	}
@@ -201,9 +235,9 @@ func (s *Store) Forge(ctx context.Context, name, description string, tags []stri
 		version = 1
 		res, err := tx.ExecContext(ctx, `
 			INSERT INTO gears (name, description, tags, origin_workspace_id, created_by_agent_id,
-			                   version, runtime, entrypoint, args_schema, status, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, 'pending', ?, ?)`,
-			name, description, string(tagsJSON), originWS, originAgent, runtime, entrypoint, argsSchema, now(), now())
+			                   version, runtime, entrypoint, args_schema, env_names, status, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'pending', ?, ?)`,
+			name, description, string(tagsJSON), originWS, originAgent, runtime, entrypoint, argsSchema, string(envJSON), now(), now())
 		if err := asConflict(err, fmt.Sprintf("gear %q", name)); err != nil {
 			return Gear{}, fmt.Errorf("forge gear: %w", err)
 		}
@@ -214,9 +248,10 @@ func (s *Store) Forge(ctx context.Context, name, description string, tags []stri
 		version++
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE gears SET description = ?, tags = ?, version = ?, runtime = ?, entrypoint = ?,
-			                 args_schema = ?, status = 'pending', updated_at = ?
+			                 args_schema = ?, env_names = ?, network_granted = 0, network_hosts = '[]',
+			                 status = 'pending', updated_at = ?
 			WHERE id = ?`,
-			description, string(tagsJSON), version, runtime, entrypoint, argsSchema, now(), id); err != nil {
+			description, string(tagsJSON), version, runtime, entrypoint, argsSchema, string(envJSON), now(), id); err != nil {
 			return Gear{}, fmt.Errorf("forge gear: update %q: %w", name, err)
 		}
 	}
@@ -247,8 +282,12 @@ func (s *Store) Forge(ctx context.Context, name, description string, tags []stri
 	if err := tx.Commit(); err != nil {
 		return Gear{}, fmt.Errorf("forge gear: commit: %w", err)
 	}
+	// The names are logged and the values are not, which is the rule this whole
+	// mechanism turns on: a name is what the operator has to see, and a value is
+	// what nobody but the gear's own process ever does.
 	slog.Info("gear forged", "id", id, "name", name, "version", version, "runtime", runtime,
-		"workspace_id", wsID, "agent_id", agentID, "status", "pending")
+		"workspace_id", wsID, "agent_id", agentID, "status", "pending", "env_names", envNames,
+		"network_granted", false)
 	return s.Get(ctx, id)
 }
 
@@ -265,7 +304,8 @@ func validFilePath(p string) error {
 const gearSelect = `
 	SELECT g.id, g.name, g.description, g.tags, g.origin_workspace_id,
 	       COALESCE(w.name, ''), g.created_by_agent_id, COALESCE(a.name, ''),
-	       g.version, g.runtime, g.entrypoint, g.args_schema, g.status,
+	       g.version, g.runtime, g.entrypoint, g.args_schema, g.env_names,
+	       g.network_granted, g.network_hosts, g.status,
 	       g.timeout_seconds, g.updated_at
 	FROM gears g
 	LEFT JOIN workspaces w ON w.id = g.origin_workspace_id
@@ -273,15 +313,35 @@ const gearSelect = `
 
 func scanGear(row interface{ Scan(...any) error }) (Gear, error) {
 	var g Gear
-	var tags string
+	var tags, envNames, netHosts string
+	var netGranted int
 	if err := row.Scan(&g.ID, &g.Name, &g.Description, &tags, &g.OriginWorkspaceID, &g.OriginWorkspace,
 		&g.CreatedByAgentID, &g.CreatedByAgent, &g.Version, &g.Runtime, &g.Entrypoint,
-		&g.ArgsSchema, &g.Status, &g.TimeoutSeconds, &g.UpdatedAt); err != nil {
+		&g.ArgsSchema, &envNames, &netGranted, &netHosts, &g.Status, &g.TimeoutSeconds, &g.UpdatedAt); err != nil {
 		return Gear{}, err
 	}
+	g.NetworkGranted = netGranted == 1
 	if err := json.Unmarshal([]byte(tags), &g.Tags); err != nil {
 		slog.Warn("gear has unparseable tags", "gear", g.Name, "err", err)
 		g.Tags = []string{}
+	}
+	// An unreadable list becomes the empty list, not the previous value and not
+	// a guess: a gear whose declaration cannot be read must be given nothing,
+	// and it will then refuse loudly on its first call rather than run with
+	// whatever happened to parse.
+	if err := json.Unmarshal([]byte(envNames), &g.EnvNames); err != nil {
+		slog.Warn("gear has an unparseable list of named values; it will be given none",
+			"gear", g.Name, "err", err)
+		g.EnvNames = []string{}
+	}
+	// An unreadable destination list is NOT the empty list here, and the
+	// asymmetry with env_names above is deliberate. Empty means "anywhere", so
+	// falling back to it would widen a grant on the strength of a parse error.
+	// A list nobody can read is a grant nobody can honour, so the grant goes.
+	if err := json.Unmarshal([]byte(netHosts), &g.NetworkHosts); err != nil {
+		slog.Warn("gear has an unparseable list of network destinations; its network grant is withdrawn until an operator grants it again",
+			"gear", g.Name, "err", err)
+		g.NetworkHosts, g.NetworkGranted = []string{}, false
 	}
 	return g, nil
 }
@@ -379,6 +439,54 @@ func (s *Store) SetStatus(ctx context.Context, id int64, status string) (Gear, e
 		return Gear{}, fmt.Errorf("gear %d: %w", id, ErrNotFound)
 	}
 	slog.Info("gear status changed by operator", "gear_id", id, "status", status)
+	return s.Get(ctx, id)
+}
+
+// SetNetwork records the other half of the approval decision: whether this
+// gear may reach out, and where.
+//
+// It is the operator's act, like SetStatus, and it is made on the same screen
+// in the same breath — an operator reading the code is the only person who can
+// judge "should THIS be able to reach api.example.com". Nothing else may call
+// it, and nothing an agent can reach leads here.
+//
+// An empty hosts list with granted true means anywhere. That is deliberately
+// allowed and deliberately not the default the interface offers: the plan is
+// explicit that a destination list is what makes the connection log auditable
+// afterwards, not a gate on the operator.
+func (s *Store) SetNetwork(ctx context.Context, id int64, granted bool, hosts []string) (Gear, error) {
+	clean, err := gearnet.NormalizeHosts(hosts)
+	if err != nil {
+		return Gear{}, err
+	}
+	if !granted {
+		// The list goes with the grant rather than lingering: a gear that shows
+		// three allowed hosts and cannot reach any of them is a screen that
+		// reads as permission when it is the opposite.
+		clean = []string{}
+	}
+	raw, err := json.Marshal(clean)
+	if err != nil {
+		return Gear{}, err
+	}
+	g := 0
+	if granted {
+		g = 1
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE gears SET network_granted = ?, network_hosts = ?, updated_at = ? WHERE id = ?`,
+		g, string(raw), now(), id)
+	if err != nil {
+		return Gear{}, fmt.Errorf("set gear %d network: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Gear{}, fmt.Errorf("gear %d: %w", id, ErrNotFound)
+	}
+	// Logged as its own line rather than folded into the status change: this is
+	// a capability grant, and an operator reading the log later is looking for
+	// the moment code was allowed to reach out.
+	slog.Info("gear network grant changed by operator", "gear_id", id, "granted", granted,
+		"destinations", clean, "anywhere", granted && len(clean) == 0)
 	return s.Get(ctx, id)
 }
 

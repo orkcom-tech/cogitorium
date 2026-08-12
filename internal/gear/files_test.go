@@ -2,6 +2,7 @@ package gear
 
 import (
 	"context"
+	"database/sql"
 	"encoding/hex"
 	"io/fs"
 	"os"
@@ -12,8 +13,10 @@ import (
 	"testing"
 
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
+	"github.com/orkcom-tech/cogitorium/internal/gearnet"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
+	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/store"
 	"github.com/orkcom-tech/cogitorium/internal/workdir"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
@@ -37,9 +40,14 @@ var payload = []byte("first\r\nline\x00\x01\x02 ünïcödé …\xff\xfe done")
 // fixture is a real executor over a real SQLite database, with a real workspace
 // directory on disk and a real agent to run on behalf of.
 type fixture struct {
-	t       *testing.T
-	exec    *Executor
-	gears   *Store
+	t     *testing.T
+	exec  *Executor
+	gears *Store
+	// db and gate are kept so a test can ask the same database and the same
+	// outward gate the executor is using what actually happened — the whole
+	// point of a real one being wired in rather than a stub.
+	db      *sql.DB
+	gate    *gearnet.Gate
 	dataDir string
 	root    string // the workspace's own directory
 	outside string // a directory that is NOT the workspace, for the escape tests
@@ -90,11 +98,39 @@ func newFixture(t *testing.T) *fixture {
 	if root == "" {
 		t.Fatal("the workspace has no working directory, so nothing below can run")
 	}
+	gate := testGate(t, db)
 	return &fixture{
-		t: t, exec: NewExecutor(NewStore(db), dataDir, nil), gears: NewStore(db),
+		t: t, exec: NewExecutor(NewStore(db), dataDir, nil, testResolver(t, db), gate), gears: NewStore(db),
+		db: db, gate: gate,
 		dataDir: dataDir, root: root, outside: t.TempDir(),
 		wsID: space.ID, agentID: agent.ID,
 	}
+}
+
+// testResolver builds the real lookup over the test's own database: no
+// encryption key and no mounted directories, which is the ordinary shape of an
+// install that has never set one. A gear declaring no names never reaches it.
+func testResolver(t *testing.T, db *sql.DB) *secrets.Resolver {
+	t.Helper()
+	r, err := secrets.NewResolver(secrets.NewStore(db, nil), "", "")
+	if err != nil {
+		t.Fatalf("build the named-value resolver: %v", err)
+	}
+	return r
+}
+
+// testGate opens a real outward gate on a real loopback port over the test's
+// own database. No gear here is granted the network, so nothing reaches it —
+// but a nil gate would be a different executor from the one that ships, and the
+// difference is exactly the branch that refuses a granted gear.
+func testGate(t *testing.T, db *sql.DB) *gearnet.Gate {
+	t.Helper()
+	g, err := gearnet.New(db, "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("open the gear network gate: %v", err)
+	}
+	t.Cleanup(func() { g.Close() })
+	return g
 }
 
 // approve forges a bash gear and approves it, which is the only state an agent
@@ -102,7 +138,7 @@ func newFixture(t *testing.T) *fixture {
 func (f *fixture) approve(name, code string) Gear {
 	f.t.Helper()
 	ctx := context.Background()
-	g, err := f.gears.Forge(ctx, name, "a test gear", nil, "bash", "main.sh", "",
+	g, err := f.gears.Forge(ctx, name, "a test gear", nil, "bash", "main.sh", "", nil,
 		[]File{{Path: "main.sh", Content: code}}, f.wsID, f.agentID)
 	if err != nil {
 		f.t.Fatalf("forge %q: %v", name, err)

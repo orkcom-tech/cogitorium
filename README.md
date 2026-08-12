@@ -54,7 +54,11 @@ possible, not just what is documented.
 capability that does not exist it can forge one — a script, a small program —
 which is registered in a catalog, versioned, and callable afterwards by other
 agents and by you. Nothing runs until you approve it, and it runs inside a
-container with no network and none of the server's files.
+container holding none of the server's files. Approving is also where you say
+what that code may hold — named credentials it reads from its environment, never
+sees the values of in a prompt, and never prints — and where it may reach: the
+network, and a list of hosts, or nothing at all. Both are on one screen, beside
+the source, because a decision made half-blind is not a decision.
 
 **Context is a managed resource.** It is stored and versioned by
 [Contextverse](https://github.com/orkcom-tech/contextverse), with a branch per

@@ -87,10 +87,11 @@ func run() error {
 	}
 	cfg.Listen = ln.Addr().String()
 
-	// The same two decisions the server command makes, from the same place:
-	// one of them refuses to start when the gate would be decorative, and a
-	// desktop build that quietly disagreed with the server about that would be
-	// the worst possible place for the disagreement to live.
+	// The same startup decisions the server command makes, from the same place:
+	// two of them refuse to start when a capability would be decorative or a
+	// configured source unreadable, and a desktop build that quietly disagreed
+	// with the server about that would be the worst possible place for the
+	// disagreement to live.
 	sb, err := appstart.SelectSandbox(ctx, cfg.Sandbox, cfg.SandboxImage)
 	if err != nil {
 		return err
@@ -99,8 +100,17 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	env, err := appstart.BuildSecrets(ctx, cfg, db)
+	if err != nil {
+		return err
+	}
+	gate, err := appstart.BuildGearNet(cfg, db, sb)
+	if err != nil {
+		return err
+	}
+	defer gate.Close()
 
-	srv := server.New(cfg, db, sb, searcher)
+	srv := server.New(cfg, db, sb, searcher, env, gate)
 	if err := srv.Bootstrap(ctx); err != nil {
 		return fmt.Errorf("first-run setup: %w", err)
 	}

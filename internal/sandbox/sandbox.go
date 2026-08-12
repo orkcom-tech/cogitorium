@@ -16,6 +16,16 @@ import (
 	"io"
 )
 
+// HostAlias is the name a process inside the sandbox uses for the machine the
+// server runs on. It exists because the outward gate a granted gear reaches the
+// network through lives in the server's own process, and "localhost" inside a
+// container is the container.
+//
+// docker.go adds it to the container's hosts for every run that has the
+// network; the name is Docker's own convention rather than an invention, so it
+// is already what a person debugging inside the container would try.
+const HostAlias = "host.docker.internal"
+
 // Spec describes one unit of work to run in isolation.
 type Spec struct {
 	// Dir is the host directory holding the code to run; it is the only

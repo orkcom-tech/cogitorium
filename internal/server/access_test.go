@@ -28,8 +28,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/orkcom-tech/cogitorium/internal/appstart"
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
 	"github.com/orkcom-tech/cogitorium/internal/config"
+	"github.com/orkcom-tech/cogitorium/internal/gearnet"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/store"
@@ -122,7 +124,23 @@ func newInstallWithSandbox(t *testing.T, listen string, searcher *websearch.Sear
 		tweak(&cfg)
 	}
 
-	srv := New(cfg, db, sb, searcher)
+	// Built the way cmd/ builds it, rather than assembled here: the key comes
+	// from the configuration or does not exist, and a fixture that always
+	// passed nil could not tell an install that holds secrets from one that
+	// refuses to.
+	env, err := appstart.BuildSecrets(context.Background(), cfg, db)
+	if err != nil {
+		t.Fatalf("build the named-value resolver: %v", err)
+	}
+	// A real gate on a real loopback port, for the same reason as the resolver
+	// above: every route this fixture exercises must be served by the server
+	// that ships, and Bootstrap reconciles the gate's own table.
+	gate, err := gearnet.New(db, "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("open the gear network gate: %v", err)
+	}
+	t.Cleanup(func() { gate.Close() })
+	srv := New(cfg, db, sb, searcher, env, gate)
 
 	in := &install{
 		srv:    srv,

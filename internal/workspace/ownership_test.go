@@ -441,7 +441,7 @@ func TestCloneDropsGearGrantsAndCanvasPositions(t *testing.T) {
 	src := f.seedCloneSource(t)
 
 	gears := gear.NewStore(f.db)
-	g, err := gears.Forge(ctx, "field_notes", "writes notes", nil, "bash", "main.sh", "{}",
+	g, err := gears.Forge(ctx, "field_notes", "writes notes", nil, "bash", "main.sh", "{}", nil,
 		[]gear.File{{Path: "main.sh", Content: "echo noted"}}, src.ws.ID, src.scribe.ID)
 	if err != nil {
 		t.Fatalf("forge gear: %v", err)

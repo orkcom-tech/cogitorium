@@ -23,10 +23,12 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/egress"
 	"github.com/orkcom-tech/cogitorium/internal/engine"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
+	"github.com/orkcom-tech/cogitorium/internal/gearnet"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/inlet"
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
+	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/version"
 	"github.com/orkcom-tech/cogitorium/internal/websearch"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
@@ -40,11 +42,17 @@ type Server struct {
 	context    *contextstore.Store
 	gears      *gear.Store
 	gearExec   *gear.Executor
-	library    *library.Store
-	identity   *identity.Store
-	inlets     *inlet.Store
-	engine     *engine.Engine
-	http       *http.Server
+	// env is the named values a gear may be given: the store the operator sets
+	// them in, and the resolver a run reads them through.
+	env *secrets.Resolver
+	// gearNet is the outward gate for gears — the other half of the same
+	// approval decision, and the log of what a granted gear actually reached.
+	gearNet  *gearnet.Gate
+	library  *library.Store
+	identity *identity.Store
+	inlets   *inlet.Store
+	engine   *engine.Engine
+	http     *http.Server
 	// trustLoopback lets an unauthenticated local request act as the admin,
 	// which is what makes a single-operator install feel accountless while
 	// running the same model as a team install.
@@ -74,12 +82,12 @@ type Server struct {
 // deliberate refusal of the obvious alternative: with New(..., terminal,
 // egress bool) a caller that swaps two arguments compiles cleanly, and the
 // result is a security gate silently switched on.
-func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.Searcher) *Server {
+func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.Searcher, env *secrets.Resolver, gate *gearnet.Gate) *Server {
 	cat := catalog.NewStore(db)
 	ws := workspace.NewStore(db)
 	cs := contextstore.New(cfg.ContextdPath)
 	gears := gear.NewStore(db)
-	gearExec := gear.NewExecutor(gears, cfg.DataDir, sb)
+	gearExec := gear.NewExecutor(gears, cfg.DataDir, sb, env, gate)
 	lib := library.NewStore(db)
 	broker := egress.New()
 	s := &Server{
@@ -89,6 +97,8 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		context:    cs,
 		gears:      gears,
 		gearExec:   gearExec,
+		env:        env,
+		gearNet:    gate,
 		library:    lib,
 		identity:   identity.NewStore(db),
 		inlets:     inlet.NewStore(db),
@@ -186,11 +196,19 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	mux.HandleFunc("GET /api/v1/instructions/{id}", s.handleGetInstruction)
 	mux.HandleFunc("DELETE /api/v1/instructions/{id}", s.handleDeleteInstruction)
 
+	mux.HandleFunc("GET /api/v1/env", s.handleListEnv)
+	mux.HandleFunc("PUT /api/v1/env/{name}", s.handleSetEnv)
+	mux.HandleFunc("DELETE /api/v1/env/{name}", s.handleDeleteEnv)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/env", s.handleListWorkspaceEnv)
+	mux.HandleFunc("PUT /api/v1/workspaces/{id}/env/{name}", s.handleSetWorkspaceEnv)
+	mux.HandleFunc("DELETE /api/v1/workspaces/{id}/env/{name}", s.handleDeleteWorkspaceEnv)
+
 	mux.HandleFunc("GET /api/v1/gears", s.handleListGears)
 	mux.HandleFunc("POST /api/v1/gears", s.handleCreateGear)
 	mux.HandleFunc("GET /api/v1/gears/{id}", s.handleGetGear)
 	mux.HandleFunc("POST /api/v1/gears/{id}/run", s.handleRunGear)
 	mux.HandleFunc("GET /api/v1/gears/{id}/runs", s.handleListGearRuns)
+	mux.HandleFunc("GET /api/v1/gears/{id}/connections", s.handleListGearConnections)
 	mux.HandleFunc("PATCH /api/v1/gears/{id}", s.handleSetGearStatus)
 	mux.HandleFunc("DELETE /api/v1/gears/{id}", s.handleDeleteGear)
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/gears", s.handleListGearBindings)
@@ -277,6 +295,15 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 		return err
 	} else if n > 0 {
 		slog.Warn("search requests were awaiting approval when the server stopped; they are recorded as interrupted", "count", n)
+	}
+
+	// And the same reasoning for a gear's connections: a socket lives in one
+	// process, so a row still saying open is a connection that ended when the
+	// process did.
+	if n, err := s.gearNet.Store().Reconcile(ctx); err != nil {
+		return err
+	} else if n > 0 {
+		slog.Warn("gear connections were open when the server stopped; they are recorded as interrupted", "count", n)
 	}
 
 	// The same reasoning for inlet runs: a run lives in one process, so a row

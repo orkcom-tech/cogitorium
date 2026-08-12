@@ -183,8 +183,9 @@ panel shows each agent's share of the workspace total.
 ## 3. Gears — tools your agents keep
 
 A gear is a small program an agent can call. It survives the conversation, it
-runs in a throwaway container with no network and none of the server's files,
-and **nothing an agent calls runs until you approve it**.
+runs in a throwaway container with none of the server's files and no network
+unless you grant it one, and **nothing an agent calls runs until you approve
+it**.
 
 ### Write one yourself
 
@@ -236,9 +237,10 @@ and no rollback: `status` is one column on the gear.
 
 ### What the sandbox does, and does not
 
-With Docker: no network, a read-only copy of only the files the gear was given,
-512 MB, one CPU, 256 processes, and the whole container is removed afterwards.
-Those limits are fixed — there is no per-gear setting for them.
+With Docker: a read-only copy of only the files the gear was given, 512 MB, one
+CPU, 256 processes, no network unless you granted it one, and the whole
+container is removed afterwards. Those limits are fixed — there is no per-gear
+setting for them.
 
 Without Docker the gear runs as a subprocess of the server, **with the server's
 own file access** — including the database, and the provider keys in it. The
@@ -250,6 +252,79 @@ gears will run as unsandboxed subprocesses with this server's file access — an
 
 In that configuration the approval gate is the only control there is. `sandbox: docker`
 refuses to start when the daemon does not answer; `auto` warns and continues.
+
+### Names a gear is given
+
+A gear that needs a key does not receive one in its arguments. It declares a
+**name** — `API_KEY` — and reads the value from its own environment when it
+runs. You say what the name means; the model never sees the value. That is not
+caution for its own sake: an agent's answer leaves the building, in the chat and
+in an inlet response, so a secret in a prompt is a secret published.
+
+Set them under **Variables** (install-wide, administrators) or in a workspace's
+own **Variables** panel. A **variable**'s value is shown afterwards. A
+**secret**'s is shown once, when you set it, and never again — not behind a
+reveal button; the server has nowhere to put it in a response, and it is removed
+from anything the gear prints, from the recorded run, from the log line and from
+the live output you are watching.
+
+Three sources, later winning:
+
+1. this install's own store, encrypted with `COGITORIUM_SECRET_KEY` from the
+   environment (without that key, variables still work and a secret cannot be
+   stored — it would have to go to disk in plaintext, and it will not);
+2. a directory on disk, one file per name, contents being the value —
+   `variables_dir` and `secrets_dir`, which is the shape Kubernetes mounts a
+   ConfigMap and a Secret in;
+3. the workspace's own overrides, which is how one gear serves staging and
+   production without being edited.
+
+A name nothing supplies **stops the run and names it**, rather than handing the
+gear an empty string that fails somewhere far away with a message about nothing.
+The approval screen says so in advance, per name.
+
+### Letting a gear reach out
+
+A gear has no network. You grant it one when you approve it, on the same screen
+as the source, and you say where:
+
+```
+api.example.com
+*.internal.example.com
+```
+
+Empty allows anywhere, which is a choice you are allowed to make. A list is what
+makes the record worth reading afterwards — **connections** on the gear card
+shows every connection it opened, with the host, the port, the outcome and the
+bytes each way, written down before the socket is. Refusals are in there too: a
+destination you did not grant, and anything pointing back at the machine the
+server runs on, which is refused whatever you granted (`127.0.0.1` is this
+server's own API, where a local request is trusted as the administrator).
+
+Forging a new version returns the gear to `pending` and takes the network grant
+with it, exactly as it does the approval — approval covers exact content.
+
+Two things worth knowing plainly:
+
+**A gear with a credential and the network can send that credential wherever it
+is allowed to reach.** Nothing prevents that and nothing can; it is what granting
+both means. Reading the source before approving is the control, which is why
+both grants are on that screen and not two.
+
+**The destination list is a check and a record, not a wall.** A granted gear is
+given `HTTP_PROXY` and friends pointing at the gate, and everything that uses an
+ordinary HTTP client goes through it. Code that deliberately ignores those
+variables reaches the network directly, because Docker's bridge network has no
+host filter. A boundary enforced regardless of the code's cooperation belongs
+where the packets are — a Kubernetes NetworkPolicy.
+
+On Linux, `host.docker.internal` is the docker bridge gateway rather than the
+host's loopback, so a server with granted gears sets the gate somewhere the
+containers can reach it:
+
+```yaml
+gear_proxy_listen: 172.17.0.1:0   # default 127.0.0.1:0, which Docker Desktop reaches
+```
 
 ---
 

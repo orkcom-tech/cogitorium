@@ -9,12 +9,15 @@ package appstart
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/orkcom-tech/cogitorium/internal/config"
+	"github.com/orkcom-tech/cogitorium/internal/gearnet"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
+	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/websearch"
 )
 
@@ -70,4 +73,83 @@ func BuildSearcher(cfg config.Config, sb sandbox.Runner) (*websearch.Searcher, e
 		"destination", websearch.Destination(),
 		"note", "every search still stops the turn and waits for an operator to approve that exact query")
 	return s, nil
+}
+
+// BuildGearNet opens the outward gate for gears: the proxy a granted gear's
+// traffic is carried through, checked against the destinations the operator
+// granted, and written down.
+//
+// It is built unconditionally rather than only when some gear happens to hold a
+// grant, because the alternative is opening a listening socket at the moment a
+// pipeline first needs one — so a port already taken, or an address the machine
+// does not hold, becomes a gear failing in production instead of a server
+// refusing to start. The gate grants nothing by existing: without a ticket, and
+// a ticket exists only for the length of a granted run, it answers 407.
+//
+// Unlike the search gate, an absent sandbox is NOT a refusal to start here, and
+// the difference is worth stating. Refusing would take gears away from every
+// install without Docker, which is most laptops, to protect a grant that is off
+// by default. What it earns instead is a sentence: without a sandbox a gear
+// already holds the server's own network, so the grant stops being a boundary
+// and becomes only a record — and an operator running that way should know
+// which of the two they have.
+//
+// The caller closes it.
+func BuildGearNet(cfg config.Config, db *sql.DB, sb sandbox.Runner) (*gearnet.Gate, error) {
+	gate, err := gearnet.New(db, cfg.GearProxyListen)
+	if err != nil {
+		return nil, err
+	}
+	if sb == nil {
+		slog.Warn("gears are not sandboxed, so a gear already holds this server's network whether or not " +
+			"it was granted one: the destinations an operator grants are recorded and checked for code that " +
+			"uses the proxy it is given, and enforced on nothing. Install Docker or set sandbox: docker")
+	}
+	return gate, nil
+}
+
+// BuildSecrets constructs the lookup that turns the names a gear declares into
+// the values it is given, and refuses to start on a source that cannot work.
+//
+// A configured directory that cannot be read is a startup error for the same
+// reason a decorative egress gate is: the operator asked for a source, and one
+// that silently supplies nothing turns into a gear failing at three in the
+// morning with a message about a name.
+//
+// A missing COGITORIUM_SECRET_KEY is NOT an error — it is the ordinary state of
+// an install that keeps nothing sensitive in its own database. It becomes worth
+// saying only when there are already secrets in there that it can no longer
+// open, which is a question that has to be asked of the database, here, once.
+func BuildSecrets(ctx context.Context, cfg config.Config, db *sql.DB) (*secrets.Resolver, error) {
+	var key *secrets.Key
+	if cfg.SecretKey != "" {
+		k, err := secrets.NewKey(cfg.SecretKey)
+		if err != nil {
+			return nil, err
+		}
+		key = k
+	}
+
+	store := secrets.NewStore(db, key)
+	resolver, err := secrets.NewResolver(store, cfg.VariablesDir, cfg.SecretsDir)
+	if err != nil {
+		return nil, err
+	}
+
+	if key == nil {
+		n, err := store.CountSealed(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if n > 0 {
+			slog.Warn("this install holds secrets it cannot read: COGITORIUM_SECRET_KEY is not set, "+
+				"so every gear that asks for one of them will be refused. Set it to the key this install was using, or set those names again",
+				"secrets", n)
+		}
+	}
+	if v, s := resolver.Sources(); v != "" || s != "" {
+		slog.Info("named values are also read from disk, one file per name",
+			"variables_dir", v, "secrets_dir", s)
+	}
+	return resolver, nil
 }
