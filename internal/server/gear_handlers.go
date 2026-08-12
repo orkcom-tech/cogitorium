@@ -396,9 +396,21 @@ func (s *Server) handleDeleteGear(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Read it before deleting it: the row is the only thing that knows the
+	// gear's name, and the name is what its directory on disk is called.
+	g, err := s.gears.Get(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
 	if err := s.gears.Delete(r.Context(), id); err != nil {
 		fail(w, r, err)
 		return
+	}
+	// After the row, and never fatal to the request: the gear IS deleted, and
+	// a 500 here would invite the operator to delete it again.
+	if err := s.gearExec.RemoveFiles(g.Name); err != nil {
+		slog.Warn("gear deleted but its files could not be removed", "gear_id", id, "gear", g.Name, "err", err)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

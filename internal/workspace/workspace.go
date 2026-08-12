@@ -517,15 +517,45 @@ func (s *Store) Clone(ctx context.Context, srcID int64, name string, ownerID int
 	return s.GetWorkspace(ctx, clone.ID)
 }
 
+// DeleteWorkspace removes the workspace and everything the database holds about
+// it. The caller removes its directory; see workdir.Remove and the delete
+// handler, which does both.
+//
+// Most of it cascades from the foreign key, but not all of it, and the
+// exceptions are deliberate rather than oversights: search_queries, inlet_runs
+// and gear_connections carry a workspace_id with NO foreign key, because an
+// audit row must be able to outlive the thing it audits. That reasoning is right
+// while the workspace exists and stops applying the moment it does not — what is
+// left is rows nobody can reach, in tables nothing prunes, keyed to an id SQLite
+// will hand out again.
+//
+// So they are deleted explicitly, in the same transaction as the workspace. One
+// transaction rather than four statements because a half-deleted workspace is
+// worse than either outcome: the operator sees it gone and its audit rows stay
+// forever, or the reverse.
 func (s *Store) DeleteWorkspace(ctx context.Context, id int64) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM workspaces WHERE id = ?`, id)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("delete workspace %d: %w", id, err)
+	}
+	defer tx.Rollback()
+
+	for _, table := range []string{"search_queries", "inlet_runs", "gear_connections"} {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE workspace_id = ?`, id); err != nil {
+			return fmt.Errorf("delete workspace %d: clear %s: %w", id, table, err)
+		}
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM workspaces WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete workspace %d: %w", id, err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("workspace %d: %w", id, ErrNotFound)
 	}
-	slog.Info("workspace deleted (agents, wires, messages cascade)", "id", id)
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("delete workspace %d: %w", id, err)
+	}
+	slog.Info("workspace deleted (agents, wires, messages cascade; runs and audit rows removed)", "id", id)
 	return nil
 }
 

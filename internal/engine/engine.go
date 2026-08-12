@@ -63,6 +63,13 @@ type Event struct {
 	// on screen dead and clickable.
 	Approval *egress.Request `json:"approval,omitempty"`
 	Resolved string          `json:"resolved,omitempty"`
+	// Did rides the final event of an operator's turn — the same record a
+	// delivery through an inlet has always carried. A person watching a turn
+	// could previously see the tool rows go past and had no summary of them
+	// afterwards, while a machine on the other side of a door got one. The
+	// asymmetry was an oversight, not a design: everything needed was already
+	// collected on the turn state, and only the delivery path ever read it.
+	Did *Record `json:"did,omitempty"`
 }
 
 type Engine struct {
@@ -236,7 +243,7 @@ func (e *Engine) HandleUserMessage(ctx context.Context, wsID int64, text string,
 			if res.StopReason == "max_tokens" || res.StopReason == "length" {
 				e.persistError(ctx, wsID, orch.ID, fmt.Errorf("orchestrator reply truncated by token limit (%s)", res.StopReason), emit)
 			}
-			emit(Event{Type: "done"})
+			e.emitDone(wsID, emit)
 			return nil
 		}
 
@@ -266,8 +273,24 @@ func (e *Engine) HandleUserMessage(ctx context.Context, wsID int64, text string,
 	}
 
 	e.persistError(ctx, wsID, orch.ID, fmt.Errorf("stopped after %d tool iterations without a final answer", maxToolIterations), emit)
-	emit(Event{Type: "done"})
+	e.emitDone(wsID, emit)
 	return nil
+}
+
+// emitDone ends an operator's turn with the record of what it did.
+//
+// Every way a turn can end goes through here, including the ones that ended
+// badly: a turn that wrote four files and then ran out of iterations still
+// wrote them, and the record is most worth reading exactly when the answer is
+// not. It is read BEFORE the deferred endTurn, for the same reason the delivery
+// path reads it before its own — after that the turn state is gone and the
+// record would report a run that did nothing.
+func (e *Engine) emitDone(wsID int64, emit func(Event)) {
+	out := e.outcome(wsID, "")
+	slog.Info("turn finished", "workspace_id", wsID,
+		"tools", len(out.Did.Tools), "files", out.Did.DistinctFiles(),
+		"model_calls", out.Did.ModelCalls, "tokens_in", out.Did.Tokens.In, "tokens_out", out.Did.Tokens.Out)
+	emit(Event{Type: "done", Did: &out.Did})
 }
 
 func (e *Engine) orchestrator(ctx context.Context, wsID int64) (workspace.Agent, error) {

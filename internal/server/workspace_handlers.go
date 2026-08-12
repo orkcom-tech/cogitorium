@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/orkcom-tech/cogitorium/internal/engine"
+	"github.com/orkcom-tech/cogitorium/internal/workdir"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
 
@@ -130,6 +131,14 @@ func (s *Server) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	if err := s.workspaces.DeleteWorkspace(r.Context(), id); err != nil {
 		fail(w, r, err)
 		return
+	}
+	// The files go after the rows, and a failure here does not fail the
+	// request: the workspace IS deleted by this point, and answering 500 would
+	// invite an operator to press delete again on something that no longer
+	// exists. The warning names the directory, which is what somebody clearing
+	// a full disk actually needs.
+	if err := workdir.Remove(s.dataDir, id); err != nil {
+		slog.Warn("workspace deleted but its files could not be removed", "workspace_id", id, "err", err)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

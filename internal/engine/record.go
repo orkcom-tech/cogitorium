@@ -40,13 +40,29 @@ type Record struct {
 	Tokens     Tokens     `json:"tokens"`
 }
 
-// ToolRun is one tool call and how it ended. A gear appears here under its tool
-// name — gear_unpack for the gear called unpack — because that is the name the
-// model called and the name the engine dispatched.
+// ToolRun is one tool call, who made it, and how it ended. A gear appears here
+// under its tool name — gear_unpack for the gear called unpack — because that is
+// the name the model called and the name the engine dispatched.
+//
+// Agent and Depth are the point of the whole record, and they were missing from
+// it for longer than they should have been. A run whose evidence says four tool
+// calls happened does not answer the question this product exists to ask, which
+// is which AGENT — and therefore which model — made them. The distinctive claim
+// is one model per agent; a record that cannot tell an expensive agent's work
+// from a cheap one's is a record about a black box. Both values were already in
+// scope at the one call site (execToolAs) and were being logged there while
+// being dropped here.
+//
+// Depth is the delegation distance from the agent the run started at: 0 for that
+// agent, 1 for one it handed work to, and so on. It is what makes a record
+// readable as a tree rather than a list, and it is free — the chain is already
+// carried for the cycle check.
 type ToolRun struct {
-	Name string `json:"name"`
-	OK   bool   `json:"ok"`
-	Ms   int64  `json:"ms"`
+	Name  string `json:"name"`
+	Agent string `json:"agent"`
+	Depth int    `json:"depth"`
+	OK    bool   `json:"ok"`
+	Ms    int64  `json:"ms"`
 }
 
 // FileMade is one file that appeared in the workspace during the run, in the
@@ -148,9 +164,11 @@ func (e *Engine) note(wsID int64, f func(*Record)) {
 	}
 }
 
-func (e *Engine) noteTool(wsID int64, name string, ok bool, took time.Duration) {
+func (e *Engine) noteTool(wsID int64, name, agent string, depth int, ok bool, took time.Duration) {
 	e.note(wsID, func(r *Record) {
-		r.Tools = append(r.Tools, ToolRun{Name: name, OK: ok, Ms: took.Milliseconds()})
+		r.Tools = append(r.Tools, ToolRun{
+			Name: name, Agent: agent, Depth: depth, OK: ok, Ms: took.Milliseconds(),
+		})
 	})
 }
 

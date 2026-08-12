@@ -16,6 +16,7 @@ package workdir
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path"
@@ -61,6 +62,30 @@ func Dir(dataDir string, wsID int64) string {
 		return ""
 	}
 	return dir
+}
+
+// Remove deletes a workspace's directory and everything under it.
+//
+// It is separate from Dir because Dir CREATES — a caller that merely wants to
+// name the directory would otherwise bring it back into existence on the way to
+// deleting it.
+//
+// It exists because deleting a workspace did not delete anything on disk. The
+// row went, the agents and the timeline cascaded, and the whole tree stayed:
+// every file an inlet had delivered, everything gears had produced, every
+// attachment the operator had sent. On a single ReadWriteOnce volume that is not
+// untidiness, it is a disk that fills with the contents of workspaces nobody can
+// reach any more.
+//
+// A missing directory is success: a workspace that never had files has nothing
+// to reclaim, and reporting that as an error would make the caller decide
+// whether "it was not there" is a problem. It is not.
+func Remove(dataDir string, wsID int64) error {
+	dir := filepath.Join(dataDir, "workspaces", strconv.FormatInt(wsID, 10))
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("remove the workspace directory %s: %w", dir, err)
+	}
+	return nil
 }
 
 // Clean is the one answer to "what does this caller-supplied path mean,

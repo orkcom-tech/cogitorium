@@ -463,41 +463,54 @@ type fileCall struct {
 	destRel string // where out/ lands, relative to the workspace root
 }
 
+// RemoveFiles deletes what a gear left on disk: the directory named after it
+// under <data>/gears.
+//
+// Every run now builds and removes its own directory below this one, so in a
+// quiet install what is left is an empty directory per gear name. Deleting the
+// gear should take that with it — otherwise <data>/gears accumulates a
+// directory for every gear that has ever existed, and the one that fills a disk
+// is the run directory of a gear killed mid-execution, which nothing else will
+// ever come back for.
+//
+// A missing directory is success. A gear that was never run has nothing here.
+func (e *Executor) RemoveFiles(name string) error {
+	if name == "" {
+		return errors.New("a gear with no name has no directory to remove")
+	}
+	dir := filepath.Join(e.baseDir, name)
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("remove the gear directory %s: %w", dir, err)
+	}
+	return nil
+}
+
 // prepare builds the directory the gear runs in, and returns the cleanup that
 // must follow it.
 //
-// A call that names no files gets the directory it has always got:
-// <data>/gears/<name>/v<version>, rebuilt from the database and left in place
-// afterwards. A call that carries files gets a run of its own — because two
-// agents in two workspaces can call the same gear at the same moment, and one
-// caller's in/ appearing in another caller's run would be a file crossing
-// between workspaces. It is removed afterwards for the same reason: a
-// workspace's files have no business staying in the gear directory once the run
-// that borrowed them is over.
+// EVERY run gets a directory of its own: <data>/gears/<name>/v<version>.run-<token>,
+// built from the database and removed afterwards.
+//
+// It did not always. A call carrying no files ran in the shared
+// <data>/gears/<name>/v<version>, and materialize starts by deleting whatever is
+// there — so a second run of the same gear wiped the first one's directory
+// while it was still executing. Two agents in two workspaces calling one gear at
+// the same moment was already possible, and this comment already said so; the
+// private directory was given only to the calls carrying files, on the grounds
+// that one caller's in/ must not appear in another's. The reason for a private
+// directory turns out to be the smaller half of the reason for one.
+//
+// Removing it afterwards costs the rebuild on the next call, which happens on
+// every call regardless: materialize rebuilds from the database each time, so
+// that a deleted-and-reforged gear reusing a name and version number can never
+// execute stale files under the new gear's approval.
 func (e *Executor) prepare(ctx context.Context, g Gear, files []string, caller Caller) (string, *fileCall, func(), error) {
 	noop := func() {}
-	base := filepath.Join(e.baseDir, g.Name, fmt.Sprintf("v%d", g.Version))
-	if files == nil {
-		if err := e.materialize(ctx, g, base); err != nil {
-			return "", nil, noop, err
-		}
-		return base, nil, noop, nil
-	}
-
-	if caller.WorkspaceID == nil {
-		return "", nil, noop, errors.New("a gear can only be given files on behalf of a workspace, and this run has none — " +
-			"an operator's dry run from the catalog has no workspace to take files from or hand them back to")
-	}
-	root := workdir.Dir(e.dataDir, *caller.WorkspaceID)
-	if root == "" {
-		return "", nil, noop, fmt.Errorf("workspace %d has no working directory on this machine, so it has no files to give", *caller.WorkspaceID)
-	}
 	token, err := runToken()
 	if err != nil {
 		return "", nil, noop, err
 	}
-
-	dir := base + ".run-" + token
+	dir := filepath.Join(e.baseDir, g.Name, fmt.Sprintf("v%d.run-%s", g.Version, token))
 	cleanup := func() {
 		if err := os.RemoveAll(dir); err != nil {
 			slog.Warn("could not remove a gear run directory", "gear", g.Name, "dir", dir, "err", err)
@@ -506,6 +519,20 @@ func (e *Executor) prepare(ctx context.Context, g Gear, files []string, caller C
 	if err := e.materialize(ctx, g, dir); err != nil {
 		cleanup()
 		return "", nil, noop, err
+	}
+	if files == nil {
+		return dir, nil, cleanup, nil
+	}
+
+	if caller.WorkspaceID == nil {
+		cleanup()
+		return "", nil, noop, errors.New("a gear can only be given files on behalf of a workspace, and this run has none — " +
+			"an operator's dry run from the catalog has no workspace to take files from or hand them back to")
+	}
+	root := workdir.Dir(e.dataDir, *caller.WorkspaceID)
+	if root == "" {
+		cleanup()
+		return "", nil, noop, fmt.Errorf("workspace %d has no working directory on this machine, so it has no files to give", *caller.WorkspaceID)
 	}
 	given, err := stageIn(root, dir, files)
 	if err != nil {
