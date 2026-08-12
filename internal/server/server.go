@@ -31,6 +31,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/version"
 	"github.com/orkcom-tech/cogitorium/internal/websearch"
+	"github.com/orkcom-tech/cogitorium/internal/work"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 	"github.com/orkcom-tech/cogitorium/web"
 )
@@ -102,7 +103,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		library:    lib,
 		identity:   identity.NewStore(db),
 		inlets:     inlet.NewStore(db),
-		engine:     engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, cfg.DataDir),
+		engine:     engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, work.NewStore(db), cfg.DataDir),
 		// A server reachable beyond this machine must not hand out admin
 		// to anyone who can open a socket to it.
 		trustLoopback:   isLoopbackListen(cfg.Listen),

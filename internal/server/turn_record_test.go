@@ -2,9 +2,12 @@ package server
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/engine"
+	"github.com/orkcom-tech/cogitorium/internal/work"
 )
 
 // An operator's own turn leaves the same record a delivery does, and every tool
@@ -128,4 +131,60 @@ func TestADelegatedToolCallIsAttributedToTheWorker(t *testing.T) {
 	if found.Depth != 1 {
 		t.Fatalf("a delegated call is recorded at depth %d, want 1 — the record cannot be read as a tree", found.Depth)
 	}
+}
+
+// An operator's turn holds the same lane a delivery queues behind, and gives it
+// back when the turn ends — including when the turn fails.
+//
+// Two latches that could not see each other would let a chat turn and a
+// delivery run at once in one workspace, and the turn state they would share
+// holds the egress budget, both anti-worm taint latches and the run record, all
+// keyed by workspace. A lane left claimed by a turn that is over is worse still:
+// that workspace would never accept another delivery for as long as the process
+// lives.
+func TestAnOperatorsTurnTakesAndReleasesTheWorkspaceLane(t *testing.T) {
+	d := newDoor(t)
+	ctx := context.Background()
+	lanes := work.NewStore(d.db)
+
+	held := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	d.provider.answers(func(n int, c modelCall) modelReply {
+		once.Do(func() { close(held) })
+		<-release
+		return says("done")
+	})
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = d.srv.engine.HandleUserMessage(ctx, d.wsID, "hold it", func(engine.Event) {})
+	}()
+	<-held
+
+	if _, claimed, err := lanes.Depth(ctx, work.Lane(d.wsID)); err != nil || claimed != 1 {
+		t.Fatalf("a running operator turn holds %d claimed units (err %v), want 1 — a delivery would run beside it", claimed, err)
+	}
+
+	close(release)
+	wg.Wait()
+
+	waitFor(t, func() bool {
+		_, claimed, err := lanes.Depth(ctx, work.Lane(d.wsID))
+		return err == nil && claimed == 0
+	}, "the lane to be released when the turn ended")
+}
+
+func waitFor(t *testing.T, cond func() bool, what string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
 }

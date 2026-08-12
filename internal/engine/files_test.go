@@ -20,6 +20,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/llm"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/store"
+	"github.com/orkcom-tech/cogitorium/internal/work"
 	"github.com/orkcom-tech/cogitorium/internal/workdir"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
@@ -104,7 +105,7 @@ func newFilesFixture(t *testing.T) *filesFixture {
 	gears := gear.NewStore(db)
 	cs := contextstore.New(filepath.Join(t.TempDir(), "contextd-not-installed"))
 	e := New(ws, cat, cs, gears, gear.NewExecutor(gears, dataDir, nil, envResolver(t, db), netGate(t, db)),
-		library.NewStore(db), nil, nil, dataDir)
+		library.NewStore(db), nil, nil, work.NewStore(db), dataDir)
 
 	orch, err := e.orchestrator(ctx, space.ID)
 	if err != nil {

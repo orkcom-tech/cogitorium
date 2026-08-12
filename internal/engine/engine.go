@@ -21,6 +21,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
 	"github.com/orkcom-tech/cogitorium/internal/websearch"
+	"github.com/orkcom-tech/cogitorium/internal/work"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
 
@@ -93,13 +94,21 @@ type Engine struct {
 	broker       *egress.Broker
 	egressKilled func() bool
 
+	// lanes is the queue's table, used here for exactly one thing: an
+	// operator's turn takes the same lane a delivery would queue behind. Two
+	// latches that could not see each other would let a chat turn and a
+	// delivery run at once in one workspace, and the turn state they would
+	// share holds the egress budget, both anti-worm taint latches and the run
+	// record — all keyed by workspace.
+	lanes *work.Store
+
 	mu      sync.Mutex
 	status  map[int64]AgentStatus
 	running map[int64]bool // workspace_id -> a turn is in flight
 	turns   map[int64]*turnState
 }
 
-func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears *gear.Store, gearExec *gear.Executor, lib *library.Store, searcher *websearch.Searcher, broker *egress.Broker, dataDir string) *Engine {
+func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears *gear.Store, gearExec *gear.Executor, lib *library.Store, searcher *websearch.Searcher, broker *egress.Broker, lanes *work.Store, dataDir string) *Engine {
 	return &Engine{
 		ws:       ws,
 		cat:      cat,
@@ -111,6 +120,7 @@ func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears 
 		searcher: searcher,
 		broker:   broker,
 		status:   map[int64]AgentStatus{},
+		lanes:    lanes,
 		running:  map[int64]bool{},
 		turns:    map[int64]*turnState{},
 	}
@@ -170,6 +180,31 @@ func (e *Engine) HandleUserMessage(ctx context.Context, wsID int64, text string,
 		e.mu.Lock()
 		delete(e.running, wsID)
 		e.mu.Unlock()
+	}()
+
+	// And the same lane the queue serialises deliveries on. An operator's turn
+	// is claimed rather than queued: a person is holding a stream and possibly
+	// an approval on screen, so being told the workspace is busy is a better
+	// answer than a place in a line they cannot see.
+	//
+	// Taken AFTER the in-process latch so the two can never disagree about who
+	// holds the workspace, and released on every path, including a panic —
+	// a lane left claimed by a turn that is over is a workspace that never
+	// accepts another delivery.
+	lane, err := e.lanes.ClaimNow(ctx, work.Unit{
+		Kind: work.KindChat, WorkspaceID: wsID, Lane: work.Lane(wsID),
+	})
+	if err != nil {
+		if errors.Is(err, work.ErrLaneBusy) {
+			return ErrBusy
+		}
+		return fmt.Errorf("take the workspace lane: %w", err)
+	}
+	defer func() {
+		if err := e.lanes.Settle(context.WithoutCancel(ctx), lane.ID, ""); err != nil {
+			slog.Error("could not release the workspace lane after an operator turn",
+				"workspace_id", wsID, "unit", lane.ID, "err", err)
+		}
 	}()
 
 	// One budget and one set of latches for the whole turn, delegation tree

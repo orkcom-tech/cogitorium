@@ -11,6 +11,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
 	"github.com/orkcom-tech/cogitorium/internal/store"
+	"github.com/orkcom-tech/cogitorium/internal/work"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
 
@@ -78,7 +79,7 @@ func newPromptFixture(t *testing.T, avoid string) promptFixture {
 
 	// gearExec, the library, the searcher, the broker and the data directory
 	// take no part in assembling a prompt; passing them would only hide that.
-	return promptFixture{engine: New(ws, cat, cs, gears, nil, nil, nil, nil, ""), ws: ws, agent: agent}
+	return promptFixture{engine: New(ws, cat, cs, gears, nil, nil, nil, nil, work.NewStore(db), ""), ws: ws, agent: agent}
 }
 
 func (f promptFixture) prompt(t *testing.T) string {
