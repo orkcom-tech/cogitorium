@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -19,6 +20,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/inlet"
 	"github.com/orkcom-tech/cogitorium/internal/workdir"
+	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
 
 // Inlets have two halves, and the whole security model is that they stay
@@ -184,6 +186,21 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 	// out is read on both branches below rather than only on the happy one.
 	out, err := s.engine.RunUnattended(r.Context(), in.WorkspaceID, task.AgentName, payload.prompt)
 	if err != nil {
+		// The run never began, so the file this delivery landed is bytes nobody
+		// will ever read. Three ways to get here, all decided before the first
+		// model call: the workspace was busy (the check above happens before
+		// the body is read, but a workspace can become busy in the gap between
+		// it and the lock inside the engine), the task's agent has no model, or
+		// its agent is gone. In each case the caller is told to retry or to fix
+		// the workspace, and a retry lands a fresh copy under a new run number
+		// while this one sits on the volume forever.
+		//
+		// Deliberately NOT every failure: a run that read the file and then
+		// fell over used it, and whoever is deciding what to do next may want
+		// to see what arrived.
+		if payload.relPath != "" && neverBegan(err) {
+			s.reclaimPayload(ledgerCtx, in.WorkspaceID, runID, payload.relPath)
+		}
 		s.failedDelivery(w, ledgerCtx, r, runID, err, out.Did)
 		return
 	}
@@ -247,6 +264,43 @@ func (s *Server) failedDelivery(w http.ResponseWriter, ledgerCtx context.Context
 		return // the connection is gone; writing to it would only log an error
 	}
 	writeJSON(w, code, deliveryResponse{Run: runID, State: state, Error: cause.Error(), Did: did})
+}
+
+// neverBegan reports whether a delivery failed before its agent could be asked
+// anything at all. These are the errors RunUnattended returns above its own
+// lock, so no model was called, no tool ran, and nothing was given the file.
+func neverBegan(err error) bool {
+	return errors.Is(err, engine.ErrBusy) ||
+		errors.Is(err, engine.ErrNoModel) ||
+		errors.Is(err, workspace.ErrNotFound)
+}
+
+// reclaimPayload removes a delivered file that was never given to anybody, and
+// clears the ledger's pointer to it in the same breath.
+//
+// Both or neither. A row naming a file that is gone is worse than either half
+// on its own, because the one thing a ledger is for is being believed — so if
+// the file cannot be removed the row keeps pointing at it, which is true.
+func (s *Server) reclaimPayload(ctx context.Context, wsID, runID int64, rel string) {
+	root := workdir.Dir(s.dataDir, wsID)
+	if root == "" {
+		slog.Warn("could not reach the workspace directory to remove an unused delivery payload", "run_id", runID, "workspace_id", wsID)
+		return
+	}
+	full, err := workdir.ResolveInside(root, rel)
+	if err != nil {
+		slog.Warn("could not resolve an unused delivery payload to remove it", "run_id", runID, "path", rel, "err", err)
+		return
+	}
+	if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
+		slog.Warn("could not remove an unused delivery payload", "run_id", runID, "path", rel, "err", err)
+		return
+	}
+	if err := s.inlets.DropPayload(ctx, runID); err != nil {
+		slog.Warn("removed an unused delivery payload but could not clear its ledger row", "run_id", runID, "err", err)
+		return
+	}
+	slog.Info("unused delivery payload reclaimed", "run_id", runID, "workspace_id", wsID, "path", rel)
 }
 
 // inletPayload is what a delivery turned into: the single user turn the agent

@@ -140,6 +140,27 @@ func (s *Store) Settle(ctx context.Context, id int64, state, result, errText str
 	return nil
 }
 
+// DropPayload forgets a delivered file that was never used, so the row does not
+// go on pointing at bytes that are no longer on disk.
+//
+// It exists for one case: a file delivery whose run never started. The busy
+// check runs before the body is read, but a workspace can become busy in the
+// gap between that check and the lock inside the engine — and by then the bytes
+// have landed. The caller is told to retry, they do, and a second copy lands
+// under a new run number while the first sits on the volume forever with
+// nothing that will ever come back for it.
+//
+// The file is removed by the caller; this is the row half. Both or neither: a
+// row naming a file that is gone is worse than either, because the one thing a
+// ledger is for is being believed.
+func (s *Store) DropPayload(ctx context.Context, id int64) error {
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE inlet_runs SET payload_path = '', updated_at = ? WHERE id = ?`, now(), id); err != nil {
+		return fmt.Errorf("clear the payload path of inlet run %d: %w", id, err)
+	}
+	return nil
+}
+
 // SettleOrLog is Settle for the paths that have already decided what to tell
 // the caller. The answer is in hand by then, so a ledger hiccup is logged and
 // swallowed rather than turned into a failure the caller sees for a job that

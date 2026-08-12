@@ -185,20 +185,21 @@ func (c *anthropicClient) Chat(ctx context.Context, r Request, onDelta func(stri
 	if err != nil {
 		return Result{}, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url("/v1/messages"), bytes.NewReader(body))
-	if err != nil {
-		return Result{}, err
-	}
-	c.headers(req)
-
-	resp, err := c.http.Do(req)
+	// A fresh request per attempt: a request body can only be read once, so a
+	// retry that reused one would send an empty body and be refused for a
+	// reason unrelated to the first refusal.
+	resp, err := send(ctx, func() (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url("/v1/messages"), bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		c.headers(req)
+		return c.http.Do(req)
+	}, "anthropic")
 	if err != nil {
 		return Result{}, fmt.Errorf("anthropic chat: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return Result{}, httpError(resp)
-	}
 
 	var (
 		result Result

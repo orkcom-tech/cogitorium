@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -32,6 +33,13 @@ func (c *openAIClient) hint404(err error, resp *http.Response) error {
 	if resp.StatusCode != http.StatusNotFound {
 		return err
 	}
+	return c.hintMissingPath(err)
+}
+
+// hintMissingPath is hint404 for a caller that already knows the status was 404
+// — the chat path learns it from the typed error rather than from a response it
+// no longer holds, because the retry loop closes the body it decided on.
+func (c *openAIClient) hintMissingPath(err error) error {
 	u, parseErr := neturl.Parse(c.baseURL)
 	if parseErr != nil || strings.Contains(u.Path, "/v") {
 		return err
@@ -196,20 +204,23 @@ func (c *openAIClient) Chat(ctx context.Context, r Request, onDelta func(string)
 	if err != nil {
 		return Result{}, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url("/chat/completions"), bytes.NewReader(body))
+	// A fresh request per attempt; see send.
+	resp, err := send(ctx, func() (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url("/chat/completions"), bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		c.headers(req)
+		return c.http.Do(req)
+	}, "openai-compatible")
 	if err != nil {
-		return Result{}, err
-	}
-	c.headers(req)
-
-	resp, err := c.http.Do(req)
-	if err != nil {
+		var perr *ProviderError
+		if errors.As(err, &perr) && perr.Status == http.StatusNotFound {
+			return Result{}, c.hintMissingPath(err)
+		}
 		return Result{}, fmt.Errorf("openai-compatible chat: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return Result{}, c.hint404(httpError(resp), resp)
-	}
 
 	var (
 		result Result
