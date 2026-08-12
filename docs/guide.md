@@ -402,7 +402,165 @@ happened.
 
 ---
 
-## 6. Files, the editor and diffs
+## 6. A door for the rest of your system
+
+An **inlet** takes an HTTP POST from outside and hands it to an agent. It has an
+address, its own key, and a list of **tasks**; a task says what it accepts,
+which agent gets it, what to tell that agent, and what counts as success.
+
+Any number of doors per workspace, any number of tasks per door. Add one from
+the workspace page, or:
+
+```bash
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/inlets -H 'Content-Type: application/json' -d '{"address":"drop","description":"files from outside"}'
+```
+
+### A task that unpacks an archive
+
+Everything below is a real capture from a running install, not an illustration.
+
+```bash
+curl -X POST http://127.0.0.1:8688/api/v1/inlets/1/tasks -H 'Content-Type: application/json' -d '{
+  "name": "archive",
+  "accepts": "file",
+  "content_type": "application/zip",
+  "agent": "filer",
+  "instruction": "An archive arrived. Call gear_unpack with into=\"unpacked\", passing its path in _files.",
+  "expect": { "runs_gear": "unpack", "produces_files": 1 }
+}'
+```
+
+Then a key, which is shown once:
+
+```bash
+curl -X POST http://127.0.0.1:8688/api/v1/inlets/1/key
+```
+
+And the delivery — a plain POST from anything you already have:
+
+```bash
+curl -X POST http://127.0.0.1:8688/i/drop/archive \
+  -H "Authorization: Bearer $INLET_KEY" \
+  -H 'Content-Type: application/zip' \
+  --data-binary @bundle.zip
+```
+
+```json
+{
+  "run": 2,
+  "state": "completed",
+  "result": "The archive has been unpacked into the folder named \"unpacked\"…",
+  "did": {
+    "tools": [ { "name": "gear_unpack", "ok": true, "ms": 47 } ],
+    "files": [
+      { "path": "gears/unpack/20260812-031936-08a6341e/unpacked/meta.json",   "bytes": 41 },
+      { "path": "gears/unpack/20260812-031936-08a6341e/unpacked/note.txt",    "bytes": 45 },
+      { "path": "gears/unpack/20260812-031936-08a6341e/unpacked/numbers.csv", "bytes": 29 }
+    ],
+    "model_calls": 2,
+    "tokens": { "in": 3936, "out": 139 }
+  }
+}
+```
+
+The file was written into the workspace and the agent was given its **path**,
+never its bytes — which is what lets a gear open it, and what stops a megabyte
+of base64 landing in a prompt.
+
+### Read `did`, not the sentence
+
+`did` is the record of what happened: which tools ran and whether they
+succeeded, which files exist afterwards, what it cost. It is on every response
+and every run, on success and on failure alike.
+
+It exists because the sentence cannot be trusted. A model asked to call a gear
+answered *"The comma-separated text file was aligned and formatted using
+gear_format … into folder formatted"* having made **zero tool calls**. The
+delivery said 200 and completed. Nothing had happened. With `did`, that run
+reads:
+
+```json
+"did": { "tools": [], "files": [], "model_calls": 1, "tokens": { "in": 11, "out": 7 } }
+```
+
+An empty tool list is the answer.
+
+### `expect` — say what success is, and have it checked
+
+Every field is optional; a task without the block behaves exactly as it did
+before.
+
+| field | means |
+|---|---|
+| `runs_gear` | this gear must have run and succeeded |
+| `produces_files` | at least this many files must exist afterwards |
+| `schema` | the answer must fit this shape |
+| `answer_from` | `"agent"` (default) or `"gear"` — where the result comes from |
+
+`runs_gear` and `produces_files` are checked against the **record**, never
+against the agent's text. A run with a confident answer and an empty record
+fails, and says both halves:
+
+```
+this task requires the gear "unpack" to have run and succeeded, and the record
+holds no successful call to it. What this run did: 1 tool call: gear_unpack
+(failed, 72ms); no files appeared; 2 model calls, 3936 tokens in and 139 out.
+```
+
+That is a real refusal, from a run where the gear was called and died. Note it
+says *no successful call* rather than guessing that it never ran — the record
+knows the difference, and so does whoever is paged.
+
+### `answer_from: "gear"` — take the model out of the answer
+
+For a deterministic job the agent is a router and its narration is not
+evidence. A task that formats a file:
+
+```json
+"expect": { "runs_gear": "format", "produces_files": 1, "answer_from": "gear" }
+```
+
+```bash
+curl -X POST http://127.0.0.1:8688/i/drop/table \
+  -H "Authorization: Bearer $INLET_KEY" -H 'Content-Type: text/plain' \
+  --data-binary @people.txt
+```
+
+```json
+{
+  "run": 3,
+  "state": "completed",
+  "result": "{\"wrote\": \"formatted/3-payload.aligned.txt\", \"rows\": 3}\n",
+  "did": { "tools": [ { "name": "gear_format", "ok": true, "ms": 32 } ],
+           "files": [ { "path": "gears/format/…/formatted/3-payload.aligned.txt", "bytes": 78 } ] }
+}
+```
+
+The result is the gear's own stdout. The file is in the workspace:
+
+```
+name   role      city
+ada    engineer  london
+grace  admiral   new york
+```
+
+### What a door will not do
+
+- **An unknown key is 401, an unknown task 404**, and a payload that does not
+  match the task is **400 before any model is called** — a malformed request
+  from somebody's cron costs nothing.
+- **A delivery writes nothing into the operator's conversation.** Otherwise
+  request two hundred would carry the previous hundred and ninety-nine.
+- **The run is treated as third-party from the first byte**, so the agent
+  behind a door cannot write to the instruction library, the gear catalog or the
+  workspace graph — the same latch that stops text from the web doing it.
+- **`web_search` is not offered**: it pauses the turn waiting for a person to
+  approve the query, and there is nobody there.
+- **One run per workspace.** A second delivery while one is running gets 429.
+
+---
+
+## 7. Files, the editor and diffs
 
 Each workspace has its own directory. **Files** shows the tree; clicking a file
 opens it in **Editor**, which is a real editor with syntax highlighting, not a
@@ -417,7 +575,7 @@ directory comes into existence when you save a file into it.
 
 ---
 
-## 7. Memory
+## 8. Memory
 
 Context and memory are stored and versioned by Contextverse's `contextd`.
 Without it the server starts, says so at `GET /api/v1/context/status`, and
@@ -440,7 +598,7 @@ order it lands in.
 
 ---
 
-## 8. Letting an agent search the web
+## 9. Letting an agent search the web
 
 Off by default, and there are three locks. All three must be open, in order:
 
@@ -468,7 +626,7 @@ evaluates to false — and overrides a config file that said true.
 
 ---
 
-## 9. The terminal
+## 10. The terminal
 
 Off by default: it is interactive code execution over HTTP. Turning it on takes
 `terminal: true`, and it **also** requires a sandbox — without one the request
@@ -479,7 +637,7 @@ While a gear runs, its output streams here live.
 
 ---
 
-## 10. More than one person
+## 11. More than one person
 
 **People** (admin only) → **add user**. A token is shown once:
 
@@ -497,7 +655,7 @@ and the internet gate.
 
 ---
 
-## 11. When it refuses
+## 12. When it refuses
 
 Every message below is the exact text.
 
@@ -519,7 +677,7 @@ the database and nothing else.
 
 ---
 
-## 12. What is not here
+## 13. What is not here
 
 So that you do not go looking:
 
@@ -534,4 +692,6 @@ So that you do not go looking:
 - No screen for the search audit log, though the route exists.
 - No workspace-wide prohibitions; they are per agent, and a created agent inherits its creator's.
 - A bundle carries the conversation nowhere — it is a template, not a transcript.
+- No inlet may target a gear directly; a task names an agent, and the agent calls the gear.
+- No streaming from a door, no fan-out to several agents, and no inlets on a schedule.
 - Gears do not run as Kubernetes Jobs, and there are no remote agents.

@@ -353,6 +353,97 @@ first turn.
 
 ---
 
+## Inlets — a door from the rest of your system
+
+An inlet lets something outside this install hand work to an agent. It has an
+address, its own key, and a list of tasks; a task says what it accepts, which
+agent receives it, what to tell that agent, and what counts as success.
+
+```
+POST /i/{address}/{task}            delivery — the only path exempt from
+                                    normal authentication, proving itself
+                                    against an inlet key
+GET/POST /api/v1/workspaces/{id}/inlets
+GET/DELETE /api/v1/inlets/{id}
+POST /api/v1/inlets/{id}/key        issued once, stored hashed
+POST /api/v1/inlets/{id}/tasks
+GET  /api/v1/workspaces/{id}/inlet-runs
+```
+
+Management stays behind normal authentication with the workspace's own access
+rule. The exemption above matches by prefix, so nothing but delivery is ever put
+under `/i/`.
+
+**A task accepts JSON against a schema, or a file of a given content type.** A
+payload that does not match is refused with 400 **before any model is called**.
+A file is written into the workspace and the agent is given its **path** — never
+its bytes, which is what lets a gear open it and what stops a megabyte of base64
+reaching a prompt.
+
+**A delivery is not a conversation.** It writes nothing to the operator's
+timeline: the timeline is replayed into every turn, so a pipeline posting to the
+chat endpoint would make request two hundred carry the previous hundred and
+ninety-nine. It is also treated as third-party from the first byte, so the agent
+behind a door cannot write to the instruction library, the gear catalog or the
+workspace graph, and is not offered `web_search` — which waits for a person to
+approve a query, and there is nobody there. One run per workspace; a second
+delivery meanwhile gets 429.
+
+### `did` — what happened
+
+Every response and every run carries the record: which tools ran and whether
+they succeeded, which files exist afterwards with their sizes, how many model
+calls and how many tokens. On success and on failure alike, and never behind a
+flag.
+
+It exists because the answer cannot be trusted on its own. A model asked to call
+a gear once answered *"The … file was aligned and formatted using gear_format"*
+having made no tool calls at all, and the delivery said 200. With the record
+that run reads `"tools": [], "files": []`, and an empty tool list is the answer.
+
+### `expect` — what the operator says success is
+
+Optional, per task. `runs_gear` requires a named gear to have run and succeeded;
+`produces_files` requires at least N files to exist afterwards; `schema`
+requires the answer to fit a shape; `answer_from: "gear"` makes the last
+successful gear's stdout the result and returns no prose at all — for a
+deterministic job the agent is a router and its narration is not evidence.
+
+The first two are checked against the **record**, never against the text, so a
+run with a confident answer and an empty record fails. Two terminal states keep
+the cases apart: `refused_expectation` when the work did not happen and
+`refused_output_schema` when the answer did not fit — different news for
+whoever is paged.
+
+`produces_files` counts files, not writes: a run that wrote one file twice has
+produced one file.
+
+---
+
+## Files, for gears and agents
+
+A gear run that is handed files executes in a directory holding `in/` — the
+files, read-only — and an empty `out/`. It opens `in/photo.jpg` and writes
+`out/result.json` the way any program does, and what it leaves in `out/` is
+copied back into the workspace and reported. A gear given no files sees neither
+directory and its input is byte-identical to what it was.
+
+Read-only there is ownership rather than a flag: the sandbox user owns `out/`
+and nothing else, and a directory you do not own is one you cannot add to or
+delete from.
+
+Agents have `list_files`, `read_file` and `write_file` over their own workspace.
+`read_file` refuses a binary rather than base64-ing it into a prompt.
+
+**What a model can be shown is text, images and PDFs.** Anything else — a zip,
+a spreadsheet, a video — is refused in the model layer with a message naming the
+gear route, because no model can look inside it. Whether a particular model
+accepts images is declared on the model in the catalog: it is never probed and
+never guessed from a name, since a wrong guess fails at the provider with an
+error nobody can act on.
+
+---
+
 ## Context and memory
 
 Context is stored and versioned by

@@ -67,6 +67,18 @@ in its prompt, and an agent the orchestrator creates inherits them — otherwise
 a standing rule would be one tool call from being routed around by hiring
 someone without it.
 
+**It can be a stage in your own pipeline.** An inlet is a door with an address
+and its own key: data arrives by HTTP, an agent works on it, a result comes
+back. Any number of doors, any number of tasks behind each. A file is written
+into the workspace and handed to a gear as a path — so a zip arrives, a gear
+unpacks it, and the files are there.
+
+**And the caller is told what happened, not only what the agent says.** Every
+delivery carries a record: which tools ran, which files exist afterwards, what
+it cost. A task can state what success is — this gear must have run, this many
+files must appear — and it is checked against that record rather than against
+the model's sentence. A confident answer over an empty record fails.
+
 **A workspace is portable.** It exports as one JSON document — the arrangement,
 not a database dump — with its gears and its context as separate opt-ins.
 Wires and models are referenced by name because ids from another install mean
