@@ -81,13 +81,18 @@ type Config struct {
 	// gear the operator granted the network reaches it through, and which
 	// records every connection.
 	//
-	// The default keeps it on this machine, which is right on a laptop — Docker
-	// Desktop's host.docker.internal reaches a host loopback service. On Linux
-	// that name is the docker bridge gateway instead, and a service bound to
-	// 127.0.0.1 is not reachable from it, so an install with granted gears sets
-	// this to the bridge gateway (commonly 172.17.0.1:0) or to a fixed port on
-	// it. Port 0 means the kernel picks, which is what a gate nobody has to
-	// firewall wants.
+	// Empty means the server works it out: it asks Docker which address a
+	// container reaches this machine on and binds there if it can, falling back
+	// to the loopback. That covers the case this used to leave to the operator
+	// — on Linux host.docker.internal is the bridge gateway rather than the
+	// host's loopback, so a gate on 127.0.0.1 is unreachable from every
+	// container, and the grant silently did nothing on the platform servers run
+	// on. See gearnet.ListenFor.
+	//
+	// Set it to name an address yourself, in which case it is used exactly as
+	// given and a gate that cannot bind there is a startup failure rather than
+	// something quietly worked around. Port 0 means the kernel picks, which is
+	// what a gate nobody has to firewall wants.
 	GearProxyListen string `yaml:"gear_proxy_listen"`
 
 	// SecretKey encrypts the secrets held in this install's own database.

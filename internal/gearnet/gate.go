@@ -29,6 +29,48 @@ import (
 // address — see config.Config.GearProxyListen.
 const DefaultListen = "127.0.0.1:0"
 
+// ListenFor decides where the gate should bind so a sandboxed gear can actually
+// reach it, given what the operator configured and what the sandbox is.
+//
+// The default is right on a laptop and wrong on a server, which is the worst
+// combination: Docker Desktop forwards host.docker.internal to the host's
+// loopback, so a gate on 127.0.0.1 works on every Mac. On Linux that name is
+// the docker bridge gateway, a different address entirely, and every granted
+// gear got "connection refused" — the feature was broken on the platform
+// servers run on and fine on the platform it was written on. The configuration
+// comment told operators to set this by hand, which is documentation standing
+// in for a default that works.
+//
+// An operator who names an address gets it, unchanged and unchecked: a gate
+// that cannot bind where it was told is a fault worth failing loudly on.
+func ListenFor(ctx context.Context, configured string, box any) string {
+	if configured != "" && configured != DefaultListen {
+		return configured
+	}
+	gw, ok := box.(interface {
+		HostGatewayAddr(context.Context) string
+	})
+	if !ok {
+		return DefaultListen
+	}
+	addr := gw.HostGatewayAddr(ctx)
+	if addr == "" {
+		return DefaultListen
+	}
+	// Probe rather than assume. On Docker Desktop the daemon answers with the
+	// bridge gateway too, but that address lives inside its virtual machine and
+	// this host cannot bind it — and there the loopback is what the container
+	// reaches anyway. One bind attempt tells the two apart without asking which
+	// operating system this is.
+	candidate := net.JoinHostPort(addr, "0")
+	ln, err := net.Listen("tcp", candidate)
+	if err != nil {
+		return DefaultListen
+	}
+	ln.Close()
+	return candidate
+}
+
 // closeGrace is how long a finished run's credential stays known to the gate.
 //
 // Not generosity: a gear that backgrounded something outlives its own run, and

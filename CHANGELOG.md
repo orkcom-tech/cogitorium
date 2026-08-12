@@ -74,6 +74,16 @@ change either updates it or shows up as a diff.
   two crowds, two axes, because tuning one for both is whack-a-mole. A label also
   steps aside rather than landing on a card it does not belong to, and the
   capture script now reports any collision instead of shipping a mess quietly.
+- **A granted gear could not reach anything on Linux.** The gate a gear's
+  traffic goes through lives in the server's own process, and it bound the
+  loopback. Docker Desktop forwards `host.docker.internal` to the host's
+  loopback, so this worked on every laptop; on Linux that name is the docker
+  bridge gateway, a different address, and every granted gear got "connection
+  refused" — the feature was broken on the platform servers run on and fine on
+  the one it was written on. The server now asks Docker which address a
+  container reaches it at and binds there. The configuration reference used to
+  tell operators to set this by hand, which was documentation standing in for a
+  default that works.
 - **A key with one character changed opened the door, once every sixteen runs.**
   The inlet was fine; the test that guards it replaced the last character with a
   zero, and one key in sixteen already ends in one. A security test that cries

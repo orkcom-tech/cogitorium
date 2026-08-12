@@ -295,3 +295,29 @@ func tap(buf *bytes.Buffer, stream string, on func(string, string)) io.Writer {
 type writerFunc func([]byte) (int, error)
 
 func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
+
+// HostGatewayAddr is the address a container reaches this machine on, or "" if
+// that cannot be established.
+//
+// It exists because the outward gate for granted gears lives in the server's
+// own process, so a gear can only use it if the gate is bound somewhere the
+// container can dial — and on Linux the obvious answer is wrong. Docker Desktop
+// forwards host.docker.internal to the host's loopback, so a gate on
+// 127.0.0.1 works and every laptop says the feature is fine. On Linux the same
+// name resolves to the bridge gateway, which is a different machine as far as
+// the socket is concerned: the gear gets "connection refused" from an address
+// nothing is listening on. Every granted gear on the platform servers actually
+// run on failed, and only CI said so.
+//
+// Asked of Docker rather than hardcoded as 172.17.0.1: the daemon's bridge is
+// configurable, and a wrong constant would fail the same silent way.
+func (d *Docker) HostGatewayAddr(ctx context.Context) string {
+	var out, errOut bytes.Buffer
+	if err := d.cli(ctx, &out, &errOut, "network", "inspect", "bridge",
+		"--format", "{{range .IPAM.Config}}{{.Gateway}}{{end}}"); err != nil {
+		slog.Warn("could not ask docker for the address a container reaches this machine on",
+			"err", err, "stderr", strings.TrimSpace(errOut.String()))
+		return ""
+	}
+	return strings.TrimSpace(out.String())
+}

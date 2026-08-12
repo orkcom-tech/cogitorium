@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/orkcom-tech/cogitorium/internal/gearnet"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 )
 
@@ -121,6 +122,20 @@ func newSandboxed(t *testing.T) *sandboxed {
 		goarch: dockerInfo(t, "{{.Server.Arch}}"),
 	}
 	s.exec.sandbox = sandbox.NewDocker(tag)
+
+	// Rebind the gate where a CONTAINER can reach it, by the same call the
+	// server makes at startup. The fixture's default is the loopback, which a
+	// container reaches on Docker Desktop and cannot reach on Linux — so a test
+	// that kept it would pass on the machine this was written on and fail on
+	// the machine it runs on, which is exactly what happened.
+	s.gate.Close()
+	gate, err := gearnet.New(s.db, gearnet.ListenFor(context.Background(), "", s.exec.sandbox))
+	if err != nil {
+		t.Fatalf("open a gate a container can reach: %v", err)
+	}
+	t.Cleanup(func() { gate.Close() })
+	s.gate = gate
+	s.exec.gate = gate
 	return s
 }
 

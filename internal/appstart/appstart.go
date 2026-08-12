@@ -96,7 +96,10 @@ func BuildSearcher(cfg config.Config, sb sandbox.Runner) (*websearch.Searcher, e
 //
 // The caller closes it.
 func BuildGearNet(cfg config.Config, db *sql.DB, sb sandbox.Runner) (*gearnet.Gate, error) {
-	gate, err := gearnet.New(db, cfg.GearProxyListen)
+	// Where to bind depends on the sandbox: a container reaches this machine at
+	// an address that is not the loopback on Linux, and a gate the gear cannot
+	// dial makes the grant useless.
+	gate, err := gearnet.New(db, gearnet.ListenFor(context.Background(), cfg.GearProxyListen, sb))
 	if err != nil {
 		return nil, err
 	}
