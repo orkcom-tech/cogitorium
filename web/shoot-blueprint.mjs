@@ -77,4 +77,39 @@ const nodes = await page.locator('.react-flow__node').count()
 const edges = await page.locator('.react-flow__edge').count()
 console.log(`${out}: ${nodes} nodes, ${edges} edges`)
 
+// Say whether the picture is actually readable, rather than leaving that to
+// whoever opens the file. Wire labels are placed by arithmetic in WireEdge, and
+// arithmetic that is a little wrong produces an image that still looks like a
+// graph — the failure is a label sitting on somebody else's card, which reads
+// as belonging to it. Cheap to check here against the rendered boxes, so the
+// script reports it instead of shipping a mess quietly.
+const collisions = await page.evaluate(() => {
+  // Two pixels, because boxes that share an edge are not a mess and reporting
+  // them as one trains the reader to ignore the report.
+  const slack = 2
+  const overlap = (a, b) =>
+    a.left < b.right - slack &&
+    a.right > b.left + slack &&
+    a.top < b.bottom - slack &&
+    a.bottom > b.top + slack
+  const labels = [...document.querySelectorAll('.bp-wire-label')]
+  const boxes = labels.map((l) => l.getBoundingClientRect())
+  const out = []
+  for (const n of document.querySelectorAll('.react-flow__node')) {
+    const r = n.getBoundingClientRect()
+    labels.forEach((l, i) => {
+      if (overlap(boxes[i], r)) out.push(`"${l.textContent}" over node ${n.dataset.id}`)
+    })
+  }
+  for (let i = 0; i < labels.length; i++)
+    for (let j = i + 1; j < labels.length; j++)
+      if (overlap(boxes[i], boxes[j]))
+        out.push(`"${labels[i].textContent}" over "${labels[j].textContent}"`)
+  return out
+})
+if (collisions.length) {
+  console.error(`  ${collisions.length} label collisions:`)
+  for (const c of collisions) console.error(`  - ${c}`)
+}
+
 await browser.close()

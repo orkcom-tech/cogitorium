@@ -274,8 +274,10 @@ Three sources, later winning:
    environment (without that key, variables still work and a secret cannot be
    stored — it would have to go to disk in plaintext, and it will not);
 2. a directory on disk, one file per name, contents being the value —
-   `variables_dir` and `secrets_dir`, which is the shape Kubernetes mounts a
-   ConfigMap and a Secret in;
+   `variables_dir` and `secrets_dir`. That is the shape Kubernetes mounts a
+   ConfigMap and a Secret in, and the chart wires exactly that up:
+   `config.variablesConfigMap` and `config.secretsSecret` name the objects,
+   the server reads the mounted files, and rotation is the cluster's own;
 3. the workspace's own overrides, which is how one gear serves staging and
    production without being edited.
 

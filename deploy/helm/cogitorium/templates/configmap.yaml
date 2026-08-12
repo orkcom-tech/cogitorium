@@ -16,3 +16,9 @@ data:
     sandbox: {{ .Values.config.sandbox }}
     terminal: {{ .Values.config.terminal }}
     egress: {{ .Values.config.egress }}
+    {{- if .Values.config.variablesConfigMap }}
+    variables_dir: /etc/cogitorium/variables
+    {{- end }}
+    {{- if .Values.config.secretsSecret }}
+    secrets_dir: /etc/cogitorium/secrets
+    {{- end }}

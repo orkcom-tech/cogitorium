@@ -275,6 +275,68 @@ never changes what is stored.
 
 ---
 
+## What a gear may hold, and where it may reach
+
+Both are decided at approval, on the same screen as the source, and neither is
+something an agent can arrange for itself.
+
+### Named values
+
+A gear declares the **names** it needs. The values are put into its environment
+when it runs and are never part of any prompt. That is the whole point: an
+agent's answer leaves the building — in an inlet response, in the chat — so a
+credential a model can see is a credential that can be published.
+
+There are two kinds:
+
+- a **variable** is shown wherever it appears;
+- a **secret** is shown once, when you set it, and never again.
+
+The kind is sticky. Turning a secret back into a variable would silently
+un-redact everything already stored under that name, so it is refused; delete it
+and make a new one.
+
+Values are resolved from three places, in this order, with a later one winning:
+
+1. this install's own store, in the database, sealed with AES-256-GCM under
+   `COGITORIUM_SECRET_KEY`;
+2. `variables_dir` and `secrets_dir` — a directory per kind, one file per name,
+   the file's contents being the value;
+3. the workspace's own override.
+
+The second is how this works on Kubernetes. The chart mounts a ConfigMap and a
+Secret as directories and the server reads files out of them, so rotation is
+whatever the cluster already does. It deliberately does **not** call the cluster
+API: that would need a service account token in the pod where agent-authored
+code runs, and the chart mounts none.
+
+Redaction happens at one boundary rather than at each caller, so nothing can
+forget it — the tool result, the stored run, the live output an operator is
+watching, the log, the error, and the names of any files the gear itself wrote.
+
+Two things it does not do, stated plainly. A value a gear **sends** somewhere is
+not redacted and cannot be: granting a key and a network is granting the ability
+to carry it out, and the approval screen is the whole of the control. And a **dry
+run gets the names with empty values** — a dry run executes code nobody has
+approved yet, so handing it this install's credentials would make the button that
+exists for looking safely the easiest way to take them.
+
+Without `COGITORIUM_SECRET_KEY` the install still works: variables work, and a
+secret mounted from `secrets_dir` works. Only writing a secret into the database
+is refused, and it says why.
+
+### The network
+
+A gear has no network unless it is granted one at approval, with the hosts it may
+reach. Traffic goes through a gate in the server's own process which checks the
+destination against that list and records every connection, so what a granted
+gear reached is in the record next to what it printed.
+
+A new version of a gear returns to pending and keeps neither grant. An approval
+is of exact content, and code that has changed has not been approved.
+
+---
+
 ## Prohibitions
 
 An agent's role says what it is for; its prohibitions say what it must never
@@ -666,6 +728,10 @@ then defaults.
 | `egress` | `COGITORIUM_EGRESS` | off | Master switch for agents reaching the web. |
 | `egress_key` | `COGITORIUM_EGRESS_KEY` | — | Credential for the search service. Required when egress is on. |
 | `egress_approval_bearer` | `COGITORIUM_EGRESS_APPROVAL_BEARER` | off | Requires a real signed-in token to grant or approve egress, refusing implicit loopback admin. |
+| `variables_dir` | `COGITORIUM_VARIABLES_DIR` | — | A directory of files read as named variables, one file per name. The Kubernetes ConfigMap mount. |
+| `secrets_dir` | `COGITORIUM_SECRETS_DIR` | — | The same, read as secrets: redacted everywhere they could surface. The Kubernetes Secret mount. |
+| `gear_proxy_listen` | `COGITORIUM_GEAR_PROXY_LISTEN` | loopback, kernel-picked port | Where the gate for granted gears listens. On Linux this must be the docker bridge gateway, not loopback, or a granted gear cannot reach it. |
+| — | `COGITORIUM_SECRET_KEY` | — | Encrypts secrets held in this install's database. Has no config-file key on purpose: on Kubernetes the config file is a ConfigMap, and a key beside its own ciphertext protects nothing. |
 
 `--config` points at a config file; `--listen`, `--data` and `--log-level` are
 the only flags. Booleans are strict: only `1` and `true` enable, so
@@ -685,6 +751,12 @@ What is actually true, without softening:
 - **Gears run in a container** with no network, no capabilities, an unprivileged
   user and their own files only — and only after an admin approves them. Without
   Docker they run with the server's file access, and the interface says so.
+- **A gear's credentials and its network are granted together, at approval,
+  beside the source.** Neither is reachable by an agent, and a new version keeps
+  neither. The values never enter a prompt, and they are redacted at one
+  boundary in everything the software shows or stores. What a granted gear
+  chooses to send is not redacted and cannot be — that is what granting both
+  means, and the approval screen is the whole of the control.
 - **The terminal** is off by default, requires a sandbox, and is never reachable
   by an agent.
 - **Egress** is off by default and needs two human decisions plus a per-query

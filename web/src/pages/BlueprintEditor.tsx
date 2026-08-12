@@ -23,6 +23,11 @@ import {
   type Wire,
 } from '../api'
 import { KINDS } from './GraphCanvas'
+import WireEdge from './WireEdge'
+
+// Declared once, outside the component: React Flow warns and re-renders every
+// edge if this object is a new identity on each pass.
+const edgeTypes = { wire: WireEdge }
 
 // Node and edge ids are namespaced because the canvas mixes two kinds of
 // each: agents and gears, delegation wires and gear bindings.
@@ -210,14 +215,40 @@ export default function BlueprintEditor({
   }, [statuses, setNodes])
 
   useEffect(() => {
+    // Two crowds, counted separately: wires leaving one agent, and wires
+    // arriving at one. WireEdge spreads the first along the curve and the
+    // second across the bundle, and neither can be worked out from the edge
+    // alone — an edge only knows about itself.
+    const fanOut = new Map<number, number[]>()
+    const fanIn = new Map<number, number[]>()
+    for (const w of wires) {
+      const out = fanOut.get(w.from_agent_id) ?? []
+      out.push(w.id)
+      fanOut.set(w.from_agent_id, out)
+      const into = fanIn.get(w.to_agent_id) ?? []
+      into.push(w.id)
+      fanIn.set(w.to_agent_id, into)
+    }
     const wireEdges: Edge[] = !layers.delegation
       ? []
       : wires.map((w) => ({
           id: wireEdge(w.id),
           source: agentNode(w.from_agent_id),
           target: agentNode(w.to_agent_id),
-          label: w.label || undefined,
+          type: 'wire',
           animated: true,
+          // The label is drawn by the custom edge, which needs to know where
+          // this wire sits among the ones leaving the same agent. A label at
+          // the midpoint is fine until wires converge — four authors each
+          // wired to two critics put eight labels in the same place, and the
+          // row reads "s submits decide submits". See WireEdge.
+          data: {
+            label: w.label || '',
+            fanIndex: fanOut.get(w.from_agent_id)?.indexOf(w.id) ?? 0,
+            fanCount: fanOut.get(w.from_agent_id)?.length ?? 1,
+            fanInIndex: fanIn.get(w.to_agent_id)?.indexOf(w.id) ?? 0,
+            fanInCount: fanIn.get(w.to_agent_id)?.length ?? 1,
+          },
         }))
     // Only agent-scoped bindings become edges; a workspace-wide gear would
     // otherwise draw an edge to every agent and drown the graph.
@@ -413,6 +444,7 @@ export default function BlueprintEditor({
             const d = n.data as NodeData
             if (d.kind === 'agent' && d.agent) onSelectAgent(d.agent)
           }}
+          edgeTypes={edgeTypes}
           fitView
           proOptions={{ hideAttribution: true }}
         >

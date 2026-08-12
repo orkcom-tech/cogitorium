@@ -106,6 +106,40 @@ config:
   egressExistingSecret: ""
   egressExistingSecretKey: egress-key
 
+  # Named values a gear may be given. The gear declares the NAMES it needs and
+  # is handed the values in its environment; nothing here ever reaches a model.
+  #
+  # Both are mounted as directories, one file per name, which is exactly the
+  # shape a ConfigMap and a Secret take when they are mounted. Rotation is
+  # therefore the cluster's own — update the object and the files change under
+  # a running server. This chart deliberately does NOT let the server read the
+  # cluster API for these: that would need a service account token in the pod,
+  # and gears currently run as a subprocess of the server, so agent-authored
+  # code would hold it. serviceAccount.automount stays false for the same
+  # reason.
+  #
+  #   kubectl create configmap cogitorium-variables --from-literal=REGION=eu-west-1
+  #   kubectl create secret generic cogitorium-secrets --from-literal=S3_KEY=...
+  #
+  # A variable is shown wherever it appears; a secret is redacted everywhere the
+  # software could otherwise surface it. Which one a name is comes from which of
+  # these it was mounted from, so putting a credential in the ConfigMap makes it
+  # a variable — visible in runs and logs.
+  variablesConfigMap: ""
+  secretsSecret: ""
+
+  # Encrypts secrets stored in THIS INSTALL'S OWN database — the ones set
+  # through the interface. Values mounted from secretsSecret above need no key,
+  # because they are never written here.
+  #
+  # It has no config-file key on purpose: the config file above is a ConfigMap,
+  # and a key sitting beside its own ciphertext protects nothing. Leave it empty
+  # and the install still works — only storing a secret in the database is
+  # refused, and it says why.
+  secretKey: ""
+  secretKeyExistingSecret: ""
+  secretKeyExistingSecretKey: secret-key
+
 resources:
   requests:
     cpu: 200m

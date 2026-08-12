@@ -250,6 +250,16 @@ func TestAKeyOpensExactlyOneDoor(t *testing.T) {
 	}
 	forged := KeyPrefix + "-tickets-" + strings.Repeat("0", 64)
 
+	// Change the last character to something it is not. Writing this as
+	// `key[:len(key)-1] + "0"` is the obvious version and it is wrong: one key
+	// in sixteen already ends in a zero, so the "changed" key is the real key
+	// and the test reports that a forgery opened the door. It did that once,
+	// and a security test that cries wolf every sixteenth run gets ignored.
+	altered := ticketKey[:len(ticketKey)-1] + "1"
+	if strings.HasSuffix(ticketKey, "1") {
+		altered = ticketKey[:len(ticketKey)-1] + "2"
+	}
+
 	for _, c := range []struct {
 		name     string
 		door     Inlet
@@ -259,7 +269,7 @@ func TestAKeyOpensExactlyOneDoor(t *testing.T) {
 		{"a forged key naming the right door", tickets, forged},
 		{"another door's key", tickets, invoiceKey},
 		{"this door's key at the other door", invoices, ticketKey},
-		{"the key with a character changed", tickets, ticketKey[:len(ticketKey)-1] + "0"},
+		{"the key with a character changed", tickets, altered},
 		{"the key with its prefix stripped", tickets, strings.TrimPrefix(ticketKey, KeyPrefix+"-")},
 		{"a truncated key", tickets, ticketKey[:len(ticketKey)-4]},
 	} {

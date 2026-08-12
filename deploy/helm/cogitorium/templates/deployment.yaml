@@ -57,6 +57,13 @@ spec:
                   name: {{ .Values.config.egressExistingSecret | default (printf "%s-auth" (include "cogitorium.fullname" .)) }}
                   key: {{ .Values.config.egressExistingSecretKey }}
             {{- end }}
+            {{- if or .Values.config.secretKey .Values.config.secretKeyExistingSecret }}
+            - name: COGITORIUM_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.secretKeyExistingSecret | default (printf "%s-auth" (include "cogitorium.fullname" .)) }}
+                  key: {{ .Values.config.secretKeyExistingSecretKey }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -83,6 +90,16 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.config.variablesConfigMap }}
+            - name: variables
+              mountPath: /etc/cogitorium/variables
+              readOnly: true
+            {{- end }}
+            {{- if .Values.config.secretsSecret }}
+            - name: secrets
+              mountPath: /etc/cogitorium/secrets
+              readOnly: true
+            {{- end }}
       volumes:
         - name: data
           {{- if .Values.persistence.existingClaim }}
@@ -99,6 +116,22 @@ spec:
           # The root filesystem is read-only; anything that needs scratch space
           # gets this instead of a writable image.
           emptyDir: {}
+        {{- if .Values.config.variablesConfigMap }}
+        - name: variables
+          configMap:
+            name: {{ .Values.config.variablesConfigMap }}
+        {{- end }}
+        {{- if .Values.config.secretsSecret }}
+        - name: secrets
+          secret:
+            secretName: {{ .Values.config.secretsSecret }}
+            # A file per key is what the server reads. Owner-and-group, not
+            # owner-only: the files are owned by root and the server runs as
+            # 65532, so 0400 would mean the process cannot read its own
+            # credentials. The group is the pod's fsGroup and nothing outside
+            # this pod is in it.
+            defaultMode: 0440
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
       {{- end }}
