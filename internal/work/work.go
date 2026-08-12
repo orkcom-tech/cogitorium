@@ -38,6 +38,10 @@ var ErrNotFound = errors.New("not found")
 // that is what makes a retry idempotent rather than merely refused.
 var ErrDuplicate = errors.New("already enqueued under this idempotency key")
 
+// ErrLaneBusy is a lane that is already running something. It is what a caller
+// that cannot wait — a chat turn — gets instead of a place in the queue.
+var ErrLaneBusy = errors.New("this workspace is already working on something")
+
 // The states a unit passes through. Deliberately four, and deliberately without
 // a "failed": a unit that ran and whose work failed is `done` — what happened
 // inside it belongs to the ledger row it filled in, not to the queue. `dead`
@@ -368,4 +372,42 @@ func (s *Store) Prune(ctx context.Context, olderThan time.Duration) (int64, erro
 	}
 	n, _ := res.RowsAffected()
 	return n, nil
+}
+
+// ClaimNow inserts a unit already claimed, or refuses because the lane is busy.
+//
+// It exists for work that cannot wait in a queue: an operator's chat turn has a
+// person holding a stream and possibly an approval on screen, so parking it in
+// a row would leave a browser waiting on something nobody can see. A chat turn
+// either gets the lane immediately or is told the workspace is busy, which is
+// what it did before any of this existed.
+//
+// The point is that it takes the SAME lane deliveries queue behind. Two latches
+// that cannot see each other would let a chat turn and a delivery run at once in
+// one workspace — and the turn state they would share holds the egress budget,
+// both anti-worm taint latches and the run record, keyed by workspace.
+func (s *Store) ClaimNow(ctx context.Context, u Unit) (Unit, error) {
+	if u.Lane == "" {
+		return Unit{}, errors.New("a unit with no lane cannot be serialised against anything")
+	}
+	if u.Args == "" {
+		u.Args = "{}"
+	}
+	at := stamp(now())
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO work (kind, workspace_id, lane, args, state, run_id,
+		                   run_after, deadline, attempts, max_attempts, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, '', 1, 1, ?, ?)`,
+		u.Kind, u.WorkspaceID, u.Lane, u.Args, StateClaimed, u.RunID, at, at, at)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return Unit{}, ErrLaneBusy
+		}
+		return Unit{}, fmt.Errorf("claim the lane: %w", err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return Unit{}, fmt.Errorf("claim the lane: %w", err)
+	}
+	return s.Get(ctx, id)
 }
