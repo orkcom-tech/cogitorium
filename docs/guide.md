@@ -560,7 +560,79 @@ grace  admiral   new york
 
 ---
 
-## 7. Files, the editor and diffs
+## 7. A worked arrangement: a panel that judges code
+
+Everything so far has been one agent doing one job. This is what the wiring is
+for: eight agents, four models, and a decision made on evidence.
+
+The operator states a requirement. Four authors, each on a different model,
+write a program for it and then read one another's submissions. Two critics look
+at every submission from one angle each. A referee reads all of it and picks the
+winner.
+
+![The code court on the blueprint](assets/13-code-court.png)
+
+Read the edges, because they are the arrangement:
+
+| edge | from → to | what it makes possible |
+|---|---|---|
+| `writes` | orchestrator → four authors | the orchestrator may hand the requirement out |
+| `submits` | each author → both critics | a critic may be asked about any submission |
+| `reports` | each critic → referee | the referee may ask a critic what it found |
+| `decides` | orchestrator → referee | the verdict comes back to the operator |
+
+Nobody's role says "you may review the others". The wire says it. Delete the
+edge from `author-mini` to `critic-speed` and that submission stops being
+measurable, on the next turn, with no prompt edited.
+
+### The part that is not an opinion
+
+"The best program" is a judgement. "The fastest program" is a measurement, and
+the two must not be confused, so `critic-speed` does not read code and guess —
+its role says to call the bench gear on every submission with the same input and
+report what it measured. The referee carries prohibitions to match:
+
+```
+Never pick a program the bench did not run.
+Never call a program fastest without a measurement.
+```
+
+Those are the last thing in its prompt and they are not overridable by anything
+the authors write in their own defence. That is the whole reason prohibitions
+exist as a separate field rather than a paragraph in a role.
+
+### Take this arrangement
+
+The workspace above is a download. It carries the agents with their roles and
+prohibitions, the wires, and the canvas positions — and no key, no token, no
+conversation, because a bundle has nowhere to put one.
+
+**[code-court.cogitorium.json](assets/code-court.cogitorium.json)** — 4 KB.
+
+```bash
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/import \
+  -H 'Content-Type: application/json' \
+  -d "{\"name\":\"code court\",\"bundle\":$(cat code-court.cogitorium.json)}"
+```
+
+```json
+{ "agents": 8, "wires": 15, "gears_imported": [], "gears_skipped": [],
+  "context_files": 0, "unresolved_models": [] }
+```
+
+That report is from importing this exact file. `unresolved_models` is empty
+because the install it landed on had those four models in its catalog; on one
+that does not, each agent still arrives — with its role, its prohibitions and
+its wires — and the models it could not find are named there for you to bind.
+Nothing is silently substituted.
+
+The bench gear is not in the file. Gears travel only when you ask for them, and
+this arrangement is more useful with a bench you wrote for your own language and
+your own definition of fast.
+
+---
+
+## 8. Files, the editor and diffs
 
 Each workspace has its own directory. **Files** shows the tree; clicking a file
 opens it in **Editor**, which is a real editor with syntax highlighting, not a
@@ -575,7 +647,7 @@ directory comes into existence when you save a file into it.
 
 ---
 
-## 8. Memory
+## 9. Memory
 
 Context and memory are stored and versioned by Contextverse's `contextd`.
 Without it the server starts, says so at `GET /api/v1/context/status`, and
@@ -598,7 +670,7 @@ order it lands in.
 
 ---
 
-## 9. Letting an agent search the web
+## 10. Letting an agent search the web
 
 Off by default, and there are three locks. All three must be open, in order:
 
@@ -626,7 +698,7 @@ evaluates to false — and overrides a config file that said true.
 
 ---
 
-## 10. The terminal
+## 11. The terminal
 
 Off by default: it is interactive code execution over HTTP. Turning it on takes
 `terminal: true`, and it **also** requires a sandbox — without one the request
@@ -637,7 +709,7 @@ While a gear runs, its output streams here live.
 
 ---
 
-## 11. More than one person
+## 12. More than one person
 
 **People** (admin only) → **add user**. A token is shown once:
 
@@ -655,7 +727,7 @@ and the internet gate.
 
 ---
 
-## 12. When it refuses
+## 13. When it refuses
 
 Every message below is the exact text.
 
@@ -677,7 +749,7 @@ the database and nothing else.
 
 ---
 
-## 13. What is not here
+## 14. What is not here
 
 So that you do not go looking:
 
