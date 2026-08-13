@@ -29,6 +29,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/inlet"
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
+	"github.com/orkcom-tech/cogitorium/internal/schedule"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/version"
 	"github.com/orkcom-tech/cogitorium/internal/websearch"
@@ -57,10 +58,11 @@ type Server struct {
 	// queue is where a delivery waits when its workspace is busy, and pool is
 	// what runs it. queueMax bounds the waiting, because a queue with no bound
 	// is a way to run a server out of disk politely.
-	queue    *work.Store
-	pool     *work.Pool
-	stopPool context.CancelFunc
-	queueMax int
+	schedules *schedule.Store
+	queue     *work.Store
+	pool      *work.Pool
+	stopPool  context.CancelFunc
+	queueMax  int
 	// callbackHosts is who this install may tell that a run finished. EMPTY
 	// MEANS OFF: a callback URL arrives in a task, and a task is editable by
 	// anyone who can reach the workspace, so defaulting to open would turn
@@ -131,6 +133,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		inlets:        inlet.NewStore(db),
 		engine:        engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, queue, cfg.DataDir),
 		queue:         queue,
+		schedules:     schedule.NewStore(db),
 		queueMax:      queueMax,
 		callbackHosts: cfg.CallbackHosts,
 		publicURL:     strings.TrimSuffix(cfg.PublicURL, "/"),
@@ -155,6 +158,11 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	poolCtx, stopPool := context.WithCancel(context.Background())
 	s.stopPool = stopPool
 	s.pool.Start(poolCtx)
+
+	// The clock, on the same lifetime as the workers and for the same reason:
+	// a scheduler that only ran while the HTTP listener did is one no test and
+	// no embedding ever sees.
+	s.startScheduler(poolCtx)
 
 	// A terminal is only offered when the sandbox can host one: without it
 	// the shell would hold the server's own file access.
@@ -272,6 +280,11 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/inlet-runs", s.handleListInletRuns)
 	mux.HandleFunc("GET /api/v1/inlet-runs/{id}", s.handleGetInletRun)
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/queue", s.handleWorkspaceQueue)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/schedules", s.handleListSchedules)
+	mux.HandleFunc("POST /api/v1/workspaces/{id}/schedules", s.handleCreateSchedule)
+	mux.HandleFunc("PATCH /api/v1/schedules/{id}", s.handleSetScheduleEnabled)
+	mux.HandleFunc("DELETE /api/v1/schedules/{id}", s.handleDeleteSchedule)
+	mux.HandleFunc("POST /api/v1/schedules/{id}/run", s.handleRunScheduleNow)
 	mux.HandleFunc("DELETE /api/v1/queue/{id}", s.handleCancelQueued)
 
 	// Unmatched /api/* must answer JSON, not fall through to the SPA —
