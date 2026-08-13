@@ -131,6 +131,11 @@ export default function InletsPanel({
           </p>
           <pre className="prompt-preview">{issued.key}</pre>
           <div className="row">
+            {/* A value shown exactly once should not have to be selected by
+                hand. Dismissing without copying loses it for good — only its
+                hash is stored — so the copy is the first button, not the last. */}
+            <CopyKey value={issued.key} />
+            <span className="spacer" />
             <button onClick={() => setIssued(null)}>done</button>
           </div>
         </div>
@@ -144,6 +149,12 @@ export default function InletsPanel({
         }}
         onError={onError}
       />
+      {/* Where the key comes from, said before it appears rather than after:
+          it is issued by this button, in this response, and shown once. */}
+      <p className="hint">
+        Adding one issues its key immediately and shows it here in full, once — copy it then, because only its hash is
+        kept. <strong>new key</strong> on a receiver replaces it and retires the old one.
+      </p>
 
       {inlets.length === 0 ? (
         <p className="hint">No receivers on this workspace. Everything reaches it through you.</p>
@@ -191,6 +202,26 @@ export default function InletsPanel({
         runs.map((r) => <RunRow key={r.id} run={r} />)
       )}
     </div>
+  )
+}
+
+// The clipboard API is unavailable on an insecure origin, which is most of the
+// installs this runs on — so the failure is said out loud rather than leaving a
+// button that does nothing.
+function CopyKey({ value }: { value: string }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  return (
+    <button
+      className="primary"
+      onClick={() => {
+        navigator.clipboard
+          ?.writeText(value)
+          .then(() => setState('copied'))
+          .catch(() => setState('failed')) ?? setState('failed')
+      }}
+    >
+      {state === 'copied' ? 'copied' : state === 'failed' ? 'select it above and copy' : 'copy the key'}
+    </button>
   )
 }
 
