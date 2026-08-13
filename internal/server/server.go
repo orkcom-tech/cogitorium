@@ -259,6 +259,8 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	mux.HandleFunc("DELETE /api/v1/inlet-tasks/{id}", s.handleDeleteInletTask)
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/inlet-runs", s.handleListInletRuns)
 	mux.HandleFunc("GET /api/v1/inlet-runs/{id}", s.handleGetInletRun)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/queue", s.handleWorkspaceQueue)
+	mux.HandleFunc("DELETE /api/v1/queue/{id}", s.handleCancelQueued)
 
 	// Unmatched /api/* must answer JSON, not fall through to the SPA —
 	// otherwise wrong-method or typo'd API calls get 200 + index.html.

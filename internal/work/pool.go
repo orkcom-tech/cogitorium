@@ -65,6 +65,14 @@ type Pool struct {
 	stop context.CancelFunc
 	done sync.WaitGroup
 
+	// running holds a cancel for every unit in flight, so that stopping one is
+	// something an operator can actually do rather than a row that changes
+	// colour while the work carries on. In-process, which is the right scope
+	// while there is one process: a second one would need this to become a
+	// signal through the table.
+	mu      sync.Mutex
+	running map[int64]context.CancelFunc
+
 	// woken lets an enqueue tell the workers to look now rather than at the
 	// next idle tick. It is a latency optimisation and nothing more: a worker
 	// that misses a wake finds the unit on its next pass, which is why the
@@ -73,7 +81,29 @@ type Pool struct {
 }
 
 func NewPool(s *Store, run Runner, opts PoolOptions) *Pool {
-	return &Pool{store: s, run: run, opts: opts.withDefaults(), woken: make(chan struct{}, 1)}
+	return &Pool{
+		store: s, run: run, opts: opts.withDefaults(),
+		woken:   make(chan struct{}, 1),
+		running: map[int64]context.CancelFunc{},
+	}
+}
+
+// Cancel stops a unit that is running here, and reports whether it found one.
+//
+// False is the ordinary answer for a unit that was still waiting: there is
+// nothing to interrupt, and marking the row is the whole of the cancellation.
+// The caller marks the row either way — this only reaches the work already in
+// flight, which otherwise would carry on spending money against a job somebody
+// has already stopped.
+func (p *Pool) Cancel(unitID int64) bool {
+	p.mu.Lock()
+	cancel, ok := p.running[unitID]
+	p.mu.Unlock()
+	if !ok {
+		return false
+	}
+	cancel()
+	return true
 }
 
 // Start clears any claim left by a previous process and then begins working.
@@ -157,7 +187,15 @@ func (p *Pool) execute(ctx context.Context, u Unit) {
 		// Deliberately not the worker's context: the pool may be stopping,
 		// and a unit that finished must be recorded as finished even then.
 		// Otherwise shutdown is how a lane gets stuck.
-		if err := p.store.Settle(context.WithoutCancel(ctx), u.ID, errText); err != nil {
+		err := p.store.Settle(context.WithoutCancel(ctx), u.ID, errText)
+		switch {
+		case err == nil:
+		case errors.Is(err, ErrNotFound):
+			// Somebody cancelled it while it ran, so the row is already
+			// terminal and its lane already free. Not a fault: it is what a
+			// cancel looks like from in here.
+			slog.Info("a work unit finished after being cancelled", "unit", u.ID, "lane", u.Lane)
+		default:
 			slog.Error("could not settle a finished work unit; its lane stays held until restart",
 				"unit", u.ID, "lane", u.Lane, "err", err)
 		}
@@ -169,12 +207,23 @@ func (p *Pool) execute(ctx context.Context, u Unit) {
 		}
 	}()
 
-	runCtx := ctx
+	runCtx, cancel := context.WithCancel(ctx)
 	if !u.Deadline.IsZero() {
-		var cancel context.CancelFunc
 		runCtx, cancel = context.WithDeadline(ctx, u.Deadline)
-		defer cancel()
 	}
+	defer cancel()
+
+	// Registered before the work starts and removed however it ends, so that a
+	// cancel arriving at any moment either finds this unit or finds nothing —
+	// never a cancel for a unit that has already gone.
+	p.mu.Lock()
+	p.running[u.ID] = cancel
+	p.mu.Unlock()
+	defer func() {
+		p.mu.Lock()
+		delete(p.running, u.ID)
+		p.mu.Unlock()
+	}()
 
 	started := time.Now()
 	err := p.run(runCtx, u)

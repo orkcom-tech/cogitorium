@@ -173,10 +173,20 @@ func (s *Store) Begin(ctx context.Context, id, agentID, payloadBytes int64, payl
 // record was kept" and is reserved for exactly that.
 func (s *Store) Settle(ctx context.Context, id int64, state, result, errText string, did []byte) error {
 	res, err := s.db.ExecContext(ctx,
+		// Every LIVE state, which is the whole of the guard's meaning: a run
+		// that is already terminal stays as it was settled.
+		//
+		// StateQueued was added to this table and missed here, and the failure
+		// was silent by construction — Settle affects no rows, SettleOrLog logs
+		// a warning, and the caller carries on. Cancelling a waiting delivery
+		// marked its work unit dead and left the ledger row saying `queued`
+		// forever, so whoever was polling it waited for an answer nobody would
+		// ever write.
 		`UPDATE inlet_runs
 		    SET state = ?, result = ?, error = ?, did = ?, updated_at = ?
-		  WHERE id = ? AND state IN (?, ?)`,
-		state, result, errText, string(did), now(), id, StateAccepted, StateRunning)
+		  WHERE id = ? AND state IN (?, ?, ?)`,
+		state, result, errText, string(did), now(), id,
+		StateAccepted, StateQueued, StateRunning)
 	if err != nil {
 		return fmt.Errorf("settle inlet run %d: %w", id, err)
 	}

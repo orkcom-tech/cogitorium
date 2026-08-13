@@ -337,8 +337,14 @@ func (s *Store) Waiting(ctx context.Context, lane string, limit int) ([]Unit, er
 	if limit <= 0 {
 		limit = 50
 	}
+	// The running unit first, then the queue in the order it will run. Spelled
+	// as an explicit CASE rather than as an alphabetical accident: sorting by
+	// state text puts 'queued' above 'claimed', which reads as a queue whose
+	// running job is last in line.
 	rows, err := s.db.QueryContext(ctx,
-		unitSelect+` WHERE lane = ? AND state IN (?, ?) ORDER BY state DESC, run_after, id LIMIT ?`,
+		unitSelect+` WHERE lane = ? AND state IN (?, ?)
+		             ORDER BY CASE state WHEN 'claimed' THEN 0 ELSE 1 END, run_after, id
+		             LIMIT ?`,
 		lane, StateClaimed, StateQueued, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list the queue: %w", err)
