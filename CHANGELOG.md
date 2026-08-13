@@ -1,5 +1,133 @@
 # Changelog
 
+## v0.4.0
+
+Cogitorium can now be left alone. Work waits its turn instead of being thrown
+away, it can start because a clock said so, a caller can hand a job off and be
+told when it is done, and a run can be stopped — by a person or by a ceiling.
+
+### A busy workspace queues instead of destroying
+
+A delivery that met a running turn used to be settled `failed` with the engine's
+busy error and answered 429 — the same terminal state a genuinely broken job
+gets. A burst of two hundred tickets was one job done and a hundred and
+ninety-nine losses a caller could only tell from real failures by
+string-matching an error message.
+
+Now it is written `queued`, waits, and runs. One durable table carries the lane
+rule, the queue and the scheduler, because they are one mechanism seen from
+three angles and building them separately means three protocols that have to
+keep agreeing forever.
+
+**The lane rule is a partial unique index**, not a `NOT EXISTS` subquery. The
+subquery is correct under SQLite's single writer, so a queue built on it alone
+passes every test here and is silently wrong the moment a second writer exists —
+two workers claiming two rows of one lane both see an empty subquery and both
+succeed.
+
+An operator's chat turn takes that same lane. Two latches that could not see
+each other would let a turn and a delivery run at once in one workspace, and
+they share an egress budget, two anti-worm latches and one run record. The
+difference is what happens when the lane is busy: a delivery queues; a chat turn
+is refused, because a person is holding a stream and cannot be parked in a line
+they cannot see.
+
+**`max_attempts` is 1.** At-least-once, not exactly-once: a re-run can repeat an
+agent that already spent tokens, wrote files and sent something outward. A unit
+found running at startup is marked dead rather than requeued, for the same
+reason.
+
+`Idempotency-Key` is read before the body and answered with the job it already
+produced — never a second one, never a refusal.
+
+### Seeing it, and stopping it
+
+`GET /api/v1/workspaces/{id}/queue` shows depth, position and what is running.
+`DELETE /api/v1/queue/{id}` stops a unit waiting or running: it marks the row
+**and** interrupts the work, because a cancel that only relabelled the row would
+leave the model answering for a job somebody stopped.
+
+### Schedules
+
+`every 15m` or a five-field cron subset, with an IANA timezone and tzdata
+embedded so a zone means the same thing in a container that has none. A schedule
+points at an inlet task rather than carrying its own agent and instruction —
+there is one definition of a job, and a firing is that job with nobody on the
+other end.
+
+Everything checkable is checked when the schedule is saved: the spec, the zone,
+the payload against the task's own schema, that the agent exists. A firing whose
+previous run has not finished is skipped and recorded as a skip.
+
+### Handing a job off
+
+`Prefer: respond-async` answers 202 with a run number; the default stays
+synchronous. An inlet key can now read the runs that arrived through its own
+door, which is what makes 202 mean anything — before this a key was write-only
+and the only way to let a pipeline poll was to hand it a user token that can also
+delete workspaces and approve agent-authored code.
+
+`GET /i/{address}/runs/{id}/file?path=` finally makes the record's own claim
+true. It has always named files and said the path was one a caller could fetch;
+the only file route was user-scoped, capped at 2 MiB, refused non-UTF-8 and
+returned content as a JSON string. This one streams anything, authorised by the
+run's own record.
+
+Callbacks tell a listener when a run finishes, in the same shape reading the run
+back gives. `callback_hosts` is **empty by default and empty means off** — a
+callback URL arrives in a task, and a task is editable by anyone who can reach
+the workspace.
+
+### What a run cost, and a ceiling that refuses
+
+Model calls, gear runs and granted-gear connections now name the queued unit
+they belonged to. The only link before was a timestamp, which works today
+because runs are serialised per workspace and stops the moment anything else is
+true.
+
+`GET /api/v1/workspaces/{id}/spend` answers what a workspace used over a window;
+the aggregates that existed were lifetime sums, so "what did last week cost"
+could not be asked.
+
+`budget_run_tokens` and `budget_workspace_day_tokens` are off by default and
+REFUSE when set — checked before the model call, not after. Tokens, not money:
+there is no price data in this schema and there is not going to be.
+
+### Fixes
+
+- **Two runs of one gear deleted each other's code mid-execution.** A call
+  carrying no files ran in the shared gear directory, and every run begins by
+  clearing it. Every run gets its own now.
+- **The record did not say who did anything.** `ToolRun` was a name and a
+  duration; the dispatcher had the agent's name and the delegation depth in hand
+  and dropped both. And an operator's own turn produced no record at all, so the
+  chat — which is how every workspace is built — left no evidence.
+- **Deleting a workspace deleted nothing on disk**, and left rows in three
+  tables whose `workspace_id` carries no foreign key on purpose.
+- **A rate limit ended the run.** Every non-200 from every provider was one
+  error with no branch on the status, so a 429 at delegation depth three
+  discarded twelve minutes of work. 429 and 5xx are retried with backoff now,
+  `Retry-After` honoured and bounded; a wrong key still is not.
+- **A delivery that never ran left its file on the volume.**
+- **`Settle` did not know about the `queued` state** it had just been given, so
+  cancelling a waiting delivery left its ledger row saying `queued` forever
+  while whoever polled it waited for an answer nobody would write.
+- **The cron parser expanded `*` into every value**, which made it
+  indistinguishable from an explicit list — and day-of-month and day-of-week are
+  OR'd — so `0 7 * * 1-5` fired on a Saturday and 30 February resolved to a real
+  date.
+- **The budget guarded one of the two places that call a model.** The delivery
+  path went straight past it.
+- **An inlet key test failed about one run in three**, replacing a key's last
+  character with a zero when one key in sixteen already ends in one. The same
+  defect had been found and fixed in another copy of that test months earlier.
+
+### Not built
+
+Gears still do not run as Kubernetes Jobs, and there are no remote agents.
+Several people sharing one workspace at once is designed and not built — see the
+planning notes.
+
 ## v0.3.0
 
 A gear can now hold a credential and reach a named host — the last step of

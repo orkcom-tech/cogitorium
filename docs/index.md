@@ -482,6 +482,136 @@ produced one file.
 
 ---
 
+## The queue, and work that waits
+
+A workspace runs one thing at a time. That has always been true; what changed is
+what happens to the second thing.
+
+It used to be destroyed. A delivery that met a running turn was written into the
+ledger as `failed` with the engine's busy error and answered 429 — the same
+terminal state a genuinely broken job gets, so a burst of two hundred tickets
+was one job done and a hundred and ninety-nine losses a caller could only tell
+from real failures by string-matching an error message.
+
+Now it **waits**. A delivery is recorded as `queued`, takes its turn, and runs.
+An operator's own chat turn takes the same lane rather than a second latch of
+its own — two latches that could not see each other would let a turn and a
+delivery run at once in one workspace, and they share an egress budget, two
+anti-worm latches and one run record. The difference between them is what
+happens when the lane is busy: a delivery queues, and a chat turn is refused
+immediately, because a person is holding a stream and possibly an approval on
+screen and cannot be parked in a line they cannot see.
+
+**What is bounded is the waiting, not the running.** Past `queue_max_per_workspace`
+a delivery is refused with 429 and told how many are ahead of it. That is
+backpressure; the thing it replaced was data loss.
+
+**Retry is opt-in and off.** `max_attempts` is 1: a re-run can repeat an agent
+that already spent tokens, wrote files and sent something outward, so this queue
+is at-least-once and never describes itself as retrying for you. A unit found
+running at startup is marked dead rather than requeued, for the same reason —
+nothing in the row says how far it got.
+
+`GET /api/v1/workspaces/{id}/queue` shows depth, position and what is running.
+`DELETE /api/v1/queue/{id}` stops a unit whether it is waiting or already
+running: it marks the row **and** interrupts the work, because a cancel that
+only relabelled the row would leave the model answering and the tokens being
+spent for a job somebody had already stopped. Cancelling something finished is a
+409, so a stale button cannot rewrite a decision.
+
+---
+
+## Schedules — work that starts because a clock said so
+
+A schedule points at an inlet task rather than carrying its own agent and
+instruction. The task already says which agent, what to tell it, what it accepts
+and what success means; a firing is that same job with nobody on the other end.
+
+Two spec forms:
+
+```
+every 15m
+0 7 * * 1-5
+```
+
+`every <duration>`, with a one-minute floor, and a five-field cron subset —
+minute, hour, day of month, month, day of week, with `*`, `n`, `a-b`, `*/n` and
+comma lists. No seconds, no `@yearly`, no `L`/`W`/`#`: each is something an
+operator can write, believe, and be wrong about. Day-of-month and day-of-week
+are OR'd when both are restricted, which is how every cron has behaved since the
+original.
+
+A timezone is an IANA name and the binary carries its own copy of the database,
+so a schedule means the same thing on a laptop and in a container that has no
+zoneinfo — otherwise every zone silently resolves to UTC, in production only.
+
+**Everything checkable is checked when the schedule is saved**: the spec, the
+zone, the payload against the task's own schema, that the agent exists. That is
+the only moment the person who typed it is still looking at it.
+
+**A firing whose previous run has not finished is skipped**, and recorded as a
+skip rather than a failure. A job slower than its own interval never catches up,
+and queueing every missed tick turns that into a backlog outliving the reason
+for it. `on_miss: run` is there for the operator who genuinely wants each tick
+attempted.
+
+---
+
+## Handing a job off, and being told when it is done
+
+**`Prefer: respond-async`** answers 202 with a run number and a `Location`
+instead of holding the connection. The default stays synchronous, because every
+caller written against a door so far expects the answer in the response.
+
+**An inlet key can read its own runs.** `GET /i/{address}/runs/{id}` returns the
+same body a synchronous delivery would have. The key reads the runs that arrived
+through *its own* inlet and nothing else — two doors into one workspace are two
+callers. There is no scope column on tokens and no policy system: the
+requirement is one sentence, and a general mechanism built to serve one sentence
+is one every future route has to be audited against.
+
+**`GET /i/{address}/runs/{id}/file?path=`** serves a file the run produced, or
+the payload it was given. Any size, any bytes, streamed. Authorisation is the
+run's own record: the path must be its payload or a file the engine recorded it
+making — narrower than "anywhere in the workspace", because a delivery's key
+would otherwise read every file every other job there had left.
+
+**Callbacks.** A task may name a URL to be told when its run finishes, and the
+body is the same shape reading the run back gives, so a pipeline that polls and
+one that listens parse the same thing. The callback is a queued unit like any
+other, with backoff, so it survives a restart and is visible to an operator.
+
+`callback_hosts` is **empty by default, and empty means off** — not "everything
+allowed". A callback URL arrives in a task, and a task is editable by anyone who
+can reach the workspace, so an open default would turn editing a task into
+making this server call an address of somebody else's choosing.
+
+---
+
+## What a run cost, and stopping it
+
+Every durable row a run writes — its model calls, its gear runs, the hosts a
+granted gear reached — now names the queued unit it belonged to. Before that the
+only link was a timestamp, which happens to work today because runs are
+serialised per workspace and stops working the moment anything else is true.
+
+`GET /api/v1/workspaces/{id}/spend` answers what a workspace used over a window,
+by agent and model, defaulting to the last seven days. The aggregates that
+existed before were lifetime sums, so "what did last week cost" could not be
+asked at all.
+
+**Budgets refuse.** `budget_run_tokens` and `budget_workspace_day_tokens` are
+both off by default; set either and a run that reaches it is stopped before the
+next model call rather than after, and answers with its own state rather than as
+a generic failure. The pattern is the web-search quota's, which already stops
+work: the difference between a bound and a chart is whether anything happens
+when the line is crossed.
+
+Tokens, not money. There is no price data in this schema and there is not going
+to be.
+
+---
+
 ## Files, for gears and agents
 
 A gear run that is handed files executes in a directory holding `in/` — the
@@ -731,6 +861,12 @@ then defaults.
 | `variables_dir` | `COGITORIUM_VARIABLES_DIR` | — | A directory of files read as named variables, one file per name. The Kubernetes ConfigMap mount. |
 | `secrets_dir` | `COGITORIUM_SECRETS_DIR` | — | The same, read as secrets: redacted everywhere they could surface. The Kubernetes Secret mount. |
 | `gear_proxy_listen` | `COGITORIUM_GEAR_PROXY_LISTEN` | worked out from Docker | Where the gate for granted gears listens. Left empty, the server asks Docker which address a container reaches this machine on and binds there — the loopback works on Docker Desktop and is unreachable from a container on Linux. Naming an address here uses it exactly, and failing to bind it stops startup. |
+| `queue_workers` | `COGITORIUM_QUEUE_WORKERS` | 4 | How many queued deliveries may run at once across workspaces. Not the ceiling that matters — one run per workspace already is. |
+| `queue_max_per_workspace` | `COGITORIUM_QUEUE_MAX_PER_WORKSPACE` | 50 | How many deliveries may WAIT for one workspace. Past it a delivery is refused with 429 and told how many are ahead. |
+| `callback_hosts` | — | none | Hostnames a task may notify when a run finishes. **Empty means callbacks are off**, not that every host is allowed. |
+| `public_url` | — | — | How this install is reached from outside. Used only to put fetchable file links into a callback. |
+| `budget_run_tokens` | — | 0 (off) | The most one run may spend before it is stopped. |
+| `budget_workspace_day_tokens` | — | 0 (off) | The most a workspace may spend in a rolling day. |
 | — | `COGITORIUM_SECRET_KEY` | — | Encrypts secrets held in this install's database. Has no config-file key on purpose: on Kubernetes the config file is a ConfigMap, and a key beside its own ciphertext protects nothing. |
 
 `--config` points at a config file; `--listen`, `--data` and `--log-level` are

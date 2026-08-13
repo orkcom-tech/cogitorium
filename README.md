@@ -77,6 +77,14 @@ back. Any number of doors, any number of tasks behind each. A file is written
 into the workspace and handed to a gear as a path — so a zip arrives, a gear
 unpacks it, and the files are there.
 
+**And it can be left alone.** A workspace already busy makes the next job
+**wait** rather than throwing it away. Work can start because a clock said so,
+on a duration or a cron line in your own timezone. A caller can hand a job off
+and be told when it is finished, read the run back with the key it already has,
+and fetch the files it produced. An operator can see the queue and stop
+anything in it — the row and the work, not just the row. And a budget, if you
+set one, refuses before the next model call rather than reporting afterwards.
+
 **And the caller is told what happened, not only what the agent says.** Every
 delivery carries a record: which tools ran, which files exist afterwards, what
 it cost. A task can state what success is — this gear must have run, this many
