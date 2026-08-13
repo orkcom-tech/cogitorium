@@ -115,7 +115,7 @@ export default function App() {
               href={ORKCOM_URL}
               target="_blank"
               rel="noreferrer"
-              title="ORKCOM on GitHub"
+              title="ORKCOM"
             >
               <span className="by-word">by</span>
               {/* The mark spells ORK and the company is ORKCOM, so the type

@@ -4,9 +4,10 @@
 
 # Cogitorium
 
-**A workbench for agentic development.**
+**A modular workbench for agentic development.**
 
-One binary. Your models, your machine, your rules — and no telemetry, ever.
+Every part moves, and every part moves two ways — by your hand or by the
+orchestrator. One binary, your models, your machine, and no telemetry, ever.
 
 [Documentation](https://orkcom-tech.github.io/cogitorium/) ·
 [Install](#install) ·
@@ -17,10 +18,31 @@ One binary. Your models, your machine, your rules — and no telemetry, ever.
 
 ---
 
+**The goal is a workflow with a model inside it that still behaves like a
+workflow.** Deterministic where determinism is available, consistent from one
+run to the next, and flexible enough to be reshaped without being rebuilt. A
+model is the least predictable component anyone has ever put in a pipeline;
+everything here exists to bound it — a payload checked against a schema before
+a model is called at all, a delegation that is only possible along a wire you
+drew, work that is judged by the record of what ran rather than by the sentence
+the model wrote, an answer that can be taken from a gear's stdout instead of
+from the model's retelling of it, and a ledger that keeps every run whether it
+succeeded or not.
+
 Most agent tooling asks you to accept a black box: one model, one vendor, a
 conversation that wanders, and a bill you cannot attribute. Cogitorium is the
-other shape. You define the agents, you choose a model **per agent**, you draw
-who may hand work to whom, and the workbench shows you what each one cost.
+other shape. **Everything in it is a part you can take hold of** — the agents,
+the wires between them, the context each one carries, the tools they forge, the
+doors your own systems deliver through, the clock that starts work without you.
+
+And each of those is configurable **twice over**: by hand on the bench, or by
+telling the orchestrator to do it. Both hands reach the same objects, and
+neither hides its work from the other — draw a wire yourself and the
+orchestrator sees a capability it now has; ask it to hire an agent and the
+agent appears on your canvas, wired, with a model, and yours to change. That is
+where the range comes from: the same install is a two-agent draft, a panel of
+eight models judging each other, and a stage inside somebody else's pipeline,
+without becoming a different product each time.
 
 It runs as a single Go binary with the interface embedded in it. Point it at a
 frontier API, at Ollama on your laptop, at a box in your homelab, or at all
@@ -36,9 +58,25 @@ three at once — it does not care and it does not phone home.
 ## What it does
 
 **A workspace is a group of agents behind one orchestrator chat.** You talk to
-the orchestrator. It creates the other agents, gives them roles and models,
+the orchestrator; it creates the other agents, gives them roles and models,
 wires them together, and hands them work — and everything it does is a visible
 step on the timeline rather than something that happened inside a black box.
+
+**Or you do it yourself.** Nearly every one of those acts has a control on the
+bench: change any agent's model, role and prohibitions; draw a wire or cut it;
+hand an agent a gear or revoke it; write a gear from scratch and approve it;
+put an instruction in the shared library; open a receiver and write the task
+behind it; put that task on a clock; edit the workspace's files; stop anything
+in the queue. Neither route is the "real" one and there is no import step
+between them — the orchestrator and the panels write to the same objects, so a
+workspace can be started by conversation and finished by hand, or the reverse,
+in the middle of one session.
+
+One exception, stated rather than glossed: **there is no add-agent button.**
+Hiring is the orchestrator's, or the API's. The interface can still bring
+agents into being wholesale — a new workspace arrives with its orchestrator,
+and clone and import carry a whole roster — but there is no control that adds
+one agent to a workspace that already exists.
 
 **Every agent gets its own model.** That is what makes the economics
 expressible: an expensive frontier model does the reasoning while free local
@@ -71,11 +109,12 @@ in its prompt, and an agent the orchestrator creates inherits them — otherwise
 a standing rule would be one tool call from being routed around by hiring
 someone without it.
 
-**It can be a stage in your own pipeline.** An inlet is a door with an address
+**It can be a stage in your own pipeline.** A receiver is a door with an address
 and its own key: data arrives by HTTP, an agent works on it, a result comes
-back. Any number of doors, any number of tasks behind each. A file is written
-into the workspace and handed to a gear as a path — so a zip arrives, a gear
-unpacks it, and the files are there.
+back. Any number of doors, any number of tasks behind each, and a task is
+editable in place rather than deleted and rewritten. A file is written into the
+workspace and handed to a gear as a path — so a zip arrives, a gear unpacks it,
+and the files are there.
 
 **And it can be left alone.** A workspace already busy makes the next job
 **wait** rather than throwing it away. Work can start because a clock said so,

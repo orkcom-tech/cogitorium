@@ -2,10 +2,17 @@
 layout: default
 title: Guide
 permalink: /guide/
-description: A worked walkthrough of Cogitorium — from an empty install to agents with tools, with every command and every error message taken from a real run.
+description: A worked walkthrough of Cogitorium — from an empty install to a pipeline with models in it that behaves the same way twice, with every command and every error message taken from a real run.
 ---
 
 # Guide
+
+This walks from an empty install to a workflow you can hand to another system:
+agents with their own models, tools they keep, a door your own services deliver
+through, and a clock that starts work without you. The thread running through
+it is the one thing the whole product is for — **a pipeline with a model in it
+that behaves the same way twice**, which is why so much of what follows is
+about what gets checked rather than what gets said.
 
 Every command below was run against a real install, and every error message is
 the exact text the software produces. Where something does not exist, it says

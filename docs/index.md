@@ -5,8 +5,19 @@ title: Cogitorium
 
 # Cogitorium
 
-**A workbench for agentic development.** One binary, your models, your machine.
-No telemetry.
+**A modular workbench for agentic development.** One binary, your models, your
+machine. No telemetry.
+
+**What it is for:** building workflows and pipelines that have models in them
+and still behave like workflows — as deterministic as the parts allow, the same
+from one run to the next, and flexible enough to be reshaped without being
+rebuilt.
+
+Every part of it is a part you can move — the agents, the wires between them,
+the context each one carries, the tools they forge, the receivers your own
+systems deliver through, the clock that starts work without you. And each is
+configurable twice over: by hand on the bench, or by telling the orchestrator.
+Both write to the same objects, so nothing has to be redone in the other place.
 
 Everything below describes what the software does today. Where something is
 absent or unfinished, it says so.
@@ -135,7 +146,7 @@ then a model from it.
 
 ## The idea in five minutes
 
-Three things make this different from a chat window with tools attached.
+Four things make this different from a chat window with tools attached.
 
 **A model per agent, not per workspace.** The agent that reasons about your
 architecture can be an expensive frontier model while the one that writes
@@ -149,6 +160,40 @@ convention — remove the wire and the delegation stops being possible.
 **Tools outlive the conversation.** An agent that needs a capability can forge
 one, and it lands in a catalog rather than evaporating with the session. It runs
 only after you approve it, and only inside a container.
+
+**Two hands on the same controls.** Every arrangement here can be built by
+telling the orchestrator or by working the panels yourself — a wire drawn on
+the canvas is a capability the orchestrator now has, an agent it hired is a card
+you can rebind to another model, a gear you wrote by hand is one it can call. It
+is the same objects and the same rules underneath, so there is no conversion
+between the two ways of working and no "advanced mode" holding the real
+controls. The one gap, stated where it matters: **no button adds an agent to an
+existing workspace** — hiring is the orchestrator's or the API's. A new
+workspace still arrives with its orchestrator, and clone and import carry a
+whole roster.
+
+### What is done about the model being unpredictable
+
+The point of the arrangement is a pipeline that behaves the same way twice. A
+model is the least predictable part anyone puts in one, so each of these bounds
+it somewhere specific:
+
+| The bound | Where |
+|---|---|
+| A payload is validated against a schema **before any model is called** — a wrong request costs nothing | [Receivers](#receivers--a-door-from-the-rest-of-your-system) |
+| An agent may delegate **only along a wire that exists**, enforced in the runtime | [The blueprint](#the-blueprint) |
+| A task states what success is, and it is checked against the **record of what ran** — not against the answer | [`expect`](#receivers--a-door-from-the-rest-of-your-system) |
+| The answer can be **the gear's own stdout**, so the model's retelling never reaches the caller | `answer_from: "gear"` |
+| The answer itself can be required to fit a schema, and a run that misses it is refused | `expect.schema` |
+| Prohibitions are the last thing in the prompt, and are inherited by agents an agent creates | [Prohibitions](#prohibitions) |
+| One run at a time per workspace; the rest **queue** rather than racing or being dropped | [The queue](#the-queue-and-work-that-waits) |
+| Every run is on the ledger with its record, whether it succeeded or not | [`did`](#did--what-happened) |
+| A scheduled run gets no web search, because a search waits for a person to approve the query | [Schedules](#schedules--work-that-starts-because-a-clock-said-so) |
+
+None of this makes a model deterministic. It makes the **workflow around it**
+deterministic: the same input either produces work that meets the same stated
+conditions or is refused with the reason, and either way there is a row saying
+which.
 
 ---
 

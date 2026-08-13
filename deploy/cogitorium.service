@@ -1,5 +1,5 @@
 [Unit]
-Description=Cogitorium — a workbench for agentic development
+Description=Cogitorium — a modular workbench for deterministic workflows built on models
 Documentation=https://orkcom-tech.github.io/cogitorium/
 After=network-online.target
 Wants=network-online.target

@@ -97,7 +97,7 @@ release:
   replace_existing_draft: true
   name_template: "v{{.Version}}"
   header: |
-    Cogitorium {{ .Tag }} — a workbench for agentic development.
+    Cogitorium {{ .Tag }} — a modular workbench for deterministic workflows built on models.
 
     Install with Homebrew, Scoop, a Linux package, Docker, or the archive for
     your platform below.
@@ -118,8 +118,8 @@ nfpms:
     package_name: cogitorium
     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
     homepage: https://github.com/orkcom-tech/cogitorium
-    maintainer: ORKCOM <https://github.com/orkcom-tech>
-    description: A workbench for agentic development. Local-first, no telemetry.
+    maintainer: ORKCOM <https://orkcom.com>
+    description: A modular workbench for building deterministic, repeatable workflows that have models in them: agents, wiring, context, gears and pipelines, set by hand or by the orchestrator. Local-first, no telemetry.
     license: BUSL-1.1
     formats:
       - deb

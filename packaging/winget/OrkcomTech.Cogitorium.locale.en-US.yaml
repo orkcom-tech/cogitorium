@@ -3,17 +3,23 @@ PackageIdentifier: OrkcomTech.Cogitorium
 PackageVersion: 0.0.1
 PackageLocale: en-US
 Publisher: ORKCOM
-PublisherUrl: https://github.com/orkcom-tech
+PublisherUrl: https://orkcom.com
 PackageName: Cogitorium
 PackageUrl: https://github.com/orkcom-tech/cogitorium
 License: BUSL-1.1
 LicenseUrl: https://github.com/orkcom-tech/cogitorium/blob/main/LICENSE
-ShortDescription: A workbench for agentic development. Local-first, no telemetry.
+ShortDescription: A modular workbench for building deterministic, repeatable workflows that have models in them: agents, wiring, context, gears and pipelines, set by hand or by the orchestrator. Local-first, no telemetry.
 Description: >-
-  Cogitorium runs your agents on your machine, behind one orchestrator chat.
-  A model per agent, wiring you draw yourself, tools the agents build and keep,
-  and per-agent token spend. One binary with the interface embedded; it talks
-  to the model providers you configure and to nothing else.
+  Cogitorium is for building workflows that have models in them and still behave
+  like workflows: as deterministic as the parts allow, the same from one run to
+  the next, and flexible enough to be reshaped without being rebuilt. The agents,
+  the wiring between them, the context each one carries, the tools they forge and
+  the pipelines they serve are all yours to configure — by hand on the bench, or
+  by telling the orchestrator, both writing to the same objects. A model per
+  agent, per-agent token spend, and a record of what every run actually did,
+  against which a task's stated conditions are checked. One binary with the
+  interface embedded; it talks to the model providers you configure and to
+  nothing else.
 Tags:
   - ai
   - agents

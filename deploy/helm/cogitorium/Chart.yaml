@@ -1,6 +1,6 @@
 apiVersion: v2
 name: cogitorium
-description: A workbench for agentic development. Local-first, no telemetry.
+description: A modular workbench for building deterministic, repeatable workflows that have models in them: agents, wiring, context, gears and pipelines, set by hand or by the orchestrator. Local-first, no telemetry.
 type: application
 # The chart's own version. appVersion tracks the release it deploys and is
 # overridden by --set image.tag, so a chart bump and an application bump are
@@ -17,7 +17,7 @@ keywords:
   - developer-tools
 maintainers:
   - name: ORKCOM
-    url: https://github.com/orkcom-tech
+    url: https://orkcom.com
 annotations:
   # Stated here as well as in the README because a values file is where someone
   # goes looking for a replica count, and this is the one that cannot be raised.

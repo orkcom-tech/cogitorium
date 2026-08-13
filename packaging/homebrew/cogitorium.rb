@@ -3,7 +3,7 @@
 # by scripts/ci/publish-packages.sh — this file is here so the dependency and
 # the caveat can be reviewed alongside the code they describe.
 class Cogitorium < Formula
-  desc "A workbench for agentic development. Local-first, no telemetry"
+  desc "Modular workbench for deterministic, repeatable workflows built on models"
   homepage "https://orkcom-tech.github.io/cogitorium/"
   license "BUSL-1.1"
   version "0.0.1"

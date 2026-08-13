@@ -1,6 +1,6 @@
 {
   "version": "0.0.1",
-  "description": "A workbench for agentic development. Local-first, no telemetry.",
+  "description": "A modular workbench for building deterministic, repeatable workflows that have models in them: agents, wiring, context, gears and pipelines, set by hand or by the orchestrator. Local-first, no telemetry.",
   "homepage": "https://orkcom-tech.github.io/cogitorium/",
   "license": "BUSL-1.1",
   "_comment": "Canonical manifest lives in https://github.com/orkcom-tech/scoop-bucket — this copy is for reference only. `depends` is Contextverse: context and memory are stored by contextd, and Scoop can express that, so it does.",

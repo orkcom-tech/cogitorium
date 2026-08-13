@@ -1,8 +1,9 @@
 title: Cogitorium
 description: >-
-  A workbench for agentic development. Model catalog, workspaces of dedicated
-  agents behind one orchestrator chat, blueprint wiring, and a persistent
-  catalog of agent-forged tools. Local-first, no telemetry.
+  A modular workbench for building deterministic, repeatable workflows that have
+  models in them. Agents, the wiring between them, context, gears and pipelines —
+  every part configurable by hand or by the orchestrator, both writing to the same
+  objects. Local-first, no telemetry.
 
 # No remote theme: the layout in _layouts/default.html is the whole site, so
 # the page fetches nothing at build or at read time.

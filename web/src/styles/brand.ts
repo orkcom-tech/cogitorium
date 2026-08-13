@@ -46,9 +46,8 @@ export const ORK_MARK =
   'rfKrcrYXs+BAr+vaCkruDQn0GW3+nBgpCOd0r/HuMf0M46nnWaYX75Pyzny1ambBKpVMmhmvfiVjj/wvAAD//3ADf/eqHxww' +
   'AAAAAElFTkSuQmCC'
 
-/** The org is the only ORKCOM address that resolves; there is no company site
- *  yet, and a hostname invented here would be a link that 404s. */
-export const ORKCOM_URL = 'https://github.com/orkcom-tech'
+/** The company. The GitHub org stood here while there was no site to point at. */
+export const ORKCOM_URL = 'https://orkcom.com/'
 
 /** The documentation site, built from docs/ by GitHub Pages. */
 export const DOCS_URL = 'https://orkcom-tech.github.io/cogitorium/'

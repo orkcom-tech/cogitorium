@@ -11,7 +11,7 @@ import (
 func main() {
 	root := &cobra.Command{
 		Use:           "cogitorium",
-		Short:         "Cogitorium — a workbench for agentic development",
+		Short:         "Cogitorium — a modular workbench for deterministic workflows built on models",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
