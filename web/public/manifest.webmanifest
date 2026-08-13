@@ -1,7 +1,7 @@
 {
   "name": "Cogitorium",
   "short_name": "Cogitorium",
-  "description": "A modular workbench for building deterministic, repeatable workflows that have models in them: agents, wiring, context, gears and pipelines, set by hand or by the orchestrator. Local-first, no telemetry.",
+  "description": "A modular workbench for building deterministic, repeatable workflows that have models in them — agents, wiring, context, gears and pipelines, set by hand or by the orchestrator. Local-first, no telemetry.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0B0B0C",

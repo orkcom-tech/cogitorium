@@ -1,6 +1,6 @@
 apiVersion: v2
 name: cogitorium
-description: A modular workbench for building deterministic, repeatable workflows that have models in them: agents, wiring, context, gears and pipelines, set by hand or by the orchestrator. Local-first, no telemetry.
+description: A modular workbench for building deterministic, repeatable workflows that have models in them — agents, wiring, context, gears and pipelines, set by hand or by the orchestrator. Local-first, no telemetry.
 type: application
 # The chart's own version. appVersion tracks the release it deploys and is
 # overridden by --set image.tag, so a chart bump and an application bump are

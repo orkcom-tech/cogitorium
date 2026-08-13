@@ -119,7 +119,7 @@ nfpms:
     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
     homepage: https://github.com/orkcom-tech/cogitorium
     maintainer: ORKCOM <https://orkcom.com>
-    description: A modular workbench for building deterministic, repeatable workflows that have models in them: agents, wiring, context, gears and pipelines, set by hand or by the orchestrator. Local-first, no telemetry.
+    description: A modular workbench for building deterministic, repeatable workflows that have models in them — agents, wiring, context, gears and pipelines, set by hand or by the orchestrator. Local-first, no telemetry.
     license: BUSL-1.1
     formats:
       - deb

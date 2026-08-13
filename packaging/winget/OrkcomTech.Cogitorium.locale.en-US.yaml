@@ -8,7 +8,7 @@ PackageName: Cogitorium
 PackageUrl: https://github.com/orkcom-tech/cogitorium
 License: BUSL-1.1
 LicenseUrl: https://github.com/orkcom-tech/cogitorium/blob/main/LICENSE
-ShortDescription: A modular workbench for building deterministic, repeatable workflows that have models in them: agents, wiring, context, gears and pipelines, set by hand or by the orchestrator. Local-first, no telemetry.
+ShortDescription: A modular workbench for building deterministic, repeatable workflows that have models in them — agents, wiring, context, gears and pipelines, set by hand or by the orchestrator. Local-first, no telemetry.
 Description: >-
   Cogitorium is for building workflows that have models in them and still behave
   like workflows: as deterministic as the parts allow, the same from one run to
