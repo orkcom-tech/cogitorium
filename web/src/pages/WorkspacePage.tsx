@@ -442,7 +442,7 @@ export default function WorkspacePage() {
     {
       id: 'inlets',
       minW: 460,
-      title: 'Inlets',
+      title: 'Receivers',
       home: 'aux',
       node: (
         <div className="bn-body bn-scroll">

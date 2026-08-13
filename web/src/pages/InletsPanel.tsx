@@ -12,7 +12,13 @@ import {
   type IssuedInletKey,
 } from '../api'
 
-// The doors into this workspace from outside.
+// The receivers: the doors into this workspace from outside.
+//
+// Called receivers on screen and inlets in the wire, deliberately. "Inlet" is
+// a word this product invented and nobody arrives already knowing; "receiver"
+// says what the thing does. The URL, the API paths and the tables keep the old
+// name because callers outside this install hold those strings, and breaking
+// them to improve a label is the wrong trade.
 //
 // This is a panel on the workspace rather than a page of its own because every
 // question it raises is answered next to it: a delivery that failed at 3am is
@@ -85,7 +91,7 @@ export default function InletsPanel({
   return (
     <div className="inlets">
       <p className="hint">
-        A door into this workspace from outside. A caller posts to its address with its key, one task runs on one
+        A receiver: a door into this workspace from outside. A caller posts to its address with its key, one task runs on one
         agent, and the answer comes back on the same response. Nothing is added to the conversation, and nothing is
         remembered between deliveries — the payload is treated as text from a stranger, so a run through a door cannot
         write to the instruction library, forge a gear or change the blueprint. A leaked key is closed by issuing a new
@@ -114,7 +120,7 @@ export default function InletsPanel({
       />
 
       {inlets.length === 0 ? (
-        <p className="hint">No doors on this workspace. Everything reaches it through you.</p>
+        <p className="hint">No receivers on this workspace. Everything reaches it through you.</p>
       ) : (
         inlets.map((i) => (
           <InletCard
@@ -154,7 +160,7 @@ export default function InletsPanel({
         </>
       )}
       {runs.length === 0 ? (
-        <p className="hint">Nothing has come through a door in this workspace.</p>
+        <p className="hint">Nothing has come through a receiver in this workspace.</p>
       ) : (
         runs.map((r) => <RunRow key={r.id} run={r} />)
       )}
@@ -200,12 +206,12 @@ function NewInletForm({
       />
       <input
         className="grow"
-        placeholder="what comes through this door"
+        placeholder="what comes through this receiver"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
       />
       <button type="submit" disabled={busy || !address.trim()}>
-        open a door
+        add a receiver
       </button>
     </form>
   )
@@ -251,7 +257,7 @@ function InletCard({
           onClick={() => {
             if (
               !confirm(
-                `Delete the inlet "${inlet.address}"? Its tasks go with it and its key stops working. The record of what already came through it stays.`,
+                `Delete the receiver "${inlet.address}"? Its tasks go with it and its key stops working. The record of what already came through it stays.`,
               )
             )
               return
@@ -268,7 +274,7 @@ function InletCard({
         </p>
       ) : (
         <p className="notice">
-          This door has no key, so every delivery to it is refused. Issue one to open it.
+          This receiver has no key, so every delivery to it is refused. Issue one to open it.
         </p>
       )}
 
