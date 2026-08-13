@@ -549,6 +549,12 @@ zoneinfo — otherwise every zone silently resolves to UTC, in production only.
 zone, the payload against the task's own schema, that the agent exists. That is
 the only moment the person who typed it is still looking at it.
 
+**A scheduled run never gets web search.** Every search stops the turn and waits
+for a person to approve that exact query, and on a schedule there is nobody to
+ask — so the tool is not offered at all. An agent may hold a grant and still
+never use it on this job, so this is not a reason to refuse the schedule; it is
+a reason to know before you write one that depends on it.
+
 **A firing whose previous run has not finished is skipped**, and recorded as a
 skip rather than a failure. A job slower than its own interval never catches up,
 and queueing every missed tick turns that into a backlog outliving the reason
@@ -600,12 +606,20 @@ by agent and model, defaulting to the last seven days. The aggregates that
 existed before were lifetime sums, so "what did last week cost" could not be
 asked at all.
 
-**Budgets refuse.** `budget_run_tokens` and `budget_workspace_day_tokens` are
-both off by default; set either and a run that reaches it is stopped before the
-next model call rather than after, and answers with its own state rather than as
-a generic failure. The pattern is the web-search quota's, which already stops
-work: the difference between a bound and a chart is whether anything happens
-when the line is crossed.
+**A budget refuses.** `budget_run_tokens` is off by default; set it and a run
+that reaches it is stopped before the next model call rather than after, and
+settles as `refused_budget` rather than `failed`.
+
+It exists **for the door, not for you**. An inlet is an entrance for somebody
+else's system, and whoever holds the key can drive deliveries — so this bounds
+what a third party can cost. There is deliberately no daily or workspace-wide
+version: nothing but your own schedules and your own typing drives a workspace's
+total, and capping that would be a knob whose only use is stopping your own
+work.
+
+The separate state is the point. A caller outside has to tell "your job hit the
+ceiling" from "we broke" without reading prose, because retrying a run that was
+deliberately stopped is how a ceiling turns into a bill.
 
 Tokens, not money. There is no price data in this schema and there is not going
 to be.
@@ -865,8 +879,7 @@ then defaults.
 | `queue_max_per_workspace` | `COGITORIUM_QUEUE_MAX_PER_WORKSPACE` | 50 | How many deliveries may WAIT for one workspace. Past it a delivery is refused with 429 and told how many are ahead. |
 | `callback_hosts` | — | none | Hostnames a task may notify when a run finishes. **Empty means callbacks are off**, not that every host is allowed. |
 | `public_url` | — | — | How this install is reached from outside. Used only to put fetchable file links into a callback. |
-| `budget_run_tokens` | — | 0 (off) | The most one run may spend before it is stopped. |
-| `budget_workspace_day_tokens` | — | 0 (off) | The most a workspace may spend in a rolling day. |
+| `budget_run_tokens` | — | 0 (off) | The most one run may spend before it is stopped. Bounds what a caller through an inlet can cost; there is no workspace-wide version on purpose. |
 | — | `COGITORIUM_SECRET_KEY` | — | Encrypts secrets held in this install's database. Has no config-file key on purpose: on Kubernetes the config file is a ConfigMap, and a key beside its own ciphertext protects nothing. |
 
 `--config` points at a config file; `--listen`, `--data` and `--log-level` are

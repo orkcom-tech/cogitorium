@@ -7,6 +7,7 @@ import FilesPage from './FilesPage'
 import CodeEditor from './CodeEditor'
 import ApprovalDialog from './ApprovalDialog'
 import InletsPanel from './InletsPanel'
+import QueuePanel from './QueuePanel'
 import EnvPanel from './EnvPanel'
 import Bench, { type PanelDef } from '../bench/Bench'
 import { useLayout } from '../bench/store'
@@ -16,7 +17,7 @@ import LayoutMenu from '../bench/LayoutMenu'
 
 // The set of ids the layout parser will accept. A restored layout naming a
 // panel nothing can render would otherwise be a permanent white screen.
-const PANEL_IDS = new Set(['chat', 'blueprint', 'files', 'editor', 'terminal', 'agents', 'agent', 'inlets', 'env'])
+const PANEL_IDS = new Set(['chat', 'blueprint', 'files', 'editor', 'terminal', 'agents', 'agent', 'inlets', 'queue', 'env'])
 import {
   api,
   wsChatStream,
@@ -450,6 +451,20 @@ export default function WorkspacePage() {
               should not pay two queries on every open for a feature it does
               not use. */}
           <InletsPanel wsId={wsId} agents={agents} shown={!!layout.slotOf('inlets')} onError={setError} />
+        </div>
+      ),
+    },
+    {
+      id: 'queue',
+      minW: 460,
+      title: 'Queue',
+      home: 'aux',
+      node: (
+        <div className="bn-body bn-scroll">
+          {/* Same rule as the inlets panel: placed decides loaded. This one
+              polls while it is on screen, so a panel nobody put out must not
+              be running a timer. */}
+          <QueuePanel wsId={wsId} shown={!!layout.slotOf('queue')} onError={setError} />
         </div>
       ),
     },

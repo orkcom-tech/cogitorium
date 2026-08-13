@@ -25,6 +25,8 @@ import {
 // problem it is, which is the only thing worth knowing at 3am.
 const STATE_MEANING: Record<InletRunState, string> = {
   accepted: 'The key opened the door and the task existed; the payload had not been looked at yet.',
+  queued:
+    'Waiting for this workspace to be free. Nothing is wrong: a workspace runs one thing at a time, and this one is in line. It used to be recorded as a failure, which is why the distinction is worth having.',
   refused_schema:
     'The payload did not match what this task accepts. No model was called, so nothing was spent — the caller sent the wrong thing.',
   running: 'The agent was working when this row was last written.',
@@ -37,6 +39,8 @@ const STATE_MEANING: Record<InletRunState, string> = {
     'The run did not do what this task requires — the gear it names never ran, or the files it needs never appeared. The agent may have answered beautifully; that is not what was checked. The record below is what was checked.',
   refused_output_schema:
     'The work happened and the answer came back the wrong shape. This one is about the model, not about the workspace: the run is in the record, and what it produced is in the message.',
+  refused_budget:
+    'This run reached the token ceiling set for one delivery and was stopped before its next model call. Not a fault: somebody drew this line. Retrying it unchanged will stop in the same place.',
 }
 
 export default function InletsPanel({

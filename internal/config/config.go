@@ -99,18 +99,22 @@ type Config struct {
 	// making this server call an address of somebody else's choosing.
 	CallbackHosts []string `yaml:"callback_hosts"`
 
-	// BudgetRunTokens is the most one run may spend before it is stopped, and
-	// BudgetWorkspaceDayTokens the most a workspace may spend in a rolling day.
-	// BOTH DEFAULT TO ZERO, WHICH IS OFF, and that is not timidity: a ceiling
-	// nobody asked for, stopping a job at three in the morning, is worse than
-	// no ceiling at all.
+	// BudgetRunTokens is the most ONE RUN may spend before it is stopped. Zero
+	// is off, and off is the default.
 	//
-	// They REFUSE rather than report. The pattern is the web-search quota's,
-	// which already stops work and writes down that it did — the difference
-	// between a bound and a chart is whether anything happens when it is
-	// crossed.
-	BudgetRunTokens          int64 `yaml:"budget_run_tokens"`
-	BudgetWorkspaceDayTokens int64 `yaml:"budget_workspace_day_tokens"`
+	// It exists for the door, not for the operator. An inlet is an entrance for
+	// somebody else's system, and whoever holds the key can drive deliveries —
+	// so this bounds what a THIRD PARTY can cost, which is a different thing
+	// from an operator limiting themselves. There is no daily or workspace-wide
+	// version for exactly that reason: nothing but the operator's own schedules
+	// and their own typing drives a workspace's total, and capping that would
+	// be a knob whose only use is to stop your own work.
+	//
+	// It REFUSES rather than reports, and a run stopped by it settles as
+	// refused_budget rather than failed — a caller outside must be able to tell
+	// "your job hit the ceiling" from "we broke", or it retries the one thing
+	// that must not be retried.
+	BudgetRunTokens int64 `yaml:"budget_run_tokens"`
 
 	// PublicURL is how this install is reached from outside. It is used only to
 	// put fetchable links to a run's files into its callback; empty leaves them

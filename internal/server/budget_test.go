@@ -24,6 +24,9 @@ func TestARunStopsAtItsTokenBudget(t *testing.T) {
 		// refuses everything would pass this test while proving nothing.
 		c.BudgetRunTokens = 10
 	}))
+	// The state is the point, not the sentence. A caller outside has to be able
+	// to tell "your job hit the ceiling" from "we broke" WITHOUT reading prose,
+	// or it retries the one thing that must not be retried.
 	d.addJSONTask(t, "triage", `{"type":"object"}`, "orchestrator", "triage it")
 
 	// A turn that keeps calling tools would run forever without a ceiling;
@@ -36,8 +39,16 @@ func TestARunStopsAtItsTokenBudget(t *testing.T) {
 	if rec.Code == http.StatusOK {
 		t.Fatalf("a run past its budget answered 200: %s", rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "budget") {
-		t.Fatalf("the answer does not say a budget stopped it: %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), `"state":"refused_budget"`) {
+		t.Fatalf("a run stopped by its budget is not reported as such: %s", rec.Body.String())
+	}
+	var state string
+	if err := d.db.QueryRow(`SELECT state FROM inlet_runs WHERE workspace_id = ? ORDER BY id DESC LIMIT 1`,
+		d.wsID).Scan(&state); err != nil {
+		t.Fatalf("read the ledger row: %v", err)
+	}
+	if state != "refused_budget" {
+		t.Fatalf("the ledger says %q, so nothing can tell a ceiling from a fault", state)
 	}
 
 	// And it stopped EARLY: without the ceiling this provider drives the loop

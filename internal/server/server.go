@@ -132,7 +132,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		identity:   identity.NewStore(db),
 		inlets:     inlet.NewStore(db),
 		engine: engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, queue,
-			engine.Budgets{Run: cfg.BudgetRunTokens, Day: cfg.BudgetWorkspaceDayTokens}, cfg.DataDir),
+			engine.Budgets{Run: cfg.BudgetRunTokens}, cfg.DataDir),
 		queue:         queue,
 		schedules:     schedule.NewStore(db),
 		queueMax:      queueMax,

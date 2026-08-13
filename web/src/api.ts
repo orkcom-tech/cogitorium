@@ -246,6 +246,10 @@ export type InletRunRecord = {
 // shape. Different people, different fixes, different hours of the night.
 export type InletRunState =
   | 'accepted'
+  // Waiting for its workspace to be free. The state this whole queue exists
+  // for: a busy workspace used to make this `failed`, which is what a broken
+  // job gets.
+  | 'queued'
   | 'refused_schema'
   | 'running'
   | 'completed'
@@ -253,6 +257,51 @@ export type InletRunState =
   | 'interrupted'
   | 'refused_expectation'
   | 'refused_output_schema'
+  // Stopped at the token ceiling an operator set for one delivery. Its own
+  // state so a caller can stop rather than retry.
+  | 'refused_budget'
+
+// One unit of queued work as an operator reads it. Deliberately without its
+// args: a delivery's args carry the caller's payload, and a queue view is not a
+// place to read other people's data.
+export type QueueEntry = {
+  unit: number
+  kind: 'delivery' | 'chat' | 'callback'
+  state: 'queued' | 'claimed'
+  run?: number
+  position: number
+  since: string
+  deadline?: string
+}
+
+export type QueueView = { queued: number; running: number; entries: QueueEntry[] }
+
+export type Schedule = {
+  id: number
+  workspace_id: number
+  task_id: number
+  name: string
+  spec: string
+  tz: string
+  payload: string
+  enabled: boolean
+  on_miss: 'skip' | 'run'
+  next_at: string
+  last_work_id?: number
+  last_fired_at?: string
+  last_outcome?: 'fired' | 'skipped' | 'failed'
+  fires: number
+  skips: number
+}
+
+export type NewSchedule = {
+  task_id: number
+  name: string
+  spec: string
+  tz?: string
+  payload?: unknown
+  on_miss?: 'skip' | 'run'
+}
 
 // One delivery, whatever became of it. inlet_id and agent_id are nullable
 // because the row outlives both: a ledger that disappeared when the door was
@@ -562,6 +611,29 @@ export const api = {
   // rule as the workspace the inlet belongs to. Delivery is the other half and
   // is not reachable from here: it lives at /i/… and proves itself with the
   // inlet's own key rather than with this operator's token.
+  // What is waiting and what is running in one workspace, and the button that
+  // stops either. A queue nobody can see is discovered by being refused by it.
+  queue: {
+    show: (wsId: number) => req<QueueView>(`/api/v1/workspaces/${wsId}/queue`),
+    // Stops a unit whether it is waiting or already running: the row AND the
+    // work. A cancel that only relabelled the row would leave the model
+    // answering for a job somebody had stopped.
+    cancel: (unitId: number) => req<void>(`/api/v1/queue/${unitId}`, { method: 'DELETE' }),
+  },
+
+  schedules: {
+    list: (wsId: number) => req<Schedule[]>(`/api/v1/workspaces/${wsId}/schedules`),
+    create: (wsId: number, body: NewSchedule) =>
+      req<Schedule>(`/api/v1/workspaces/${wsId}/schedules`, { method: 'POST', body: JSON.stringify(body) }),
+    setEnabled: (id: number, enabled: boolean) =>
+      req<Schedule>(`/api/v1/schedules/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
+    remove: (id: number) => req<void>(`/api/v1/schedules/${id}`, { method: 'DELETE' }),
+    // Fires it by hand without moving its clock — the first thing anybody wants
+    // after writing one is to know whether it works, and waiting until 02:00 to
+    // find out is how a broken job stays broken for a day.
+    runNow: (id: number) => req<{ unit: number }>(`/api/v1/schedules/${id}/run`, { method: 'POST' }),
+  },
+
   inlets: {
     list: (wsId: number) => req<Inlet[]>(`/api/v1/workspaces/${wsId}/inlets`),
     // Opening a door issues its first key in the same call, and this response

@@ -116,7 +116,14 @@ func (s *Server) runDelivery(ctx context.Context, u work.Unit) error {
 // disk.
 func (s *Server) failedRun(ctx context.Context, runID int64, cause error, did engine.Record) {
 	state := inlet.StateFailed
-	if errors.Is(ctx.Err(), context.Canceled) {
+	switch {
+	case errors.Is(cause, engine.ErrBudget):
+		// Not a broken job: the operator drew this line. Saying so in the state
+		// rather than only in the error text is what lets a caller stop instead
+		// of retrying — and retrying a run that was deliberately stopped is how
+		// a ceiling turns into a bill.
+		state = inlet.StateRefusedBudget
+	case errors.Is(ctx.Err(), context.Canceled):
 		state = inlet.StateInterrupted
 	}
 	slog.Error("inlet run failed", "run_id", runID, "state", state,

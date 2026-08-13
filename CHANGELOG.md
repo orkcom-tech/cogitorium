@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.4.1
+
+Three things v0.4.0 shipped without, and one it shipped that should not have
+existed.
+
+### The daily budget is gone
+
+`budget_workspace_day_tokens` read from the config and went nowhere — a knob an
+operator could set and believe in. It has been removed rather than implemented,
+because its only real use was a hosted service where the person paying is not
+the person asking for the work, and that is not what this is. Nothing drives a
+workspace's daily total except your own schedules and your own typing, so a cap
+on it would only ever stop your own work.
+
+`budget_run_tokens` stays, with the reason stated properly this time: an inlet
+is a door for somebody ELSE's system, and whoever holds the key can drive
+deliveries. It bounds what a third party can cost, which is a different thing
+from limiting yourself.
+
+### A run stopped by that ceiling says so
+
+It settled as `failed` with the reason in the error text, so a caller could only
+tell "your job hit the ceiling" from "we broke" by reading prose — and retrying
+a job that was deliberately stopped is how a ceiling turns into a bill. It is
+`refused_budget` now, answered with 413, and the state was already in the
+ledger's CHECK waiting for a writer.
+
+### The queue and schedules have an interface
+
+They existed only as routes. A queue nobody can see is discovered by being
+refused by it, and a schedule nobody can pause is one you disable by deleting
+it. The panel shows what is running and what is waiting, with a Stop on each
+that ends the work rather than only the row, and lists schedules with pause,
+run-now and delete. It polls only while it is on the bench and the tab is in
+front.
+
+### And a plan item withdrawn
+
+Refusing to create a schedule for a task whose agent holds a web-search grant
+was in the plan and is wrong: an agent may hold a grant and never use it on that
+job, so the refusal would block legitimate schedules. What is true — that a
+scheduled run never gets web search, because every search waits for a person to
+approve that exact query and on a schedule there is nobody to ask — is now in
+the documentation and beside the form.
+
 ## v0.4.0
 
 Cogitorium can now be left alone. Work waits its turn instead of being thrown

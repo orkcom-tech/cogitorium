@@ -328,6 +328,11 @@ func statusForRun(run inlet.Run) int {
 		return http.StatusOK
 	case inlet.StateRefusedSchema:
 		return http.StatusBadRequest
+	case inlet.StateRefusedBudget:
+		// 413: the caller asked for more work than this install will do for one
+		// delivery. It is about what they sent, and sending less is the fix —
+		// which is what separates it from the 500s below.
+		return http.StatusRequestEntityTooLarge
 	case inlet.StateRefusedExpectation, inlet.StateRefusedOutputSchema:
 		// The caller sent a valid payload and this install did not produce what
 		// its own task requires. Nothing the caller can change would fix it,

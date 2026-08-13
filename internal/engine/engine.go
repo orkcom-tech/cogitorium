@@ -109,17 +109,15 @@ type Engine struct {
 	// record — all keyed by workspace.
 	lanes *work.Store
 
-	// runTokenBudget is the most one run may spend before it is refused, and
-	// dayTokenBudget the most a workspace may spend in a rolling day. Zero is
-	// off, which is the default and the only sane one: a ceiling nobody asked
-	// for that stops a job at 3am is worse than no ceiling.
+	// runTokenBudget is the most one run may spend before it is stopped. Zero
+	// is off, and off is the default.
 	//
-	// A budget that REFUSES rather than a dashboard that reports. The pattern is
-	// the web-search quota's, which already stops work and writes down that it
-	// did — the difference between a bound and a chart is whether anything
-	// happens when it is crossed.
+	// One budget and not two. A workspace-wide or daily ceiling was designed and
+	// then removed: nothing drives a workspace's total except the operator's own
+	// schedules and their own typing, so it would have been a knob whose only
+	// use is stopping your own work. This one bounds what somebody ELSE can cost
+	// through an inlet, which is a different thing entirely.
 	runTokenBudget int64
-	dayTokenBudget int64
 
 	mu     sync.Mutex
 	status map[int64]AgentStatus
@@ -133,11 +131,8 @@ type Engine struct {
 	turns       map[int64]*turnState
 }
 
-// Budgets is what a run and a workspace may spend, in tokens. Zero is off.
-type Budgets struct {
-	Run int64
-	Day int64
-}
+// Budgets is what one run may spend, in tokens. Zero is off.
+type Budgets struct{ Run int64 }
 
 func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears *gear.Store, gearExec *gear.Executor, lib *library.Store, searcher *websearch.Searcher, broker *egress.Broker, lanes *work.Store, budgets Budgets, dataDir string) *Engine {
 	return &Engine{
@@ -153,7 +148,6 @@ func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears 
 		status:         map[int64]AgentStatus{},
 		lanes:          lanes,
 		runTokenBudget: budgets.Run,
-		dayTokenBudget: budgets.Day,
 		running:        map[int64]bool{},
 		turns:          map[int64]*turnState{},
 	}

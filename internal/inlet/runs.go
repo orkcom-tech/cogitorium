@@ -52,6 +52,14 @@ const (
 	// that is not what was checked, and a beautiful answer over an empty record
 	// is the exact failure this state exists to name.
 	StateRefusedExpectation = "refused_expectation"
+	// StateRefusedBudget: the run reached the token ceiling an operator set for
+	// one delivery, and was stopped before its next model call.
+	//
+	// Its own state because a caller outside must be able to tell "your job hit
+	// the ceiling" from "we broke". The first reaction is to send less or ask
+	// for more headroom; the second is to retry — and retrying a job that was
+	// deliberately stopped is how a ceiling turns into a bill.
+	StateRefusedBudget = "refused_budget"
 	// StateRefusedOutputSchema: the answer did not fit the shape the task
 	// declared. Kept apart from the one above because they want different
 	// reactions from whoever is paged: "the model produced garbage" is a
