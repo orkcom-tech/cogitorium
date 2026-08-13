@@ -83,26 +83,13 @@ func ledgerRecord(did engine.Record) []byte {
 // task, record the run, check the payload, run one agent, answer with what it
 // said.
 func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
-	address, taskName := r.PathValue("address"), r.PathValue("task")
+	taskName := r.PathValue("task")
 
-	in, err := s.inlets.ByAddress(r.Context(), address)
-	if err != nil {
-		if errors.Is(err, inlet.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "no such inlet")
-			return
-		}
-		fail(w, r, err)
-		return
-	}
-	if !in.MatchesKey(bearerToken(r)) {
-		// The address is already known to whoever holds the URL, so this says
-		// nothing new; the log line is what an operator needs when a key has
-		// leaked and something is trying it.
-		slog.Warn("inlet delivery refused: key does not open this door",
-			"address", address, "task", taskName, "remote", r.RemoteAddr, "key_issued", in.HasKey)
-		writeError(w, http.StatusUnauthorized,
-			"this inlet's key is required: send Authorization: Bearer <inlet key>. "+
-				"A key is issued from the workspace's inlet settings and shown once")
+	// One proof that this key opens this door, shared with every other route
+	// under /i/. Two copies of that check is one copy that will be subtly
+	// weaker, and it will not be the one anybody reads.
+	in, ok := s.inletFromKey(w, r)
+	if !ok {
 		return
 	}
 	task, err := s.inlets.TaskByName(r.Context(), in.ID, taskName)
@@ -114,8 +101,6 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	s.inlets.NoteKeyUse(r.Context(), in.ID)
-
 	// The idempotency key is read BEFORE the body, and a key already seen is
 	// answered with the job it already produced — never with a second one, and
 	// never with a refusal.
@@ -271,10 +256,16 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 	}
 	s.pool.Wake()
 
-	// Wait for it, and answer exactly as this route always has. Asynchronous
-	// delivery — 202 and a run number — is the next step and deliberately not
-	// this one: changing the queueing and the response shape in one release
-	// would leave nobody able to say which of the two broke a caller.
+	// A caller that asked not to wait is told the job exists and where to look.
+	// Everyone else gets the answer in the response, exactly as this door has
+	// always given it — the default cannot change without breaking every caller
+	// written against it so far.
+	if wantsAsync(r) {
+		w.Header().Set("Preference-Applied", "respond-async")
+		w.Header().Set("Location", "/i/"+in.Address+"/runs/"+itoa(runID))
+		writeJSON(w, http.StatusAccepted, deliveryResponse{Run: runID, State: inlet.StateQueued})
+		return
+	}
 	s.answerRun(w, r, unit)
 }
 

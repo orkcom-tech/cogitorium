@@ -287,6 +287,8 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// rather than falling through to the SPA, which would serve index.html with
 	// a 200 to a pipeline that got the URL slightly wrong.
 	mux.HandleFunc("POST /i/{address}/{task}", s.handleInletDelivery)
+	mux.HandleFunc("GET /i/{address}/runs/{id}", s.handleInletRunStatus)
+	mux.HandleFunc("GET /i/{address}/runs/{id}/file", s.handleInletRunFile)
 	mux.HandleFunc(inletDeliveryPrefix, handleInletDeliveryPath)
 
 	mux.Handle("/", uiHandler())
