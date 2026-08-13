@@ -49,6 +49,32 @@ const STATE_MEANING: Record<InletRunState, string> = {
     'This run reached the token ceiling set for one delivery and was stopped before its next model call. Not a fault: somebody drew this line. Retrying it unchanged will stop in the same place.',
 }
 
+// A schema an operator can start from and edit, rather than an example that
+// disappears when they touch the field. Every keyword in it is one this server
+// actually enforces.
+const SCHEMA_STARTER = `{
+  "type": "object",
+  "required": ["url"],
+  "additionalProperties": false,
+  "properties": {
+    "url": { "type": "string", "maxLength": 2000 },
+    "depth": { "type": "integer", "minimum": 1, "maximum": 3 }
+  }
+}`
+
+// schemaProblem is the JSON check only — whether the KEYWORDS are ones this
+// server enforces is the server's answer, and asking the browser to duplicate
+// that list is how the two drift apart.
+function schemaProblem(text: string): string {
+  try {
+    const v = JSON.parse(text)
+    if (typeof v !== 'object' || v === null || Array.isArray(v)) return 'a schema must be a JSON object'
+    return ''
+  } catch (e) {
+    return `not JSON yet: ${(e as Error).message}`
+  }
+}
+
 export default function InletsPanel({
   wsId,
   agents,
@@ -230,7 +256,14 @@ function InletCard({
   onChanged: () => void
   onError: (m: string) => void
 }) {
-  const [adding, setAdding] = useState(false)
+  // A receiver with no tasks is a receiver that answers 404 to everything —
+  // this card says so two lines up. So the form is OPEN, not behind a button:
+  // the one state in which there is exactly one thing to do should not make
+  // anybody find the button for it.
+  //
+  // Once a task exists the button comes back, because by then adding a second
+  // one is a choice rather than the only way forward.
+  const [adding, setAdding] = useState(inlet.tasks.length === 0)
 
   return (
     <div className="card">
@@ -527,13 +560,28 @@ function AddTaskForm({
 
       {accepts === 'json' ? (
         <label className="field">
-          <span className="muted">schema — leave it empty to accept any JSON body</span>
+          <span className="row spread">
+            <span className="muted">schema — what a caller's body must look like</span>
+            {/* A button rather than a placeholder. The example used to BE the
+                placeholder, which meant it vanished the moment anybody typed —
+                the one instant it was needed. An operator writing their first
+                schema had a grey example they could not copy, could not edit,
+                and could not get back. */}
+            <button type="button" className="link" onClick={() => setSchemaText(SCHEMA_STARTER)}>
+              start from an example
+            </button>
+          </span>
           <textarea
-            rows={6}
+            rows={12}
+            spellCheck={false}
             value={schemaText}
             onChange={(e) => setSchemaText(e.target.value)}
-            placeholder={'{\n  "type": "object",\n  "required": ["subject"],\n  "properties": {\n    "subject": { "type": "string", "maxLength": 200 }\n  }\n}'}
+            placeholder={'empty accepts any JSON body'}
           />
+          {schemaText.trim() !== '' && schemaProblem(schemaText) && (
+            // Said here, while they are looking at it, rather than on submit.
+            <span className="hint danger">{schemaProblem(schemaText)}</span>
+          )}
           <span className="hint">
             Only the keywords this server can actually enforce are accepted: type, enum, properties, required,
             additionalProperties, items, minItems, maxItems, minLength, maxLength, minimum, maximum. Anything else is
