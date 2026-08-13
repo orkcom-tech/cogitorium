@@ -99,6 +99,19 @@ type Config struct {
 	// making this server call an address of somebody else's choosing.
 	CallbackHosts []string `yaml:"callback_hosts"`
 
+	// BudgetRunTokens is the most one run may spend before it is stopped, and
+	// BudgetWorkspaceDayTokens the most a workspace may spend in a rolling day.
+	// BOTH DEFAULT TO ZERO, WHICH IS OFF, and that is not timidity: a ceiling
+	// nobody asked for, stopping a job at three in the morning, is worse than
+	// no ceiling at all.
+	//
+	// They REFUSE rather than report. The pattern is the web-search quota's,
+	// which already stops work and writes down that it did — the difference
+	// between a bound and a chart is whether anything happens when it is
+	// crossed.
+	BudgetRunTokens          int64 `yaml:"budget_run_tokens"`
+	BudgetWorkspaceDayTokens int64 `yaml:"budget_workspace_day_tokens"`
+
 	// PublicURL is how this install is reached from outside. It is used only to
 	// put fetchable links to a run's files into its callback; empty leaves them
 	// out, and nothing else depends on it.

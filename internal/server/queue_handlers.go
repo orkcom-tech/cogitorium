@@ -120,3 +120,42 @@ func (s *Server) handleCancelQueued(w http.ResponseWriter, r *http.Request) {
 		"lane", unit.Lane, "was", unit.State, "interrupted", interrupted, "by", caller.Name)
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleWorkspaceSpend answers what a workspace used over a window.
+//
+// A window, because the two aggregates that already existed are lifetime sums
+// and "what did last week cost" is the question anybody actually has. Defaults
+// to the last seven days so the route answers something useful with no
+// parameters at all.
+func (s *Server) handleWorkspaceSpend(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.workspaceScoped(w, r)
+	if !ok {
+		return
+	}
+	until := time.Now().UTC()
+	since := until.AddDate(0, 0, -7)
+	if v := r.URL.Query().Get("since"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "since must be an RFC3339 time, like 2026-08-01T00:00:00Z")
+			return
+		}
+		since = t
+	}
+	if v := r.URL.Query().Get("until"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "until must be an RFC3339 time, like 2026-08-08T00:00:00Z")
+			return
+		}
+		until = t
+	}
+	spend, err := s.workspaces.SpendBetween(r.Context(), id, since, until)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"since": since.UTC(), "until": until.UTC(), "by_agent": spend,
+	})
+}

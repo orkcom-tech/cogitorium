@@ -61,6 +61,9 @@ func (s *Server) runDelivery(ctx context.Context, u work.Unit) error {
 		return nil
 	}
 
+	// Tell the engine which unit this run belongs to, so every durable row it
+	// writes carries the correlation those tables have never had.
+	s.engine.SetWorkFor(u.WorkspaceID, u.ID)
 	out, err := s.engine.RunUnattended(ctx, u.WorkspaceID, args.Agent, args.Prompt)
 	if err != nil {
 		// A run that never began leaves a file nobody will ever read. What
@@ -88,6 +91,9 @@ func (s *Server) runDelivery(ctx context.Context, u work.Unit) error {
 				"run_id", runID, "err", err)
 		}
 	}
+	// A run stopped by a ceiling is not a broken job. It gets its own state so
+	// a caller can tell "you told me to stop this" from "it went wrong", and
+	// does not retry the one that must not be retried.
 	v := judge(expect, out)
 	if v.refused() {
 		slog.Warn("inlet run refused by what its task requires", "run_id", runID, "state", v.state,

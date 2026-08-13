@@ -128,3 +128,15 @@ func (e *Engine) WorkspaceBusy(wsID int64) bool {
 	defer e.mu.Unlock()
 	return e.running[wsID]
 }
+
+// SetWorkFor names the queued unit a workspace's next unattended run belongs
+// to. Called by the worker before RunUnattended, because the turn state does
+// not exist yet at that point — the value is held until beginTurn takes it.
+func (e *Engine) SetWorkFor(wsID, workID int64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.pendingWork == nil {
+		e.pendingWork = map[int64]int64{}
+	}
+	e.pendingWork[wsID] = workID
+}

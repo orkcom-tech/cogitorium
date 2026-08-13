@@ -2,6 +2,8 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -193,6 +195,22 @@ func (e *Engine) noteFile(wsID int64, path string, bytes int64) {
 	})
 }
 
+// overBudget reports whether this turn has spent what it was allowed, and is
+// checked BEFORE a model call rather than after.
+//
+// After would mean the call that crossed the line still happened and still cost
+// money, which makes the ceiling a report rather than a bound. The whole point
+// of copying the web-search quota's shape is that it stops work.
+func (e *Engine) overBudget(wsID int64) (int64, int64, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	ts, ok := e.turns[wsID]
+	if !ok || ts.budget <= 0 {
+		return 0, 0, false
+	}
+	return ts.tokens, ts.budget, ts.tokens >= ts.budget
+}
+
 func (e *Engine) noteModelCall(wsID int64, u llm.Usage) {
 	e.note(wsID, func(r *Record) {
 		r.ModelCalls++
@@ -202,6 +220,14 @@ func (e *Engine) noteModelCall(wsID int64, u llm.Usage) {
 		r.Tokens.In += u.InputTokens
 		r.Tokens.Out += u.OutputTokens
 	})
+	// And on the turn, where the ceiling reads it. Kept beside the record
+	// rather than derived from it so that a budget check is one comparison
+	// under the lock the turn state already needs.
+	e.mu.Lock()
+	if ts, ok := e.turns[wsID]; ok {
+		ts.tokens += int64(u.InputTokens) + int64(u.OutputTokens)
+	}
+	e.mu.Unlock()
 }
 
 // noteGearOutput remembers a successful gear's stdout, replacing whatever the
@@ -254,4 +280,24 @@ func (r Record) DistinctFiles() int {
 		seen[f.Path] = struct{}{}
 	}
 	return len(seen)
+}
+
+// guardBudget refuses before a model is called, or lets it through.
+//
+// THERE ARE TWO PLACES IN THIS ENGINE THAT CALL A MODEL — modelTurn, which the
+// operator's orchestrator loop uses, and runAgent, which every delegated and
+// every unattended run uses — and the first version of this ceiling was in one
+// of them. The delivery path went straight past it and spent sixteen
+// iterations against a ten-token budget, which the test said out loud.
+//
+// Both call it now. A third call site added later would miss it in the same
+// way, so it is worth saying: the rule is that nothing calls Chat without
+// coming through here first.
+func (e *Engine) guardBudget(wsID int64) error {
+	spent, budget, over := e.overBudget(wsID)
+	if !over {
+		return nil
+	}
+	slog.Warn("run stopped by its token budget", "workspace_id", wsID, "spent", spent, "budget", budget)
+	return fmt.Errorf("%w: %d tokens of %d", ErrBudget, spent, budget)
 }

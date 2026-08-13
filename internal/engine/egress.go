@@ -65,10 +65,28 @@ type turnState struct {
 	// record.go for what they are and why they exist at all.
 	did     Record
 	gearOut string
+
+	// workID is the queued unit this turn belongs to, or 0 for a turn that has
+	// none. It is carried here for the same reason everything else in this
+	// struct is: the whole delegation tree is one turn, so a gear a worker four
+	// levels down ran belongs to the same unit as the agent the payload reached
+	// first. Every durable row written mid-run gets stamped with it, which is
+	// the correlation those tables have never had.
+	workID int64
+
+	// tokens is what this turn has spent so far, and budget is what it may.
+	// Zero budget means no ceiling — the ordinary install — and is checked
+	// rather than assumed, because a ceiling nobody set must never refuse.
+	tokens int64
+	budget int64
 }
 
 func (e *Engine) beginTurn(wsID int64) *turnState {
-	ts := &turnState{}
+	ts := &turnState{budget: e.runTokenBudget}
+	if id, ok := e.pendingWork[wsID]; ok {
+		ts.workID = id
+		delete(e.pendingWork, wsID)
+	}
 	e.mu.Lock()
 	e.turns[wsID] = ts
 	e.mu.Unlock()
@@ -566,4 +584,30 @@ var unattendedClosedTools = map[string]bool{
 	"list_gears":        true,
 	"list_instructions": true,
 	"read_instruction":  true,
+}
+
+// workOf is the queued unit this workspace's turn belongs to, or 0.
+//
+// Read under the same lock as everything else on the turn, and deliberately
+// tolerant of there being no turn at all: a gear the operator dry-runs from the
+// catalog has no unit, and a zero there is the honest answer rather than a
+// reason to fail.
+func (e *Engine) workOf(wsID int64) int64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if ts, ok := e.turns[wsID]; ok {
+		return ts.workID
+	}
+	return 0
+}
+
+// SetWork tells a turn which queued unit it belongs to. Called by the worker
+// that claimed the unit, before the run starts, so every durable row the run
+// writes can be stamped with it.
+func (e *Engine) SetWork(wsID, workID int64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if ts, ok := e.turns[wsID]; ok {
+		ts.workID = workID
+	}
 }

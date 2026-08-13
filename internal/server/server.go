@@ -120,18 +120,19 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		queueMax = config.Defaults().QueueMaxPerWorkspace
 	}
 	s := &Server{
-		db:            db,
-		catalog:       cat,
-		workspaces:    ws,
-		context:       cs,
-		gears:         gears,
-		gearExec:      gearExec,
-		env:           env,
-		gearNet:       gate,
-		library:       lib,
-		identity:      identity.NewStore(db),
-		inlets:        inlet.NewStore(db),
-		engine:        engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, queue, cfg.DataDir),
+		db:         db,
+		catalog:    cat,
+		workspaces: ws,
+		context:    cs,
+		gears:      gears,
+		gearExec:   gearExec,
+		env:        env,
+		gearNet:    gate,
+		library:    lib,
+		identity:   identity.NewStore(db),
+		inlets:     inlet.NewStore(db),
+		engine: engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, queue,
+			engine.Budgets{Run: cfg.BudgetRunTokens, Day: cfg.BudgetWorkspaceDayTokens}, cfg.DataDir),
 		queue:         queue,
 		schedules:     schedule.NewStore(db),
 		queueMax:      queueMax,
@@ -280,6 +281,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/inlet-runs", s.handleListInletRuns)
 	mux.HandleFunc("GET /api/v1/inlet-runs/{id}", s.handleGetInletRun)
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/queue", s.handleWorkspaceQueue)
+	mux.HandleFunc("GET /api/v1/workspaces/{id}/spend", s.handleWorkspaceSpend)
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/schedules", s.handleListSchedules)
 	mux.HandleFunc("POST /api/v1/workspaces/{id}/schedules", s.handleCreateSchedule)
 	mux.HandleFunc("PATCH /api/v1/schedules/{id}", s.handleSetScheduleEnabled)

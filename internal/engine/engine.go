@@ -42,6 +42,13 @@ var (
 	// An agent with no model is ordinary — an imported bundle can name a model
 	// this install does not have — so it must be an answer, not a panic.
 	ErrNoModel = errors.New("no model is bound to it; bind one on the blueprint before anything can be run through it")
+
+	// ErrBudget is a run stopped because it reached a ceiling an operator set.
+	//
+	// A distinct error rather than a generic failure: "it went wrong" and "you
+	// told me to stop it here" want different reactions, and a caller that
+	// cannot tell them apart will retry the one that must not be retried.
+	ErrBudget = errors.New("this run reached the token budget set for it and was stopped")
 )
 
 type AgentStatus struct {
@@ -102,27 +109,53 @@ type Engine struct {
 	// record — all keyed by workspace.
 	lanes *work.Store
 
-	mu      sync.Mutex
-	status  map[int64]AgentStatus
-	running map[int64]bool // workspace_id -> a turn is in flight
-	turns   map[int64]*turnState
+	// runTokenBudget is the most one run may spend before it is refused, and
+	// dayTokenBudget the most a workspace may spend in a rolling day. Zero is
+	// off, which is the default and the only sane one: a ceiling nobody asked
+	// for that stops a job at 3am is worse than no ceiling.
+	//
+	// A budget that REFUSES rather than a dashboard that reports. The pattern is
+	// the web-search quota's, which already stops work and writes down that it
+	// did — the difference between a bound and a chart is whether anything
+	// happens when it is crossed.
+	runTokenBudget int64
+	dayTokenBudget int64
+
+	mu     sync.Mutex
+	status map[int64]AgentStatus
+	// pendingWork is the unit a workspace's next run belongs to, set by the
+	// worker before the turn exists and consumed by beginTurn. A map rather
+	// than a parameter because RunUnattended's signature is the engine's
+	// contract with three callers, and threading a queue id through it would
+	// put the queue in the engine's vocabulary for one field.
+	pendingWork map[int64]int64
+	running     map[int64]bool // workspace_id -> a turn is in flight
+	turns       map[int64]*turnState
 }
 
-func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears *gear.Store, gearExec *gear.Executor, lib *library.Store, searcher *websearch.Searcher, broker *egress.Broker, lanes *work.Store, dataDir string) *Engine {
+// Budgets is what a run and a workspace may spend, in tokens. Zero is off.
+type Budgets struct {
+	Run int64
+	Day int64
+}
+
+func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears *gear.Store, gearExec *gear.Executor, lib *library.Store, searcher *websearch.Searcher, broker *egress.Broker, lanes *work.Store, budgets Budgets, dataDir string) *Engine {
 	return &Engine{
-		ws:       ws,
-		cat:      cat,
-		ctx:      cs,
-		gears:    gears,
-		gearExec: gearExec,
-		library:  lib,
-		dataDir:  dataDir,
-		searcher: searcher,
-		broker:   broker,
-		status:   map[int64]AgentStatus{},
-		lanes:    lanes,
-		running:  map[int64]bool{},
-		turns:    map[int64]*turnState{},
+		ws:             ws,
+		cat:            cat,
+		ctx:            cs,
+		gears:          gears,
+		gearExec:       gearExec,
+		library:        lib,
+		dataDir:        dataDir,
+		searcher:       searcher,
+		broker:         broker,
+		status:         map[int64]AgentStatus{},
+		lanes:          lanes,
+		runTokenBudget: budgets.Run,
+		dayTokenBudget: budgets.Day,
+		running:        map[int64]bool{},
+		turns:          map[int64]*turnState{},
 	}
 }
 
@@ -346,6 +379,9 @@ func (e *Engine) modelTurn(ctx context.Context, wsID int64, agent workspace.Agen
 	if agent.ModelID == nil {
 		return llm.Result{}, fmt.Errorf("agent %q has no model bound", agent.Name)
 	}
+	if err := e.guardBudget(wsID); err != nil {
+		return llm.Result{}, err
+	}
 	model, err := e.cat.GetModel(ctx, *agent.ModelID)
 	if err != nil {
 		return llm.Result{}, fmt.Errorf("agent %q: %w", agent.Name, err)
@@ -409,7 +445,8 @@ func (e *Engine) recordUsage(ctx context.Context, wsID int64, agent workspace.Ag
 	// this line, and what happened to that attempt is in the run's error rather
 	// than dressed up as work.
 	e.noteModelCall(wsID, u)
-	if err := e.ws.RecordTurn(context.WithoutCancel(ctx), wsID, agent.ID, agent.ModelLabel, u.InputTokens, u.OutputTokens, u.Reported); err != nil {
+	if err := e.ws.RecordTurn(context.WithoutCancel(ctx), wsID, agent.ID, agent.ModelLabel,
+		u.InputTokens, u.OutputTokens, u.Reported, e.workOf(wsID)); err != nil {
 		slog.Warn("could not record token usage", "workspace_id", wsID, "agent", agent.Name, "err", err)
 	}
 	if !u.Reported {
@@ -1009,6 +1046,9 @@ func (e *Engine) runAgent(ctx context.Context, wsID int64, agent workspace.Agent
 
 	history := []llm.Turn{{Role: "user", Text: task}}
 	for iter := 0; iter < maxToolIterations; iter++ {
+		if err := e.guardBudget(wsID); err != nil {
+			return "", err
+		}
 		res, err := client.Chat(ctx, llm.Request{
 			Model:    model.ModelName,
 			System:   system,

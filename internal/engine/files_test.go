@@ -105,7 +105,7 @@ func newFilesFixture(t *testing.T) *filesFixture {
 	gears := gear.NewStore(db)
 	cs := contextstore.New(filepath.Join(t.TempDir(), "contextd-not-installed"))
 	e := New(ws, cat, cs, gears, gear.NewExecutor(gears, dataDir, nil, envResolver(t, db), netGate(t, db)),
-		library.NewStore(db), nil, nil, work.NewStore(db), dataDir)
+		library.NewStore(db), nil, nil, work.NewStore(db), Budgets{}, dataDir)
 
 	orch, err := e.orchestrator(ctx, space.ID)
 	if err != nil {
