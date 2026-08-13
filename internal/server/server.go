@@ -277,6 +277,10 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	mux.HandleFunc("DELETE /api/v1/inlets/{id}", s.handleDeleteInlet)
 	mux.HandleFunc("POST /api/v1/inlets/{id}/key", s.handleRotateInletKey)
 	mux.HandleFunc("POST /api/v1/inlets/{id}/tasks", s.handleAddInletTask)
+	// PUT, not PATCH: the body is the whole task. A merge would have to decide
+	// what an absent schema means, and "accept anything" is not a thing that
+	// may happen because a field was left out.
+	mux.HandleFunc("PUT /api/v1/inlet-tasks/{id}", s.handleUpdateInletTask)
 	mux.HandleFunc("DELETE /api/v1/inlet-tasks/{id}", s.handleDeleteInletTask)
 	mux.HandleFunc("GET /api/v1/workspaces/{id}/inlet-runs", s.handleListInletRuns)
 	mux.HandleFunc("GET /api/v1/inlet-runs/{id}", s.handleGetInletRun)

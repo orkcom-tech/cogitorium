@@ -320,15 +320,16 @@ function InletCard({
           <TaskRow
             key={t.id}
             inlet={inlet}
+            agents={agents}
             task={t}
-            onDeleted={onChanged}
+            onChanged={onChanged}
             onError={onError}
           />
         ))
       )}
 
       {adding ? (
-        <AddTaskForm
+        <TaskForm
           inlet={inlet}
           agents={agents}
           onDone={() => {
@@ -349,25 +350,48 @@ function InletCard({
 
 function TaskRow({
   inlet,
+  agents,
   task,
-  onDeleted,
+  onChanged,
   onError,
 }: {
   inlet: Inlet
+  agents: Agent[]
   task: InletTask
-  onDeleted: () => void
+  onChanged: () => void
   onError: (m: string) => void
 }) {
+  const [editing, setEditing] = useState(false)
   const url = inletDeliveryUrl(inlet.address, task.name)
+
+  // In place, where the task is, rather than in a dialog: what it currently
+  // does is the thing being corrected, and it stays on screen right above.
+  if (editing) {
+    return (
+      <TaskForm
+        inlet={inlet}
+        agents={agents}
+        task={task}
+        onDone={() => {
+          setEditing(false)
+          onChanged()
+        }}
+        onCancel={() => setEditing(false)}
+        onError={onError}
+      />
+    )
+  }
+
   return (
     <div className="inlet-task">
       <div className="row">
         <code className="grow inlet-url">POST {url}</code>
+        <button onClick={() => setEditing(true)}>edit</button>
         <button
           className="danger"
           onClick={() => {
             if (!confirm(`Delete the task "${task.name}"? Calls to it start answering 404.`)) return
-            api.inlets.removeTask(task.id).then(onDeleted).catch((e: Error) => onError(e.message))
+            api.inlets.removeTask(task.id).then(onChanged).catch((e: Error) => onError(e.message))
           }}
         >
           delete
@@ -460,29 +484,51 @@ function expectationLines(expect: InletExpect): string[] {
   return lines
 }
 
-function AddTaskForm({
+// One form, whether the task is being written or fixed.
+//
+// Not two: the rules the server holds a task to are the same on both routes,
+// and a second form is how an edit ends up offering a field the creation does
+// not, or quietly dropping one it does. The server refuses both bodies through
+// one validator for the same reason.
+//
+// Editing exists because before it the only repair was delete-and-recreate:
+// the address answered 404 to every caller in between, and the task came back
+// with a new id, so the schedules pointing at it pointed at nothing.
+function TaskForm({
   inlet,
   agents,
+  task,
   onDone,
   onCancel,
   onError,
 }: {
   inlet: Inlet
   agents: Agent[]
+  /** the task being fixed, or nothing when one is being written */
+  task?: InletTask
   onDone: () => void
   onCancel: () => void
   onError: (m: string) => void
 }) {
-  const [name, setName] = useState('')
-  const [accepts, setAccepts] = useState<'json' | 'file'>('json')
-  const [schemaText, setSchemaText] = useState('')
-  const [contentType, setContentType] = useState('')
-  const [agent, setAgent] = useState('')
-  const [instruction, setInstruction] = useState('')
-  const [runsGear, setRunsGear] = useState('')
-  const [producesFiles, setProducesFiles] = useState('')
-  const [answerFrom, setAnswerFrom] = useState<'agent' | 'gear'>('agent')
-  const [answerSchemaText, setAnswerSchemaText] = useState('')
+  const [name, setName] = useState(task?.name ?? '')
+  const [accepts, setAccepts] = useState<'json' | 'file'>(task?.accepts ?? 'json')
+  // "{}" is how "any JSON body" is stored, and showing it back as literal
+  // braces would read like a schema that says something.
+  const [schemaText, setSchemaText] = useState(
+    task && task.accepts === 'json' && task.schema.trim() !== '{}' ? prettySchema(task.schema) : '',
+  )
+  const [contentType, setContentType] = useState(task?.content_type ?? '')
+  const [agent, setAgent] = useState(task?.agent_name ?? '')
+  const [instruction, setInstruction] = useState(task?.instruction ?? '')
+  const [runsGear, setRunsGear] = useState(task?.expect.runs_gear ?? '')
+  const [producesFiles, setProducesFiles] = useState(
+    task?.expect.produces_files ? String(task.expect.produces_files) : '',
+  )
+  const [answerFrom, setAnswerFrom] = useState<'agent' | 'gear'>(task?.expect.answer_from ?? 'agent')
+  const [answerSchemaText, setAnswerSchemaText] = useState(
+    task?.expect.schema != null ? JSON.stringify(task.expect.schema, null, 2) : '',
+  )
+  const [callbackURL, setCallbackURL] = useState(task?.callback_url ?? '')
   const [busy, setBusy] = useState(false)
 
   const submit = (e: React.FormEvent) => {
@@ -523,17 +569,23 @@ function AddTaskForm({
       }
     }
 
+    const body = {
+      name: name.trim(),
+      accepts,
+      schema,
+      content_type: accepts === 'file' ? contentType.trim() : undefined,
+      agent,
+      instruction: instruction.trim(),
+      expect: Object.keys(expect).length > 0 ? expect : undefined,
+      callback_url: callbackURL.trim(),
+    }
+
     setBusy(true)
-    api.inlets
-      .addTask(inlet.id, {
-        name: name.trim(),
-        accepts,
-        schema,
-        content_type: accepts === 'file' ? contentType.trim() : undefined,
-        agent,
-        instruction: instruction.trim(),
-        expect: Object.keys(expect).length > 0 ? expect : undefined,
-      })
+    // The whole task goes either way. An edit that sent only what changed
+    // would leave the server deciding what an absent schema means, and the
+    // honest answer — accept anything — must not happen because a field was
+    // left out of a request.
+    ;(task ? api.inlets.updateTask(task.id, body) : api.inlets.addTask(inlet.id, body))
       .then(onDone)
       .catch((err: Error) => onError(err.message))
       .finally(() => setBusy(false))
@@ -611,6 +663,21 @@ function AddTaskForm({
         </span>
       </label>
 
+      <label className="field">
+        <span className="muted">tell somebody when it finishes — leave it empty and nobody is told</span>
+        <input
+          placeholder="https://your-service/hooks/cogitorium"
+          value={callbackURL}
+          onChange={(e) => setCallbackURL(e.target.value)}
+        />
+        <span className="hint">
+          For callers that hand the job off with <code>Prefer: respond-async</code> and do not hold the connection open.
+          The finished run is posted here — its number, how it ended and what it produced. The host has to be on this
+          install’s allowlist, which is in the config file rather than here: who this machine may talk to is a decision
+          about the machine, and this form is editable by anyone who can reach the workspace.
+        </span>
+      </label>
+
       <details className="inlet-expect-form">
         <summary>what has to have happened for this to count</summary>
         <p className="hint">
@@ -677,13 +744,24 @@ function AddTaskForm({
         </label>
       </details>
 
+      {/* Renaming is allowed and it moves the address. Said before the save,
+          not after: the callers outside this install hold the old URL and
+          nothing here can tell them. */}
+      {task && name.trim() !== task.name && (
+        <p className="notice">
+          This renames the task, so its address becomes{' '}
+          <code>{inletDeliveryUrl(inlet.address, name.trim() || '…')}</code> and the old one starts answering 404.
+          Anything already calling it has to be changed too.
+        </p>
+      )}
+
       <div className="row">
         <span className="spacer" />
         <button type="button" onClick={onCancel}>
           cancel
         </button>
         <button className="primary" type="submit" disabled={busy}>
-          add task
+          {task ? 'save changes' : 'add task'}
         </button>
       </div>
     </form>

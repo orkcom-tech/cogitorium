@@ -2,8 +2,48 @@
 
 ## v0.4.1
 
-Three things v0.4.0 shipped without, and one it shipped that should not have
-existed.
+Four things v0.4.0 shipped without, one it shipped that should not have existed,
+and a word that was never going to be understood.
+
+### Inlets are called receivers
+
+On screen only. "Inlet" is a word this product invented and nobody arrives
+already knowing what it means; "receiver" says what the thing does. The URLs,
+the API paths, the config keys and the tables keep the old name, because callers
+outside your install hold those strings and breaking them to improve a label is
+the wrong trade.
+
+### A task can be fixed
+
+There was no editor. A wrong schema meant deleting the task and writing it
+again — the address answering 404 to every caller in between, and the task
+coming back with a new id, so the schedules and the runs on record pointed at
+nothing. `PUT /api/v1/inlet-tasks/{id}` keeps the id, and the row has an **edit**
+button that opens the same form it was written in, filled in.
+
+The body is the whole task rather than the fields that changed: an absent
+`schema` would otherwise have to mean *accept anything*, and a door does not
+widen because a field was left out of a request. Both routes go through one
+validator, so a task cannot be edited into a state it could not have been
+created in — proven by breaking it, with the edit route accepting an agent that
+does not exist the moment the shared check is skipped.
+
+### Callbacks could not be turned on
+
+A task's `callback_url` was read by the runner, stored in the table, documented
+in the reference — and written by no route on this server. The whole feature was
+reachable only from a test. It is a field on the create and edit routes now, and
+a line on the form.
+
+### The form stopped hiding
+
+The schema example was the field's placeholder, so it vanished the instant
+anybody typed — at exactly the moment it was needed, and it could not be copied,
+edited or got back. It is a button that fills the field with a real schema now,
+in a box tall enough to read, checked as you type. And the task form opens by
+itself on a receiver that has none: a receiver with no task answers 404 to
+everything, so the one state with exactly one thing to do should not hide the
+control for it.
 
 ### The daily budget is gone
 

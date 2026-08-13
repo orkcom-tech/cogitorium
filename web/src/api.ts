@@ -199,8 +199,29 @@ export type InletTask = {
   agent_name: string
   instruction: string
   expect: InletExpect
+  /** where the finished run is posted, or empty: nobody is told */
+  callback_url: string
   created_at: string
   updated_at: string
+}
+
+// What defines a task, on the way in and on the way back in when it is fixed.
+// One shape for both, because a task that can be created but not edited into
+// the same state is a task with two definitions of what it may be.
+export type InletTaskInput = {
+  name: string
+  accepts: 'json' | 'file'
+  // The schema travels as a JSON value, never as a string containing JSON: the
+  // server decodes this field as the schema object itself, so a string would
+  // arrive as a string and be refused as one.
+  schema?: unknown
+  content_type?: string
+  agent: string
+  instruction: string
+  // What this task requires of a run before its answer counts. Left out
+  // entirely, the task is never judged and behaves as it always did.
+  expect?: InletExpect
+  callback_url?: string
 }
 
 // What a task declares success to be. Every field is optional, and a task that
@@ -647,23 +668,14 @@ export const api = {
     // Issuing again is how a leaked key is closed: the previous string stops
     // working the moment this returns, and the door keeps its tasks.
     issueKey: (id: number) => req<IssuedInletKey>(`/api/v1/inlets/${id}/key`, { method: 'POST' }),
-    addTask: (
-      inletId: number,
-      t: {
-        name: string
-        accepts: 'json' | 'file'
-        // The schema travels as a JSON value, never as a string containing
-        // JSON: the server decodes this field as the schema object itself, so
-        // a string would arrive as a string and be refused as one.
-        schema?: unknown
-        content_type?: string
-        agent: string
-        instruction: string
-        // What this task requires of a run before its answer counts. Left out
-        // entirely, the task is never judged and behaves as it always did.
-        expect?: InletExpect
-      },
-    ) => req<InletTask>(`/api/v1/inlets/${inletId}/tasks`, { method: 'POST', body: JSON.stringify(t) }),
+    addTask: (inletId: number, t: InletTaskInput) =>
+      req<InletTask>(`/api/v1/inlets/${inletId}/tasks`, { method: 'POST', body: JSON.stringify(t) }),
+    // PUT, not PATCH: the body is the whole task. Sending only what changed
+    // would leave the server deciding what an absent schema means, and the
+    // honest answer — "accept anything" — is not something that may happen
+    // because a field was left out of a request.
+    updateTask: (id: number, t: InletTaskInput) =>
+      req<InletTask>(`/api/v1/inlet-tasks/${id}`, { method: 'PUT', body: JSON.stringify(t) }),
     removeTask: (id: number) => req<void>(`/api/v1/inlet-tasks/${id}`, { method: 'DELETE' }),
     runs: (wsId: number, limit = 50) => req<InletRun[]>(`/api/v1/workspaces/${wsId}/inlet-runs?limit=${limit}`),
     // One run by number. The list only reaches back so far, and the number a

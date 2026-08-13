@@ -318,22 +318,27 @@ func (s *Store) NoteKeyUse(ctx context.Context, id int64) {
 	}
 }
 
-// AddTask puts a job behind a door. Everything that can be checked now is
-// checked now — the name, the schema, the content type — because the
-// alternative is a caller discovering it at delivery time, when the operator
-// who wrote it is not the one reading the error.
-func (s *Store) AddTask(ctx context.Context, inletID int64, t Task) (Task, error) {
+// normalize rewrites a task into the form that is stored, and refuses what
+// cannot be stored at all. It returns the encoded expectations block.
+//
+// This is the ONE validator. AddTask and UpdateTask both go through it on
+// purpose: a second copy of these rules is how a task ends up edited into a
+// state it could never have been created in — a schema keyword this server
+// does not enforce, a file task carrying a JSON schema, a gear name with a
+// space in it that matches nothing for the rest of the task's life.
+func (t *Task) normalize() (string, error) {
 	t.Name = strings.TrimSpace(strings.ToLower(t.Name))
 	if !nameRe.MatchString(t.Name) {
-		return Task{}, fmt.Errorf("task name %q is invalid: use lowercase letters, digits, underscores and hyphens (2-49 characters) starting with a letter — it is a path segment in POST /i/{address}/{task}", t.Name)
+		return "", fmt.Errorf("task name %q is invalid: use lowercase letters, digits, underscores and hyphens (2-49 characters) starting with a letter — it is a path segment in POST /i/{address}/{task}", t.Name)
 	}
 	t.AgentName = strings.TrimSpace(t.AgentName)
 	if t.AgentName == "" {
-		return Task{}, errors.New("a task needs a target agent: give the name of an agent in this workspace")
+		return "", errors.New("a task needs a target agent: give the name of an agent in this workspace")
 	}
 	if strings.TrimSpace(t.Instruction) == "" {
-		return Task{}, errors.New("a task needs an instruction: it is the sentence the agent is given along with the payload")
+		return "", errors.New("a task needs an instruction: it is the sentence the agent is given along with the payload")
 	}
+	t.CallbackURL = strings.TrimSpace(t.CallbackURL)
 
 	switch t.Accepts {
 	case AcceptsJSON:
@@ -341,25 +346,33 @@ func (s *Store) AddTask(ctx context.Context, inletID int64, t Task) (Task, error
 			t.Schema = "{}"
 		}
 		if err := CheckSchema(t.Schema); err != nil {
-			return Task{}, err
+			return "", err
 		}
 		t.ContentType = ""
 	case AcceptsFile:
 		if err := CheckContentType(t.ContentType); err != nil {
-			return Task{}, err
+			return "", err
 		}
 		t.Schema = "{}"
 	default:
-		return Task{}, fmt.Errorf("a task accepts %q or %q (got %q)", AcceptsJSON, AcceptsFile, t.Accepts)
+		return "", fmt.Errorf("a task accepts %q or %q (got %q)", AcceptsJSON, AcceptsFile, t.Accepts)
 	}
 
 	// check normalises as well as refuses, so what is stored is what will be
 	// compared: a gear name with a stray space would otherwise match nothing
 	// and read, in the ledger, as work that never happened.
 	if err := t.Expect.check(); err != nil {
-		return Task{}, err
+		return "", err
 	}
-	expect, err := t.Expect.encode()
+	return t.Expect.encode()
+}
+
+// AddTask puts a job behind a door. Everything that can be checked now is
+// checked now — the name, the schema, the content type — because the
+// alternative is a caller discovering it at delivery time, when the operator
+// who wrote it is not the one reading the error.
+func (s *Store) AddTask(ctx context.Context, inletID int64, t Task) (Task, error) {
+	expect, err := t.normalize()
 	if err != nil {
 		return Task{}, err
 	}
@@ -368,7 +381,7 @@ func (s *Store) AddTask(ctx context.Context, inletID int64, t Task) (Task, error
 		`INSERT INTO inlet_tasks (inlet_id, name, accepts, payload_schema, content_type, agent_name, instruction, expect, callback_url, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		inletID, t.Name, t.Accepts, t.Schema, t.ContentType, t.AgentName, t.Instruction, expect,
-		strings.TrimSpace(t.CallbackURL), now(), now())
+		t.CallbackURL, now(), now())
 	if err := asConflict(err, fmt.Sprintf("task %q already exists on this inlet", t.Name)); err != nil {
 		return Task{}, fmt.Errorf("add inlet task: %w", err)
 	}
@@ -440,6 +453,42 @@ func (s *Store) ListTasks(ctx context.Context, inletID int64) ([]Task, error) {
 		out = append(out, t)
 	}
 	return out, rows.Err()
+}
+
+// UpdateTask rewrites a task in place, keeping its id and therefore everything
+// pointed at it: the schedules that fire it and the deliveries already on
+// record against it.
+//
+// It REPLACES rather than merges. A merge would have to decide what an absent
+// field means, and for the two fields that matter the answer is dangerous in
+// both directions: an absent schema reading as "accept anything" widens the
+// door silently, and an absent expect block turns a task that judged its own
+// runs into one that answers 200 for work that did nothing. Every caller here
+// is a form that already holds the whole task, so nothing is lost by sending
+// all of it.
+func (s *Store) UpdateTask(ctx context.Context, id int64, t Task) (Task, error) {
+	expect, err := t.normalize()
+	if err != nil {
+		return Task{}, err
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE inlet_tasks SET name = ?, accepts = ?, payload_schema = ?, content_type = ?,
+		   agent_name = ?, instruction = ?, expect = ?, callback_url = ?, updated_at = ?
+		 WHERE id = ?`,
+		t.Name, t.Accepts, t.Schema, t.ContentType, t.AgentName, t.Instruction, expect,
+		t.CallbackURL, now(), id)
+	// Renaming a task onto one that already exists on the same door is the one
+	// conflict this can hit, and it is worth saying which name collided: the
+	// operator is looking at a form, not at the other task.
+	if err := asConflict(err, fmt.Sprintf("task %q already exists on this inlet", t.Name)); err != nil {
+		return Task{}, fmt.Errorf("update inlet task %d: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Task{}, fmt.Errorf("inlet task %d: %w", id, ErrNotFound)
+	}
+	slog.Info("inlet task updated", "id", id, "task", t.Name, "accepts", t.Accepts,
+		"agent", t.AgentName, "expects", t.Expect.Declared())
+	return s.GetTask(ctx, id)
 }
 
 func (s *Store) DeleteTask(ctx context.Context, id int64) error {

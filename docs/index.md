@@ -415,11 +415,15 @@ first turn.
 
 ---
 
-## Inlets — a door from the rest of your system
+## Receivers — a door from the rest of your system
 
-An inlet lets something outside this install hand work to an agent. It has an
+A receiver lets something outside this install hand work to an agent. It has an
 address, its own key, and a list of tasks; a task says what it accepts, which
 agent receives it, what to tell that agent, and what counts as success.
+
+Called a receiver in the interface and an **inlet** in every string a caller
+holds — the paths below, the config keys, the tables. The label changed; the
+wire did not.
 
 ```
 POST /i/{address}/{task}            delivery — the only path exempt from
@@ -429,8 +433,18 @@ GET/POST /api/v1/workspaces/{id}/inlets
 GET/DELETE /api/v1/inlets/{id}
 POST /api/v1/inlets/{id}/key        issued once, stored hashed
 POST /api/v1/inlets/{id}/tasks
+PUT/DELETE /api/v1/inlet-tasks/{id} PUT carries the whole task, not a patch
 GET  /api/v1/workspaces/{id}/inlet-runs
 ```
+
+**A task is editable in place.** `PUT` keeps its id, so the runs on record and
+the schedules pointing at it survive a correction; the alternative was delete
+and recreate, which answers 404 in between and comes back as a different task.
+The body is the whole definition rather than the fields that changed, because an
+absent `schema` would otherwise have to mean *accept anything* — and a door does
+not widen because a field was left out of a request. Creation and edit go
+through one validator, so a task cannot be edited into a state it could not have
+been created in.
 
 Management stays behind normal authentication with the workspace's own access
 rule. The exemption above matches by prefix, so nothing but delivery is ever put
@@ -446,10 +460,11 @@ reaching a prompt.
 timeline: the timeline is replayed into every turn, so a pipeline posting to the
 chat endpoint would make request two hundred carry the previous hundred and
 ninety-nine. It is also treated as third-party from the first byte, so the agent
-behind a door cannot write to the instruction library, the gear catalog or the
-workspace graph, and is not offered `web_search` — which waits for a person to
-approve a query, and there is nobody there. One run per workspace; a second
-delivery meanwhile gets 429.
+behind a receiver cannot write to the instruction library, the gear catalog or
+the workspace graph, and is not offered `web_search` — which waits for a person
+to approve a query, and there is nobody there. One run at a time per workspace;
+a delivery that arrives meanwhile is `queued` and waits, and only a queue past
+`queue_max_per_workspace` refuses with 429.
 
 ### `did` — what happened
 
@@ -585,7 +600,9 @@ would otherwise read every file every other job there had left.
 **Callbacks.** A task may name a URL to be told when its run finishes, and the
 body is the same shape reading the run back gives, so a pipeline that polls and
 one that listens parse the same thing. The callback is a queued unit like any
-other, with backoff, so it survives a restart and is visible to an operator.
+other, with backoff, so it survives a restart and is visible to an operator. The
+URL is a field on the task — `callback_url` on the route, *tell somebody when it
+finishes* on the form.
 
 `callback_hosts` is **empty by default, and empty means off** — not "everything
 allowed". A callback URL arrives in a task, and a task is editable by anyone who

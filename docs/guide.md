@@ -479,18 +479,186 @@ happened.
 
 ---
 
-## 6. A door for the rest of your system
+## 6. A receiver — a door for the rest of your system
 
-An **inlet** takes an HTTP POST from outside and hands it to an agent. It has an
-address, its own key, and a list of **tasks**; a task says what it accepts,
+A **receiver** takes an HTTP POST from outside and hands it to one agent. It has
+an address, its own key, and a list of **tasks**; a task says what it accepts,
 which agent gets it, what to tell that agent, and what counts as success.
 
-Any number of doors per workspace, any number of tasks per door. Add one from
-the workspace page, or:
+It is called a receiver on screen and an **inlet** everywhere else — the URLs,
+the API paths, the tables and the config keys. The word on screen changed
+because "inlet" is a word this product invented and nobody arrives already
+knowing; the strings did not, because callers outside your install hold them.
+
+Any number of receivers per workspace, any number of tasks per receiver.
+
+### Making one, in the interface
+
+Open a workspace and turn on the **Receivers** panel from the row of panel
+buttons at the top right.
+
+1. **Give it an address.** One word, lowercase — `sites`, `tickets`, `drop`. It
+   becomes part of every URL under this door: `POST /i/sites/…`. The second
+   field is a note to yourself, shown only here.
+2. **Press "add a receiver".** The key appears **once**, in full, right then.
+   Copy it now: only its hash is stored, and nothing can show it to you again.
+   Lost it, or leaked it? **new key** issues a fresh one and the previous string
+   stops working the same instant — the receiver keeps its tasks and its
+   address.
+3. **Write its first task.** A receiver with no task answers 404 to everything,
+   so the form is already open on a new one. Once a task exists it goes behind
+   **add a task**.
+4. **Press "add task".** The row that appears carries the full URL a caller
+   posts to, and an **edit** button for when you got something wrong.
+
+The fields on that form, and what each one decides:
+
+| field | decides |
+|---|---|
+| task name | the last segment of the URL — `POST /i/sites/<name>` |
+| accepts JSON / a file | whether the body is a payload or a file written into the workspace |
+| which agent | who does the work. Only agents in this workspace, and it is checked as you save |
+| schema | what a caller's JSON body must look like. **Empty accepts any JSON.** Press *start from an example* to get a real one to edit |
+| instruction | the sentence the agent is given with the payload — the whole brief, since the run carries nothing else |
+| tell somebody when it finishes | a URL the finished run is posted to. Empty is normal: the answer goes back on the caller's own connection |
+| what has to have happened | the checks under **expect** — a gear that must have run, files that must exist, the shape of the answer |
+
+### A worked receiver: a worker hands a page to the workspace
+
+Something in your system already knows a URL needs looking at — a crawler, a
+queue worker, a webhook. It should not have to know which agent, which model, or
+what the prompt says. It posts the URL and gets an answer.
+
+The schema, which is what makes this a contract rather than a hope:
+
+```json
+{
+  "type": "object",
+  "required": ["url"],
+  "additionalProperties": false,
+  "properties": {
+    "url":   { "type": "string", "maxLength": 2000 },
+    "depth": { "type": "integer", "minimum": 1, "maximum": 3 }
+  }
+}
+```
+
+The instruction, which is the whole brief the agent gets:
+
+> Read the page at `url` and return what it is about, who publishes it, and
+> anything that reads as a claim about a product. Nothing else.
+
+And the call, from whatever you already have:
+
+```bash
+curl -X POST http://127.0.0.1:8688/i/sites/ingest-page \
+  -H "Authorization: Bearer $INLET_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://example.com/pricing","depth":1}'
+```
+
+**The schema is enforced before any model is called**, so a caller that sends
+the wrong thing costs nothing at all. Every one of these is the exact response
+from a running install:
+
+```json
+{"run":1,"state":"refused_schema","error":"url is required but was not sent",
+ "did":{"tools":[],"files":[],"model_calls":0,"tokens":{"in":0,"out":0}}}
+```
+
+```json
+{"run":2,"state":"refused_schema","error":"depth: must be at most 3, got 9", …}
+```
+
+```json
+{"run":3,"state":"refused_schema",
+ "error":"the payload: \"priority\" is not a field this task accepts (it allows only: depth, url)", …}
+```
+
+`model_calls: 0` is the part worth noticing. That last one is `additionalProperties: false`
+doing its job: a caller that invents a field is told so, instead of having it
+silently ignored for a year.
+
+The other two refusals, in full:
+
+```json
+{"error":{"message":"this inlet's key is required: send Authorization: Bearer <inlet key>. A key is issued from the workspace's inlet settings and shown once"}}
+```
+
+```json
+{"error":{"message":"this inlet has no task called \"nope\""}}
+```
+
+401 and 404. An unknown address answers exactly as an unknown task does, so
+somebody probing for names learns nothing you did not tell them.
+
+### When the work takes longer than a request should
+
+Reading a page and thinking about it can take a minute, and a worker that has to
+hold a connection open for it is a worker you cannot restart. Hand the job off
+instead:
+
+```bash
+curl -X POST http://127.0.0.1:8688/i/sites/ingest-page \
+  -H "Authorization: Bearer $INLET_KEY" -H 'Content-Type: application/json' \
+  -H 'Prefer: respond-async' \
+  -H 'Idempotency-Key: page-8814' \
+  -d '{"url":"https://example.com/pricing"}'
+```
+
+```
+HTTP/1.1 202 Accepted
+Location: /i/sites/runs/4
+Preference-Applied: respond-async
+
+{"run":4,"state":"queued","did":{"tools":[],"files":[],"model_calls":0,"tokens":{"in":0,"out":0}}}
+```
+
+Then either poll `GET /i/sites/runs/4` with the same key, or put a URL in **tell
+somebody when it finishes** and be posted to instead. `Idempotency-Key` is what
+makes the worker safe to retry: the same key twice is the same run, not two.
+
+Without `Prefer: respond-async` nothing changes — the answer comes back on the
+same response, exactly as it always has.
+
+A task does not need a caller at all: the **Queue** panel can put it on a
+schedule — `every 15m`, or five cron fields — and the payload is fixed when you
+write the schedule. Same task, same instruction, same checks; nobody posting.
+
+### Fixing a task
+
+Press **edit** on the task row. Everything is there as you left it, and saving
+keeps the task's id — so the deliveries already on record and any schedule
+pointing at it stay pointed at it.
+
+Renaming is allowed and it **moves the address**; the form says so, with the new
+URL, before you save. The old one starts answering 404 and nothing here can tell
+the callers holding it.
+
+Over the API it is a `PUT`, and the body is the whole task:
+
+```bash
+curl -X PUT http://127.0.0.1:8688/api/v1/inlet-tasks/1 -H 'Content-Type: application/json' -d '{
+  "name": "ingest-page",
+  "accepts": "json",
+  "schema": { "type": "object", "required": ["link"] },
+  "agent": "orchestrator",
+  "instruction": "Read the page at link and say what it is about."
+}'
+```
+
+The whole task, not just what changed: a request with no `schema` in it would
+otherwise mean *accept anything*, and widening a door is not something that may
+happen because a field was left out. Everything that refuses a bad task on the
+way in refuses it here too — one validator, both routes.
+
+### The same, over the API
 
 ```bash
 curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/inlets -H 'Content-Type: application/json' -d '{"address":"drop","description":"files from outside"}'
 ```
+
+The response carries the first key. `POST /api/v1/inlets/1/key` issues a new one.
 
 ### A task that unpacks an archive
 
@@ -621,7 +789,7 @@ ada    engineer  london
 grace  admiral   new york
 ```
 
-### What a door will not do
+### What a receiver will not do
 
 - **An unknown key is 401, an unknown task 404**, and a payload that does not
   match the task is **400 before any model is called** — a malformed request
@@ -629,11 +797,15 @@ grace  admiral   new york
 - **A delivery writes nothing into the operator's conversation.** Otherwise
   request two hundred would carry the previous hundred and ninety-nine.
 - **The run is treated as third-party from the first byte**, so the agent
-  behind a door cannot write to the instruction library, the gear catalog or the
-  workspace graph — the same latch that stops text from the web doing it.
+  behind a receiver cannot write to the instruction library, the gear catalog or
+  the workspace graph — the same latch that stops text from the web doing it.
 - **`web_search` is not offered**: it pauses the turn waiting for a person to
   approve the query, and there is nobody there.
-- **One run per workspace.** A second delivery while one is running gets 429.
+- **One run at a time per workspace.** A delivery that arrives while one is
+  running **waits** — it is `queued`, which is a state in the ledger and a row
+  in the Queue panel, not a failure. What is refused is a queue that has stopped
+  being one: past `queue_max_per_workspace` waiting deliveries the next gets 429
+  and says how many are ahead of it.
 
 ---
 
@@ -841,6 +1013,8 @@ So that you do not go looking:
 - No screen for the search audit log, though the route exists.
 - No workspace-wide prohibitions; they are per agent, and a created agent inherits its creator's.
 - A bundle carries the conversation nowhere — it is a template, not a transcript.
-- No inlet may target a gear directly; a task names an agent, and the agent calls the gear.
-- No streaming from a door, no fan-out to several agents, and no inlets on a schedule.
+- No receiver may target a gear directly; a task names an agent, and the agent calls the gear.
+- No streaming from a receiver, and no fan-out of one delivery to several agents.
 - Gears do not run as Kubernetes Jobs, and there are no remote agents.
+- No private thread inside a shared workspace: two people in one workspace share its
+  conversation. Separate workspaces are how two people stay out of each other's way.

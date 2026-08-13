@@ -799,72 +799,135 @@ func (s *Server) handleAddInletTask(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	var body struct {
-		Name string `json:"name"`
-		// Accepts is "json" or "file"; it decides which of the next two fields
-		// is meaningful.
-		Accepts     string          `json:"accepts"`
-		Schema      json.RawMessage `json:"schema"`
-		ContentType string          `json:"content_type"`
-		Agent       string          `json:"agent"`
-		Instruction string          `json:"instruction"`
-		// Expect is what this task declares success to be. Every field in it is
-		// optional and a task sent without it behaves exactly as tasks did
-		// before it existed.
-		Expect inlet.Expect `json:"expect"`
+	body, ok := readInletTask(w, r)
+	if !ok {
+		return
 	}
-	if !decodeJSON(w, r, &body) {
+	if !s.taskTargetsExist(w, r, in.WorkspaceID, body) {
 		return
 	}
 
-	// The target is checked now, while the operator who typed the name is still
-	// here to read the answer. At delivery time the reader is a caller who can
-	// do nothing about it.
-	if err := s.engine.UnattendedTargetError(r.Context(), in.WorkspaceID, body.Agent); err != nil {
+	task, err := s.inlets.AddTask(r.Context(), id, body.task())
+	if err != nil {
+		writeTaskError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, task)
+}
+
+// inletTaskBody is what an operator sends to define a task, on the way in and
+// on the way back in when they fix it.
+type inletTaskBody struct {
+	Name string `json:"name"`
+	// Accepts is "json" or "file"; it decides which of the next two fields
+	// is meaningful.
+	Accepts     string          `json:"accepts"`
+	Schema      json.RawMessage `json:"schema"`
+	ContentType string          `json:"content_type"`
+	Agent       string          `json:"agent"`
+	Instruction string          `json:"instruction"`
+	// Expect is what this task declares success to be. Every field in it is
+	// optional and a task sent without it behaves exactly as tasks did
+	// before it existed.
+	Expect inlet.Expect `json:"expect"`
+	// CallbackURL is where this install posts the finished run. Empty is the
+	// ordinary case: the answer goes back on the caller's own connection.
+	CallbackURL string `json:"callback_url"`
+}
+
+func (b inletTaskBody) task() inlet.Task {
+	return inlet.Task{
+		Name:        b.Name,
+		Accepts:     b.Accepts,
+		Schema:      string(b.Schema),
+		ContentType: b.ContentType,
+		AgentName:   b.Agent,
+		Instruction: b.Instruction,
+		Expect:      b.Expect,
+		CallbackURL: b.CallbackURL,
+	}
+}
+
+func readInletTask(w http.ResponseWriter, r *http.Request) (inletTaskBody, bool) {
+	var body inletTaskBody
+	if !decodeJSON(w, r, &body) {
+		return inletTaskBody{}, false
+	}
+	return body, true
+}
+
+// taskTargetsExist refuses names that resolve to nothing, while the operator
+// who typed them is still here to read the answer. At delivery time the reader
+// is a caller who can do nothing about it.
+func (s *Server) taskTargetsExist(w http.ResponseWriter, r *http.Request, wsID int64, body inletTaskBody) bool {
+	if err := s.engine.UnattendedTargetError(r.Context(), wsID, body.Agent); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf(
 			"this task cannot target agent %q: %s", body.Agent, err))
-		return
+		return false
 	}
 
-	// And so is the gear the task requires, for the same reason and one worse:
-	// a name with a typo in it does not fail loudly. It refuses every delivery
-	// for the rest of the task's life with a message about work that never
-	// happened — which reads exactly like a broken pipeline, and sends whoever
-	// is paged to look at everything except the one word that is wrong.
+	// The gear is checked for the same reason and one worse: a name with a typo
+	// in it does not fail loudly. It refuses every delivery for the rest of the
+	// task's life with a message about work that never happened — which reads
+	// exactly like a broken pipeline, and sends whoever is paged to look at
+	// everything except the one word that is wrong.
 	if want := strings.TrimSpace(body.Expect.RunsGear); want != "" {
 		if _, err := s.gears.GetByName(r.Context(), want); err != nil {
 			if errors.Is(err, gear.ErrNotFound) {
 				writeError(w, http.StatusBadRequest, fmt.Sprintf(
 					"this task requires the gear %q, and no gear by that name has been forged in this install. "+
 						"Forge it first, or fix the name — the gear's own name is what goes here, not the tool name a model calls it by", want))
-				return
+				return false
 			}
 			fail(w, r, err)
-			return
+			return false
 		}
 	}
+	return true
+}
 
-	task, err := s.inlets.AddTask(r.Context(), id, inlet.Task{
-		Name:        body.Name,
-		Accepts:     body.Accepts,
-		Schema:      string(body.Schema),
-		ContentType: body.ContentType,
-		AgentName:   body.Agent,
-		Instruction: body.Instruction,
-		Expect:      body.Expect,
-	})
-	if err != nil {
-		if errors.Is(err, inlet.ErrConflict) {
-			fail(w, r, err)
-			return
-		}
-		// Everything else AddTask refuses is something the operator wrote:
-		// a bad name, a schema keyword this server does not enforce, an
-		// unusable content type. That is a 400, not a 500.
-		writeError(w, http.StatusBadRequest, err.Error())
+func writeTaskError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, inlet.ErrConflict) || errors.Is(err, inlet.ErrNotFound) {
+		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, task)
+	// Everything else the store refuses is something the operator wrote: a bad
+	// name, a schema keyword this server does not enforce, an unusable content
+	// type. That is a 400, not a 500.
+	writeError(w, http.StatusBadRequest, err.Error())
+}
+
+// handleUpdateInletTask rewrites a task that already exists.
+//
+// Without this the only way to fix a schema was to delete the task and write it
+// again — during which the address it lives at answers 404 to everyone, and the
+// schedules pointing at it are gone with it.
+func (s *Server) handleUpdateInletTask(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.nestedScoped(w, r, func(taskID int64) (int64, error) {
+		return s.inlets.WorkspaceOfTask(r.Context(), taskID)
+	})
+	if !ok {
+		return
+	}
+	wsID, err := s.inlets.WorkspaceOfTask(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	body, ok := readInletTask(w, r)
+	if !ok {
+		return
+	}
+	if !s.taskTargetsExist(w, r, wsID, body) {
+		return
+	}
+
+	task, err := s.inlets.UpdateTask(r.Context(), id, body.task())
+	if err != nil {
+		writeTaskError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, task)
 }
 
 func (s *Server) handleDeleteInletTask(w http.ResponseWriter, r *http.Request) {
