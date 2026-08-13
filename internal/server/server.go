@@ -53,6 +53,13 @@ type Server struct {
 	identity *identity.Store
 	inlets   *inlet.Store
 	engine   *engine.Engine
+	// queue is where a delivery waits when its workspace is busy, and pool is
+	// what runs it. queueMax bounds the waiting, because a queue with no bound
+	// is a way to run a server out of disk politely.
+	queue    *work.Store
+	pool     *work.Pool
+	stopPool context.CancelFunc
+	queueMax int
 	http     *http.Server
 	// trustLoopback lets an unauthenticated local request act as the admin,
 	// which is what makes a single-operator install feel accountless while
@@ -91,6 +98,15 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	gearExec := gear.NewExecutor(gears, cfg.DataDir, sb, env, gate)
 	lib := library.NewStore(db)
 	broker := egress.New()
+	queue := work.NewStore(db)
+	// Zero means unset, not "refuse everything". A Config built in code rather
+	// than read from a file — which is what every test and every embedding
+	// does — would otherwise turn the queue's bound into a door that is shut,
+	// and the failure would read as a queue that is full while it is empty.
+	queueMax := cfg.QueueMaxPerWorkspace
+	if queueMax <= 0 {
+		queueMax = config.Defaults().QueueMaxPerWorkspace
+	}
 	s := &Server{
 		db:         db,
 		catalog:    cat,
@@ -103,7 +119,9 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		library:    lib,
 		identity:   identity.NewStore(db),
 		inlets:     inlet.NewStore(db),
-		engine:     engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, work.NewStore(db), cfg.DataDir),
+		engine:     engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, queue, cfg.DataDir),
+		queue:      queue,
+		queueMax:   queueMax,
 		// A server reachable beyond this machine must not hand out admin
 		// to anyone who can open a socket to it.
 		trustLoopback:   isLoopbackListen(cfg.Listen),
@@ -114,6 +132,18 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		egressBearer:    cfg.EgressApprovalBearer,
 		adminToken:      cfg.AdminToken,
 	}
+	// The workers, started here rather than in Serve.
+	//
+	// A pool that only ran while the HTTP listener did would leave queued work
+	// unrunnable everywhere the handlers are driven directly — every test, and
+	// any embedding — and the symptom is not an error but a delivery that waits
+	// forever for a worker that does not exist. The server owns the pool for as
+	// long as the server exists; Close stops it.
+	s.pool = work.NewPool(queue, s.runDelivery, work.PoolOptions{Workers: cfg.QueueWorkers})
+	poolCtx, stopPool := context.WithCancel(context.Background())
+	s.stopPool = stopPool
+	s.pool.Start(poolCtx)
+
 	// A terminal is only offered when the sandbox can host one: without it
 	// the shell would hold the server's own file access.
 	if i, ok := sb.(sandbox.Interactive); ok && sb != nil {
@@ -354,11 +384,33 @@ func (s *Server) Run(ctx context.Context) error {
 // for a fixed port instead would mean a second copy of the application, or a
 // machine where somebody else already holds 8688, deciding whether the app can
 // start at all.
+// Close stops the workers and waits for whatever they are running.
+//
+// Waits rather than abandons: a unit mid-model-call has spent money and may
+// have written files, and dropping it would leave a claimed row whose only
+// account of itself is that the server restarted. Safe to call twice, because
+// a caller that has both a Serve and a defer should not have to know which of
+// them got there first.
+func (s *Server) Close() {
+	if s.stopPool == nil {
+		return
+	}
+	s.stopPool()
+	s.stopPool = nil
+	s.pool.Stop()
+}
+
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	baseCtx, cancelBase := context.WithCancel(context.Background())
 	defer cancelBase()
 	s.http.BaseContext = func(net.Listener) context.Context { return baseCtx }
 	s.http.RegisterOnShutdown(cancelBase)
+
+	// The workers were started with the server and stop with it. They run on a
+	// context of their own rather than on the request base context: a queued
+	// delivery is not a request, and the one thing that must not happen to it
+	// is being cancelled because the listener stopped accepting.
+	defer s.Close()
 
 	errCh := make(chan error, 1)
 	go func() {

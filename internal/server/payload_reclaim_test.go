@@ -3,48 +3,83 @@ package server
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
+	"github.com/orkcom-tech/cogitorium/internal/engine"
 	"github.com/orkcom-tech/cogitorium/internal/workdir"
-	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
 
 // A file delivery whose run never began leaves nothing on disk.
 //
-// The case that produced this was the busy race: the busy check happens before
-// the body is read, deliberately — eight concurrent 32 MiB deliveries into a
-// busy workspace once took the heap from 2 MiB to 592 MiB — but it is advisory,
-// the authoritative check is the lock inside the engine, and a workspace can
-// become busy in the gap. By then the bytes have landed. The caller is told to
-// retry, they do, and a second copy lands under a new run number while the first
-// sits on the volume with nothing that will ever come back for it.
+// The bytes land when the delivery is accepted, and the run happens later, in a
+// worker. Between those two moments the workspace can change under it — and the
+// case driven here is the one that survives every guard at the door: the task's
+// agent is DELETED while its delivery waits its turn. The run then never begins,
+// and without the reclaim its file sits on the volume with nothing that will
+// ever come back for it.
 //
-// Driving that race from a test is not worth the flakiness, and it is not the
-// only way in: RunUnattended refuses an agent with no model, and an agent that
-// is gone, on the lines directly above the same lock. All three reach one branch
-// through neverBegan, so proving it deterministically with one proves the
-// branch. The first attempt at this test drove the race instead, and passed with
-// the fix REVERTED — it was measuring the pre-check, which refuses before the
-// body is read and therefore never had a file to leave behind.
+// The queue is what makes this testable without racing. The delivery is put
+// behind a chat turn that holds the lane, the agent is deleted while it waits,
+// and the lane is then released — which is a sequence, not a coincidence of
+// timing.
+//
+// An earlier version of this test used an agent with no model. That route is
+// now refused at the door, before the body is read, so it never lands a file:
+// the test would have passed while measuring nothing, which is exactly how its
+// FIRST version failed — it drove the busy race and passed with the fix
+// reverted.
 func TestADeliveryThatNeverRanLeavesNoFileBehind(t *testing.T) {
 	d := newDoor(t)
+	ctx := context.Background()
 
-	// An agent with no model bound. RunUnattended refuses on exactly the line
-	// it refuses a busy workspace on — above its own lock, before any model is
-	// called — so this is the same orphan by a route a test can drive without
-	// racing. The busy case reaches the identical branch through neverBegan.
-	if _, err := d.spaces.CreateAgentSpec(context.Background(), d.wsID, workspace.AgentSpec{
-		Name: "unbound", Role: "has no model yet",
-	}); err != nil {
-		t.Fatalf("create an agent with no model: %v", err)
+	worker, err := d.spaces.CreateAgent(ctx, d.wsID, "ingester", "reads what arrives", d.modelID)
+	if err != nil {
+		t.Fatalf("create the target agent: %v", err)
 	}
-	d.addFileTask(t, "ingest", "text/plain", "unbound", "read it")
+	d.addFileTask(t, "ingest", "text/plain", worker.Name, "read it")
 
-	rec := d.deliver(t, "ingest", d.key, "text/plain", []byte("the bytes nobody will read"))
+	// Hold the lane so the delivery is certainly queued rather than run.
+	held := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	d.provider.answers(func(n int, c modelCall) modelReply {
+		once.Do(func() { close(held) })
+		<-release
+		return says("held")
+	})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = d.srv.engine.HandleUserMessage(ctx, d.wsID, "hold the lane", func(engine.Event) {})
+	}()
+	<-held
+
+	delivered := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		delivered <- d.deliver(t, "ingest", d.key, "text/plain", []byte("the bytes nobody will read"))
+	}()
+
+	// The delivery is now waiting with its bytes on disk. Take its agent away.
+	waitFor(t, func() bool {
+		var n int
+		_ = d.db.QueryRow(`SELECT COUNT(*) FROM inlet_runs WHERE workspace_id = ? AND state = 'queued'`,
+			d.wsID).Scan(&n)
+		return n == 1
+	}, "the delivery to be queued")
+	if err := d.spaces.DeleteAgent(ctx, worker.ID); err != nil {
+		t.Fatalf("delete the target agent: %v", err)
+	}
+
+	close(release)
+	wg.Wait()
+	rec := <-delivered
 	if rec.Code == http.StatusOK {
-		t.Fatalf("the delivery ran, so this test measures nothing: %s", rec.Body.String())
+		t.Fatalf("the delivery ran against an agent that was deleted: %s", rec.Body.String())
 	}
 
 	// Nothing under the inlet directory: this refused delivery is the only one

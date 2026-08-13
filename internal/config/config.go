@@ -77,6 +77,21 @@ type Config struct {
 	VariablesDir string `yaml:"variables_dir"`
 	SecretsDir   string `yaml:"secrets_dir"`
 
+	// QueueWorkers is how many queued deliveries may run at once ACROSS
+	// workspaces. It is not the ceiling that matters — one run per workspace
+	// already is — so this is about how many different workspaces can be busy
+	// at the same moment, and every one of them is mostly waiting on a model.
+	QueueWorkers int `yaml:"queue_workers"`
+
+	// QueueMaxPerWorkspace bounds what may be WAITING for one workspace.
+	//
+	// A queue with no bound is a polite way to run a server out of disk: every
+	// waiting file delivery has already landed its bytes. Past this a delivery
+	// is refused with 429 and told how many are ahead of it — which is
+	// backpressure, and is a different thing from the data loss it replaced,
+	// where a busy workspace destroyed the request outright.
+	QueueMaxPerWorkspace int `yaml:"queue_max_per_workspace"`
+
 	// GearProxyListen is where the outward gate for gears listens: the proxy a
 	// gear the operator granted the network reaches it through, and which
 	// records every connection.
@@ -136,6 +151,11 @@ func Defaults() Config {
 		ContextdPath:    "contextd",
 		Sandbox:         "auto",
 		GearProxyListen: gearnet.DefaultListen,
+		QueueWorkers:    4,
+		// Fifty is a burst, not a backlog. It is large enough that an ordinary
+		// spike waits rather than being refused, and small enough that fifty
+		// file deliveries' bytes are a size an operator can reason about.
+		QueueMaxPerWorkspace: 50,
 	}
 }
 

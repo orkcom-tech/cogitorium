@@ -16,12 +16,21 @@ import (
 // writers cannot leave a row claiming both that the agent answered and that the
 // payload was refused.
 
-// Run states. Two are live and six are terminal; nothing else may be written,
+// Run states. Three are live and six are terminal; nothing else may be written,
 // because the CHECK on the table enumerates exactly these.
 const (
 	// StateAccepted: the key opened the door and the task exists. Written
 	// before the payload is even looked at.
 	StateAccepted = "accepted"
+	// StateQueued: the payload is checked and stored, and the delivery is
+	// waiting for its workspace to be free.
+	//
+	// This state is why the queue exists. A delivery that met a busy workspace
+	// used to be settled StateFailed — the same terminal state a genuinely
+	// broken job gets — so a burst of two hundred tickets was one job done and
+	// a hundred and ninety-nine rows a caller could only tell apart from real
+	// failures by string-matching an error message. Waiting is not failing.
+	StateQueued = "queued"
 	// StateRefusedSchema: the payload did not match the task's schema. No model
 	// was called, and the caller got a 400.
 	StateRefusedSchema = "refused_schema"
@@ -95,10 +104,47 @@ func (s *Store) Accept(ctx context.Context, wsID, inletID int64, address, taskNa
 	return res.LastInsertId()
 }
 
-// Begin moves an accepted run to running once the payload has been checked and,
-// for a file task, landed in the workspace. The guard is what makes it safe to
-// call from a path that may also have settled the row already: a run that was
-// refused stays refused.
+// Queued records everything known before the work starts, and says the delivery
+// is WAITING rather than running.
+//
+// The state matters more than it looks. A delivery that met a busy workspace
+// used to be settled `failed` — the same terminal state a genuinely broken job
+// gets — so a caller could only tell a queue from a fault by string-matching an
+// error message. Waiting is not failing, and now it does not have to be spelled
+// as one.
+func (s *Store) Queued(ctx context.Context, id, agentID, payloadBytes int64, payloadPath string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE inlet_runs
+		    SET state = ?, agent_id = ?, payload_bytes = ?, payload_path = ?, updated_at = ?
+		  WHERE id = ? AND state = ?`,
+		StateQueued, agentID, payloadBytes, payloadPath, now(), id, StateAccepted)
+	if err != nil {
+		return fmt.Errorf("queue inlet run %d: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("inlet run %d: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
+// Start moves a waiting delivery to running, when a worker picks it up.
+func (s *Store) Start(ctx context.Context, id int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE inlet_runs SET state = ?, updated_at = ? WHERE id = ? AND state = ?`,
+		StateRunning, now(), id, StateQueued)
+	if err != nil {
+		return fmt.Errorf("start inlet run %d: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("inlet run %d: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
+// Begin moves an accepted run straight to running, for a delivery that is not
+// going through the queue. The guard is what makes it safe to call from a path
+// that may also have settled the row already: a run that was refused stays
+// refused.
 func (s *Store) Begin(ctx context.Context, id, agentID, payloadBytes int64, payloadPath string) error {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE inlet_runs

@@ -15,10 +15,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/engine"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/inlet"
+	"github.com/orkcom-tech/cogitorium/internal/work"
 	"github.com/orkcom-tech/cogitorium/internal/workdir"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
@@ -114,6 +116,33 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 	}
 	s.inlets.NoteKeyUse(r.Context(), in.ID)
 
+	// The idempotency key is read BEFORE the body, and a key already seen is
+	// answered with the job it already produced — never with a second one, and
+	// never with a refusal.
+	//
+	// Before the body, because a caller whose retry is about to be answered
+	// from the ledger has no business having thirty-two megabytes buffered on
+	// the way there. And answered rather than refused, because idempotency that
+	// returns an error just moves the problem to whoever wrote the retry loop:
+	// they now have to tell "already done" apart from "went wrong", which is
+	// the exact confusion this whole change exists to end.
+	idemKey := ""
+	if raw := strings.TrimSpace(r.Header.Get("Idempotency-Key")); raw != "" {
+		// Scoped to the door and the job, so one caller's "ticket-1834" cannot
+		// collide with another's on a different task.
+		idemKey = fmt.Sprintf("%d:%s:%s", in.ID, task.Name, raw)
+		switch existing, err := s.queue.ByIdem(r.Context(), work.KindDelivery, in.WorkspaceID, idemKey); {
+		case err == nil:
+			slog.Info("a delivery repeated an idempotency key; answering with the original run",
+				"address", in.Address, "task", task.Name, "run_id", existing.RunID)
+			s.answerRun(w, r, existing)
+			return
+		case !errors.Is(err, work.ErrNotFound):
+			fail(w, r, err)
+			return
+		}
+	}
+
 	// The row exists before the payload is even read, and before the target is
 	// looked up: from here on everything that can go wrong is something an
 	// operator will want to find in the ledger, and a crash between this line
@@ -150,18 +179,46 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	// And an agent with no model cannot run either, which is the same kind of
+	// answer: the workspace is not finished, nothing the caller sends will fix
+	// it, and it is not permanent.
+	//
+	// Checked HERE rather than left to the worker, and the reason is not
+	// tidiness. Once a delivery is queued its outcome reaches the caller
+	// through the ledger row, and the ledger has one state for "it failed" —
+	// so a job that could never have started would arrive as a 500 next to
+	// jobs that broke. Refusing before the body is read also means it takes no
+	// queue slot and lands no file that nothing will ever read.
+	if agent.ModelID == nil {
+		cause := fmt.Errorf("this task targets agent %q: %w", agent.Name, engine.ErrNoModel)
+		slog.Error("inlet run failed", "run_id", runID, "address", in.Address, "task", task.Name, "err", cause)
+		s.inlets.SettleOrLog(ledgerCtx, runID, inlet.StateFailed, "", cause.Error(), nothingRan)
+		writeJSON(w, http.StatusServiceUnavailable, deliveryResponse{
+			Run: runID, State: inlet.StateFailed, Error: cause.Error(),
+		})
+		return
+	}
 
-	// Refuse a busy workspace BEFORE reading the body. The authoritative check
-	// is inside RunUnattended, under the lock; this one exists so a caller that
-	// is about to be told "no" does not first have its payload buffered in the
-	// server's memory and written to the disk. Measured before it was here:
-	// eight concurrent 32 MiB deliveries into a busy workspace took the heap
-	// from 2 MiB to 592 MiB and left 256 MiB of files behind, and seven of the
-	// eight were refused anyway.
-	if s.engine.WorkspaceBusy(in.WorkspaceID) {
-		s.inlets.SettleOrLog(ledgerCtx, runID, inlet.StateFailed, "", engine.ErrBusy.Error(), nothingRan)
+	// A busy workspace makes a delivery WAIT. What is refused here is a queue
+	// that has stopped being a queue and become a backlog.
+	//
+	// This check stays before the body is read, and the reason it was here has
+	// not changed: eight concurrent 32 MiB deliveries into a busy workspace
+	// took the heap from 2 MiB to 592 MiB and left 256 MiB of files behind, and
+	// seven of the eight were refused anyway. The bound moved from "is anything
+	// running" to "how many are already waiting", which is the difference
+	// between backpressure and data loss.
+	queued, _, err := s.queue.Depth(r.Context(), work.Lane(in.WorkspaceID))
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	if queued >= s.queueMax {
+		cause := fmt.Errorf("this workspace already has %d deliveries waiting, which is the most this install will hold (queue_max_per_workspace); "+
+			"the ones already queued will still run", queued)
+		s.inlets.SettleOrLog(ledgerCtx, runID, inlet.StateFailed, "", cause.Error(), nothingRan)
 		writeJSON(w, http.StatusTooManyRequests, deliveryResponse{
-			Run: runID, State: inlet.StateFailed, Error: engine.ErrBusy.Error(),
+			Run: runID, State: inlet.StateFailed, Error: cause.Error(),
 		})
 		return
 	}
@@ -177,59 +234,146 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.inlets.Begin(ledgerCtx, runID, agent.ID, payload.bytes, payload.relPath); err != nil {
+	if err := s.inlets.Queued(ledgerCtx, runID, agent.ID, payload.bytes, payload.relPath); err != nil {
 		fail(w, r, err)
 		return
 	}
 
-	// The run's record comes back whether or not the run succeeded, which is why
-	// out is read on both branches below rather than only on the happy one.
-	out, err := s.engine.RunUnattended(r.Context(), in.WorkspaceID, task.AgentName, payload.prompt)
-	if err != nil {
-		// The run never began, so the file this delivery landed is bytes nobody
-		// will ever read. Three ways to get here, all decided before the first
-		// model call: the workspace was busy (the check above happens before
-		// the body is read, but a workspace can become busy in the gap between
-		// it and the lock inside the engine), the task's agent has no model, or
-		// its agent is gone. In each case the caller is told to retry or to fix
-		// the workspace, and a retry lands a fresh copy under a new run number
-		// while this one sits on the volume forever.
-		//
-		// Deliberately NOT every failure: a run that read the file and then
-		// fell over used it, and whoever is deciding what to do next may want
-		// to see what arrived.
-		if payload.relPath != "" && neverBegan(err) {
-			s.reclaimPayload(ledgerCtx, in.WorkspaceID, runID, payload.relPath)
-		}
-		s.failedDelivery(w, ledgerCtx, r, runID, err, out.Did)
-		return
-	}
-
-	// What the task declared success to be, held against what the run recorded.
-	// A task that declares nothing is not judged and reaches the two lines at
-	// the bottom exactly as it did before any of this existed.
-	v := judge(task.Expect, out)
-	if v.refused() {
-		slog.Warn("inlet run refused by what its task requires", "run_id", runID, "state", v.state,
-			"address", in.Address, "task", task.Name, "tools", len(out.Did.Tools),
-			"files", len(out.Did.Files), "err", v.err)
-		s.inlets.SettleOrLog(ledgerCtx, runID, v.state, "", v.err.Error(), ledgerRecord(out.Did))
-		// 500 for both refusals, because the caller sent a valid payload and
-		// this install did not produce what its own task requires: nothing the
-		// caller can change would fix it, which is what a 4xx would tell them.
-		// Which of the two it was is in `state`, where a pipeline can branch on
-		// it — "the work did not happen" is worth retrying and paging about,
-		// "the model produced garbage" is worth retrying and reading.
-		writeJSON(w, http.StatusInternalServerError, deliveryResponse{
-			Run: runID, State: v.state, Error: v.err.Error(), Did: out.Did,
-		})
-		return
-	}
-
-	s.inlets.SettleOrLog(ledgerCtx, runID, v.state, v.result, "", ledgerRecord(out.Did))
-	writeJSON(w, http.StatusOK, deliveryResponse{
-		Run: runID, State: v.state, Result: v.result, Did: out.Did,
+	// Everything the run needs goes into the unit rather than being read back
+	// when a worker picks it up. A task can be edited or deleted while its
+	// deliveries wait, and a job that ran against a different instruction from
+	// the one it was accepted under is the worst kind of surprise: the ledger
+	// row would name a task whose text no longer matches what the agent was
+	// told.
+	args, err := json.Marshal(deliveryArgs{
+		Agent: task.AgentName, Prompt: payload.prompt, Expect: expectJSON(task.Expect),
+		Address: in.Address, Task: task.Name,
 	})
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	unit, err := s.queue.Enqueue(ledgerCtx, work.Unit{
+		Kind: work.KindDelivery, WorkspaceID: in.WorkspaceID, Lane: work.Lane(in.WorkspaceID),
+		Args: string(args), IdemKey: idemKey, RunID: &runID,
+	})
+	switch {
+	case errors.Is(err, work.ErrDuplicate):
+		// Two callers raced with one key. The first one's unit is the answer,
+		// and this row is a duplicate of a job already accepted.
+		s.inlets.SettleOrLog(ledgerCtx, runID, inlet.StateFailed, "",
+			"this idempotency key is already in flight", nothingRan)
+		s.answerRun(w, r, unit)
+		return
+	case err != nil:
+		fail(w, r, err)
+		return
+	}
+	s.pool.Wake()
+
+	// Wait for it, and answer exactly as this route always has. Asynchronous
+	// delivery — 202 and a run number — is the next step and deliberately not
+	// this one: changing the queueing and the response shape in one release
+	// would leave nobody able to say which of the two broke a caller.
+	s.answerRun(w, r, unit)
+}
+
+// answerRun blocks until a delivery reaches a terminal state and then writes
+// the same body this route has always written.
+//
+// A poll rather than a channel, and that is a deliberate trade rather than
+// laziness: the ledger row is the authority on what happened, a channel would
+// be a second authority that has to agree with it, and the row is written by a
+// worker that may be a different goroutine from the one this request is on. A
+// query every quarter second against a table with an id index is not the
+// expensive part of a delivery that takes a model call.
+func (s *Server) answerRun(w http.ResponseWriter, r *http.Request, unit work.Unit) {
+	if unit.RunID == nil {
+		fail(w, r, errors.New("a queued delivery with no ledger row"))
+		return
+	}
+	runID := *unit.RunID
+	tick := time.NewTicker(250 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		run, err := s.inlets.GetRun(context.WithoutCancel(r.Context()), runID)
+		if err != nil {
+			fail(w, r, err)
+			return
+		}
+		if terminal(run.State) {
+			writeJSON(w, statusForRun(run), deliveryResponse{
+				Run: runID, State: run.State, Result: run.Result,
+				Error: run.Error, Did: recordFrom(run.Did),
+			})
+			return
+		}
+		select {
+		case <-r.Context().Done():
+			// The caller hung up. The run keeps going — it holds the lane and
+			// is somebody's job — and the ledger row is where its answer will
+			// be. Writing to a dead connection would only log an error.
+			slog.Info("the caller of a delivery hung up while it was still working",
+				"run_id", runID, "state", run.State)
+			return
+		case <-tick.C:
+		}
+	}
+}
+
+// terminal reports whether a run has finished, in the one place that knows.
+// Spelling this as a list of live states rather than of terminal ones is
+// deliberate: a state added later is terminal far more often than not, and this
+// way forgetting to update it makes a caller wait rather than answer early with
+// a half-finished run.
+func terminal(state string) bool {
+	switch state {
+	case inlet.StateAccepted, inlet.StateQueued, inlet.StateRunning:
+		return false
+	}
+	return true
+}
+
+// statusForRun maps a settled row to the code this route has always answered
+// with, so that queueing a delivery changed when the answer arrives and not
+// what it says.
+func statusForRun(run inlet.Run) int {
+	switch run.State {
+	case inlet.StateCompleted:
+		return http.StatusOK
+	case inlet.StateRefusedSchema:
+		return http.StatusBadRequest
+	case inlet.StateRefusedExpectation, inlet.StateRefusedOutputSchema:
+		// The caller sent a valid payload and this install did not produce what
+		// its own task requires. Nothing the caller can change would fix it,
+		// which is what a 4xx would wrongly tell them; which of the two it was
+		// is in `state`, where a pipeline can branch on it.
+		return http.StatusInternalServerError
+	}
+	return http.StatusInternalServerError
+}
+
+func recordFrom(did json.RawMessage) engine.Record {
+	var rec engine.Record
+	if len(did) == 0 {
+		return rec
+	}
+	if err := json.Unmarshal(did, &rec); err != nil {
+		slog.Warn("a run's record could not be read back", "err", err)
+	}
+	return rec
+}
+
+// expectJSON carries the task's expectation into the unit, or nothing when the
+// task declares none — a task that declares nothing is not judged, exactly as
+// before.
+func expectJSON(e inlet.Expect) json.RawMessage {
+	raw, err := json.Marshal(e)
+	if err != nil {
+		slog.Warn("a task's expectation could not be stored with its delivery", "err", err)
+		return nil
+	}
+	return raw
 }
 
 // failedDelivery settles a run that did not produce an answer and tells the
