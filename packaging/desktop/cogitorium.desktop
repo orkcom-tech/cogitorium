@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Cogitorium
-GenericName=Modular agentic development workbench
+GenericName=Agentic workflow workbench
 Comment=Deterministic workflows with models in them — your agents, your wiring, your machine.
 Exec=cogitorium-desktop
 Icon=cogitorium
