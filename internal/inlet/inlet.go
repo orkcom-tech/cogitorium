@@ -93,9 +93,18 @@ type Task struct {
 	// It is checked against the run's RECORD, never against what the agent
 	// wrote. The zero value declares nothing and is what every task carried
 	// before this existed.
-	Expect    Expect `json:"expect"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	Expect Expect `json:"expect"`
+	// CallbackURL is where this install tells somebody a run finished. Empty is
+	// the ordinary case and means nobody is told; the answer then reaches the
+	// caller on the connection they delivered on, or by reading the run back.
+	//
+	// The host allowlist that decides whether this URL may be reached at all
+	// lives in the config file rather than here: who the machine may talk to is
+	// an operator's decision about the machine, and a task is editable by
+	// anyone who can reach the workspace.
+	CallbackURL string `json:"callback_url"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
 }
 
 type Store struct {
@@ -356,9 +365,10 @@ func (s *Store) AddTask(ctx context.Context, inletID int64, t Task) (Task, error
 	}
 
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO inlet_tasks (inlet_id, name, accepts, payload_schema, content_type, agent_name, instruction, expect, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		inletID, t.Name, t.Accepts, t.Schema, t.ContentType, t.AgentName, t.Instruction, expect, now(), now())
+		`INSERT INTO inlet_tasks (inlet_id, name, accepts, payload_schema, content_type, agent_name, instruction, expect, callback_url, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		inletID, t.Name, t.Accepts, t.Schema, t.ContentType, t.AgentName, t.Instruction, expect,
+		strings.TrimSpace(t.CallbackURL), now(), now())
 	if err := asConflict(err, fmt.Sprintf("task %q already exists on this inlet", t.Name)); err != nil {
 		return Task{}, fmt.Errorf("add inlet task: %w", err)
 	}
@@ -368,14 +378,14 @@ func (s *Store) AddTask(ctx context.Context, inletID int64, t Task) (Task, error
 	return s.GetTask(ctx, id)
 }
 
-const taskSelect = `SELECT id, inlet_id, name, accepts, payload_schema, content_type, agent_name, instruction, expect, created_at, updated_at
+const taskSelect = `SELECT id, inlet_id, name, accepts, payload_schema, content_type, agent_name, instruction, expect, callback_url, created_at, updated_at
   FROM inlet_tasks`
 
 func scanTask(row interface{ Scan(...any) error }) (Task, error) {
 	var t Task
 	var expect string
 	if err := row.Scan(&t.ID, &t.InletID, &t.Name, &t.Accepts, &t.Schema, &t.ContentType,
-		&t.AgentName, &t.Instruction, &expect, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		&t.AgentName, &t.Instruction, &expect, &t.CallbackURL, &t.CreatedAt, &t.UpdatedAt); err != nil {
 		return Task{}, err
 	}
 	// A block that will not decode fails the read rather than resolving to "no

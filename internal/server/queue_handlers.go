@@ -113,8 +113,8 @@ func (s *Server) handleCancelQueued(w http.ResponseWriter, r *http.Request) {
 	// The ledger row it was going to fill in must say so too, or a caller
 	// polling that row waits forever for an answer nobody will write.
 	if unit.RunID != nil {
-		s.inlets.SettleOrLog(context.WithoutCancel(r.Context()), *unit.RunID,
-			inlet.StateInterrupted, "", reason, ledgerRecord(engine.Record{}))
+		s.settle(context.WithoutCancel(r.Context()), *unit.RunID,
+			inlet.StateInterrupted, "", reason, engine.Record{})
 	}
 	slog.Info("work unit cancelled", "unit", unitID, "kind", unit.Kind,
 		"lane", unit.Lane, "was", unit.State, "interrupted", interrupted, "by", caller.Name)

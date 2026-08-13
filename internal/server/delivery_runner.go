@@ -49,7 +49,7 @@ func (s *Server) runDelivery(ctx context.Context, u work.Unit) error {
 	var args deliveryArgs
 	if err := json.Unmarshal([]byte(u.Args), &args); err != nil {
 		cause := fmt.Errorf("this delivery's stored arguments could not be read: %w", err)
-		s.inlets.SettleOrLog(ledgerCtx, runID, inlet.StateFailed, "", cause.Error(), ledgerRecord(engine.Record{}))
+		s.settle(ledgerCtx, runID, inlet.StateFailed, "", cause.Error(), engine.Record{})
 		return cause
 	}
 
@@ -93,10 +93,10 @@ func (s *Server) runDelivery(ctx context.Context, u work.Unit) error {
 		slog.Warn("inlet run refused by what its task requires", "run_id", runID, "state", v.state,
 			"address", args.Address, "task", args.Task, "tools", len(out.Did.Tools),
 			"files", len(out.Did.Files), "err", v.err)
-		s.inlets.SettleOrLog(ledgerCtx, runID, v.state, "", v.err.Error(), ledgerRecord(out.Did))
+		s.settle(ledgerCtx, runID, v.state, "", v.err.Error(), out.Did)
 		return nil
 	}
-	s.inlets.SettleOrLog(ledgerCtx, runID, v.state, v.result, "", ledgerRecord(out.Did))
+	s.settle(ledgerCtx, runID, v.state, v.result, "", out.Did)
 	return nil
 }
 
@@ -115,5 +115,19 @@ func (s *Server) failedRun(ctx context.Context, runID int64, cause error, did en
 	}
 	slog.Error("inlet run failed", "run_id", runID, "state", state,
 		"tools", len(did.Tools), "files", len(did.Files), "err", cause)
-	s.inlets.SettleOrLog(ctx, runID, state, "", cause.Error(), ledgerRecord(did))
+	s.settle(ctx, runID, state, "", cause.Error(), did)
+}
+
+// runWork is what the pool calls, and the one place that decides what a unit
+// means. A kind with no runner is a bug rather than a no-op: the unit would
+// otherwise settle successfully having done nothing, which is the exact shape
+// of failure this whole ledger exists to make impossible.
+func (s *Server) runWork(ctx context.Context, u work.Unit) error {
+	switch u.Kind {
+	case work.KindDelivery:
+		return s.runDelivery(ctx, u)
+	case work.KindCallback:
+		return s.runCallback(ctx, u)
+	}
+	return fmt.Errorf("nothing in this server knows how to run a %q unit", u.Kind)
 }

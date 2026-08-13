@@ -158,13 +158,26 @@ func TestOnlyThisDoorsKeyDelivers(t *testing.T) {
 	const good = `{"id":7,"title":"disk full"}`
 	forged := inlet.KeyPrefix + "-tickets-" + strings.Repeat("0", 64)
 
+	// Change the last character to something it is NOT. Writing this as
+	// `key[:len(key)-1] + "0"` is the obvious version and it is wrong: one key
+	// in sixteen already ends in a zero, so the "changed" key is the real key
+	// and the test reports that a forgery opened the door. It did, about one
+	// run in three of the whole package — the identical defect that was already
+	// found and fixed in internal/inlet's own key test.
+	alter := func(key string) string {
+		if strings.HasSuffix(key, "1") {
+			return key[:len(key)-1] + "2"
+		}
+		return key[:len(key)-1] + "1"
+	}
+
 	for _, c := range []struct{ name, address, key string }{
 		{"no credential at all", d.address, ""},
 		{"a forged key naming the right door", d.address, forged},
 		{"a user token instead of an inlet key", d.address, d.adminTok},
 		{"another door's key", d.address, otherKey},
 		{"this door's key at the other door", "invoices", d.key},
-		{"the key with a character changed", d.address, d.key[:len(d.key)-1] + "0"},
+		{"the key with a character changed", d.address, alter(d.key)},
 		{"a truncated key", d.address, d.key[:len(d.key)-4]},
 		{"any key at a door that has none", "imported", d.key},
 		{"an empty key at a door that has none", "imported", ""},

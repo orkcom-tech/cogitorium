@@ -14,6 +14,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -60,7 +61,16 @@ type Server struct {
 	pool     *work.Pool
 	stopPool context.CancelFunc
 	queueMax int
-	http     *http.Server
+	// callbackHosts is who this install may tell that a run finished. EMPTY
+	// MEANS OFF: a callback URL arrives in a task, and a task is editable by
+	// anyone who can reach the workspace, so defaulting to open would turn
+	// "edit a task" into "make this server call an address of my choosing".
+	callbackHosts []string
+	// publicURL is how this install is reachable from outside, used to put
+	// fetchable links to a run's files in its callback. Empty simply leaves
+	// them out.
+	publicURL string
+	http      *http.Server
 	// trustLoopback lets an unauthenticated local request act as the admin,
 	// which is what makes a single-operator install feel accountless while
 	// running the same model as a team install.
@@ -108,20 +118,22 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		queueMax = config.Defaults().QueueMaxPerWorkspace
 	}
 	s := &Server{
-		db:         db,
-		catalog:    cat,
-		workspaces: ws,
-		context:    cs,
-		gears:      gears,
-		gearExec:   gearExec,
-		env:        env,
-		gearNet:    gate,
-		library:    lib,
-		identity:   identity.NewStore(db),
-		inlets:     inlet.NewStore(db),
-		engine:     engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, queue, cfg.DataDir),
-		queue:      queue,
-		queueMax:   queueMax,
+		db:            db,
+		catalog:       cat,
+		workspaces:    ws,
+		context:       cs,
+		gears:         gears,
+		gearExec:      gearExec,
+		env:           env,
+		gearNet:       gate,
+		library:       lib,
+		identity:      identity.NewStore(db),
+		inlets:        inlet.NewStore(db),
+		engine:        engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, queue, cfg.DataDir),
+		queue:         queue,
+		queueMax:      queueMax,
+		callbackHosts: cfg.CallbackHosts,
+		publicURL:     strings.TrimSuffix(cfg.PublicURL, "/"),
 		// A server reachable beyond this machine must not hand out admin
 		// to anyone who can open a socket to it.
 		trustLoopback:   isLoopbackListen(cfg.Listen),
@@ -139,7 +151,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// any embedding — and the symptom is not an error but a delivery that waits
 	// forever for a worker that does not exist. The server owns the pool for as
 	// long as the server exists; Close stops it.
-	s.pool = work.NewPool(queue, s.runDelivery, work.PoolOptions{Workers: cfg.QueueWorkers})
+	s.pool = work.NewPool(queue, s.runWork, work.PoolOptions{Workers: cfg.QueueWorkers})
 	poolCtx, stopPool := context.WithCancel(context.Background())
 	s.stopPool = stopPool
 	s.pool.Start(poolCtx)

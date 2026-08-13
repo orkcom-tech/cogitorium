@@ -142,12 +142,6 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 	// forever is exactly what this table exists to prevent.
 	ledgerCtx := context.WithoutCancel(r.Context())
 
-	// Every path from here to a refusal below ran nothing at all, and says so
-	// with the same empty record the caller is shown. It is built once, from
-	// the engine's own type, so the shape a refusal reports and the shape a
-	// completed run reports cannot drift apart.
-	nothingRan := ledgerRecord(engine.Record{})
-
 	// The target is resolved here as well as inside the engine, because the
 	// ledger records which agent did the work, and because "this task points at
 	// an agent that is gone" is a different answer from "no such task" — the
@@ -158,7 +152,7 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 		cause := fmt.Errorf("this task targets agent %q, which its workspace no longer has: %w",
 			task.AgentName, err)
 		slog.Error("inlet run failed", "run_id", runID, "address", in.Address, "task", task.Name, "err", cause)
-		s.inlets.SettleOrLog(ledgerCtx, runID, inlet.StateFailed, "", cause.Error(), nothingRan)
+		s.settle(ledgerCtx, runID, inlet.StateFailed, "", cause.Error(), engine.Record{})
 		writeJSON(w, http.StatusServiceUnavailable, deliveryResponse{
 			Run: runID, State: inlet.StateFailed, Error: cause.Error(),
 		})
@@ -177,7 +171,7 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 	if agent.ModelID == nil {
 		cause := fmt.Errorf("this task targets agent %q: %w", agent.Name, engine.ErrNoModel)
 		slog.Error("inlet run failed", "run_id", runID, "address", in.Address, "task", task.Name, "err", cause)
-		s.inlets.SettleOrLog(ledgerCtx, runID, inlet.StateFailed, "", cause.Error(), nothingRan)
+		s.settle(ledgerCtx, runID, inlet.StateFailed, "", cause.Error(), engine.Record{})
 		writeJSON(w, http.StatusServiceUnavailable, deliveryResponse{
 			Run: runID, State: inlet.StateFailed, Error: cause.Error(),
 		})
@@ -201,7 +195,7 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 	if queued >= s.queueMax {
 		cause := fmt.Errorf("this workspace already has %d deliveries waiting, which is the most this install will hold (queue_max_per_workspace); "+
 			"the ones already queued will still run", queued)
-		s.inlets.SettleOrLog(ledgerCtx, runID, inlet.StateFailed, "", cause.Error(), nothingRan)
+		s.settle(ledgerCtx, runID, inlet.StateFailed, "", cause.Error(), engine.Record{})
 		writeJSON(w, http.StatusTooManyRequests, deliveryResponse{
 			Run: runID, State: inlet.StateFailed, Error: cause.Error(),
 		})
@@ -210,7 +204,7 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 
 	payload, refusal := s.readInletPayload(r, in, task, runID)
 	if refusal != nil {
-		s.inlets.SettleOrLog(ledgerCtx, runID, refusal.state, "", refusal.err.Error(), nothingRan)
+		s.settle(ledgerCtx, runID, refusal.state, "", refusal.err.Error(), engine.Record{})
 		slog.Info("inlet payload not run", "run_id", runID, "address", in.Address, "task", task.Name,
 			"state", refusal.state, "err", refusal.err)
 		writeJSON(w, refusal.code, deliveryResponse{
@@ -246,8 +240,8 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, work.ErrDuplicate):
 		// Two callers raced with one key. The first one's unit is the answer,
 		// and this row is a duplicate of a job already accepted.
-		s.inlets.SettleOrLog(ledgerCtx, runID, inlet.StateFailed, "",
-			"this idempotency key is already in flight", nothingRan)
+		s.settle(ledgerCtx, runID, inlet.StateFailed, "",
+			"this idempotency key is already in flight", engine.Record{})
 		s.answerRun(w, r, unit)
 		return
 	case err != nil:
@@ -394,7 +388,7 @@ func (s *Server) failedDelivery(w http.ResponseWriter, ledgerCtx context.Context
 	}
 	slog.Error("inlet run failed", "run_id", runID, "state", state,
 		"tools", len(did.Tools), "files", len(did.Files), "err", cause)
-	s.inlets.SettleOrLog(ledgerCtx, runID, state, "", cause.Error(), ledgerRecord(did))
+	s.settle(ledgerCtx, runID, state, "", cause.Error(), did)
 	if state == inlet.StateInterrupted {
 		return // the connection is gone; writing to it would only log an error
 	}

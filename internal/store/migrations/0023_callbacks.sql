@@ -1,0 +1,12 @@
+-- A task can name somewhere to tell when a run finishes.
+--
+-- Until now a delivery could only be answered on the connection it arrived on.
+-- That is fine for a caller who waits and useless for a pipeline: the thing on
+-- the other side wants to be told, not to poll, and asynchronous delivery
+-- without a callback just moves the polling somewhere else.
+--
+-- One column, deliberately. The host allowlist lives in the config file rather
+-- than here, because who this install may talk to is an operator's decision
+-- about the machine, not a property of a task — and a task is editable by
+-- anyone who can reach the workspace.
+ALTER TABLE inlet_tasks ADD COLUMN callback_url TEXT NOT NULL DEFAULT '';

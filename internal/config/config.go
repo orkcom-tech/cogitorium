@@ -92,6 +92,18 @@ type Config struct {
 	// where a busy workspace destroyed the request outright.
 	QueueMaxPerWorkspace int `yaml:"queue_max_per_workspace"`
 
+	// CallbackHosts is who a task may tell that its run finished, by hostname.
+	// EMPTY MEANS CALLBACKS ARE OFF — not that every host is allowed. A
+	// callback URL arrives in a task, and a task is editable by anyone who can
+	// reach the workspace, so an open default would turn editing a task into
+	// making this server call an address of somebody else's choosing.
+	CallbackHosts []string `yaml:"callback_hosts"`
+
+	// PublicURL is how this install is reached from outside. It is used only to
+	// put fetchable links to a run's files into its callback; empty leaves them
+	// out, and nothing else depends on it.
+	PublicURL string `yaml:"public_url"`
+
 	// GearProxyListen is where the outward gate for gears listens: the proxy a
 	// gear the operator granted the network reaches it through, and which
 	// records every connection.
