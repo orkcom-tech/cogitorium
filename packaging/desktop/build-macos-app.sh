@@ -24,4 +24,13 @@ cp "$BIN" "$APP/Contents/MacOS/cogitorium-desktop"
 chmod +x "$APP/Contents/MacOS/cogitorium-desktop"
 cp "$HERE/Cogitorium.icns" "$APP/Contents/Resources/Cogitorium.icns"
 
+# The licence and its NOTICE ride inside the bundle.
+#
+# The zip that ships to users contains Cogitorium.app and nothing else, so
+# before this the macOS download was the only artifact carrying neither — a
+# redistribution with the terms left behind. Resources/ is where a .app is
+# expected to keep them.
+ROOT="$(cd "$HERE/../.." && pwd)"
+cp "$ROOT/LICENSE" "$ROOT/NOTICE" "$APP/Contents/Resources/"
+
 echo "built $APP"

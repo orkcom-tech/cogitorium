@@ -111,7 +111,7 @@ jobs:
           cp packaging/desktop/cogitorium.desktop "$stage/"
           cp packaging/desktop/cogitorium.png "$stage/"
           cp packaging/desktop/install-linux.sh "$stage/install.sh"
-          cp LICENSE README.md "$stage/"
+          cp LICENSE NOTICE README.md "$stage/"
           tar czf "dist/$stage.tar.gz" "$stage"
           rm -rf "$stage" dist/cogitorium-desktop
 
@@ -122,7 +122,7 @@ jobs:
           stage="Cogitorium-desktop_${{ steps.v.outputs.version }}_${{ matrix.artifact }}"
           mkdir -p "$stage"
           cp dist/cogitorium-desktop.exe "$stage/Cogitorium.exe"
-          cp LICENSE README.md "$stage/"
+          cp LICENSE NOTICE README.md "$stage/"
           cd "$stage" && 7z a "../dist/$stage.zip" . && cd ..
           rm -rf "$stage" dist/cogitorium-desktop.exe
 
