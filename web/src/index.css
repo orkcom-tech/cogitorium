@@ -2483,3 +2483,16 @@ button.big {
   color: var(--warn);
   border-color: currentColor;
 }
+
+/* Adding to the graph.
+ *
+ * The row sits above the canvas rather than floating on it: an action that
+ * changes what the workspace IS should not be a control the graph can scroll
+ * under, and the canvas already owns its corners for zoom and fit. */
+.bp-add {
+  gap: var(--s2);
+}
+
+.bp-new-agent {
+  margin-bottom: var(--s2);
+}

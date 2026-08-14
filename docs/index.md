@@ -181,10 +181,9 @@ the canvas is a capability the orchestrator now has, an agent it hired is a card
 you can rebind to another model, a gear you wrote by hand is one it can call. It
 is the same objects and the same rules underneath, so there is no conversion
 between the two ways of working and no "advanced mode" holding the real
-controls. The one gap, stated where it matters: **no button adds an agent to an
-existing workspace** — hiring is the orchestrator's or the API's. A new
-workspace still arrives with its orchestrator, and clone and import carry a
-whole roster.
+controls. Hiring included: **`+ agent` on the blueprint** adds a node to the
+canvas, and it arrives unwired — no delegation in or out, no gears, no outward
+grant — until you draw the edges that give it any.
 
 ### What is done about the model being unpredictable
 

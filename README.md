@@ -72,11 +72,11 @@ between them — the orchestrator and the panels write to the same objects, so a
 workspace can be started by conversation and finished by hand, or the reverse,
 in the middle of one session.
 
-One exception, stated rather than glossed: **there is no add-agent button.**
-Hiring is the orchestrator's, or the API's. The interface can still bring
-agents into being wholesale — a new workspace arrives with its orchestrator,
-and clone and import carry a whole roster — but there is no control that adds
-one agent to a workspace that already exists.
+That includes hiring. **`+ agent` on the blueprint** puts a new node on the
+canvas — a name, a model and a role — and it arrives with no capabilities at
+all: nothing may delegate to it and it may delegate to nothing until you draw
+an edge. Which is the honest shape of a new agent in a graph, and the reason
+the button belongs on the canvas rather than in a list.
 
 **Every agent gets its own model.** That is what makes the economics
 expressible: an expensive frontier model does the reasoning while free local

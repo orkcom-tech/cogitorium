@@ -341,6 +341,7 @@ export default function WorkspacePage() {
           <BlueprintEditor
             wsId={wsId}
             agents={agents}
+            models={models}
             statuses={statuses}
             onChanged={reloadAgents}
             onSelectAgent={(a) => {

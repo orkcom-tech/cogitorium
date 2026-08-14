@@ -20,6 +20,7 @@ import {
   type GraphData,
   type GraphNode,
   type EgressGrant,
+  type Model,
   type Wire,
 } from '../api'
 import { KINDS } from './GraphCanvas'
@@ -88,6 +89,7 @@ function layoutAgents(agents: Agent[]): Map<number, { x: number; y: number }> {
 export default function BlueprintEditor({
   wsId,
   agents,
+  models,
   statuses,
   onChanged,
   onSelectAgent,
@@ -95,11 +97,14 @@ export default function BlueprintEditor({
 }: {
   wsId: number
   agents: Agent[]
+  /** The catalog, so a new node can be given something to think with. */
+  models: Model[]
   statuses: Map<number, AgentStatus>
   onChanged: () => void
   onSelectAgent: (a: Agent) => void
   onError: (msg: string) => void
 }) {
+  const [adding, setAdding] = useState(false)
   const [wires, setWires] = useState<Wire[]>([])
   const [bindings, setBindings] = useState<GearBinding[]>([])
   const [catalog, setCatalog] = useState<Gear[]>([])
@@ -412,10 +417,22 @@ export default function BlueprintEditor({
           </span>
         )}
       </div>
-      <div className="row">
+      {/* Adding things to the graph.
+          
+          There was no way to do it here at all. The only control was the gear
+          dropdown below, which reads as a filter rather than an action, and an
+          agent could not be created from the interface at any point — the API
+          method existed and no component had ever called it. On a canvas whose
+          whole subject is the graph, "add a node" is the one verb that has to
+          be visible. */}
+      <div className="row bp-add">
+        <button onClick={() => setAdding((v) => !v)} title="Put a new agent on this canvas">
+          {adding ? 'cancel' : '+ agent'}
+        </button>
         <select
           className="grow"
           value=""
+          disabled={addable.length === 0}
           onChange={(e) => {
             if (!e.target.value) return
             api.gears
@@ -424,7 +441,11 @@ export default function BlueprintEditor({
               .catch((err: Error) => onError(err.message))
           }}
         >
-          <option value="">add a gear to this workspace (all agents)…</option>
+          <option value="">
+            {addable.length === 0
+              ? 'every forged gear is already in this workspace'
+              : '+ gear — add one to this workspace (all agents)…'}
+          </option>
           {addable.map((g) => (
             <option key={g.id} value={g.id}>
               {g.name} ({g.status})
@@ -432,6 +453,20 @@ export default function BlueprintEditor({
           ))}
         </select>
       </div>
+
+      {adding && (
+        <NewAgentForm
+          wsId={wsId}
+          models={models}
+          taken={new Set(agents.map((a) => a.name))}
+          onDone={() => {
+            setAdding(false)
+            onChanged()
+            void reloadGraph()
+          }}
+          onError={onError}
+        />
+      )}
       <div className="canvas">
         <ReactFlow
           nodes={nodes.map((n) => ({ ...n, data: { ...n.data, label: nodeLabel(n.data) } }))}
@@ -500,5 +535,97 @@ function nodeLabel(data: NodeData) {
       <span className="muted">{agent?.model_label || 'no model'}</span>
       {state !== 'idle' && <span className="bp-state">{state}</span>}
     </div>
+  )
+}
+
+
+/**
+ * A new agent, put on the canvas by hand.
+ *
+ * Until now the only way to get one was to ask the orchestrator, or to call the
+ * API yourself — api.agents.createAgent had been in the client the whole time
+ * with no caller. For a product whose thesis is that the graph IS the program,
+ * a canvas you cannot add a node to is a canvas you can only rearrange.
+ *
+ * A model is required and not defaulted. An agent without one cannot think, and
+ * silently picking the first in the catalog would spend somebody's money on a
+ * choice they did not make.
+ */
+function NewAgentForm({
+  wsId,
+  models,
+  taken,
+  onDone,
+  onError,
+}: {
+  wsId: number
+  models: Model[]
+  taken: Set<string>
+  onDone: () => void
+  onError: (m: string) => void
+}) {
+  const [name, setName] = useState('')
+  const [modelId, setModelId] = useState<number | ''>('')
+  const [role, setRole] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const clash = taken.has(name.trim())
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (modelId === '') {
+      onError('Give the agent a model: an agent with nothing to think with cannot take a turn.')
+      return
+    }
+    setBusy(true)
+    api.workspaces
+      .createAgent(wsId, { name: name.trim(), role: role.trim(), model_id: modelId })
+      .then(onDone)
+      .catch((err: Error) => onError(err.message))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <form className="card bp-new-agent" onSubmit={submit}>
+      <div className="row">
+        <input
+          required
+          autoFocus
+          placeholder="name, e.g. reviewer"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <select className="grow" required value={modelId} onChange={(e) => setModelId(e.target.value ? Number(e.target.value) : '')}>
+          <option value="">which model does it think with…</option>
+          {models.map((m) => (
+            <option key={m.id} value={m.id}>
+              {/* label is optional in the catalog, so it alone renders four
+                  blank rows on an install that never set one. Same shape as
+                  the agent inspector's picker, deliberately. */}
+              {m.provider_name} / {m.label || m.model_name}
+            </option>
+          ))}
+        </select>
+      </div>
+      {clash && <span className="hint danger">this workspace already has an agent called “{name.trim()}”</span>}
+      <label className="field">
+        <span className="muted">role — the system prompt it always carries</span>
+        <textarea
+          rows={3}
+          value={role}
+          onChange={(e) => setRole(e.target.value)}
+          placeholder="You review code for correctness. Say what is wrong and why, and nothing else."
+        />
+      </label>
+      <div className="row spread">
+        <span className="hint">
+          It arrives unwired: nothing may delegate to it and it may delegate to nothing until you draw an edge. That is
+          the point of the canvas — a new agent is a node with no capabilities, not a member of the team.
+        </span>
+        <button className="primary" type="submit" disabled={busy || !name.trim() || clash || modelId === ''}>
+          add to the canvas
+        </button>
+      </div>
+    </form>
   )
 }

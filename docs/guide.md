@@ -133,11 +133,15 @@ whole first loop.
 
 ## 2. A second agent
 
-There is **no add-agent button anywhere in the interface**. Worker agents are
-created by the orchestrator, on your instruction, or through the API. That is
-deliberate: the orchestrator is the operator's single point of contact.
+Two ways, and they land in the same place.
 
-Ask for one in the chat:
+**By hand:** open **Blueprint** and press **`+ agent`**. Give it a name, a model
+and a role. It appears on the canvas with no capabilities at all — nothing may
+delegate to it and it may delegate to nothing — until you draw an edge, which
+is what a new node in a graph honestly is.
+
+**Or ask the orchestrator**, which is often faster when you know the shape of
+the team but not the names:
 
 > Create a worker agent named researcher with the role "You summarize sources accurately and cite them." and delegate to it: summarise what a blueprint wire does in this product.
 
@@ -1025,7 +1029,7 @@ the database and nothing else.
 
 So that you do not go looking:
 
-- No add-agent button; the orchestrator creates agents, or the API does.
+- No way to duplicate an agent; make a new one and copy the role across.
 - No way to chat with a worker agent directly — every turn goes through the orchestrator.
 - No editing a workspace's name or description after it is created.
 - No editing a gear's source in the interface, no per-version approval, no rollback.
