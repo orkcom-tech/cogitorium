@@ -186,6 +186,15 @@ body {
   height: 100%;
 }
 
+/* xterm's own stylesheet hardcodes .xterm-viewport to black, which is why
+   allowTransparency and a transparent theme background never did anything:
+   the element covering the whole terminal was opaque the entire time. Nobody
+   saw it because every ground this product had was near-black — on paper it is
+   a black slab with the panel's surface hidden behind it. */
+.xterm .xterm-viewport {
+  background-color: transparent;
+}
+
 .terminal-holder {
   flex: 1;
   min-height: 20rem;
@@ -658,12 +667,12 @@ th {
 }
 
 .status.pending {
-  color: #d0a050;
+  color: var(--warn);
   border-color: currentColor;
 }
 
 .status.approved {
-  color: #5aa86a;
+  color: var(--ok);
   border-color: currentColor;
 }
 
@@ -675,7 +684,7 @@ th {
 .notice {
   margin: 0;
   font-size: 0.9rem;
-  color: #d0a050;
+  color: var(--warn);
 }
 
 .gear-desc {
@@ -766,11 +775,11 @@ th {
 }
 
 .react-flow__node.bp-gear-approved {
-  border-color: #5aa86a;
+  border-color: var(--ok);
 }
 
 .react-flow__node.bp-gear-pending {
-  border-color: #d0a050;
+  border-color: var(--warn);
 }
 
 .react-flow__node.bp-gear-disabled {
@@ -822,23 +831,23 @@ th {
 }
 .react-flow__node.gn-gear,
 .legend-dot.gn-gear {
-  --kind: #d0a050;
+  --kind: var(--warn);
 }
 .react-flow__node.gn-shared,
 .legend-dot.gn-shared {
-  --kind: #6aa8c8;
+  --kind: var(--shared);
 }
 .react-flow__node.gn-private,
 .legend-dot.gn-private {
-  --kind: #9a86d0;
+  --kind: var(--memory);
 }
 .react-flow__node.gn-document,
 .legend-dot.gn-document {
-  --kind: #5aa86a;
+  --kind: var(--ok);
 }
 .react-flow__node.gn-instruction,
 .legend-dot.gn-instruction {
-  --kind: #c87a9a;
+  --kind: var(--instruction);
 }
 .react-flow__node.gn-user,
 .legend-dot.gn-user {
@@ -846,11 +855,11 @@ th {
 }
 .react-flow__node.gn-team,
 .legend-dot.gn-team {
-  --kind: #9a86d0;
+  --kind: var(--memory);
 }
 .react-flow__node.gn-workspace,
 .legend-dot.gn-workspace {
-  --kind: #d0a050;
+  --kind: var(--warn);
 }
 
 .react-flow__node[class*='gn-'] {
@@ -912,10 +921,10 @@ th {
   --kind: var(--accent);
 }
 .legend-dot.layer-tools {
-  --kind: #d0a050;
+  --kind: var(--warn);
 }
 .legend-dot.layer-memory {
-  --kind: #9a86d0;
+  --kind: var(--memory);
 }
 
 .hint.inline {
@@ -1183,7 +1192,7 @@ th {
 }
 
 .warn {
-  color: #d0a050;
+  color: var(--warn);
   font-size: 0.75rem;
 }
 
@@ -1204,7 +1213,7 @@ th {
 }
 
 .agent-spend-detail .warn {
-  color: #d0a050;
+  color: var(--warn);
 }
 
 .map-canvas {
@@ -1342,9 +1351,9 @@ th {
 /* The internet node. It is deliberately unlike everything else on the canvas:
    it is the only node that is not part of this workspace. */
 .react-flow__node.bp-outward {
-  border-color: #c85a5a;
+  border-color: var(--outward);
   border-width: 2px;
-  background: color-mix(in srgb, #c85a5a 14%, transparent);
+  background: color-mix(in srgb, var(--outward) 14%, transparent);
   max-width: 15rem;
 }
 
@@ -1354,17 +1363,17 @@ th {
 }
 
 .react-flow__edge.bp-egress-edge .react-flow__edge-path {
-  stroke: #c85a5a;
+  stroke: var(--outward);
   stroke-width: 2;
   stroke-dasharray: 8 4;
 }
 
 .react-flow__edge.bp-egress-edge.stale .react-flow__edge-path {
-  stroke: #d0a050;
+  stroke: var(--warn);
 }
 
 .legend-dot.layer-outward {
-  --kind: #c85a5a;
+  --kind: var(--outward);
 }
 
 /* The approval dialog. Every rule here exists so that what the operator reads
@@ -1373,7 +1382,9 @@ th {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  /* The scrim, both ways. A flat 55% black over a paper interface reads as
+     the lights going out rather than as a dialog coming forward. */
+  background: light-dark(rgb(0 0 0 / 0.22), rgb(0 0 0 / 0.55));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1383,7 +1394,7 @@ th {
 
 .modal.approval {
   background: var(--bg);
-  border: 2px solid #c85a5a;
+  border: 2px solid var(--outward);
   border-radius: 10px;
   padding: 1rem 1.25rem;
   max-width: 44rem;
@@ -2109,6 +2120,27 @@ button.big {
 
 .look-canvas::after {
   background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* The drawn one says so in its own thumbnail: paper, and a box with corners
+   that disagree. */
+.look-sketch {
+  grid-template-columns: 8px 1fr 1fr;
+  background: light-dark(#faf7f0, #23262a);
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--text) 55%, transparent);
+  border-radius: 10px 3px 11px 4px / 4px 11px 3px 10px;
+}
+
+.look-sketch::before,
+.look-sketch::after {
+  border: 1.5px solid color-mix(in srgb, light-dark(#2a2622, #e8e3d8) 55%, transparent);
+  background: transparent;
+  border-radius: 8px 3px 9px 3px / 3px 9px 3px 8px;
+}
+
+.look-sketch::after {
+  border-color: color-mix(in srgb, var(--accent) 75%, transparent);
 }
 
 /* A run in progress.

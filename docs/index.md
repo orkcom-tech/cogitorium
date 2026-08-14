@@ -153,9 +153,23 @@ architecture can be an expensive frontier model while the one that writes
 release notes is a free local one. The workbench records what each agent spent,
 so the arrangement can be judged on its actual cost rather than on how it feels.
 
-**The wiring is the capability.** An agent may delegate only along an edge you
-drew on the canvas. This is enforced in the runtime, not documented as a
-convention — remove the wire and the delegation stops being possible.
+**Graph engineering — the edge is the capability.** What you build here is a
+graph, and its edges are enforced rather than illustrated. Agents are nodes;
+four kinds of edge share the canvas, on four layers you can show one at a time:
+
+| Layer | An edge means |
+|---|---|
+| delegation | this agent may hand work to that one |
+| tools | this agent may call that gear |
+| memory | this is what the agent knows going in |
+| outward | this agent may ask to reach the internet |
+
+Remove an edge and the thing it allowed stops being possible — checked in the
+runtime, not written down as a convention. It is the difference between
+prompt engineering, which asks what to say to one model, and engineering the
+graph, which asks what the parts may do to each other. The second is a
+structure: you can look at it, change it, export it and hand it to somebody
+else.
 
 **Tools outlive the conversation.** An agent that needs a capability can forge
 one, and it lands in a catalog rather than evaporating with the session. It runs
@@ -233,6 +247,11 @@ removes it from what the agent knows.
 ---
 
 ## The blueprint
+
+The workspace's graph, and the place graph engineering actually happens: the
+nodes are agents and gears, the edges are permissions, and the drawing is the
+program rather than a diagram of it. Nothing here is a note about what the
+system is supposed to do.
 
 The canvas holds four layers you can switch independently:
 
@@ -793,8 +812,9 @@ you can save your own. `?layout=reset` in the URL recovers from anything.
 
 ### Looks
 
-The interface has two, and they are whole designs rather than a density switch:
-each carries its own ground, accent, surface treatment and arrangement.
+The interface has three, and they are whole designs rather than a density
+switch: each carries its own ground, accent, surface treatment and
+arrangement.
 
 **Instrument** — a bench instrument. No light at all, hairlines carrying every
 boundary, nothing rounded, panel names are stencilled in monospace, and every figure is monospaced
@@ -808,6 +828,21 @@ the orchestrator chat is the way in, which is why it is a choice and not the
 default.
 
 ![Canvas-first](assets/08-canvas-first.png)
+
+**Sketch** — drawn. Paper ground with the grain multiplied into it as tooth,
+ink outlines whose corners disagree, and handwriting on the chrome: panel
+names, buttons, the nav, headings. What it deliberately leaves alone is
+content — code, logs, schemas, token counts and the transcript stay in the type
+they were already in, because a workbench whose stack traces are in a
+handwriting face is one nobody can read a stack trace in.
+
+It lands in light mode, since paper is light, and it does not pin it: every
+colour in it is a light/dark pair, so switching to dark gives the same drawing
+in chalk on slate. The handwriting is whatever the operating system already
+has — Bradley Hand, Segoe Print, Comic Sans in that order — because this
+interface downloads nothing at runtime and a webfont would be the first thing
+it ever fetched. Where none of them exists, the chrome falls back to the UI
+face and the drawing carries the look on its own.
 
 Choosing a look applies its arrangement too — picking Canvas-first and then
 hunting for a matching layout preset would be two decisions for one intention.

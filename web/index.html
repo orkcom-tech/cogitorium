@@ -17,7 +17,12 @@
     <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#0B0B0C" />
+    <!-- Two, because the app has a light look now and one near-black value
+         painted the browser's own chrome the wrong colour around a paper
+         interface. The media query is how theme-color varies; there is no
+         light-dark() for a meta tag. -->
+    <meta name="theme-color" content="#faf7f0" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0B0B0C" media="(prefers-color-scheme: dark)" />
   </head>
   <body>
     <div id="root"></div>

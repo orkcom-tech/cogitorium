@@ -43,10 +43,15 @@ export type Theme = {
    * the centre. `canvas` inverts it — the wiring graph becomes the whole
    * application and the conversation floats above it.
    *
+   * `sketch` is neither: a drawn one. Paper ground, ink outlines that are not
+   * quite straight, handwriting on the chrome — the arrangement as something
+   * somebody sat down and drew, which is what wiring a graph by hand actually
+   * is before it becomes a running system.
+   *
    * This is one setting rather than two because the pair is a decision about
    * how you work, not two sliders to reconcile.
    */
-  look: 'instrument' | 'canvas'
+  look: 'instrument' | 'canvas' | 'sketch'
   /** the operator's own backdrop: a picture or a looping clip */
   bg: { kind: 'none' | 'image' | 'video'; data: string; dim: number }
 }
@@ -81,7 +86,15 @@ const ACCENT = '#1a8a69'
  * The palette controls stay live underneath: the signature is where you land,
  * not a cage. Pick a look, then change every colour in it if you like.
  */
-export const LOOK_SIGNATURE: Record<Look, Palette & Pick<Theme, 'surface' | 'dim' | 'blur' | 'glow' | 'glowStrength' | 'drift'>> = {
+export const LOOK_SIGNATURE: Record<
+  Look,
+  Palette &
+    Pick<Theme, 'surface' | 'dim' | 'blur' | 'glow' | 'glowStrength' | 'drift'> &
+    // Only a look that is ABOUT its mode carries one. Instrument and Canvas
+    // are drawn dark but keep whatever the operator set, so picking one does
+    // not silently reach over and change a second setting.
+    Partial<Pick<Theme, 'mode'>>
+> = {
   // Near-black, and no light at all: an instrument has no weather. The wash
   // was there because the glow could not be switched off, which is a bad
   // reason for a design decision.
@@ -109,6 +122,24 @@ export const LOOK_SIGNATURE: Record<Look, Palette & Pick<Theme, 'surface' | 'dim
     glow: { x: 84, y: 6 },
     glowStrength: 0.35,
     drift: false,
+  },
+  // Paper. Warm, barely graded, with the grain up because paper has tooth —
+  // this is the one look where the noise layer is doing representational work
+  // rather than taking the flatness off a gradient.
+  //
+  // Glass is meaningless here (paper is opaque) and so is the glow: a sheet on
+  // a desk is lit by the room, not from inside.
+  sketch: {
+    colors: ['#f2ece0', '#e7dfd0', ACCENT],
+    grain: 0.75,
+    tint: 0.3,
+    surface: 'solid',
+    dim: 1,
+    blur: 0,
+    glow: { x: 50, y: 0 },
+    glowStrength: 0,
+    drift: false,
+    mode: 'light',
   },
 }
 
@@ -166,7 +197,7 @@ export function loadTheme(): Theme {
       surface: t.surface === 'solid' ? 'solid' : 'glass',
       blur: typeof t.blur === 'number' && t.blur >= 0 && t.blur <= 40 ? t.blur : DEFAULT_THEME.blur,
       dim: clamp01(typeof t.dim === 'number' ? t.dim : DEFAULT_THEME.dim),
-      look: t.look === 'canvas' ? 'canvas' : 'instrument',
+      look: t.look === 'canvas' || t.look === 'sketch' ? t.look : 'instrument',
       bg: {
         kind: t.bg?.kind === 'image' || t.bg?.kind === 'video' ? t.bg.kind : 'none',
         // Only a data: URL is ever accepted. A remote address here would make

@@ -165,6 +165,22 @@ the new one.
 
 ![A wired workspace](assets/02-workspace-wired.png)
 
+This is the part worth slowing down on, because it is **graph engineering** and
+not decoration. The canvas holds four layers of the same graph, and the buttons
+above it show one at a time:
+
+| Layer | An edge means |
+|---|---|
+| **delegation** | this agent may hand work to that one |
+| **tools** | this agent may call that gear |
+| **memory** | this is what the agent knows going into a turn |
+| **outward** | this agent may ask to reach the internet |
+
+Every one of them is a permission the runtime checks, not a note about
+intentions. So the arrangement you are looking at is the program: to change
+what the system can do, you change the graph — and to know what it can do, you
+look at it, rather than reading four prompts and hoping.
+
 ### What an agent carries into a turn
 
 Open **Agents**, click an agent, and read the inspector. Everything the model

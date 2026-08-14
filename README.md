@@ -84,9 +84,19 @@ models write the docs and run the checks, all inside one topology. The token
 spend is shown per agent, so a cheap arrangement can be told apart from an
 expensive one that merely feels cheap.
 
-**The wiring is the capability, not a picture of one.** An agent can delegate
-only along an edge you drew. Change the canvas and you have changed what is
-possible, not just what is documented.
+**Graph engineering: the edge IS the capability, not a picture of one.** What
+you build here is a graph — agents are the nodes, and every edge is a
+permission the runtime enforces. Four kinds, on four layers of the same canvas:
+a **wire** is permission to delegate, a **gear link** is permission to call
+that tool, a **binding** is what an agent knows, and the **outward gate** is
+permission to ask the internet anything at all. Draw an edge and a capability
+exists; select it and press Delete and it stops being possible — not
+discouraged, not documented against. Impossible.
+
+That is the shift worth naming. Prompt engineering asks what to say to one
+model. Graph engineering asks what the parts may do to each other — and the
+answer is a structure you can look at, change, hand to somebody else, and
+diff.
 
 **Agents build tools that outlive the conversation.** When an agent needs a
 capability that does not exist it can forge one — a script, a small program —

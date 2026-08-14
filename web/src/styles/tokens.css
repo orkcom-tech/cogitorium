@@ -26,16 +26,24 @@
   --border-strong: color-mix(in srgb, var(--text) 30%, transparent);
 
   --accent: #6c8cff;
-  --danger: #d05050;
-  /* These three were hardcoded at fifteen call sites between them, which is
-     how a palette drifts: one gets adjusted and the others quietly do not. */
-  --warn: #d0a050;
-  --ok: #5aa86a;
-  --outward: #c85a5a;
+  /* Every one of these was a single hex chosen against a near-black ground,
+     which is fine until the ground is not near-black. Measured on the light
+     side they land between 2:1 and 3.2:1 — the amber worst of all, and it is
+     the one that says "this is a warning". They are pairs now: the dark half is
+     the value that was already there, so nothing about the two dark looks
+     changes, and the light half is the same hue taken down far enough to read
+     on paper.
 
-  --memory: #9a86d0;
-  --shared: #6aa8c8;
-  --instruction: #c87a9a;
+     This is a light-mode bug that predates any light look. A third look drawn
+     on paper is only what finally made it visible. */
+  --danger: light-dark(#a52f2f, #d05050);
+  --warn: light-dark(#8a5a00, #d0a050);
+  --ok: light-dark(#3f7d38, #5aa86a);
+  --outward: light-dark(#a43e3e, #c85a5a);
+
+  --memory: light-dark(#6b53a8, #9a86d0);
+  --shared: light-dark(#2f6f8a, #6aa8c8);
+  --instruction: light-dark(#a04f70, #c87a9a);
 
   /* 18% matches the recipe already used at four call sites, so extracting it
      is a pure refactor with no visual delta — worth caring about when the only
@@ -939,4 +947,403 @@ button.primary:hover:not(:disabled) {
 
 :root[data-look='canvas'] .composer button {
   border-radius: var(--r1);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SKETCH
+
+   Drawn. Paper ground, ink outlines that are not quite straight, handwriting
+   on the chrome — a workspace as something somebody sat down and drew, which
+   is what wiring a graph by hand is before it becomes a running system.
+
+   Two rules keep it a look rather than a joke:
+
+   1. Handwriting goes on the CHROME only — panel names, buttons, nav, headings.
+      Code, logs, figures, schemas, URLs and the transcript stay in the type
+      they were already in. A workbench whose JSON is in a handwriting face is
+      a workbench nobody can read a stack trace in.
+   2. The wobble is geometry, never a filter. An SVG displacement filter over a
+      panel drags the text with it and costs a compositing layer per element;
+      lopsided radii and a doubled outline cost nothing and are what actually
+      reads as "drawn by hand".
+
+   It lands in light mode because paper is light, and it does not pin the mode:
+   every colour below is a light-dark() pair, so switching to dark gives chalk
+   on slate rather than ink on a black sheet.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root[data-look='sketch'] {
+  /* Ink and paper, both ways round. The dark half is a slate, not an inverted
+     page: the same drawing in chalk. */
+  --ink: light-dark(#2a2622, #e8e3d8);
+  --paper: light-dark(#faf7f0, #23262a);
+  --paper-2: light-dark(#f1ebdd, #2c3035);
+
+  --text: var(--ink);
+  --surface-base: var(--paper);
+  --surface-2-base: var(--paper-2);
+  --bg: var(--paper);
+
+  /* Drawn lines are dark and definite — a 14% hairline reads as a printed
+     rule, which is the opposite of the point. */
+  --border: color-mix(in srgb, var(--ink) 62%, transparent);
+  --border-strong: var(--ink);
+
+  --r1: 8px;
+  --r2: 10px;
+  --r3: 12px;
+  --t-prose: 15px;
+
+  /* Three wobbles so a column of controls does not look stamped from one die.
+     The pattern is the standard trick: opposite corners share a radius and the
+     horizontal and vertical halves disagree, which is what a pen does. */
+  --wob-box: 14px 5px 16px 6px / 6px 16px 5px 14px;
+  --wob-alt: 6px 16px 5px 14px / 14px 5px 16px 6px;
+  --wob-ctl: 22px 6px 20px 7px / 7px 20px 6px 22px;
+
+  /* The pen going round twice, and a page shadow that is offset rather than
+     blurred — paper on a desk has an edge, not a halo. */
+  --ink-double: 1.5px 2px 0 color-mix(in srgb, var(--ink) 22%, transparent);
+  --shadow: 2px 3px 0 color-mix(in srgb, var(--ink) 26%, transparent);
+
+  /* Bradley Hand is macOS, Segoe Print is Windows, Comic Sans is on both and
+     often on Linux through the core fonts. Nothing is downloaded for this: the
+     interface fetches nothing at runtime, and a webfont would be the first
+     thing it ever did. Where none of these exist the chrome falls back to the
+     UI face and the look is quieter — the drawing carries it either way. */
+  --hand: 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', ui-rounded, cursive;
+
+  /* The stroke under a heading, as a MASK rather than a coloured drawing: the
+     accent is the operator's, and an SVG with a hex in it would go on being
+     green after they made everything else amber. preserveAspectRatio is off so
+     one stroke stretches to whatever the heading is wide. */
+  --marker: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 8' preserveAspectRatio='none'%3E%3Cpath d='M2 5.4C34 3.1 66 6.2 98 4.3s62-2.1 100 1.4' fill='none' stroke='%23000' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+/* Paper, with the tooth already in the grain layer above it. The ruled tint is
+   very low: this is a sheet of drawing paper, not a legal pad. */
+:root[data-look='sketch'] .shell-ground {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--ink) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(160deg, var(--ground-a) 0%, var(--ground-b) 60%, var(--ground-a) 100%);
+  background-size: 100% 28px, auto;
+}
+
+/* ── The chrome, in the hand ─────────────────────────────────────────────── */
+
+:root[data-look='sketch'] .wordmark,
+:root[data-look='sketch'] .bn-tab,
+:root[data-look='sketch'] .menu-head,
+:root[data-look='sketch'] .sidebar nav a,
+:root[data-look='sketch'] .nav-external,
+:root[data-look='sketch'] button,
+:root[data-look='sketch'] .chip,
+:root[data-look='sketch'] h1,
+:root[data-look='sketch'] h2,
+:root[data-look='sketch'] h3,
+:root[data-look='sketch'] .ws-head strong,
+:root[data-look='sketch'] .page-head {
+  font-family: var(--hand);
+  letter-spacing: 0.01em;
+}
+
+:root[data-look='sketch'] .wordmark {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+/* Headings get the marker stroke under them, the way somebody underlines a
+   title after writing it. A mask rather than a coloured SVG, so the stroke is
+   whatever accent the operator's palette carries. */
+:root[data-look='sketch'] h2,
+:root[data-look='sketch'] .page > h2:first-child {
+  position: relative;
+  padding-bottom: 5px;
+}
+
+:root[data-look='sketch'] h2::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -6px;
+  bottom: 0;
+  height: 6px;
+  background: var(--accent);
+  -webkit-mask-image: var(--marker);
+  mask-image: var(--marker);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* ── Everything with an edge is drawn ────────────────────────────────────── */
+
+:root[data-look='sketch'] .card,
+:root[data-look='sketch'] .bn-panel,
+:root[data-look='sketch'] .side-pane,
+:root[data-look='sketch'] .agent-card,
+:root[data-look='sketch'] .terminal-holder,
+:root[data-look='sketch'] .canvas {
+  border: 2px solid var(--border);
+  border-radius: var(--wob-box);
+  box-shadow: var(--ink-double);
+}
+
+/* The second box in a row leans the other way, so a stack of cards reads as
+   several drawn boxes rather than one shape repeated. */
+:root[data-look='sketch'] .card:nth-of-type(even),
+:root[data-look='sketch'] .agent-card:nth-of-type(even) {
+  border-radius: var(--wob-alt);
+}
+
+:root[data-look='sketch'] input,
+:root[data-look='sketch'] select,
+:root[data-look='sketch'] textarea,
+:root[data-look='sketch'] button,
+:root[data-look='sketch'] .chip,
+:root[data-look='sketch'] .icon-tile {
+  border: 2px solid var(--border);
+  border-radius: var(--wob-ctl);
+  background: var(--surface);
+}
+
+:root[data-look='sketch'] textarea {
+  border-radius: var(--wob-box);
+}
+
+:root[data-look='sketch'] button:hover:not(:disabled) {
+  box-shadow: var(--ink-double);
+}
+
+/* Pressed is the button moving under the pen, not a colour change. */
+:root[data-look='sketch'] button:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: none;
+}
+
+:root[data-look='sketch'] button.primary {
+  border-color: var(--accent);
+  box-shadow: var(--ink-double);
+}
+
+/* ── Panels ──────────────────────────────────────────────────────────────── */
+
+:root[data-look='sketch'] .bn-chrome {
+  border-bottom: 2px solid var(--border);
+  background: transparent;
+}
+
+:root[data-look='sketch'] .bn-tab {
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* The active panel is ticked, the way you mark the one you are working in. */
+:root[data-look='sketch'] .bn-tab.active::after {
+  background: var(--accent);
+  height: 3px;
+  border-radius: 3px;
+}
+
+:root[data-look='sketch'] .sidebar {
+  border-right: 2px solid var(--border);
+}
+
+:root[data-look='sketch'] .sidebar nav a,
+:root[data-look='sketch'] .nav-external {
+  border: 2px solid transparent;
+  border-radius: var(--wob-ctl);
+}
+
+:root[data-look='sketch'] .sidebar nav a.active {
+  border-color: var(--border);
+  background: var(--surface-2);
+  box-shadow: var(--ink-double);
+}
+
+/* ── The graph, which is the drawing that matters ────────────────────────── */
+
+:root[data-look='sketch'] .react-flow__node.bp-node,
+:root[data-look='sketch'] .react-flow__node[class*='gn-'] {
+  border: 2px solid var(--border);
+  border-radius: var(--wob-box);
+  background: var(--surface);
+  box-shadow: var(--ink-double);
+  font-family: var(--hand);
+}
+
+:root[data-look='sketch'] .react-flow__node.bp-node:nth-child(even) {
+  border-radius: var(--wob-alt);
+}
+
+/* ── What stays legible, deliberately ────────────────────────────────────── */
+
+/* Content is not chrome. A schema, a stack trace, a run's output and a token
+   count have to be read exactly, and a handwriting face is where an l becomes
+   a 1. These override the chrome rule above rather than being missed by it. */
+:root[data-look='sketch'] code,
+:root[data-look='sketch'] pre,
+:root[data-look='sketch'] .prompt-preview,
+:root[data-look='sketch'] .inlet-url,
+:root[data-look='sketch'] .terminal-holder,
+:root[data-look='sketch'] .cm-editor,
+:root[data-look='sketch'] .diff-stack,
+:root[data-look='sketch'] .agent-spend,
+:root[data-look='sketch'] .agent-spend-big,
+:root[data-look='sketch'] .agent-spend-detail,
+:root[data-look='sketch'] .run-live {
+  font-family: var(--mono);
+  letter-spacing: 0;
+}
+
+/* The transcript is reading, not chrome. */
+:root[data-look='sketch'] .msg-body,
+:root[data-look='sketch'] .hint,
+:root[data-look='sketch'] .muted {
+  font-family: inherit;
+}
+
+/* The edges matter more here than anywhere else: this look is a drawing, and
+   what is being drawn is the graph. A 1px machine grey inside a hand-drawn box
+   is the one thing that would give the whole look away. Ink, and thicker —
+   with the ends rounded, because a pen leaves a round end. */
+:root[data-look='sketch'] .react-flow__edge-path {
+  stroke: color-mix(in srgb, var(--ink) 55%, transparent);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+:root[data-look='sketch'] .react-flow__edge.selected .react-flow__edge-path,
+:root[data-look='sketch'] .react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+/* Paper is ruled, not dotted; the drafting grid belongs to Canvas-first. */
+:root[data-look='sketch'] .react-flow__background {
+  opacity: 0.35;
+}
+
+/* Edge labels are the words written along a line, so they take the hand and
+   sit on the paper rather than in a grey pill. */
+:root[data-look='sketch'] .react-flow__edge-text {
+  font-family: var(--hand);
+}
+
+:root[data-look='sketch'] .react-flow__edge-textbg {
+  fill: var(--paper);
+}
+
+/* The controls are drawn too — otherwise three crisp browser-grey buttons sit
+   in the corner of a pen drawing. */
+:root[data-look='sketch'] .react-flow__controls-button {
+  border: 2px solid var(--border);
+  border-radius: var(--wob-ctl);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* ── What the drawing got wrong on its own, fixed ────────────────────────── */
+
+/* The general "everything with an edge is drawn" rule above is more specific
+   than button.primary, so it took the accent fill off the two buttons that
+   most need it — save, and Allow once in the approval dialog — and left their
+   white text on paper. A drawn primary is still a filled one. */
+:root[data-look='sketch'] button.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: color-mix(in srgb, var(--ink) 45%, var(--accent));
+}
+
+:root[data-look='sketch'] button.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 85%, black);
+}
+
+/* The palette that makes this look is a pair of creams, and the ground takes
+   the palette RAW in dark mode — so switching to dark gave chalk text on a
+   cream sheet. The paper darkens with the mode instead: same drawing, slate
+   instead of cartridge. */
+:root[data-look='sketch'] {
+  --ground-a: light-dark(var(--theme-a), #22252a);
+  --ground-b: light-dark(var(--theme-b), #1d2024);
+  --ground-c: light-dark(var(--theme-c), #262a2f);
+}
+
+/* The grain is grey noise laid OVER its ground, which lightens a dark one and
+   dusts a light one. Multiplied instead, it darkens — which on paper is tooth.
+   The opacity is left alone: --grain is already the operator's slider.
+
+   No light-dark() here, and that is not an oversight. light-dark() takes
+   COLOUR values only; on mix-blend-mode or opacity the declaration is invalid,
+   drops to the initial value, and the grain silently goes to full strength — a
+   dirty grey sheet that builds clean and typechecks clean. */
+:root[data-look='sketch'] .shell-grain {
+  mix-blend-mode: multiply;
+}
+
+/* A focus ring made of box-shadow is erased by every rule here that draws its
+   own — and this look draws one on nearly everything. An outline cannot be
+   clobbered by a shadow, and it follows the wobble. */
+:root[data-look='sketch'] :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* The maker's mark is dimmed twice over and lands near the paper's own value. */
+:root[data-look='sketch'] .by-ork {
+  opacity: 0.85;
+}
+
+/* Handles are React Flow's dark navy with a white ring: invisible at both ends
+   of a drawn wire. */
+:root[data-look='sketch'] .react-flow__handle {
+  background: var(--ink);
+  border-color: var(--paper);
+}
+
+/* Wire labels paint with the `Canvas` system colour, which is the OS's page
+   white and not this page's paper. */
+:root[data-look='sketch'] .react-flow__edge-textbg,
+:root[data-look='sketch'] .bp-wire-label {
+  fill: var(--paper);
+  background: var(--paper);
+}
+
+/* Selection, which otherwise falls through to the system blue — a colour from
+   nowhere in the middle of a drawing. */
+:root[data-look='sketch'] ::selection {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+/* A diff on paper: the add/delete washes were mixed for a dark ground and land
+   at a few percent over cream, which is a diff you have to be told is there. */
+:root[data-look='sketch'] .dl-add {
+  background: color-mix(in srgb, var(--ok) 26%, transparent);
+}
+
+:root[data-look='sketch'] .dl-del {
+  background: color-mix(in srgb, var(--danger) 24%, transparent);
+}
+
+:root[data-look='sketch'] .dl-n {
+  color: color-mix(in srgb, var(--text) 52%, transparent);
+}
+
+/* Initials are white on an accent that is now a mid green on cream. */
+:root[data-look='sketch'] .avatar {
+  color: var(--paper);
+  border: 2px solid color-mix(in srgb, var(--ink) 40%, transparent);
+}
+
+/* The app's own mark is a raster tile with its own dark ground, and it is the
+   identity — it does not get repainted per look. It does get drawn INTO the
+   drawing, so it reads as a sticker on the page rather than a hole in it. */
+:root[data-look='sketch'] .brand-mark {
+  border-radius: 9px 4px 10px 3px / 3px 10px 4px 9px;
 }

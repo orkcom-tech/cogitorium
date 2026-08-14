@@ -8,6 +8,57 @@ import { session } from '../session'
 // A shell, running in the same sandbox gears run in — not on the server.
 // The server refuses to open one without that sandbox, so what you get here
 // cannot read the database or the provider keys in it.
+
+/**
+ * The terminal's colours, taken from the page rather than assumed.
+ *
+ * The background was transparent and the foreground was never set, so xterm
+ * used its own default — white. That is right on the two dark looks and
+ * invisible on anything light: white on paper, and white on white in light
+ * mode, which was already true before a light look existed and had simply
+ * never been looked at.
+ *
+ * The text colour is read off the holder's COMPUTED colour rather than the
+ * --text custom property, because a custom property's computed value is the
+ * unresolved light-dark(...) token — reading it gives a string no terminal can
+ * use.
+ *
+ * The ANSI sixteen are set for the same reason: a gear that prints in colour
+ * hands back bright yellow on cream otherwise. These are darkened for a light
+ * ground and left bright for a dark one.
+ */
+function terminalTheme(el: HTMLElement) {
+  const fg = getComputedStyle(el).color
+  const light = isLight(fg)
+  return {
+    // rgba(), not the 8-digit hex that was here: xterm paints .xterm-viewport
+    // from this value and rendered #00000000 as opaque BLACK. Nobody saw it
+    // because the only grounds were near-black — on paper it is a black slab.
+    background: 'rgba(0, 0, 0, 0)',
+    foreground: fg,
+    cursor: fg,
+    cursorAccent: light ? '#ffffff' : '#000000',
+    selectionBackground: light ? 'rgba(0,0,0,0.16)' : 'rgba(255,255,255,0.22)',
+    ...(light
+      ? {
+          black: '#2a2622', red: '#b3352c', green: '#3f7d38', yellow: '#8a6a12',
+          blue: '#2f5fa8', magenta: '#8a4a86', cyan: '#2b7a80', white: '#5c574f',
+          brightBlack: '#7c766c', brightRed: '#d0483c', brightGreen: '#4f9a46',
+          brightYellow: '#a8811a', brightBlue: '#3a74c9', brightMagenta: '#a55ba0',
+          brightCyan: '#35939b', brightWhite: '#2a2622',
+        }
+      : {}),
+  }
+}
+
+/** Perceived lightness of a computed rgb() string, for choosing a set. */
+function isLight(color: string): boolean {
+  const m = color.match(/\d+(\.\d+)?/g)
+  if (!m || m.length < 3) return false
+  const [r, g, b] = m.slice(0, 3).map(Number)
+  // The text is what was measured, so a LIGHT text means a dark ground.
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 128
+}
 export default function TerminalPage({ workspaceId }: { workspaceId?: number }) {
   const [status, setStatus] = useState<TerminalStatus | null>(null)
   const [connected, setConnected] = useState(false)
@@ -30,8 +81,20 @@ export default function TerminalPage({ workspaceId }: { workspaceId?: number }) 
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
       fontSize: 13,
       cursorBlink: true,
-      theme: { background: '#00000000' },
+      theme: terminalTheme(holder.current),
       allowTransparency: true,
+    })
+
+    // A look or a mode can change while the shell is open, and a terminal that
+    // keeps the colours of the theme it was opened under goes unreadable the
+    // moment somebody switches to paper. applyTheme writes these attributes on
+    // the root, so that is what is watched.
+    const repaint = new MutationObserver(() => {
+      if (holder.current) term.options.theme = terminalTheme(holder.current)
+    })
+    repaint.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme', 'data-look', 'class', 'style'],
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
