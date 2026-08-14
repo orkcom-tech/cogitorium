@@ -6,7 +6,7 @@ Publisher: ORKCOM
 PublisherUrl: https://orkcom.com
 PackageName: Cogitorium
 PackageUrl: https://github.com/orkcom-tech/cogitorium
-License: BUSL-1.1
+License: Apache-2.0
 LicenseUrl: https://github.com/orkcom-tech/cogitorium/blob/main/LICENSE
 ShortDescription: A modular workbench for building deterministic, repeatable workflows that have models in them — agents, wiring, context, gears and pipelines, set by hand or by the orchestrator. Local-first, no telemetry.
 Description: >-

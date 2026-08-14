@@ -1,5 +1,75 @@
 # Changelog
 
+## v0.5.0
+
+The licence opens, the interface is drawn, and the thing this project is for is
+finally written down.
+
+### Apache 2.0
+
+Cogitorium was under the Business Source Licence, which allowed production use
+but not offering it to third parties on a hosted basis. That restriction is
+gone. Use it as a tool, build a product on it, run it inside a service you
+sell — none of it needs permission or a conversation.
+
+This is not a reversal so much as an early arrival: the BUSL already named
+Apache 2.0 as its Change Licence, dated 2030-08-08. The date has been brought
+forward to now.
+
+What the licence asks in return is attribution, not restraint. Keep the
+copyright and licence notices; carry the new `NOTICE` file with anything you
+redistribute; say in a modified copy that you changed it; and leave the names
+alone, because "Cogitorium" and "ORKCOM" are marks and section 6 does not grant
+them. Build on it, ship it, charge for it — say where it came from.
+
+The archives, the container image and the deb/rpm all carry `LICENSE` and
+`NOTICE` now. Shipping the licence without the notice it requires would have
+put this project in breach of its own terms on the first download.
+
+### Graph engineering
+
+The product's subject is a graph and the documentation never said the word. It
+described a canvas, wires and grants — the parts — without the thing they add up
+to: agents are nodes, and four kinds of edge on four layers of one canvas are
+each a permission the runtime checks. Delegation is may-hand-work-to, tools is
+may-call, memory is what-it-knows-going-in, outward is may-reach-the-internet.
+Remove an edge and the thing it allowed stops being possible.
+
+Prompt engineering asks what to say to one model. Graph engineering asks what
+the parts may do to each other, and the answer is a structure you can look at,
+change, export and hand to somebody else.
+
+### Sketch, and it is the default
+
+A third look: paper ground, ink outlines whose corners disagree, handwriting on
+the chrome — and code, logs, schemas and figures left in the type they were
+already in, because a workbench you cannot read a stack trace in is not one. It
+opens light; switching to dark gives the same drawing in chalk on slate. A
+fresh install lands here now, and an upgrade never repaints a stored theme.
+
+### And the light-mode bugs it walked into
+
+Both existing looks were dark, so the light half of this product had never been
+looked at. Twenty-two problems were found and each verified in the file before
+being touched. The terminal rendered white glyphs on paper and had never set a
+foreground at all; xterm's own stylesheet pins `.xterm-viewport` to black,
+which is why `allowTransparency` had never done anything; and seven semantic
+colours — the amber that means "warning" worst of all — were single hexes
+picked against near-black, landing between 2:1 and 3.2:1 on a light ground.
+
+### Screenshots are taken by a script
+
+`scripts/shots.mjs` shoots all eleven from one running install, driving the real
+menus. The graph shots measure themselves and fail the run if any node is
+outside the pane — which is how a fit that parked the graph off-screen got
+caught, having built and uploaded perfectly cleanly.
+
+### Also
+
+`goreleaser check` runs on every push. It only ever ran at release time before,
+and a description with a colon in it — invalid YAML — would have been found on
+the tag, with the release already half-published.
+
 ## v0.4.1
 
 Four things v0.4.0 shipped without, one it shipped that should not have existed,

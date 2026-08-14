@@ -1,0 +1,28 @@
+Cogitorium
+Copyright 2026 ORKCOM
+
+This product includes software developed at ORKCOM (https://orkcom.com/).
+
+Licensed under the Apache License, Version 2.0. See LICENSE for the terms.
+
+--------------------------------------------------------------------------
+
+What this file is for, in plain terms.
+
+The Apache licence lets you do almost anything with this code: run it, change
+it, build a product on it, sell that product, and offer it as a hosted service.
+None of that needs permission and none of it needs to be discussed with anyone.
+
+What it does not let you do is present the work as originating with you. Three
+clauses carry that, and this file is one of them:
+
+  * Section 4(b) — a modified copy has to carry prominent notices saying that
+    you changed the files.
+  * Section 4(c) — if you redistribute the work, this NOTICE travels with it.
+    Keeping it is the whole obligation; you may add your own notices beside it,
+    but not in place of it.
+  * Section 6 — the licence grants no rights in the names or marks. "Cogitorium"
+    and "ORKCOM" are not yours to put on a fork, and nothing here suggests this
+    project endorses what you build.
+
+So: build on it, ship it, charge for it. Say where it came from.

@@ -42,6 +42,10 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - LICENSE
+      # Apache 2.0 §4(c): the NOTICE travels with the work. An archive IS a
+      # redistribution, so shipping the licence without it would put this
+      # project in breach of its own terms on the first download.
+      - NOTICE
       - README.md
 
 checksum:
@@ -120,7 +124,7 @@ nfpms:
     homepage: https://github.com/orkcom-tech/cogitorium
     maintainer: ORKCOM <https://orkcom.com>
     description: A modular workbench for building deterministic, repeatable workflows that have models in them — agents, wiring, context, gears and pipelines, set by hand or by the orchestrator. Local-first, no telemetry.
-    license: BUSL-1.1
+    license: Apache-2.0
     formats:
       - deb
       - rpm
@@ -140,6 +144,12 @@ nfpms:
       - src: deploy/cogitorium.service
         dst: /usr/lib/systemd/system/cogitorium.service
         type: config
+      # Same obligation as the archives and the image. Debian and RPM both
+      # expect the licence under /usr/share/doc/<package> anyway.
+      - src: LICENSE
+        dst: /usr/share/doc/cogitorium/LICENSE
+      - src: NOTICE
+        dst: /usr/share/doc/cogitorium/NOTICE
 
 # Homebrew and Scoop are bumped after the release by
 # scripts/ci/publish-packages.sh — see packaging/README.md. They are not

@@ -1050,7 +1050,13 @@ until it is designed.
 
 ## Licence
 
-[Business Source License 1.1](https://github.com/orkcom-tech/cogitorium/blob/main/LICENSE).
-Production use is granted, including commercially, provided you are not offering
-Cogitorium to third parties on a hosted or embedded basis competitive with our
-own products. It converts to Apache 2.0 on 2030-08-08.
+[Apache License 2.0](https://github.com/orkcom-tech/cogitorium/blob/main/LICENSE).
+Use it as a tool, build a product on it, or run it inside a service you sell —
+all permitted, without asking. The hosted-use restriction that stood here under
+the Business Source Licence is gone; the conversion to Apache 2.0 that was set
+for 2030 was simply brought forward.
+
+The obligations are attribution ones: keep the copyright and licence notices,
+carry the `NOTICE` file with anything you redistribute, state in a modified copy
+that you changed it, and leave the names alone — "Cogitorium" and "ORKCOM" are
+marks and are not part of the grant.

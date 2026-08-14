@@ -43,6 +43,9 @@ RUN adduser -D cogitorium \
  && chown -R cogitorium:cogitorium /data /home/cogitorium
 COPY --from=build /out/cogitorium /usr/local/bin/cogitorium
 COPY --from=contextd /go/bin/contextd /usr/local/bin/contextd
+# The licence and its NOTICE travel with the image for the same reason they
+# travel with the archives: pulling it is a redistribution.
+COPY LICENSE NOTICE /usr/share/doc/cogitorium/
 COPY packaging/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 USER cogitorium
 VOLUME /data /home/cogitorium/.context
