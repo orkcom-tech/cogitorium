@@ -975,10 +975,18 @@ button.primary:hover:not(:disabled) {
 
 :root[data-look='sketch'] {
   /* Ink and paper, both ways round. The dark half is a slate, not an inverted
-     page: the same drawing in chalk. */
+     page: the same drawing in chalk.
+
+     The paper takes a TINT from the operator's palette and never its lightness
+     — the rule the ground already follows a few hundred lines up, applied to
+     the sheet. Pinned to a fixed cream instead, the look broke the moment
+     anybody picked Sketch and then Graphite: a near-black ground with cream
+     panels floating on it, which is the one arrangement this look cannot
+     survive. The palette still chooses whether the paper is warm or cool; the
+     mode alone decides whether it is paper or slate. */
   --ink: light-dark(#2a2622, #e8e3d8);
-  --paper: light-dark(#faf7f0, #23262a);
-  --paper-2: light-dark(#f1ebdd, #2c3035);
+  --paper: light-dark(color-mix(in srgb, var(--theme-a) 8%, #fdfbf6), color-mix(in srgb, var(--theme-b) 45%, #23262a));
+  --paper-2: light-dark(color-mix(in srgb, var(--theme-b) 12%, #f1ebdd), color-mix(in srgb, var(--theme-b) 70%, #2c3035));
 
   --text: var(--ink);
   --surface-base: var(--paper);
@@ -1269,9 +1277,9 @@ button.primary:hover:not(:disabled) {
    cream sheet. The paper darkens with the mode instead: same drawing, slate
    instead of cartridge. */
 :root[data-look='sketch'] {
-  --ground-a: light-dark(var(--theme-a), #22252a);
-  --ground-b: light-dark(var(--theme-b), #1d2024);
-  --ground-c: light-dark(var(--theme-c), #262a2f);
+  --ground-a: light-dark(color-mix(in srgb, var(--theme-a) 14%, #f7f3ea), color-mix(in srgb, var(--theme-a) 45%, #22252a));
+  --ground-b: light-dark(color-mix(in srgb, var(--theme-b) 18%, #efe8da), color-mix(in srgb, var(--theme-b) 45%, #1d2024));
+  --ground-c: light-dark(color-mix(in srgb, var(--theme-c) 22%, #fffdf8), color-mix(in srgb, var(--theme-c) 45%, #262a2f));
 }
 
 /* The grain is grey noise laid OVER its ground, which lightens a dark one and

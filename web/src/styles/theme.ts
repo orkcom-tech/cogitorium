@@ -156,18 +156,47 @@ export const PRESET_THEMES: { name: string; theme: Palette }[] = [
   { name: 'Moss', theme: { colors: ['#131a17', '#1b2a24', '#4fd1a5'], grain: 0.5, tint: 0.35 } },
 ]
 
+/**
+ * What a fresh install looks like: Sketch, on paper.
+ *
+ * Built from the look's own signature rather than restating it, so the default
+ * and the menu entry cannot drift apart — that is the failure this composition
+ * exists to prevent, not a style preference.
+ *
+ * The mode comes with it. Sketch carries `light` because paper is light, and a
+ * first run that opened in chalk-on-slate because the operating system happens
+ * to be in dark mode would be a first impression nobody chose.
+ *
+ * Only a fresh install lands here. Anyone with a stored theme keeps it —
+ * loadTheme reads what is there and falls back per field, so an upgrade does
+ * not repaint a workspace somebody already arranged.
+ */
 export const DEFAULT_THEME: Theme = {
+  ...LOOK_SIGNATURE.sketch,
+  mode: LOOK_SIGNATURE.sketch.mode ?? 'system',
+  driftSpeed: 90,
+  look: 'sketch',
+  bg: { kind: 'none', data: '', dim: 0.55 },
+}
+
+/**
+ * What a field falls back to when a STORED theme does not carry it, which is
+ * not the same question as what a fresh install looks like.
+ *
+ * These are the values DEFAULT_THEME held before Sketch became the default, and
+ * they have to stay put. A theme saved before `glowStrength` existed is read
+ * with this table: pointing it at the new default would hand it 0 and flatten a
+ * ground somebody has been looking at for months — which is precisely what the
+ * note beside that field says must not happen. Moving the default look would
+ * otherwise have quietly repainted every install that predates the field it is
+ * missing.
+ */
+const STORED_FALLBACK: Palette & Pick<Theme, 'glow' | 'glowStrength' | 'blur' | 'dim'> = {
   ...PRESET_THEMES[0].theme,
-  mode: 'system',
   glow: { x: 12, y: 4 },
   glowStrength: 1,
-  drift: false,
-  driftSpeed: 90,
-  surface: 'glass',
   blur: 14,
   dim: 0.62,
-  look: 'instrument',
-  bg: { kind: 'none', data: '', dim: 0.55 },
 }
 
 const KEY = 'cogitorium.theme'
@@ -181,22 +210,22 @@ export function loadTheme(): Theme {
       ? t.colors.filter((c) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)).slice(0, 3)
       : []
     return {
-      colors: colors.length ? colors : DEFAULT_THEME.colors,
-      grain: clamp01(typeof t.grain === 'number' ? t.grain : DEFAULT_THEME.grain),
-      tint: clamp01(typeof t.tint === 'number' ? t.tint : DEFAULT_THEME.tint),
+      colors: colors.length ? colors : STORED_FALLBACK.colors,
+      grain: clamp01(typeof t.grain === 'number' ? t.grain : STORED_FALLBACK.grain),
+      tint: clamp01(typeof t.tint === 'number' ? t.tint : STORED_FALLBACK.tint),
       mode: t.mode === 'dark' || t.mode === 'light' ? t.mode : 'system',
       glow: {
-        x: clampPct(t.glow?.x, DEFAULT_THEME.glow.x),
-        y: clampPct(t.glow?.y, DEFAULT_THEME.glow.y),
+        x: clampPct(t.glow?.x, STORED_FALLBACK.glow.x),
+        y: clampPct(t.glow?.y, STORED_FALLBACK.glow.y),
       },
       // Themes stored before this existed have no strength; they get the
       // default rather than 0, so nobody's ground goes flat on an upgrade.
-      glowStrength: clamp01(typeof t.glowStrength === 'number' ? t.glowStrength : DEFAULT_THEME.glowStrength),
+      glowStrength: clamp01(typeof t.glowStrength === 'number' ? t.glowStrength : STORED_FALLBACK.glowStrength),
       drift: t.drift === true,
       driftSpeed: typeof t.driftSpeed === 'number' && t.driftSpeed >= 10 && t.driftSpeed <= 600 ? t.driftSpeed : 90,
       surface: t.surface === 'solid' ? 'solid' : 'glass',
-      blur: typeof t.blur === 'number' && t.blur >= 0 && t.blur <= 40 ? t.blur : DEFAULT_THEME.blur,
-      dim: clamp01(typeof t.dim === 'number' ? t.dim : DEFAULT_THEME.dim),
+      blur: typeof t.blur === 'number' && t.blur >= 0 && t.blur <= 40 ? t.blur : STORED_FALLBACK.blur,
+      dim: clamp01(typeof t.dim === 'number' ? t.dim : STORED_FALLBACK.dim),
       look: t.look === 'canvas' || t.look === 'sketch' ? t.look : 'instrument',
       bg: {
         kind: t.bg?.kind === 'image' || t.bg?.kind === 'video' ? t.bg.kind : 'none',

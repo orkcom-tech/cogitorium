@@ -786,7 +786,7 @@ editing what it produced is why both are on screen. Nothing is destroyed —
 every panel put away is one chip away in the top bar, and the editor floats out
 into its own window like any other panel.
 
-![Unsaved edits, shown as a diff against what is on disk](assets/12-diff.png)
+![Unsaved edits, shown as a diff against what is on disk — in Instrument](assets/12-diff.png)
 
 **Diffs.** With unsaved edits open, **changes** shows them against what is on
 disk — two line-number columns, a sign column, and long runs of unchanged lines
@@ -813,40 +813,45 @@ you can save your own. `?layout=reset` in the URL recovers from anything.
 ### Looks
 
 The interface has three, and they are whole designs rather than a density
-switch: each carries its own ground, accent, surface treatment and
-arrangement.
+switch: each carries its own ground, accent, surface treatment and arrangement.
+Every screenshot in this document is Sketch unless its caption names another
+look.
 
-**Instrument** — a bench instrument. No light at all, hairlines carrying every
-boundary, nothing rounded, panel names are stencilled in monospace, and every figure is monospaced
-so a column of token spends lines up down the panel. The conversation stays in
-the centre. Every screenshot above is Instrument.
-
-**Canvas-first** — the wiring graph becomes the application. The menu shrinks to
-a rail of glyphs, the ground becomes a drafting grid, and panels float over it
-on shadows instead of dividing it. This deliberately contradicts the rule that
-the orchestrator chat is the way in, which is why it is a choice and not the
-default.
-
-![Canvas-first](assets/08-canvas-first.png)
-
-**Sketch** — drawn. Paper ground with the grain multiplied into it as tooth,
-ink outlines whose corners disagree, and handwriting on the chrome: panel
-names, buttons, the nav, headings. What it deliberately leaves alone is
-content — code, logs, schemas, token counts and the transcript stay in the type
-they were already in, because a workbench whose stack traces are in a
-handwriting face is one nobody can read a stack trace in.
+**Sketch** — the default, and what a fresh install opens on. Drawn: paper ground
+with the grain multiplied into it as tooth, ink outlines whose corners disagree,
+and handwriting on the chrome — panel names, buttons, the nav, headings. What it
+deliberately leaves alone is content. Code, logs, schemas, token counts and the
+transcript stay in the type they were already in, because a workbench whose
+stack traces are in a handwriting face is one nobody can read a stack trace in.
 
 It lands in light mode, since paper is light, and it does not pin it: every
 colour in it is a light/dark pair, so switching to dark gives the same drawing
 in chalk on slate. The handwriting is whatever the operating system already
 has — Bradley Hand, Segoe Print, Comic Sans in that order — because this
-interface downloads nothing at runtime and a webfont would be the first thing
-it ever fetched. Where none of them exists, the chrome falls back to the UI
-face and the drawing carries the look on its own.
+interface downloads nothing at runtime and a webfont would be the first thing it
+ever fetched. Where none of them exists the chrome falls back to the UI face and
+the drawing carries the look on its own.
+
+**Instrument** — a bench instrument. No light at all, hairlines carrying every
+boundary, nothing rounded, panel names stencilled in monospace, and every figure
+monospaced so a column of token spends lines up down the panel. The conversation
+stays in the centre.
+
+![Instrument](assets/13-instrument.png)
+
+**Canvas-first** — the wiring graph becomes the application. The menu shrinks to
+a rail of glyphs, the ground becomes a drafting grid, and panels float over it on
+shadows instead of dividing it. This deliberately contradicts the rule that the
+orchestrator chat is the way in, which is why it is a choice and not the default.
+
+![Canvas-first](assets/08-canvas-first.png)
+
+![The three looks in Appearance](assets/04-appearance.png)
 
 Choosing a look applies its arrangement too — picking Canvas-first and then
 hunting for a matching layout preset would be two decisions for one intention.
-A plain reload never overwrites an arrangement you built by hand.
+A plain reload never overwrites an arrangement you built by hand, and neither
+does an upgrade: moving the default moved it for FRESH installs only.
 
 ### Palette
 
@@ -864,12 +869,10 @@ ship ready-made: Graphite, Lime, Cobalt, Ember, Moss.
 
 ![The same workspace in a warmer palette](assets/09-palette.png)
 
-![The appearance dialog](assets/04-appearance.png)
-
 You can put your own picture or looping clip behind everything, with a scrim
 dial so text stays readable over whatever you chose.
 
-![An operator's own backdrop](assets/10-backdrop.png)
+![An operator's own backdrop — in Instrument](assets/10-backdrop.png)
 
 Light and dark both work and follow the system unless you pin one. In light mode
 the palette becomes a tint carried into a light ground rather than the ground

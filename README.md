@@ -229,7 +229,7 @@ previous one — an approval covers exact content, so what you want before
 approving is what changed. All of it is written in the product rather than
 installed: no highlighter library, no diff library, no editor component.
 
-![Unsaved edits, shown as a diff against what is on disk](docs/assets/12-diff.png)
+![Unsaved edits, shown as a diff against what is on disk — in Instrument](docs/assets/12-diff.png)
 
 Nothing has to be docked at all. Any panel can be pulled off the grid into a
 window you move, resize, roll up or close.
@@ -241,12 +241,20 @@ has spent.
 
 ![The agent inspector beside the conversation](docs/assets/05-agent.png)
 
-### Two looks, and a palette under them
+### Three looks, and a palette under them
 
-Pick the room you want to work in. **Instrument** is a bench instrument — no
-light at all, hairlines instead of cards, nothing rounded, every figure in monospace so a
-column of spends lines up, and the conversation in the centre. Everything above
-this line is Instrument.
+Pick the room you want to work in. **Sketch** is the default and everything
+above this line is drawn in it: paper ground, ink outlines whose corners
+disagree, handwriting on the chrome — and code, logs, schemas and figures left
+in the type they were already in, because a workbench you cannot read a stack
+trace in is not one. It opens light, and switching to dark gives the same
+drawing in chalk on slate.
+
+**Instrument** is a bench instrument — no light at all, hairlines instead of
+cards, nothing rounded, every figure in monospace so a column of spends lines
+up, and the conversation in the centre.
+
+![Instrument](docs/assets/13-instrument.png)
 
 **Canvas-first** turns it inside out: the wiring graph becomes the application,
 the menu shrinks to a rail of glyphs, and the panels float over a drafting grid.
@@ -255,11 +263,11 @@ and never the default. Choosing a look brings its arrangement with it.
 
 ![Canvas-first: the graph takes the room](docs/assets/08-canvas-first.png)
 
-The palette is independent of both. Up to three colours make the gradient — the
-third is the accent — with dials for grain, tint, and where the light falls,
-plus a drift that walks it slowly around the screen. Panels are frosted glass or
-plain solid fill, with the blur and the darkness on sliders. Five palettes ship
-ready-made; the picture below is Instrument wearing one of them.
+The palette is independent of all three. Up to three colours make the
+gradient — the third is the accent — with dials for grain, tint, and where the
+light falls, plus a drift that walks it slowly around the screen. Panels are
+frosted glass or plain solid fill, with the blur and the darkness on sliders.
+Five palettes ship ready-made; the picture below is Sketch wearing one of them.
 
 ![The same workspace in a warmer palette](docs/assets/09-palette.png)
 
