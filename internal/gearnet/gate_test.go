@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/store"
+	"syscall"
 )
 
 // The outward gate, proved by carrying real traffic rather than by reading the
@@ -541,5 +542,39 @@ func TestRoutableAddrsRefusesANameThatPointsHere(t *testing.T) {
 	}
 	if _, err := routableAddrs(context.Background(), "169.254.169.254"); !errors.Is(err, errLocal) {
 		t.Errorf("the cloud metadata address was accepted (err %v)", err)
+	}
+}
+
+// How a tunnel ENDS decides what the audit trail says about it, and the
+// connection log is read by an operator deciding whether a gear misbehaved.
+//
+// This was found by CI, not by reading: TestGateTunnelsAndRecordsIt passed on
+// macOS — where the client's teardown usually arrives as a clean FIN — and
+// failed on Linux, where the same teardown arrives as an RST and the row said
+// "failed" for a tunnel that had carried its request and answer perfectly.
+func TestAnOrdinaryTeardownIsNotRecordedAsAFailure(t *testing.T) {
+	for _, c := range []struct {
+		what string
+		err  error
+		want bool
+	}{
+		{"a clean end of stream", io.EOF, true},
+		{"our own close, on cancel", net.ErrClosed, true},
+		{"the run being cancelled", context.Canceled, true},
+		// The two that were missing.
+		{"the peer resetting the socket", syscall.ECONNRESET, true},
+		{"writing to a socket the peer closed", syscall.EPIPE, true},
+		// Wrapped the way the net package actually delivers them.
+		{"a reset wrapped in an OpError", &net.OpError{Op: "read", Err: syscall.ECONNRESET}, true},
+		// And something that genuinely is a failure, so this is not a rule
+		// that swallows everything.
+		{"the host refusing the connection", syscall.ECONNREFUSED, false},
+		{"a timeout", context.DeadlineExceeded, false},
+	} {
+		if got := ignorable(c.err); got != c.want {
+			t.Errorf("%s: ignorable=%v, want %v — the log %s",
+				c.what, got, c.want,
+				map[bool]string{true: "will report a failure that did not happen", false: "will hide a real failure"}[c.want])
+		}
 	}
 }

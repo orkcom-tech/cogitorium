@@ -48,6 +48,20 @@ sentence — "The gear X is disabled, not approved, so it cannot be run" — as 
 tool result rather than a protocol error, so the model is told what happened
 instead of the client reporting a broken server.
 
+### And a real bug the CI found on the way
+
+`TestGateTunnelsAndRecordsIt` failed on Linux while passing on macOS, and the
+cause was not the test. Once a CONNECT tunnel is established, either side may
+tear the socket down with a reset rather than a clean close — Go's own
+`http.Transport` does it on `CloseIdleConnections` — and the gate was recording
+`ECONNRESET` as a failed connection.
+
+The connection log is an audit trail an operator reads to decide whether a
+granted gear misbehaved. Filling it with failures that did not happen is how a
+real one becomes invisible. A reset and a broken pipe are ordinary ends of a
+tunnel now; a refused connection and a timeout are still failures, and there is
+a test that holds both halves of that line.
+
 ### Verified by driving it
 
 The protocol has its own tests — initialize, notifications going unanswered,

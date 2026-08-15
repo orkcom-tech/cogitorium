@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -589,7 +590,26 @@ func halfClose(c net.Conn) {
 // directions closing, and the sockets being closed under them when the run
 // finishes, are how a normal connection ends.
 func ignorable(err error) bool {
-	return errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) || errors.Is(err, context.Canceled)
+	// A reset is how a tunnel ordinarily ends.
+	//
+	// Once CONNECT has succeeded and bytes have flowed, either side may tear
+	// the socket down with an RST rather than a FIN — Go's own http.Transport
+	// does it on CloseIdleConnections, and browsers do it constantly. Treating
+	// that as a failure filled the connection log, which is an audit trail an
+	// operator reads, with failures that did not happen; and a log where
+	// ordinary traffic says "failed" is one where a real failure is invisible.
+	//
+	// ECONNRESET is the read side of that, EPIPE the write side. Neither can
+	// reach here from a connection that never established: dial failures are
+	// settled before the tunnel starts, a few lines up.
+	//
+	// Found by CI rather than by reading: this test passed on macOS, where the
+	// same teardown usually arrives as a clean FIN, and failed on Linux.
+	return errors.Is(err, io.EOF) ||
+		errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.EPIPE)
 }
 
 // counter reads a body and remembers how much of it there was, because a
