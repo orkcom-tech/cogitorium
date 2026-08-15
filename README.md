@@ -10,11 +10,60 @@ Every part moves, and every part moves two ways — by your hand or by the
 orchestrator. One binary, your models, your machine, and no telemetry, ever.
 
 [Documentation](https://orkcom-tech.github.io/cogitorium/) ·
+[Features](#features) ·
 [Install](#install) ·
-[What it does](#what-it-does) ·
+[Guide](https://orkcom-tech.github.io/cogitorium/guide/) ·
 [Licence](#licence)
 
 </div>
+
+---
+
+Cogitorium is a **workbench for graph engineering**: you build a graph of
+agents, wire what each one may do to the others, and get a pipeline with models
+inside it that behaves like a pipeline — deterministic where determinism is
+available, the same from one run to the next, and reshapeable without being
+rebuilt. One Go binary, your own models, no telemetry.
+
+## Features
+
+- 🕸 **Graph engineering** — agents are nodes, and every edge is a permission the
+  runtime enforces: a **wire** grants delegation, a **gear link** grants a tool,
+  a **binding** is what an agent knows, an **outward gate** grants the internet.
+  Delete an edge and the thing it allowed is not discouraged, it is impossible.
+  [→](#graph-engineering)
+- 🎛 **Two hands on the same controls** — build it by telling the orchestrator, or
+  by working the canvas and panels yourself. Both write to the same objects, so
+  there is no conversion between them and no "advanced mode" holding the real
+  controls. [→](#what-it-does)
+- 🧠 **A model per agent** — an expensive frontier model reasons while free local
+  ones write docs and run checks, in one topology, with the token spend shown per
+  agent. Anthropic, OpenAI-compatible, Ollama, or all at once.
+- ⚙️ **Gears: tools that outlive the conversation** — an agent forges a script,
+  it lands in a versioned catalog, and nothing runs until you approve it. It
+  executes in a container holding none of the server's files, with named
+  credentials it never sees the values of and a network allowlist you set beside
+  the source.
+- 🚪 **Receivers: a door for your own systems** — an address and a key; data
+  arrives by HTTP, an agent works on it, the result comes back. The payload is
+  checked against a JSON Schema **before any model is called**, so a malformed
+  request costs nothing.
+- 📋 **Judged by the record, not the sentence** — every delivery carries what
+  actually ran: which tools, which files appeared, what it cost. A task states
+  its own success conditions and they are checked against that record, so a
+  confident answer over an empty record fails.
+- ⏱ **It can be left alone** — work queues instead of being dropped, starts on a
+  cron line or an interval, can be handed off with `Prefer: respond-async` and
+  called back when it finishes, and can be stopped mid-run — the work, not just
+  the row.
+- 🔒 **Prohibitions and an internet gate** — rules an agent must never break go
+  last in its prompt and are inherited by agents it creates; reaching the web is
+  a per-agent grant, and every search still stops for a human to approve that
+  exact query. [→](#letting-agents-reach-the-web)
+- 📦 **Portable and local-first** — a workspace exports as one JSON document you
+  can hand to another install. Everything runs on your machine, and the binary
+  talks to the model providers you configure and to nothing else.
+  [→](#no-telemetry)
 
 ---
 
@@ -84,7 +133,9 @@ models write the docs and run the checks, all inside one topology. The token
 spend is shown per agent, so a cheap arrangement can be told apart from an
 expensive one that merely feels cheap.
 
-**Graph engineering: the edge IS the capability, not a picture of one.** What
+### Graph engineering
+
+**The edge IS the capability, not a picture of one.** What
 you build here is a graph — agents are the nodes, and every edge is a
 permission the runtime enforces. Four kinds, on four layers of the same canvas:
 a **wire** is permission to delegate, a **gear link** is permission to call
