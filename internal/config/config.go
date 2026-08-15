@@ -31,6 +31,14 @@ type Config struct {
 	Sandbox string `yaml:"sandbox"`
 	// SandboxImage is the container image gears run in.
 	SandboxImage string `yaml:"sandbox_image"`
+	// SandboxRuntime is the OCI runtime the Docker daemon should use for
+	// gear containers — empty for its default, or a name it has been
+	// configured with: "runsc" for gVisor, "kata-runtime" for Kata.
+	//
+	// Cogitorium does not install or configure these. It selects one and
+	// refuses at startup if the daemon does not have it, which is the honest
+	// boundary — the isolation belongs to the runtime, not to this product.
+	SandboxRuntime string `yaml:"sandbox_runtime"`
 	// Terminal opens a shell in the UI. Off by default: it is interactive
 	// code execution over HTTP, so switching it on is a deliberate act. It
 	// also requires a sandbox — without one the request is refused rather
@@ -243,6 +251,9 @@ func Load(path, dataDirOverride string) (Config, error) {
 	}
 	if v := os.Getenv("COGITORIUM_SANDBOX_IMAGE"); v != "" {
 		cfg.SandboxImage = v
+	}
+	if v := os.Getenv("COGITORIUM_SANDBOX_RUNTIME"); v != "" {
+		cfg.SandboxRuntime = v
 	}
 	if v := os.Getenv("COGITORIUM_TERMINAL"); v != "" {
 		cfg.Terminal = v == "1" || strings.EqualFold(v, "true")

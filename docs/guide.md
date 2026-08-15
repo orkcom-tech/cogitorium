@@ -280,6 +280,38 @@ gears will run as unsandboxed subprocesses with this server's file access — an
 In that configuration the approval gate is the only control there is. `sandbox: docker`
 refuses to start when the daemon does not answer; `auto` warns and continues.
 
+### Harder isolation, if you have installed it
+
+A container is a process with a restricted view, not a machine. If that is not
+enough for what your gears run, point Docker at a stronger runtime and name it:
+
+```yaml
+sandbox: docker
+sandbox_runtime: runsc        # gVisor. Or kata-runtime for Kata Containers.
+```
+
+**Cogitorium does not install or configure these.** You install gVisor or Kata,
+register it with your Docker daemon, and this names it — the isolation is the
+runtime's work, and claiming otherwise would be claiming somebody else's. What
+this adds is that a name your daemon does not have is refused **at startup**,
+with the names it does have in the message:
+
+```
+sandbox_runtime "runsc" is not one this Docker daemon has: it offers io.containerd.runc.v2, runc. The runtime has to be installed and registered with the daemon first — Cogitorium selects one, it does not install one
+```
+
+Without that check the mistake surfaces on the first gear run, possibly days
+later, as `create container: exit status 125`.
+
+Two refusals worth knowing. `sandbox_runtime` with `sandbox: subprocess` is an
+error rather than an ignored setting — it reads as hardened isolation and is in
+fact no isolation at all. And every other restriction stays exactly as it was:
+naming a runtime does not quietly return capabilities, the network or the
+memory ceiling.
+
+The sandbox image is also fetched once at startup now, so the first gear does
+not spend its own timeout pulling a distribution.
+
 ### Names a gear is given
 
 A gear that needs a key does not receive one in its arguments. It declares a

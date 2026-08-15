@@ -25,19 +25,54 @@ import (
 // isolation and says plainly when it cannot get it — it never pretends. A gear
 // running unsandboxed holds the server's own file access, which is enough to
 // read the database and the provider API keys in it.
-func SelectSandbox(ctx context.Context, mode, image string) (sandbox.Runner, error) {
+func SelectSandbox(ctx context.Context, mode, image, runtime string) (sandbox.Runner, error) {
 	switch mode {
 	case "subprocess":
+		if runtime != "" {
+			// Refused rather than ignored. A sandbox_runtime set beside
+			// sandbox: subprocess is somebody who believes they have hardened
+			// isolation and has in fact switched isolation off — the one
+			// misconfiguration here that reads as the opposite of what it is.
+			return nil, errors.New("sandbox_runtime is set but sandbox is \"subprocess\", which runs gears " +
+				"with this server's own file access and no container at all. A runtime cannot harden something " +
+				"that is not being isolated: either set sandbox to docker or auto, or remove sandbox_runtime")
+		}
 		slog.Warn("sandbox disabled by configuration: gears run with this server's file access")
 		return nil, nil
 	case "docker", "auto", "":
-		d := sandbox.NewDocker(image)
+		d := sandbox.NewDocker(image, runtime)
 		if d != nil && d.Available(ctx) {
+			// A runtime the daemon does not have is a startup failure whether
+			// or not the mode was "auto": falling back to the default runtime
+			// would hand somebody who asked for gVisor a plain runc container
+			// and log it as success.
+			if err := d.CheckRuntime(ctx); err != nil {
+				return nil, err
+			}
 			slog.Info("gears run sandboxed", "backend", d.Name())
+			// Fetch the image now, in the background, so the first gear does
+			// not pay for it inside its own timeout — a sixty-second gear
+			// failing because it spent ninety pulling an image is a failure
+			// that says nothing about the gear.
+			//
+			// Background because startup must not block on a registry, and
+			// best-effort because a pull that fails here is not fatal: the run
+			// will pull it itself, slowly, exactly as it did before.
+			go func() {
+				if err := d.Pull(context.WithoutCancel(ctx)); err != nil {
+					slog.Info("could not pre-fetch the sandbox image; the first gear will fetch it", "err", err)
+					return
+				}
+				slog.Info("sandbox image ready", "image", d.Image)
+			}()
 			return d, nil
 		}
 		if mode == "docker" {
 			return nil, errors.New("sandbox: docker was requested but the daemon does not answer")
+		}
+		if runtime != "" {
+			return nil, errors.New("sandbox_runtime is set but Docker does not answer, so there is no daemon " +
+				"to select a runtime on. Start Docker, or remove sandbox_runtime")
 		}
 		// A compensating control nobody is told about is not one: this branch
 		// silently downgraded to unsandboxed execution before.

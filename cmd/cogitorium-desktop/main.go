@@ -92,7 +92,7 @@ func run() error {
 	// configured source unreadable, and a desktop build that quietly disagreed
 	// with the server about that would be the worst possible place for the
 	// disagreement to live.
-	sb, err := appstart.SelectSandbox(ctx, cfg.Sandbox, cfg.SandboxImage)
+	sb, err := appstart.SelectSandbox(ctx, cfg.Sandbox, cfg.SandboxImage, cfg.SandboxRuntime)
 	if err != nil {
 		return err
 	}

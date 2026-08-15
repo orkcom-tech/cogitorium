@@ -1,5 +1,48 @@
 # Changelog
 
+## v0.6.0
+
+Stage 1 of the parity plan: an operator who has installed a hardened container
+runtime can now tell Cogitorium to use it.
+
+### The OCI runtime is selectable
+
+`sandbox_runtime` in the config, `COGITORIUM_SANDBOX_RUNTIME` in the
+environment, carried into `docker create --runtime`. Set it to `runsc` for
+gVisor or `kata-runtime` for Kata Containers.
+
+**Cogitorium does not install or configure those.** It names one and checks the
+daemon has it — the isolation is the runtime's work, and claiming otherwise
+would be claiming somebody else's. What this adds is the check: a name your
+daemon does not have is refused at startup, with the names it does have in the
+message, instead of surfacing on the first gear run days later as
+`create container: exit status 125`.
+
+Two more refusals, both for configurations that read as the opposite of what
+they are. `sandbox_runtime` beside `sandbox: subprocess` is an error rather
+than an ignored line: that combination looks like hardened isolation and is in
+fact no isolation at all, gears running with the server's own file access.
+`sandbox_runtime` with no daemon answering is an error for the plainer reason
+that there is nothing to select a runtime on.
+
+Everything else about the container is untouched, and there is a test that says
+so: naming a runtime does not quietly return `--cap-drop=ALL`, the pid ceiling,
+the memory limit, the unprivileged user or `--network none`. A container that
+runs perfectly well under gVisor with its capabilities back is the regression
+that would matter most and show least.
+
+The tests run against a real Docker daemon rather than a mocked one, because
+the whole value here is that Docker accepts the flag — a mocked `docker info`
+proves a string survived a function call. One of them creates a container and
+runs work in it under an explicitly named runtime; the rest check arguments,
+and an argument is not a container.
+
+### The sandbox image is fetched at startup
+
+Once, in the background, best-effort. Before this the first gear on a fresh
+install paid for a full image pull inside its own timeout, which is how a
+sixty-second gear fails for reasons that have nothing to do with the gear.
+
 ## v0.5.0
 
 The licence opens, the interface is drawn, and the thing this project is for is

@@ -23,7 +23,18 @@ type Docker struct {
 	// Image must contain the interpreters gears use. Kept configurable
 	// because a team will want their own with their dependencies baked in.
 	Image string
-	bin   string
+	// Runtime is the OCI runtime the daemon should use — empty for the
+	// daemon's default (runc), or a name it has been configured with, such as
+	// "runsc" for gVisor or "kata-runtime" for Kata Containers.
+	//
+	// This product does not install or configure those. It selects one and
+	// checks it exists, which is the honest boundary: the isolation is the
+	// runtime's, and claiming otherwise would be claiming somebody else's
+	// work. What is added here is that a wrong name is refused at startup
+	// instead of failing on the first gear run, hours later, in a message
+	// about a container that could not be created.
+	Runtime string
+	bin     string
 }
 
 const (
@@ -34,7 +45,7 @@ const (
 // NewDocker returns a Docker runner, or nil if Docker is not usable here.
 // The caller decides what to do about that; this package does not silently
 // fall back to running unsandboxed.
-func NewDocker(image string) *Docker {
+func NewDocker(image, runtime string) *Docker {
 	bin, err := exec.LookPath("docker")
 	if err != nil {
 		slog.Info("docker not found; sandboxed execution unavailable")
@@ -43,10 +54,15 @@ func NewDocker(image string) *Docker {
 	if image == "" {
 		image = DefaultImage
 	}
-	return &Docker{Image: image, bin: bin}
+	return &Docker{Image: image, Runtime: runtime, bin: bin}
 }
 
-func (d *Docker) Name() string   { return "docker:" + d.Image }
+func (d *Docker) Name() string {
+	if d.Runtime != "" {
+		return "docker[" + d.Runtime + "]:" + d.Image
+	}
+	return "docker:" + d.Image
+}
 func (d *Docker) Isolated() bool { return true }
 
 // Available reports whether the daemon actually answers — the binary being
@@ -55,6 +71,70 @@ func (d *Docker) Available(ctx context.Context) bool {
 	probe, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	return exec.CommandContext(probe, d.bin, "version", "--format", "{{.Server.Version}}").Run() == nil
+}
+
+// Runtimes asks the daemon which OCI runtimes it has been configured with.
+//
+// The names come from `docker info`, which is where the daemon's own
+// configuration surfaces — there is no way to ask it "would --runtime=X
+// work" other than reading this list or trying it.
+func (d *Docker) Runtimes(ctx context.Context) ([]string, error) {
+	var out, errOut bytes.Buffer
+	// One name per line. The Go template is used rather than JSON so this does
+	// not carry a parser for a structure only one field of which is wanted.
+	if err := d.cli(ctx, &out, &errOut,
+		"info", "--format", "{{range $name, $_ := .Runtimes}}{{$name}}\n{{end}}"); err != nil {
+		return nil, fmt.Errorf("ask docker which runtimes it has: %w: %s", err, strings.TrimSpace(errOut.String()))
+	}
+	var names []string
+	for _, line := range strings.Split(out.String(), "\n") {
+		if n := strings.TrimSpace(line); n != "" {
+			names = append(names, n)
+		}
+	}
+	return names, nil
+}
+
+// CheckRuntime refuses a runtime the daemon does not have.
+//
+// Called at startup rather than at first use. A name with a typo in it would
+// otherwise be discovered by the first gear to run — which may be days later,
+// under load, with the failure reading as "create container: exit status 125"
+// and nothing pointing at the configuration line that caused it.
+func (d *Docker) CheckRuntime(ctx context.Context) error {
+	if d.Runtime == "" {
+		return nil
+	}
+	have, err := d.Runtimes(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range have {
+		if n == d.Runtime {
+			return nil
+		}
+	}
+	return fmt.Errorf("sandbox_runtime %q is not one this Docker daemon has: it offers %s. "+
+		"The runtime has to be installed and registered with the daemon first — Cogitorium selects one, "+
+		"it does not install one", d.Runtime, strings.Join(have, ", "))
+}
+
+// Pull fetches the sandbox image so the first gear does not pay for it.
+//
+// Without this the very first gear run on a fresh install includes a full
+// image pull inside the gear's own timeout, which is how a sixty-second gear
+// fails on a slow connection for reasons that have nothing to do with it.
+func (d *Docker) Pull(ctx context.Context) error {
+	pctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	var errOut bytes.Buffer
+	cmd := exec.CommandContext(pctx, d.bin, "pull", d.Image)
+	cmd.Stderr = &errOut
+	cmd.WaitDelay = 5 * time.Second
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("pull %s: %w: %s", d.Image, err, strings.TrimSpace(errOut.String()))
+	}
+	return nil
 }
 
 // createArgs builds the container. Every flag is load-bearing: capabilities
@@ -75,6 +155,9 @@ func (d *Docker) createArgs(spec Spec, interactive bool) []string {
 		"--cpus", "1",
 		"--user", "65534:65534",
 		"--workdir", workDir,
+	}
+	if d.Runtime != "" {
+		a = append(a, "--runtime", d.Runtime)
 	}
 	if interactive {
 		a = append(a, "-t")

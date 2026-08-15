@@ -89,7 +89,7 @@ type sandboxed struct {
 
 func newSandboxed(t *testing.T) *sandboxed {
 	t.Helper()
-	sb := sandbox.NewDocker("")
+	sb := sandbox.NewDocker("", "")
 	if sb == nil {
 		t.Skip("docker is not installed; the sandboxed boundary cannot be exercised here")
 	}
@@ -121,7 +121,7 @@ func newSandboxed(t *testing.T) *sandboxed {
 		goos:   dockerInfo(t, "{{.Server.Os}}"),
 		goarch: dockerInfo(t, "{{.Server.Arch}}"),
 	}
-	s.exec.sandbox = sandbox.NewDocker(tag)
+	s.exec.sandbox = sandbox.NewDocker(tag, "")
 
 	// Rebind the gate where a CONTAINER can reach it, by the same call the
 	// server makes at startup. The fixture's default is the loopback, which a

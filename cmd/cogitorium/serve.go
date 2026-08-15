@@ -58,7 +58,7 @@ func newServeCmd() *cobra.Command {
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			sb, err := appstart.SelectSandbox(ctx, cfg.Sandbox, cfg.SandboxImage)
+			sb, err := appstart.SelectSandbox(ctx, cfg.Sandbox, cfg.SandboxImage, cfg.SandboxRuntime)
 			if err != nil {
 				return err
 			}
