@@ -259,6 +259,10 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	mux.HandleFunc("POST /api/v1/gears", s.handleCreateGear)
 	mux.HandleFunc("GET /api/v1/gears/{id}", s.handleGetGear)
 	mux.HandleFunc("POST /api/v1/gears/{id}/run", s.handleRunGear)
+	// Distinct from the dry run above on purpose: /run bypasses approval and
+	// /invoke enforces it. Two verbs because they are two different promises,
+	// and collapsing them into one flag is how the safe one becomes optional.
+	mux.HandleFunc("POST /api/v1/gears/{id}/invoke", s.handleInvokeGear)
 	mux.HandleFunc("GET /api/v1/gears/{id}/runs", s.handleListGearRuns)
 	mux.HandleFunc("GET /api/v1/gears/{id}/connections", s.handleListGearConnections)
 	mux.HandleFunc("PATCH /api/v1/gears/{id}", s.handleSetGearStatus)

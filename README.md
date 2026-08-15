@@ -44,6 +44,10 @@ rebuilt. One Go binary, your own models, no telemetry.
   executes in a container holding none of the server's files, with named
   credentials it never sees the values of and a network allowlist you set beside
   the source.
+- 🔌 **Speaks MCP** — `cogitorium mcp` serves your approved gears and receiver
+  tasks to Claude Desktop, Cursor or anything else that speaks the Model Context
+  Protocol. The approval gate holds through it: a gear you have not approved is
+  not listed and will not run. [→](https://orkcom-tech.github.io/cogitorium/#mcp--this-install-as-a-tool-provider)
 - 🚪 **Receivers: a door for your own systems** — an address and a key; data
   arrives by HTTP, an agent works on it, the result comes back. The payload is
   checked against a JSON Schema **before any model is called**, so a malformed

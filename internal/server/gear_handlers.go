@@ -232,6 +232,59 @@ func (s *Server) handleRunGear(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// handleInvokeGear runs an APPROVED gear, as the operator, and refuses
+// anything else.
+//
+// This is not handleRunGear with a different name. That one is the dry run: it
+// deliberately bypasses the approval gate so an operator can see what code
+// does before trusting it, and it is safe only because a dry run is a throwaway
+// container and an operator act.
+//
+// This one is the opposite promise. It exists so a gear can be called from
+// outside a conversation — the CLI, an MCP client — and the whole value of
+// that is that the approval gate still holds. It sets no DryRun, so the
+// executor's own check refuses a pending or disabled gear, and the refusal
+// comes back as 403 rather than as a run that quietly happened.
+func (s *Server) handleInvokeGear(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		Args json.RawMessage `json:"args"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	g, err := s.gears.Get(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	args := "{}"
+	if len(in.Args) > 0 {
+		args = string(in.Args)
+	}
+
+	// No Caller fields at all: not a dry run, and not on behalf of an agent.
+	// The connection log names the operator by the absence of an agent, which
+	// is what distinguishes "somebody ran this from a shell" from "an agent
+	// called it mid-turn".
+	res, runErr := s.gearExec.Run(r.Context(), g, args, gear.Caller{})
+	if errors.Is(runErr, gear.ErrNotApproved) {
+		writeError(w, http.StatusForbidden, runErr.Error())
+		return
+	}
+	out := map[string]any{
+		"stdout": res.Stdout, "stderr": res.Stderr,
+		"exit_code": res.ExitCode, "timed_out": res.TimedOut,
+	}
+	if runErr != nil {
+		out["error"] = runErr.Error()
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 // streamGearRun runs the gear inside this request and emits its output as it
 // arrives, then one final event carrying the same result the buffered path
 // would have returned.

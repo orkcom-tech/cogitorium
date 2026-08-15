@@ -478,6 +478,57 @@ first turn.
 
 ---
 
+## MCP — this install as a tool provider
+
+Cogitorium speaks the Model Context Protocol over stdio, so Claude Desktop,
+Cursor or anything else that spawns an MCP server can use what this install
+holds.
+
+```sh
+cogitorium mcp --server http://127.0.0.1:8688 --token $COGITORIUM_TOKEN \
+  --inlet-key tickets=cgi-tickets-…
+```
+
+That command line is the whole integration; in a client's configuration it goes
+where the client keeps its servers.
+
+**What becomes a tool.** Two kinds, and nothing else:
+
+| Tool | Is | Runs as |
+|---|---|---|
+| `gear_<name>` | an **approved** gear | a sandboxed container on the Cogitorium host |
+| `receive_<address>_<task>` | a receiver task that accepts JSON | a delivery through the door, with its schema checked first |
+
+A pending or disabled gear is not listed, and calling one anyway is refused
+with a sentence rather than run — the tool list a client holds can be minutes
+old, and a gear disabled in between must not execute because somebody's cache
+is stale.
+
+**What is not exposed, on purpose.** The management API. Creating agents,
+drawing wires, editing prohibitions, approving gears — those are the operator's
+acts. An MCP client is a guest with a tool list, and a guest that can approve
+its own tools is not one.
+
+**Credentials are separate, deliberately.** `--token` decides what can be
+*seen*; a receiver's own key is what lets anything be *delivered* to it, and
+there is no default. A door has its own credential by design, and lending it
+the admin's would put the wrong caller in the ledger.
+
+This process holds no database. It talks to a running server over HTTP, so an
+MCP client may start and kill it as often as it likes without ever contending
+with Cogitorium for its SQLite file.
+
+**`POST /api/v1/gears/{id}/invoke`** is the route behind the gear tools: it runs
+an approved gear and answers 403 for anything else. It is deliberately not the
+same route as `/run`, which is the dry run and bypasses the gate so an operator
+can see what code does before trusting it. Two routes because they are two
+different promises.
+
+Consuming external MCP servers — granting an agent somebody else's tools the
+way it is granted a gear — is not built yet.
+
+---
+
 ## Receivers — a door from the rest of your system
 
 A receiver lets something outside this install hand work to an agent. It has an

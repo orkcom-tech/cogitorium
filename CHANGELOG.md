@@ -1,5 +1,67 @@
 # Changelog
 
+## v0.7.0
+
+Stage 2 of the parity plan: this install can be handed to an MCP client.
+
+### Cogitorium speaks MCP
+
+`cogitorium mcp` serves the Model Context Protocol over stdio, so Claude
+Desktop, Cursor or anything else that spawns an MCP server can use what this
+install holds. One command line is the whole integration.
+
+Two kinds of thing become tools and nothing else does. An **approved gear**
+becomes `gear_<name>` — a gear is already a name, a description and an argument
+schema, which is the whole of an MCP tool definition. A **receiver task** that
+accepts JSON becomes `receive_<address>_<task>`, which adds a transport to a
+door that already had a key, a schema checked before any model is called, a
+queue and a row in the ledger.
+
+The management API is not exposed, on purpose. Creating agents, drawing wires,
+editing prohibitions and approving gears are the operator's acts; an MCP client
+is a guest with a tool list, and a guest that can approve its own tools is not
+one.
+
+The two credentials stay separate for the same reason. `--token` decides what
+can be listed; a receiver's own key decides what may be delivered to it, and
+there is no default — a door's credential is the door's, and lending it the
+admin's would put the wrong caller in the ledger.
+
+The process holds no database. It talks to a running server over HTTP, so a
+client may start and kill it as often as it likes without ever contending for
+the SQLite file this product pins its Helm chart to one replica over.
+
+### A route that runs an approved gear, separate from the one that does not
+
+`POST /api/v1/gears/{id}/invoke` runs an approved gear and answers 403 for
+anything else. It is deliberately not `/run`, which is the dry run and bypasses
+the approval gate so an operator can see what code does before trusting it.
+
+Two routes because they are two different promises, and collapsing them into
+one route with a flag is how the safe one becomes optional. Proven by making
+exactly that mistake in a mutation: setting `DryRun` on the invoke path makes
+both refusal tests fail immediately.
+
+The gate is also checked where a stale tool list would otherwise bite. A client
+that listed a gear a minute ago and calls it after it was disabled gets a
+sentence — "The gear X is disabled, not approved, so it cannot be run" — as a
+tool result rather than a protocol error, so the model is told what happened
+instead of the client reporting a broken server.
+
+### Verified by driving it
+
+The protocol has its own tests — initialize, notifications going unanswered,
+schemas surviving as objects rather than strings, an empty list marshalling as
+`[]` and not `null`, a failing tool reported as a result rather than an RPC
+error. Beyond those, the real binary was driven against a real server: a gear
+forged, listed as absent while pending, approved, listed, called, and returning
+`5` for the five words it was given. Then disabled, and refused.
+
+One test in this batch initially passed for the wrong reason — the fixture it
+used approves the gear it forges, so a test about a *pending* gear was
+asserting about an approved one. It now forges directly and fails if the status
+is not what it claims.
+
 ## v0.6.0
 
 Stage 1 of the parity plan: an operator who has installed a hardened container

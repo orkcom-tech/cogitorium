@@ -868,6 +868,58 @@ grace  admiral   new york
 
 ---
 
+## 6b. Handing this install to Claude Desktop or Cursor
+
+Everything you just built can be a tool in somebody else's client. Cogitorium
+speaks MCP over stdio:
+
+```bash
+cogitorium mcp --server http://127.0.0.1:8688 --token $COGITORIUM_TOKEN \
+  --inlet-key sites=$INLET_KEY
+```
+
+That is the whole integration — in a client's configuration, that command line
+goes where it keeps its servers. Approved gears and JSON receiver tasks appear
+as tools:
+
+```
+gear_wordcount              → runs the gear in its sandbox
+receive_sites_ingest-page   → delivers to the receiver, schema checked first
+```
+
+Real output from the exchange, with a gear called `wordcount` approved and the
+`sites` receiver open:
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+→ tools: ["gear_wordcount", "receive_sites_ingest-page"]
+
+{"jsonrpc":"2.0","id":3,"method":"tools/call",
+ "params":{"name":"gear_wordcount","arguments":{"text":"one two three four five"}}}
+→ isError: false, text: "5"
+```
+
+**The approval gate still holds.** Disable that gear and call it again with the
+same tool list a client already fetched:
+
+```
+isError: true — The gear "wordcount" is disabled, not approved, so it cannot be run.
+```
+
+Not a crash and not a silent run: the model is told, in a sentence, and can
+say so. The route behind it answers 403 to anything unapproved.
+
+**What is deliberately absent.** No management: an MCP client cannot create an
+agent, draw a wire, edit a prohibition or approve a gear. It is a guest with a
+tool list. And the two credentials are separate on purpose — `--token` decides
+what can be listed, a receiver's own key decides what may be delivered to it,
+and there is no default for the second.
+
+Consuming somebody else's MCP server — granting an agent external tools the way
+you grant it a gear — is not built yet.
+
+---
+
 ## 7. A worked arrangement: a panel that judges code
 
 Everything so far has been one agent doing one job. This is what the wiring is
@@ -1074,6 +1126,7 @@ So that you do not go looking:
 - A bundle carries the conversation nowhere — it is a template, not a transcript.
 - No receiver may target a gear directly; a task names an agent, and the agent calls the gear.
 - No streaming from a receiver, and no fan-out of one delivery to several agents.
+- Cogitorium serves MCP but does not consume it: an agent cannot yet be granted an external MCP server's tools.
 - Gears do not run as Kubernetes Jobs, and there are no remote agents.
 - No private thread inside a shared workspace: two people in one workspace share its
   conversation. Separate workspaces are how two people stay out of each other's way.

@@ -17,6 +17,7 @@ func main() {
 	}
 
 	root.AddCommand(newServeCmd())
+	root.AddCommand(newMCPCmd())
 	root.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print cogitorium version",
