@@ -11,7 +11,9 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // Everything here drives a real contextd stand-in: a /bin/sh program written
@@ -90,7 +92,45 @@ exit "$("$cat" "$d/code.$key")"
 	if err := os.WriteFile(f.path, []byte(script), 0o755); err != nil {
 		t.Fatalf("write contextd stand-in: %v", err)
 	}
+	waitExecutable(t, f)
 	return f
+}
+
+// waitExecutable runs the stand-in once, and keeps trying while Linux answers
+// ETXTBSY.
+//
+// os.WriteFile closes the file before returning, so the write itself is
+// finished — but these tests run in parallel and each builds its own stand-in,
+// and a fork from any other goroutine between this file's open and close
+// inherits the writable descriptor. Linux then refuses to exec it until that
+// descriptor is gone. It is a race in the FIXTURE, not in what is being
+// tested, and it surfaced as CI reporting "text file busy" for a conflict test
+// that had nothing to do with exec.
+//
+// Proving the binary runs before handing it to the code under test moves the
+// flake here, where it can be waited out, instead of failing an assertion
+// about something else entirely. The warm-up call is then erased: it would
+// otherwise appear in the recorded calls that several tests count.
+func waitExecutable(t *testing.T, f *fakeContextd) {
+	t.Helper()
+	for range 100 {
+		cmd := exec.Command(f.path, "--warmup")
+		cmd.Stdin = strings.NewReader("")
+		err := cmd.Run()
+		if errors.Is(err, syscall.ETXTBSY) {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		// Any other outcome means it executed — the stand-in exits non-zero on
+		// purpose in several of these tests, and that is not a problem here.
+		for _, leftover := range []string{f.callsFile, f.stdinFile} {
+			if err := os.Remove(leftover); err != nil && !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("clear the warm-up trace: %v", err)
+			}
+		}
+		return
+	}
+	t.Fatal("the contextd stand-in was still \"text file busy\" a second after being written")
 }
 
 func writeFile(t *testing.T, path, content string) {
