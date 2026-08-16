@@ -214,7 +214,15 @@ jobs:
             echo "ok: refused $1"
           }
           refuse "--set config.terminal=true"
-          refuse "--set config.egress=true"
+          # A terminal is an interactive attachment and a gear Job is
+          # run-to-completion, so it stays refused on kubernetes too — for a
+          # different reason than it used to be.
+          refuse "--set config.terminal=true --set config.sandbox=subprocess"
+          # Egress is no longer refused in-cluster: gears run as Jobs, so there
+          # IS a sandbox. It is still refused where there is not one.
+          refuse "--set config.egress=true --set config.sandbox=subprocess"
+          refuse "--set config.sandbox=kubernetes --set serviceAccount.automountServiceAccountToken=false"
+          refuse "--set config.sandbox=docker"
           refuse "--set persistence.enabled=false"
           if helm template cog deploy/helm/cogitorium --set auth.adminToken=short >/dev/null 2>&1; then
             echo "FAIL: the chart accepted a short admin token"; exit 1
@@ -223,6 +231,10 @@ jobs:
           # And the valid shape must still render, or the guards are just noise.
           helm template cog deploy/helm/cogitorium --set auth.adminToken="$TOK" >/dev/null
           echo "ok: a valid configuration renders"
+          # Egress with the default sandbox is now a working configuration, and
+          # that is the half of this change worth asserting rather than assuming.
+          helm template cog deploy/helm/cogitorium --set auth.adminToken="$TOK" --set config.egress=true >/dev/null
+          echo "ok: egress renders on sandbox: kubernetes"
 
       - name: Build the image
         run: docker build -t cogitorium:ci .
@@ -278,6 +290,33 @@ jobs:
           # particular failure — which is exactly what happened.
           echo "$STATUS" | grep -q '"available":true' || { kubectl -n cogitorium logs deploy/cogitorium; exit 1; }
           echo "ok: Contextverse is available in the cluster"
+
+      - name: A gear runs as a Job, and sees nothing but its own payload
+        run: |
+          set -e
+          A="Authorization: Bearer $ADMIN_TOKEN"
+          # A gear that reports what it can reach. If the mount is wrong it can
+          # see the data volume — the database and the provider keys in it — and
+          # this prints that rather than leaving it to be assumed.
+          curl -fsS -X POST -H "$A" -H 'Content-Type: application/json' \
+            http://127.0.0.1:8688/api/v1/gears -d '{
+              "name":"probe","description":"Reports what it can reach.","runtime":"python",
+              "entrypoint":"main.py",
+              "files":[{"path":"main.py","content":"import os,glob\nprint(\"CWD\", os.getcwd())\nprint(\"HERE\", sorted(os.listdir(\".\")))\nprint(\"DATA\", os.path.isdir(\"/data\"))\nprint(\"DBS\", glob.glob(\"/data/*.db\") + glob.glob(\"../*.db\"))\n"}],
+              "args_schema":"{\"type\":\"object\"}"}' >/dev/null
+          OUT=$(curl -fsS -X POST -H "$A" -H 'Content-Type: application/json' \
+            http://127.0.0.1:8688/api/v1/gears/1/run -d '{"args":{}}')
+          echo "$OUT"
+          echo "$OUT" | grep -q '"exit_code":0' || { echo "FAIL: the gear did not run"; exit 1; }
+          echo "$OUT" | grep -q 'CWD /work' || { echo "FAIL: the gear did not start in its payload"; exit 1; }
+          echo "$OUT" | grep -q 'DATA False' || { echo "FAIL: the gear can see the data volume"; exit 1; }
+          echo "$OUT" | grep -q 'DBS \[\]' || { echo "FAIL: the gear can see a database"; exit 1; }
+          echo "ok: a gear ran as a Job and saw only its own payload"
+          # And it was a Job, not a subprocess. The Jobs are deleted when the run
+          # ends, so this asks the server what backend it chose.
+          kubectl -n cogitorium logs deploy/cogitorium | grep -q 'backend=kubernetes' \
+            || { echo "FAIL: gears did not run as Kubernetes Jobs"; exit 1; }
+          echo "ok: the sandbox backend is kubernetes"
 
       - name: One replica, and it cannot be raised
         run: |
