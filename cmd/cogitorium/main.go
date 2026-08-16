@@ -18,6 +18,9 @@ func main() {
 
 	root.AddCommand(newServeCmd())
 	root.AddCommand(newMCPCmd())
+	for _, c := range newCLICmds() {
+		root.AddCommand(c)
+	}
 	root.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print cogitorium version",

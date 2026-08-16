@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
+	"github.com/orkcom-tech/cogitorium/internal/work"
 )
 
 type apiError struct {
@@ -24,10 +25,17 @@ func writeError(w http.ResponseWriter, code int, msg string) {
 
 // fail maps domain errors to HTTP codes and logs them — every error path is
 // visible in the log, none are swallowed.
+// fail turns a store error into a status.
+//
+// Most packages alias catalog's sentinels, so one case covers them. work does
+// not — it defines its own ErrNotFound — and until this line existed, asking to
+// cancel a queue unit that is not there answered 500. That matters more than
+// tidiness: 5xx is what a client retries and what wakes somebody up, and "you
+// asked for something that is not here" is neither.
 func fail(w http.ResponseWriter, r *http.Request, err error) {
 	code := http.StatusInternalServerError
 	switch {
-	case errors.Is(err, catalog.ErrNotFound):
+	case errors.Is(err, catalog.ErrNotFound), errors.Is(err, work.ErrNotFound):
 		code = http.StatusNotFound
 	case errors.Is(err, catalog.ErrConflict):
 		code = http.StatusConflict

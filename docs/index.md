@@ -573,6 +573,46 @@ way it is granted a gear — is not built yet.
 
 ---
 
+## The command line
+
+The same binary is a client for its own API. Nothing here can do anything the
+interface cannot; what it adds is an exit code a shell can branch on and output
+narrow enough to pipe.
+
+| Command | Does |
+|---|---|
+| `workspaces` | list them |
+| `workspaces export <id> [--gears] [--context] [-o file]` | write a bundle |
+| `workspaces import <file> [--name] [--gears] [--context]` | build a workspace from one |
+| `gears list` | every gear, with its approval status |
+| `gears run <name-or-id> [--args JSON]` | run an **approved** gear |
+| `receivers list --workspace <id>` | the doors, their keys and their tasks |
+| `receivers deliver <address>/<task> --key K [--data JSON] [--async]` | post to a door |
+| `queue list --workspace <id>` | what is running and what waits |
+| `queue cancel <unit>` | stop the work, not just the row |
+| `run <id>` | read a delivery back from the ledger |
+
+**Address and credential.** `--server` and `--token`, or `COGITORIUM_URL` and
+`COGITORIUM_TOKEN`; the flag wins. On a loopback listen address a local call is
+already the admin, so on one machine the token is optional. Delivery is the
+exception: it takes the *receiver's* key — `--key` or `COGITORIUM_INLET_KEY` —
+because a door's credential opens that door and nothing else, and it is the one
+the ledger records.
+
+**Exit codes are the point.** `gears run` exits with the gear's own code, so a
+shell branches on what the gear said rather than on whether the HTTP call
+worked. `run <id>` exits non-zero for anything that did not complete. A refused
+delivery, an unapproved gear and a missing run are all non-zero with the
+server's own sentence on stderr.
+
+**What it deliberately does not do.** Create agents, draw wires, edit
+prohibitions or approve gears. Those are decisions made while looking at a
+canvas or a source listing. Everything else is over the same HTTP API described
+in [openapi.yaml](openapi.yaml), so anything absent here is a `curl` away rather
+than blocked.
+
+---
+
 ## Receivers — a door from the rest of your system
 
 A receiver lets something outside this install hand work to an agent. It has an

@@ -1,5 +1,93 @@
 # Changelog
 
+## v0.9.0
+
+Stage 4 of the parity plan: a command line over the API the interface already
+uses.
+
+### `cogitorium` is a client for its own server
+
+```
+$ cogitorium gears run wordcount --args '{"text":"one two three four five"}'
+5
+```
+
+Ten commands, over routes that already existed and are already in
+`docs/openapi.yaml`: list workspaces and move one between installs, list and run
+gears, list receivers and deliver to one, see the queue and stop a unit, read a
+delivery back from the ledger.
+
+What it adds over `curl` is the two things a terminal wants and a browser does
+not. **An exit code that means something**: `gears run` exits with the gear's
+own code, so a shell branches on what the gear said rather than on whether the
+HTTP call worked; `run <id>` exits non-zero for anything that did not complete.
+And **output narrow enough to pipe** — columns for a person, and for a script,
+the server's own JSON on the routes that carry a record.
+
+It is deliberately a wrapper. Creating agents, drawing wires, editing
+prohibitions and approving gears are not here: those are decisions made while
+looking at a canvas or a source listing, and a flag is a worse place to make
+them than a screen that shows what is being decided.
+
+`internal/client` is shared with the MCP server rather than written twice — two
+copies would be two error-handling behaviours, and the one that mattered would
+be whichever the reader was not looking at.
+
+### Moving a workspace between installs, from a shell
+
+```
+$ cogitorium workspaces export 1 --gears -o court.json
+wrote court.json (4828 bytes)
+
+$ COGITORIUM_URL=http://the-other-install:8688 cogitorium workspaces import court.json --gears
+workspace 1 "code court" — 8 agents, 15 wires, 0 context files
+gears: wordcount (pending — approve them before anything can run them)
+agent orchestrator wants anthropic/claude-opus-4-6, which this install does not have
+```
+
+That is a real transcript between two installs, and the second half is why the
+report is printed rather than counted. A bundle whose gears were all skipped
+imports "successfully" and leaves you a workspace that cannot do its work.
+Skips and unresolved models go to stderr, the summary to stdout, so a pipeline
+keeps the line it wants and a person still sees what did not come across.
+
+### `--async` on a delivery
+
+A delivery holds the connection until the work finishes, which is right at a
+prompt and wrong in anything with a timeout of its own. `--async` sets the
+`Prefer: respond-async` the receiver already understood and takes a run number
+instead; `cogitorium run <id>` reads it back.
+
+### Cancelling a unit that was not there answered 500
+
+```
+$ cogitorium queue cancel 99999
+error: 500 Internal Server Error: work unit 99999: not found
+```
+
+Every other store aliases the catalog's not-found sentinel; `internal/work`
+defines its own, and the status mapping had never been taught it. The
+difference is not cosmetic — 5xx is what a client retries and what pages
+somebody, and "you asked for something that is not here" is neither. It answers
+404 now, and the test for it was confirmed by unmapping the sentinel again.
+
+Found by driving the command line against a real server, which is what having
+one is for.
+
+### A test for the class of bug this could ship
+
+The first draft of the run struct called its fields `task` and `address`; the
+server calls them `task_name` and `inlet_address`. Nothing failed —
+encoding/json ignores a key it was not asked for — so `cogitorium run 3` printed
+`run 3  completed  /  agent ` and looked like a formatting problem rather than a
+client reading the wrong document.
+
+There is now a test that walks every json tag the client declares against
+responses from the real handlers and fails on any key the server does not send.
+Presence, not value: half these fields are legitimately empty, and what makes a
+client wrong is asking for something that was never there. Both a top-level and
+a nested field were renamed to confirm it fails.
+
 ## v0.8.0
 
 Stage 3, first half: the API has a description that cannot drift from it.

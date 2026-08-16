@@ -920,6 +920,172 @@ you grant it a gear — is not built yet.
 
 ---
 
+## 6c. From a terminal, and from a script
+
+The same binary that serves the interface is also a client for it. Nothing in
+this section can do anything the browser cannot; what it adds is an exit code a
+shell can branch on and output narrow enough to pipe.
+
+It reads two environment variables, so the address and the token are said once:
+
+```bash
+export COGITORIUM_URL=http://127.0.0.1:8688
+export COGITORIUM_TOKEN=…
+```
+
+`--server` and `--token` override them per command. On a loopback address a
+local call is already the admin, so on your own machine the token is optional —
+change the listen address and it stops being.
+
+**Look around.**
+
+```
+$ cogitorium workspaces
+ID  NAME        DESCRIPTION
+1   code court  several models write the same program, review each other, and the measured winner is returned
+
+$ cogitorium gears list
+ID  NAME       STATUS    RUNTIME  V  DESCRIPTION
+1   wordcount  approved  python   1  Count the words in a piece of text.
+
+$ cogitorium receivers list --workspace 1
+ADDRESS  KEY     TASK                  ACCEPTS  AGENT
+sites    issued  ingest-page           json     orchestrator
+tickets  issued  (none — answers 404)
+```
+
+A receiver with no tasks is shown as one, because a door that answers 404 to
+everything looks identical to a missing door from the outside, and the
+difference matters when you are working out why a delivery bounced.
+
+**Run a gear.** Its output goes to stdout, its exit code is the gear's own:
+
+```
+$ cogitorium gears run wordcount --args '{"text":"one two three four five"}'
+5
+```
+
+The approval gate is the same gate. This is a gear that arrived in a bundle and
+has not been approved on this install yet:
+
+```
+$ cogitorium gears run wordcount --args '{"text":"one two three"}'
+error: 403 Forbidden: gear "wordcount" (status pending): gear is not approved
+for execution — the operator must approve it in the gear catalog first
+$ echo $?
+1
+```
+
+**Deliver to a receiver**, with that receiver's own key rather than your token —
+a door's credential opens that door and nothing else, and it is the one the
+ledger records:
+
+```bash
+cogitorium receivers deliver sites/ingest-page \
+  --key "$COGITORIUM_INLET_KEY" \
+  --data '{"url":"https://example.com","depth":2}'
+```
+
+The call is held open until the work finishes, which is what you want at a
+prompt and wrong in anything with a timeout of its own. `--async` takes a run
+number instead and lets the work carry on:
+
+```
+$ cogitorium receivers deliver slowdoor/think --async --data '{"q":"…"}'
+{"run":5,"state":"queued","did":{"tools":[],"files":[],"model_calls":0,"tokens":{"in":0,"out":0}}}
+```
+
+The key is checked at the door either way:
+
+```
+$ cogitorium receivers deliver slowdoor/think --key not-the-key --data '{}'
+error: 401: this inlet's key is required: send Authorization: Bearer <inlet key>.
+A key is issued from the workspace's inlet settings and shown once
+```
+
+**Read a delivery back.** This is a real run from a real install, and it is the
+reason the command exists in this form:
+
+```
+$ cogitorium run 3
+run 3  refused_schema  sites/ingest-page  agent orchestrator
+
+error: the payload: "priority" is not a field this task accepts (it allows only: depth, url)
+
+did: {"tools":[],"files":[],"model_calls":0,"tokens":{"in":0,"out":0}}
+$ echo $?
+1
+```
+
+Anything that did not complete exits non-zero, so a script can stop on it
+without reading the text. And `did` is the record's own account — no tools, no
+files, no model calls — which is how you tell a refusal at the door from an
+agent that ran and produced nothing.
+
+**See and stop what is running.** Three deliveries into a workspace whose
+provider had stopped answering — one claimed, two waiting behind it:
+
+```
+$ cogitorium queue list --workspace 1
+1 running, 2 waiting
+UNIT  STATE    KIND      RUN  SINCE
+1     claimed  delivery  1    2026-08-16T02:28:37Z
+2     queued   delivery  2    2026-08-16T02:28:47Z
+3     queued   delivery  3    2026-08-16T02:28:47Z
+
+$ cogitorium queue cancel 1
+stopped 1
+$ cogitorium queue cancel 3
+stopped 3
+
+$ cogitorium queue list --workspace 1
+1 running, 0 waiting
+UNIT  STATE    KIND      RUN  SINCE
+2     claimed  delivery  2    2026-08-16T02:28:47Z
+```
+
+`cancel` stops the work, not just the row — the same route the interface's stop
+button uses, and it takes a unit that is already running as readily as one that
+is still waiting. Unit 2 moved up on its own once the workspace was free again.
+The ledger keeps what happened rather than losing the run:
+
+```
+$ cogitorium run 1
+run 1  interrupted  slowdoor/think  agent orchestrator
+
+error: stopped by admin
+```
+
+**Move a workspace between installs.** The export is the same document as the
+one in section 5; these are the two commands that carry it:
+
+```
+$ cogitorium workspaces export 1 --gears -o court.json
+wrote court.json (4828 bytes)
+
+$ COGITORIUM_URL=http://the-other-install:8688 cogitorium workspaces import court.json --gears
+workspace 1 "code court" — 8 agents, 15 wires, 0 context files
+gears: wordcount (pending — approve them before anything can run them)
+agent orchestrator wants anthropic/claude-opus-4-6, which this install does not have
+agent author-gpt wants openai-compatible/gpt-5.2, which this install does not have
+…
+```
+
+That is a real transcript between two installs. The report goes to stderr and
+the summary to stdout, so a pipeline keeps the line it wants and a person still
+sees what did not come across. Skips and unresolved models are printed rather
+than counted, because a bundle whose gears were all skipped imports
+"successfully" and leaves you a workspace that cannot do its work.
+
+**What is deliberately not here.** No creating agents, drawing wires or
+approving gears. Those are decisions made while looking at a canvas or a source
+listing, and a flag is a worse place to make them than a screen that shows what
+is being decided. Everything the command line does, it does over the same HTTP
+API described in [openapi.yaml](openapi.yaml) — so anything missing here is one
+`curl` away, not blocked.
+
+---
+
 ## 7. A worked arrangement: a panel that judges code
 
 Everything so far has been one agent doing one job. This is what the wiring is

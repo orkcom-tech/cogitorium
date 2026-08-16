@@ -223,3 +223,23 @@ func TestCancellingARunningDeliveryStopsTheWork(t *testing.T) {
 		t.Fatalf("a cancelled run's ledger row says %q", state)
 	}
 }
+
+// Cancelling a unit that is not there is a 404, not a 500.
+//
+// It answered 500 until the work package's own ErrNotFound was mapped: every
+// other store aliases catalog's sentinel and that one defines its own. The
+// difference is not cosmetic — 5xx is what a client retries and what pages
+// somebody, and "you asked for something that is not here" is neither. Found
+// by running the new command line against a real server, which is the point of
+// having one.
+func TestCancellingAUnitThatIsNotThereIsNotAServerFault(t *testing.T) {
+	t.Parallel()
+	d := newDoor(t)
+	rec := d.request(t, http.MethodDelete, "/api/v1/queue/999999", d.adminTok, "")
+	if rec.Code == http.StatusInternalServerError {
+		t.Fatalf("a missing unit answered 500, which is a retry and a page: %s", rec.Body.String())
+	}
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("want 404 for a unit that does not exist, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
