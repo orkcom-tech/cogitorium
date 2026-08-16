@@ -99,6 +99,15 @@ changelog:
 release:
   draft: false
   replace_existing_draft: true
+  # A re-run must not fail on the work the first run already did.
+  #
+  # v0.7.0's image job was killed by GitHub's six-hour ceiling while goreleaser
+  # had already finished. Re-running the workflow then failed on the FIRST
+  # asset — "already_exists" — so the only way to retry the half that broke was
+  # to retry the half that had not. Replacing an asset with a byte-identical
+  # rebuild is the harmless case, and this is the one flag that makes a release
+  # workflow safe to run twice.
+  replace_existing_artifacts: true
   name_template: "v{{.Version}}"
   header: |
     Cogitorium {{ .Tag }} — a modular workbench for deterministic workflows built on models.
