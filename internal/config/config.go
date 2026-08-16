@@ -15,6 +15,15 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
 )
 
+// DefaultBrowserImage carries a real browser and the driver that speaks to it.
+//
+// Microsoft's Playwright image rather than one built here, because the awkward
+// half of running a browser in a container is the system libraries and the
+// matching browser build, and that image is maintained by the people who ship
+// the driver. Pinned to a version: an image that followed a moving tag would
+// change what an approved gear runs inside without the approval changing.
+const DefaultBrowserImage = "mcr.microsoft.com/playwright:v1.56.0-noble"
+
 type Config struct {
 	// Listen is the HTTP listen address, e.g. "127.0.0.1:8688".
 	Listen string `yaml:"listen"`
@@ -41,6 +50,14 @@ type Config struct {
 	// refuses at startup if the daemon does not have it, which is the honest
 	// boundary — the isolation belongs to the runtime, not to this product.
 	SandboxRuntime string `yaml:"sandbox_runtime"`
+	// BrowserImage is the container a gear granted the "browser" environment
+	// runs in — an image carrying a real browser, so a gear can drive one and
+	// hand back what it saw as ordinary run artifacts.
+	//
+	// Configurable rather than fixed, and not pulled at startup: it is large,
+	// most installs never grant it, and paying for it on every start would be
+	// a minute of every boot spent on a capability nobody used.
+	BrowserImage string `yaml:"browser_image"`
 	// KubeNamespace, KubeClaim and KubeNode configure the "kubernetes"
 	// sandbox, where a gear runs as a Job rather than a container this
 	// process creates.
@@ -206,6 +223,7 @@ func Defaults() Config {
 		LogLevel:        "info",
 		ContextdPath:    "contextd",
 		Sandbox:         "auto",
+		BrowserImage:    DefaultBrowserImage,
 		GearProxyListen: gearnet.DefaultListen,
 		QueueWorkers:    4,
 		// Fifty is a burst, not a backlog. It is large enough that an ordinary
@@ -273,6 +291,9 @@ func Load(path, dataDirOverride string) (Config, error) {
 	}
 	if v := os.Getenv("COGITORIUM_SANDBOX_RUNTIME"); v != "" {
 		cfg.SandboxRuntime = v
+	}
+	if v := os.Getenv("COGITORIUM_BROWSER_IMAGE"); v != "" {
+		cfg.BrowserImage = v
 	}
 	// The claim and the node come from the chart rather than from a file: one
 	// is a Helm release's own name and the other is the downward API, and

@@ -61,6 +61,14 @@ type Spec struct {
 	// Empty means the process produces no files and nothing is copied back,
 	// which is every call that existed before gears could be handed one.
 	Out string
+	// Image overrides the backend's own image for this run. Empty is the
+	// ordinary one.
+	//
+	// It exists so a gear can be given a different KIND of machine — a browser
+	// image is the first — without a second Runner or a second configuration
+	// path. Which images an install has is the operator's; a caller passes one
+	// of them, never a name it composed.
+	Image string
 	// OnOutput, when set, is called with each chunk as it arrives rather than
 	// only at the end. The buffered Result is unaffected — this is an extra
 	// tap on the same stream, not a replacement — so a caller that does not

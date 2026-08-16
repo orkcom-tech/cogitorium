@@ -58,6 +58,10 @@ type SetGearStatusBody struct {
 	Status         *string       `json:"status"`
 	TimeoutSeconds *int          `json:"timeout_seconds"`
 	Network        *networkInput `json:"network"`
+	// Environment is "browser" or empty. Beside the network because it is the
+	// same kind of decision, made in the same act: what this code is allowed to
+	// have, settled while its source is on the screen.
+	Environment *string `json:"environment"`
 }
 
 // CreateWorkspaceBody makes a workspace and its orchestrator.

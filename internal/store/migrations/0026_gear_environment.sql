@@ -1,0 +1,19 @@
+-- The environment a gear runs in: which image its container is made from.
+--
+-- Empty is the install's ordinary sandbox image and is what every gear that
+-- exists right now uses. The other value this software knows is 'browser',
+-- which resolves to browser_image in the configuration — an image carrying a
+-- real browser, so a gear can drive one and hand back what it saw.
+--
+-- A column on the gear, beside network_granted, and for the same reason: it is
+-- the operator's decision at APPROVAL rather than something the gear declares.
+-- An agent asking for a browser is asking for a headless machine that renders
+-- untrusted pages, and that is a capability granted while reading the source,
+-- not a field an agent fills in. Forging a new version clears it along with the
+-- approval, because approval covers exact content and so does this.
+--
+-- The name rather than the image: a gear that pinned an image would be a gear
+-- that stops working when the operator moves to a different one, and a gear
+-- that could NAME an image would be an agent choosing what its own code runs
+-- inside. Two names, resolved by this install's configuration.
+ALTER TABLE gears ADD COLUMN environment TEXT NOT NULL DEFAULT '';

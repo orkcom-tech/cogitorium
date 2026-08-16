@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/orkcom-tech/cogitorium/internal/config"
 	"github.com/orkcom-tech/cogitorium/internal/gearnet"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
@@ -52,6 +53,11 @@ type Executor struct {
 	// means this server has no such source at all, and a gear that declares a
 	// name is then refused rather than run without it.
 	env *secrets.Resolver
+	// browserImage is what the "browser" environment resolves to. Held here
+	// rather than read from a package variable so an install that configured a
+	// different one is the one that decides, and a test can use an image it
+	// actually has.
+	browserImage string
 	// gate carries the traffic of a gear the operator granted the network, and
 	// records every connection. nil means this server has no gate, and a
 	// granted gear is then refused rather than run with an unrecorded network.
@@ -65,12 +71,13 @@ func NewExecutor(store *Store, dataDir string, sb sandbox.Runner, env *secrets.R
 			"install Docker or set sandbox: docker to isolate them")
 	}
 	return &Executor{
-		store:   store,
-		baseDir: filepath.Join(dataDir, "gears"),
-		dataDir: dataDir,
-		sandbox: sb,
-		env:     env,
-		gate:    gate,
+		store:        store,
+		baseDir:      filepath.Join(dataDir, "gears"),
+		dataDir:      dataDir,
+		sandbox:      sb,
+		env:          env,
+		gate:         gate,
+		browserImage: config.DefaultBrowserImage,
 	}
 }
 
@@ -453,6 +460,22 @@ func (e *Executor) trustGate(dir string, ticket *gearnet.Ticket, env map[string]
 	return nil
 }
 
+// SetBrowserImage points the "browser" environment at this install's image.
+func (e *Executor) SetBrowserImage(image string) {
+	if image != "" {
+		e.browserImage = image
+	}
+}
+
+// imageFor resolves the gear's granted environment to an image, or to empty —
+// which the backend reads as its ordinary one.
+func (e *Executor) imageFor(g Gear) string {
+	if g.Environment == EnvironmentBrowser {
+		return e.browserImage
+	}
+	return ""
+}
+
 // openNetwork turns the operator's grant into a ticket for this run, or into a
 // refusal naming what is missing. A gear that was not granted the network gets
 // no ticket, and nil is a working ticket in every sense that matters here: it
@@ -731,6 +754,9 @@ func (e *Executor) execSandboxed(ctx context.Context, g Gear, dir, argsJSON stri
 		Network:  g.NetworkGranted,
 		OnOutput: onOutput,
 		Writable: true,
+		// The environment the operator granted, resolved to one of this
+		// install's images. A gear never names an image.
+		Image: e.imageFor(g),
 	}
 	if fc != nil {
 		spec.Writable = false

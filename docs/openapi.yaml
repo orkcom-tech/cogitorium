@@ -275,6 +275,8 @@ paths:
             schema:
               type: object
               properties:
+                "environment":
+                  type: string
                 "network":
                   type: object
                   properties:

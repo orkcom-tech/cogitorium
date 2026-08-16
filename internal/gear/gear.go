@@ -62,9 +62,15 @@ type Gear struct {
 	// choice the operator is allowed to make.
 	NetworkGranted bool     `json:"network_granted"`
 	NetworkHosts   []string `json:"network_hosts"`
-	Status         string   `json:"status"`
-	TimeoutSeconds int      `json:"timeout_seconds"`
-	UpdatedAt      string   `json:"updated_at"`
+	// Environment names the kind of container this gear runs in, and is the
+	// operator's decision at approval for the same reason the network is: an
+	// agent asking for a browser is asking for a machine that renders untrusted
+	// pages. Empty is the ordinary sandbox image; "browser" resolves to the
+	// install's browser_image.
+	Environment    string `json:"environment"`
+	Status         string `json:"status"`
+	TimeoutSeconds int    `json:"timeout_seconds"`
+	UpdatedAt      string `json:"updated_at"`
 }
 
 // Run is one recorded execution of a gear.
@@ -248,7 +254,7 @@ func (s *Store) Forge(ctx context.Context, name, description string, tags []stri
 		version++
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE gears SET description = ?, tags = ?, version = ?, runtime = ?, entrypoint = ?,
-			                 args_schema = ?, env_names = ?, network_granted = 0, network_hosts = '[]',
+			                 args_schema = ?, env_names = ?, network_granted = 0, network_hosts = '[]', environment = '',
 			                 status = 'pending', updated_at = ?
 			WHERE id = ?`,
 			description, string(tagsJSON), version, runtime, entrypoint, argsSchema, string(envJSON), now(), id); err != nil {
@@ -305,7 +311,7 @@ const gearSelect = `
 	SELECT g.id, g.name, g.description, g.tags, g.origin_workspace_id,
 	       COALESCE(w.name, ''), g.created_by_agent_id, COALESCE(a.name, ''),
 	       g.version, g.runtime, g.entrypoint, g.args_schema, g.env_names,
-	       g.network_granted, g.network_hosts, g.status,
+	       g.network_granted, g.network_hosts, g.environment, g.status,
 	       g.timeout_seconds, g.updated_at
 	FROM gears g
 	LEFT JOIN workspaces w ON w.id = g.origin_workspace_id
@@ -317,7 +323,7 @@ func scanGear(row interface{ Scan(...any) error }) (Gear, error) {
 	var netGranted int
 	if err := row.Scan(&g.ID, &g.Name, &g.Description, &tags, &g.OriginWorkspaceID, &g.OriginWorkspace,
 		&g.CreatedByAgentID, &g.CreatedByAgent, &g.Version, &g.Runtime, &g.Entrypoint,
-		&g.ArgsSchema, &envNames, &netGranted, &netHosts, &g.Status, &g.TimeoutSeconds, &g.UpdatedAt); err != nil {
+		&g.ArgsSchema, &envNames, &netGranted, &netHosts, &g.Environment, &g.Status, &g.TimeoutSeconds, &g.UpdatedAt); err != nil {
 		return Gear{}, err
 	}
 	g.NetworkGranted = netGranted == 1
@@ -454,6 +460,38 @@ func (s *Store) SetStatus(ctx context.Context, id int64, status string) (Gear, e
 // allowed and deliberately not the default the interface offers: the plan is
 // explicit that a destination list is what makes the connection log auditable
 // afterwards, not a gate on the operator.
+// EnvironmentDefault and EnvironmentBrowser are the two this software knows.
+//
+// Names rather than images, because a gear that pinned an image is a gear that
+// stops working when the operator moves to another one, and a gear that could
+// NAME an image would be agent-authored code choosing what it runs inside.
+const (
+	EnvironmentDefault = ""
+	EnvironmentBrowser = "browser"
+)
+
+// SetEnvironment records which container this gear runs in.
+//
+// Refused rather than coerced for an unknown name: an operator who typed
+// "chrome" and got the ordinary image would have a gear that silently cannot
+// find a browser, and would go looking at the gear's code for the reason.
+func (s *Store) SetEnvironment(ctx context.Context, id int64, env string) (Gear, error) {
+	if env != EnvironmentDefault && env != EnvironmentBrowser {
+		return Gear{}, fmt.Errorf("%q is not an environment this install has: use \"browser\", or leave it "+
+			"empty for the ordinary sandbox image", env)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE gears SET environment = ?, updated_at = ? WHERE id = ?`, env, now(), id)
+	if err != nil {
+		return Gear{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Gear{}, fmt.Errorf("gear %d: %w", id, ErrNotFound)
+	}
+	slog.Info("gear environment set", "gear_id", id, "environment", env)
+	return s.Get(ctx, id)
+}
+
 func (s *Store) SetNetwork(ctx context.Context, id int64, granted bool, hosts []string) (Gear, error) {
 	clean, err := gearnet.NormalizeHosts(hosts)
 	if err != nil {

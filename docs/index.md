@@ -418,6 +418,42 @@ Without `COGITORIUM_SECRET_KEY` the install still works: variables work, and a
 secret mounted from `secrets_dir` works. Only writing a secret into the database
 is refused, and it says why.
 
+### The environment
+
+A gear runs in this install's ordinary sandbox image. An operator can grant it a
+different **environment** instead, on the same screen and in the same act as the
+network — because an agent asking for a browser is asking for a machine that
+renders untrusted pages, and that is a decision made while reading the source.
+
+One environment exists: **`browser`**, which resolves to `browser_image` — an
+image carrying a real browser and the libraries it needs. The gear drives it
+however it likes, and what comes back comes back the way everything else does:
+
+```
+BROWSER=/ms-playwright/chromium-1194/chrome-linux/chrome
+SHOT=7012 TEXT=97
+```
+
+A screenshot and the page's text, written into `out/`, collected as run
+artifacts by the same path that already carries any file a gear produces. There
+is no browser pipeline and no new record — the point of doing it this way is
+that there is nothing new to learn.
+
+A gear **names an environment, never an image**. A gear that could name one
+would be agent-authored code choosing what it runs inside, and a gear that
+pinned one would stop working the day the operator moved to another. Forging a
+new version clears the environment along with the approval.
+
+The image is not pre-fetched at startup the way the ordinary one is: it is about
+a gigabyte, and most installs never grant it. The first gear that needs one
+pays for the pull inside its own timeout, so raise that gear's timeout for its
+first run or pull the image on the host beforehand.
+
+It runs under exactly the constraints every other gear does — an unprivileged
+user, every capability dropped, no new privileges, and no network unless it was
+granted one. A browser's own sandbox cannot start under those, so a browser gear
+passes `--no-sandbox`: the container is the boundary, and it is the same one.
+
 ### The network
 
 A gear has no network unless it is granted one at approval, with the hosts it may
@@ -1130,6 +1166,7 @@ then defaults.
 | `data_dir` | `COGITORIUM_DATA_DIR` | `~/.cogitorium` | SQLite database and server-owned files. |
 | `log_level` | `COGITORIUM_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 | `contextd_path` | `COGITORIUM_CONTEXTD` | `contextd` | How to find the Contextverse CLI. |
+| `browser_image` | `COGITORIUM_BROWSER_IMAGE` | `mcr.microsoft.com/playwright:v1.56.0-noble` | What the `browser` environment resolves to. Pinned rather than a moving tag: an image that changed under an approved gear would change what it runs inside without the approval changing. |
 | `sandbox` | `COGITORIUM_SANDBOX` | `auto` | `auto`, `docker`, `kubernetes` or `subprocess`. `auto` uses Docker when it answers and says so when it cannot; it never selects `kubernetes`, which is a deliberate deployment. |
 | `kube_claim` | `COGITORIUM_KUBE_CLAIM` | — | The claim the data directory is on. A gear Job mounts it at the run's own subPath. Required by `sandbox: kubernetes`; the chart sets it. |
 | `kube_node` | `COGITORIUM_KUBE_NODE` | — | The node to pin gear Jobs to. The chart takes it from the downward API — a ReadWriteOnce volume attaches to one node. |

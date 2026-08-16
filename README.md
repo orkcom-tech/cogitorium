@@ -53,6 +53,11 @@ rebuilt. One Go binary, your own models, no telemetry.
   tasks to Claude Desktop, Cursor or anything else that speaks the Model Context
   Protocol. The approval gate holds through it: a gear you have not approved is
   not listed and will not run. [→](https://orkcom-tech.github.io/cogitorium/#mcp--this-install-as-a-tool-provider)
+- 🌐 **A browser, when you grant one** — an operator can give a gear an
+  environment with a real browser in it, on the same screen as its network
+  grant. Screenshots and page text come back as ordinary run artifacts; there
+  is no separate browser pipeline to learn.
+  [→](https://orkcom-tech.github.io/cogitorium/#the-environment)
 - ☸️ **Gears run as Kubernetes Jobs in-cluster** — one Job per run, mounting the
   data claim at that run's own subPath, so the gear sees its payload and nothing
   else on the volume. No token in the gear's pod, every capability dropped, the

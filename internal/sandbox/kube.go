@@ -310,9 +310,13 @@ func (k *Kube) create(ctx context.Context, name, subPath string, spec Spec, time
 func (k *Kube) manifest(name, subPath string, spec Spec, timeout int) map[string]any {
 	args := append([]string{"sh", "-c", shim, spec.Command, spec.Command}, spec.Args...)
 
+	image := k.Image
+	if spec.Image != "" {
+		image = spec.Image
+	}
 	container := map[string]any{
 		"name":       "gear",
-		"image":      k.Image,
+		"image":      image,
 		"command":    args,
 		"workingDir": kubeMount,
 		"env": []any{

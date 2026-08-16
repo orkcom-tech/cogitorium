@@ -176,7 +176,13 @@ func (d *Docker) createArgs(spec Spec, interactive bool) []string {
 	for k, v := range spec.Env {
 		a = append(a, "-e", k+"="+v)
 	}
-	a = append(a, d.Image, spec.Command)
+	// The run's own image when it was given one, so a gear granted a browser
+	// gets a machine with one rather than the ordinary sandbox.
+	image := d.Image
+	if spec.Image != "" {
+		image = spec.Image
+	}
+	a = append(a, image, spec.Command)
 	return append(a, spec.Args...)
 }
 

@@ -111,6 +111,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	cs := contextstore.New(cfg.ContextdPath)
 	gears := gear.NewStore(db)
 	gearExec := gear.NewExecutor(gears, cfg.DataDir, sb, env, gate)
+	gearExec.SetBrowserImage(cfg.BrowserImage)
 	lib := library.NewStore(db)
 	broker := egress.New()
 	queue := work.NewStore(db)

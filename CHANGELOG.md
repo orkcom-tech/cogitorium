@@ -1,5 +1,58 @@
 # Changelog
 
+## v0.12.0
+
+Stage 7 of the parity plan: an operator can give a gear a machine with a browser
+in it.
+
+### The environment is a grant, like the network
+
+A gear runs in this install's ordinary sandbox image. It can now be granted a
+different **environment** instead, on the same screen and in the same act as the
+network — because an agent asking for a browser is asking for a machine that
+renders untrusted pages, and that is decided while reading the source.
+
+One environment exists, `browser`, resolving to `browser_image`. A real run:
+
+```
+BROWSER=/ms-playwright/chromium-1194/chrome-linux/chrome
+SHOT=7012 TEXT=97
+```
+
+A screenshot and the page's text, written into `out/` and collected by the same
+path that already carries any file a gear produces. There is no browser
+pipeline and no new record — that is the point of doing it this way rather than
+building a second one.
+
+A gear **names an environment, never an image**: naming one would be
+agent-authored code choosing what it runs inside, and pinning one would break
+the day the operator moved. Forging a new version clears the environment along
+with the approval, so an agent cannot rewrite a gear's code and inherit a
+capability granted to different code.
+
+### The constraint that made it worth testing
+
+A gear runs as an unprivileged user with every capability dropped and no new
+privileges, which is exactly where a browser's own sandbox cannot start. That a
+browser renders at all under those flags is a fact about this arrangement rather
+than something readable from the code, so it is established by running one: a
+real container, a real Chromium, a real page, and a screenshot that is seven
+kilobytes rather than a file that merely exists.
+
+`--no-sandbox` is therefore required of a browser gear. The container is the
+boundary and it is the same one every other gear has.
+
+### Also true
+
+The browser image is about a gigabyte and is **not** pre-fetched at startup the
+way the ordinary one is, because most installs never grant it. The first gear
+that needs one pays for the pull inside its own timeout — raise that gear's
+timeout for its first run, or pull the image on the host.
+
+The default is pinned to a version rather than a moving tag: an image that
+changed under an approved gear would change what it runs inside without the
+approval changing.
+
 ## v0.11.0
 
 Stage 6 of the parity plan: a gear is not given its secrets.

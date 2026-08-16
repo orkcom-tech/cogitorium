@@ -373,8 +373,9 @@ func (s *Server) handleSetGearStatus(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	if in.Status == nil && in.TimeoutSeconds == nil && in.Network == nil {
-		writeError(w, http.StatusBadRequest, "nothing to change: send status, timeout_seconds and/or network")
+	if in.Status == nil && in.TimeoutSeconds == nil && in.Network == nil && in.Environment == nil {
+		writeError(w, http.StatusBadRequest,
+			"nothing to change: send status, timeout_seconds, network and/or environment")
 		return
 	}
 	if in.Status != nil {
@@ -393,6 +394,12 @@ func (s *Server) handleSetGearStatus(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if in.TimeoutSeconds != nil {
 		if g, err = s.gears.SetTimeout(r.Context(), id, *in.TimeoutSeconds); err != nil {
+			failGear(w, r, err)
+			return
+		}
+	}
+	if in.Environment != nil {
+		if g, err = s.gears.SetEnvironment(r.Context(), id, *in.Environment); err != nil {
 			failGear(w, r, err)
 			return
 		}

@@ -373,6 +373,47 @@ edge to substitute at, so a stand-in would simply be a credential that cannot
 work. If your gear uses a key locally rather than in a request, that is the case
 you are in, and nothing changes for you.
 
+### Giving a gear a browser
+
+A gear runs in the ordinary sandbox image, which has no browser in it. On the
+approval screen you can give it the **browser** environment instead — the same
+place and the same act as the network grant, because it is the same kind of
+decision.
+
+```bash
+curl -X PATCH http://127.0.0.1:8688/api/v1/gears/1 -H 'Content-Type: application/json' \
+  -d '{"environment":"browser","network":{"granted":true,"hosts":["example.com"]},"status":"approved"}'
+```
+
+The gear then finds a real browser in its container and drives it however it
+likes. A few lines of shell is enough:
+
+```bash
+CHROME=$(ls -d /ms-playwright/chromium-*/chrome-linux/chrome | head -1)
+mkdir -p out
+"$CHROME" --headless --no-sandbox --screenshot=out/shot.png https://example.com
+"$CHROME" --headless --no-sandbox --dump-dom https://example.com > out/page.txt
+```
+
+That is a real run:
+
+```
+BROWSER=/ms-playwright/chromium-1194/chrome-linux/chrome
+SHOT=7012 TEXT=97
+```
+
+`out/` is collected the way it always is, so the screenshot and the page text
+come back as run artifacts an agent can hand on and you can open. Nothing about
+the record is new.
+
+Three things worth knowing. **`--no-sandbox` is required**: a gear already runs
+as an unprivileged user with every capability dropped, which is exactly where a
+browser's own sandbox cannot start — the container is the boundary, and it is
+the same one every gear has. **The image is about a gigabyte** and is not
+fetched until a gear needs it, so give the first such run a longer timeout or
+pull it on the host first. And **the browser is not the network**: a gear that
+has a browser and no network grant can render a local file and nothing else.
+
 ### Letting a gear reach out
 
 A gear has no network. You grant it one when you approve it, on the same screen
@@ -1323,6 +1364,9 @@ So that you do not go looking:
 - No streaming from a receiver, and no fan-out of one delivery to several agents.
 - Cogitorium serves MCP but does not consume it: an agent cannot yet be granted an external MCP server's tools.
 - No remote agents: every agent's turn is taken by this server's own process.
+- No browser an agent drives directly: a gear granted the browser environment
+  drives one, and the agent calls the gear. There is no live page an agent
+  clicks around in, and no session that survives a run.
 - No terminal in-cluster. A terminal is an interactive attachment and a gear Job
   is run-to-completion; the Kubernetes backend runs a gear rather than attaching
   to one.
