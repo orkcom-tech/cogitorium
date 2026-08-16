@@ -62,6 +62,12 @@ jobs:
     name: container image
     needs: goreleaser
     runs-on: ubuntu-latest
+    # Because the alternative is what happened on v0.7.0: the arm64 half of the
+    # build hung under QEMU and ran until GitHub's own six-hour ceiling killed
+    # it, which reports as "cancelled" — a word that reads like somebody pressed
+    # a button rather than like a failure worth looking at. The same build takes
+    # about twenty-two minutes when it is healthy.
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
