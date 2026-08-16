@@ -62,9 +62,13 @@ func netGate(t *testing.T, db *sql.DB) *gearnet.Gate {
 // workspace directory on disk. contextd is not installed — the ordinary case —
 // which is why nothing here depends on the library's text store.
 type filesFixture struct {
-	t       *testing.T
-	e       *Engine
-	gears   *gear.Store
+	t     *testing.T
+	e     *Engine
+	gears *gear.Store
+	// db is kept so a test can build another store over the same database the
+	// engine is using, rather than a second one that would not see its rows.
+	db      *sql.DB
+	ws      *workspace.Store
 	dataDir string
 	root    string // the workspace's own directory
 	outside string // a directory that is NOT the workspace
@@ -116,7 +120,7 @@ func newFilesFixture(t *testing.T) *filesFixture {
 		t.Fatal("the workspace has no working directory, so nothing below can run")
 	}
 	return &filesFixture{
-		t: t, e: e, gears: gears, dataDir: dataDir, root: root,
+		t: t, e: e, gears: gears, db: db, ws: ws, dataDir: dataDir, root: root,
 		outside: t.TempDir(), wsID: space.ID, orch: orch,
 	}
 }
@@ -449,7 +453,7 @@ func TestUnattendedRunRefusesTheCatalogueReadersAtDispatch(t *testing.T) {
 
 	// And they are not advertised either — belt as well as braces, since a tool
 	// that is offered and always refused costs a paid round-trip per iteration.
-	for _, tool := range f.e.toolsFor(f.orch, nil, nil, false, true) {
+	for _, tool := range f.e.toolsFor(f.orch, nil, nil, nil, false, true) {
 		if unattendedClosedTools[tool.Name] {
 			t.Errorf("%q is still offered on an unattended run", tool.Name)
 		}

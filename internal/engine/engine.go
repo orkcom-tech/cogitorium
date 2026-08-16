@@ -20,6 +20,8 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
+	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
+	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/websearch"
 	"github.com/orkcom-tech/cogitorium/internal/work"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
@@ -86,7 +88,15 @@ type Engine struct {
 	ctx      *contextstore.Store
 	gears    *gear.Store
 	gearExec *gear.Executor
-	library  *library.Store
+	// mcp is the external MCP servers an operator installed and granted. Nil
+	// when the capability is off, which is the default: it is the one thing
+	// this product runs that it never saw the source of.
+	// mcpSecrets resolves the names such a server was granted — the same
+	// resolver a gear's names go through, so the two cannot disagree about
+	// what a name means in a workspace.
+	mcp        *mcpstore.Store
+	mcpSecrets *secrets.Resolver
+	library    *library.Store
 
 	// dataDir is where the workspace directories live. The engine holds it
 	// because agents now read and write their workspace's own files, and
@@ -406,13 +416,17 @@ func (e *Engine) modelTurn(ctx context.Context, wsID int64, agent workspace.Agen
 	if err != nil {
 		return llm.Result{}, err
 	}
+	mcpTools, err := e.mcpToolsFor(ctx, wsID, agent.ID)
+	if err != nil {
+		return llm.Result{}, err
+	}
 
 	e.setStatus(agent.ID, "thinking", "", emit)
 	res, err := client.Chat(ctx, llm.Request{
 		Model:    model.ModelName,
 		System:   system,
 		Messages: history,
-		Tools:    e.toolsFor(agent, targets, gears, e.egressAvailable(ctx, wsID, agent), e.turn(wsID).unattended),
+		Tools:    e.toolsFor(agent, targets, gears, mcpTools, e.egressAvailable(ctx, wsID, agent), e.turn(wsID).unattended),
 	}, func(text string) error {
 		emit(Event{Type: "delta", AgentID: agent.ID, Text: text})
 		return ctx.Err()
@@ -1036,7 +1050,11 @@ func (e *Engine) runAgent(ctx context.Context, wsID int64, agent workspace.Agent
 	if err != nil {
 		return "", err
 	}
-	tools := e.toolsFor(agent, targets, gears, e.egressAvailable(ctx, wsID, agent), e.turn(wsID).unattended)
+	mcpTools, err := e.mcpToolsFor(ctx, wsID, agent.ID)
+	if err != nil {
+		return "", err
+	}
+	tools := e.toolsFor(agent, targets, gears, mcpTools, e.egressAvailable(ctx, wsID, agent), e.turn(wsID).unattended)
 
 	history := []llm.Turn{{Role: "user", Text: task}}
 	for iter := 0; iter < maxToolIterations; iter++ {

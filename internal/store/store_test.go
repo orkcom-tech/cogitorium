@@ -200,7 +200,7 @@ func TestFreshSchemaContainsTheTablesTheProductQueries(t *testing.T) {
 		"instructions",                   // 0011
 		"agent_usage",                    // 0012
 		"agent_egress", "search_queries", // 0013
-		"workspace_teams", // 0014
+		"workspace_teams",                          // 0014
 		"mcp_servers", "mcp_tools", "mcp_bindings", // 0027
 	} {
 		if !tableExists(t, db, table) {

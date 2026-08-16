@@ -11,6 +11,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
+	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/workdir"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
@@ -44,7 +45,7 @@ const gearFilesArg = "_files"
 
 // toolsFor returns the tools an agent may use: built-ins by role, delegation
 // along its outgoing wires, and every approved gear bound to it.
-func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gears []gear.Gear, egressGranted, unattended bool) []llm.Tool {
+func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gears []gear.Gear, mcpTools []mcpstore.Tool, egressGranted, unattended bool) []llm.Tool {
 	var tools []llm.Tool
 
 	if agent.IsOrchestrator {
@@ -319,7 +320,52 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 			InputSchema: withFilesArg(schema, g.Name),
 		})
 	}
+
+	// External MCP tools, beside the gears and named so they cannot collide
+	// with one. The schema is the remote server's own — this install did not
+	// write it and does not second-guess it — and the description says where
+	// the tool comes from, because "which of these two search tools do I
+	// trust" is a choice the model is being asked to make.
+	for _, t := range mcpTools {
+		desc := t.Description
+		if desc == "" {
+			desc = "A tool from the external MCP server " + t.ServerName + "."
+		} else {
+			desc += " (from the external MCP server " + t.ServerName + ".)"
+		}
+		tools = append(tools, llm.Tool{
+			Name:        t.OfferedName,
+			Description: desc,
+			InputSchema: remoteSchema(t),
+		})
+	}
 	return tools
+}
+
+// remoteSchema is the server's own argument schema, or an empty object if it
+// sent something that will not decode.
+//
+// Not a refusal: a tool with an unreadable schema is still a tool, and the
+// alternative — dropping it from the list — is an agent quietly missing a
+// capability its operator granted. An empty object says "an object, contents
+// unspecified", which is what is actually known.
+func remoteSchema(t mcpstore.Tool) map[string]any {
+	var out map[string]any
+	if json.Unmarshal([]byte(t.InputSchema), &out) != nil || out == nil {
+		slog.Warn("an MCP tool's schema could not be read; offering it with an open one",
+			"tool", t.OfferedName, "server", t.ServerName)
+		return map[string]any{"type": "object"}
+	}
+	return out
+}
+
+// mcpToolsFor is what this agent may call, or nothing at all when the
+// capability was never switched on.
+func (e *Engine) mcpToolsFor(ctx context.Context, wsID, agentID int64) ([]mcpstore.Tool, error) {
+	if e.mcp == nil {
+		return nil, nil
+	}
+	return e.mcp.ToolsForAgent(ctx, wsID, agentID)
 }
 
 // withFilesArg adds the file argument to a gear's own schema.
@@ -402,6 +448,11 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 	// straight through.
 	if gearName, ok := strings.CutPrefix(call.Name, gearToolPrefix); ok {
 		return e.runGear(ctx, wsID, agent, gearName, call.InputJSON)
+	}
+	// An external MCP tool. Its arguments are the remote server's schema, so
+	// they go through untouched, exactly as a gear's do.
+	if strings.HasPrefix(call.Name, mcpstore.ToolPrefix) {
+		return e.runMCPTool(ctx, wsID, agent, call.Name, call.InputJSON)
 	}
 
 	args, err := parseArgs(call.Name, call.InputJSON)
