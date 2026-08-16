@@ -161,11 +161,7 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var in struct {
-		Name    string `json:"name"`
-		Role    string `json:"role"`
-		ModelID int64  `json:"model_id"`
-	}
+	var in CreateAgentBody
 	if !decodeJSON(w, r, &in) {
 		return
 	}

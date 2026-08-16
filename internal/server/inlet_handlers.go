@@ -704,10 +704,7 @@ func (s *Server) handleCreateInlet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var in struct {
-		Address     string `json:"address"`
-		Description string `json:"description"`
-	}
+	var in CreateInletBody
 	if !decodeJSON(w, r, &in) {
 		return
 	}

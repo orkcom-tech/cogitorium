@@ -7,11 +7,13 @@ info:
     route table by a test that fails when the two disagree — so this lists every
     endpoint that exists, and only those.
 
-    Request and response bodies are not yet described. Every path, method,
-    parameter and credential below is exact; the shape of what travels in the
-    body is documented in the reference at
-    https://orkcom-tech.github.io/cogitorium/ until the handlers carry named
-    types this can be generated from.
+    Request bodies are described where the handler decodes into a named type,
+    and those schemas are the parser's own definition rather than a second
+    account of it. The rest are being named route by route; until then their
+    shape is in the reference at https://orkcom-tech.github.io/cogitorium/.
+    A test holds the count of undescribed ones so it can only fall.
+
+    Response bodies are not described yet.
 
     The version above is the API surface — everything here lives under /api/v1 —
     and deliberately not the build's version: a document that changed with every
@@ -214,6 +216,35 @@ paths:
           description: see the reference
     post:
       summary: "Create gears"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "args_schema":
+                  description: any JSON value
+                "code":
+                  type: string
+                "description":
+                  type: string
+                "entrypoint":
+                  type: string
+                "env_names":
+                  type: array
+                  items:
+                    type: string
+                "files":
+                  description: any JSON value
+                "name":
+                  type: string
+                "runtime":
+                  type: string
+                "tags":
+                  type: array
+                  items:
+                    type: string
       responses:
         default:
           description: see the reference
@@ -237,6 +268,26 @@ paths:
           description: see the reference
     patch:
       summary: "Update gears/{id}"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "network":
+                  type: object
+                  properties:
+                    "granted":
+                      type: boolean
+                    "hosts":
+                      type: array
+                      items:
+                        type: string
+                "status":
+                  type: string
+                "timeout_seconds":
+                  type: integer
       responses:
         default:
           description: see the reference
@@ -263,6 +314,15 @@ paths:
           format: int64
     post:
       summary: "Create gears/{id}/invoke"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "args":
+                  description: any JSON value
       responses:
         default:
           description: see the reference
@@ -276,6 +336,24 @@ paths:
           format: int64
     post:
       summary: "Create gears/{id}/run"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "args":
+                  description: any JSON value
+                "network":
+                  type: object
+                  properties:
+                    "granted":
+                      type: boolean
+                    "hosts":
+                      type: array
+                      items:
+                        type: string
       responses:
         default:
           description: see the reference
@@ -320,6 +398,38 @@ paths:
           description: see the reference
     put:
       summary: "Replace inlet-tasks/{id}"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "accepts":
+                  type: string
+                "agent":
+                  type: string
+                "callback_url":
+                  type: string
+                "content_type":
+                  type: string
+                "expect":
+                  type: object
+                  properties:
+                    "answer_from":
+                      type: string
+                    "produces_files":
+                      type: integer
+                    "runs_gear":
+                      type: string
+                    "schema":
+                      description: any JSON value
+                "instruction":
+                  type: string
+                "name":
+                  type: string
+                "schema":
+                  description: any JSON value
       responses:
         default:
           description: see the reference
@@ -364,6 +474,38 @@ paths:
           format: int64
     post:
       summary: "Create inlets/{id}/tasks"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "accepts":
+                  type: string
+                "agent":
+                  type: string
+                "callback_url":
+                  type: string
+                "content_type":
+                  type: string
+                "expect":
+                  type: object
+                  properties:
+                    "answer_from":
+                      type: string
+                    "produces_files":
+                      type: integer
+                    "runs_gear":
+                      type: string
+                    "schema":
+                      description: any JSON value
+                "instruction":
+                  type: string
+                "name":
+                  type: string
+                "schema":
+                  description: any JSON value
       responses:
         default:
           description: see the reference
@@ -673,6 +815,19 @@ paths:
           description: see the reference
     post:
       summary: "Create workspaces"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "description":
+                  type: string
+                "name":
+                  type: string
+                "orchestrator_model_id":
+                  type: integer
       responses:
         default:
           description: see the reference
@@ -715,6 +870,19 @@ paths:
           description: see the reference
     post:
       summary: "Create workspaces/{id}/agents"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "model_id":
+                  type: integer
+                "name":
+                  type: string
+                "role":
+                  type: string
       responses:
         default:
           description: see the reference
@@ -958,6 +1126,17 @@ paths:
           description: see the reference
     post:
       summary: "Create workspaces/{id}/inlets"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "address":
+                  type: string
+                "description":
+                  type: string
       responses:
         default:
           description: see the reference

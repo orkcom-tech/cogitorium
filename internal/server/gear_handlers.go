@@ -250,9 +250,7 @@ func (s *Server) handleInvokeGear(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var in struct {
-		Args json.RawMessage `json:"args"`
-	}
+	var in InvokeGearBody
 	if !decodeJSON(w, r, &in) {
 		return
 	}
@@ -371,11 +369,7 @@ func (s *Server) handleSetGearStatus(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var in struct {
-		Status         *string       `json:"status"`
-		TimeoutSeconds *int          `json:"timeout_seconds"`
-		Network        *networkInput `json:"network"`
-	}
+	var in SetGearStatusBody
 	if !decodeJSON(w, r, &in) {
 		return
 	}

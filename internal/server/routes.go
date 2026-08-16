@@ -23,6 +23,10 @@ import (
 type Route struct {
 	Method string
 	Path   string
+	// Body is the type this route decodes a request into, or nil where the
+	// body is not yet named. The description is generated from it, so a field
+	// renamed in the struct is renamed in the document by the same edit.
+	Body any
 	// Auth says what a caller needs. Derived from the path rather than
 	// declared, because the middleware derives it the same way — two
 	// independent statements of the same rule would be two things to keep in
@@ -68,6 +72,17 @@ func (s *Server) route(mux *http.ServeMux, pattern string, h http.HandlerFunc) {
 	}
 	s.routes = append(s.routes, Route{Method: method, Path: path, Auth: authFor(path)})
 	mux.HandleFunc(pattern, h)
+}
+
+// routeIn is route, for an endpoint that takes a body. The body argument is a
+// zero value of the type the handler decodes into — passing the type rather
+// than describing it is what keeps the two from drifting.
+func (s *Server) routeIn(mux *http.ServeMux, pattern string, h http.HandlerFunc, body any) {
+	before := len(s.routes)
+	s.route(mux, pattern, h)
+	if len(s.routes) > before {
+		s.routes[len(s.routes)-1].Body = body
+	}
 }
 
 // Routes returns every registered endpoint, sorted so the order is the

@@ -46,7 +46,9 @@ rebuilt. One Go binary, your own models, no telemetry.
   the source.
 - 📐 **A described API** — `docs/openapi.yaml` lists all 85 endpoints, generated
   from the server's own route table by a test that fails when the two disagree,
-  so a route cannot exist without appearing in it.
+  so a route cannot exist without appearing in it. Request schemas come from the
+  structs the server actually decodes into.
+  [→](https://orkcom-tech.github.io/cogitorium/#the-api-description)
 - 🔌 **Speaks MCP** — `cogitorium mcp` serves your approved gears and receiver
   tasks to Claude Desktop, Cursor or anything else that speaks the Model Context
   Protocol. The approval gate holds through it: a gear you have not approved is

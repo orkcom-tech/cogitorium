@@ -91,3 +91,60 @@ func firstDifference(want, got string) string {
 	}
 	return "the files differ but no line does, which means one ends without a newline"
 }
+
+// A described body must land where OpenAPI expects it.
+//
+// The first version of the generator indented the schema to sit beside
+// `content` rather than under `schema`. That is valid YAML — it parsed, the
+// document loaded, and a check for "does this route have a requestBody"
+// passed — while every schema read back as null. A generator that produces
+// well-formed nonsense is the failure this test exists for.
+func TestADescribedBodyIsWhereASchemaBelongs(t *testing.T) {
+	d := newDoor(t)
+	doc := openAPI(d.srv.Routes())
+
+	// The one route whose body is a single named field, so the assertion can
+	// name what it expects to find rather than checking a shape.
+	i := strings.Index(doc, `"/api/v1/inlet-tasks/{id}":`)
+	if i < 0 {
+		t.Fatal("the receiver task route is not in the document at all")
+	}
+	section := doc[i:]
+	if j := strings.Index(section[1:], "\n  \""); j > 0 {
+		section = section[:j]
+	}
+	for _, want := range []string{
+		"      requestBody:\n",
+		"        content:\n",
+		"          application/json:\n",
+		"            schema:\n",
+		// Fourteen spaces. If this line ever loses two, the schema silently
+		// becomes a sibling of content again.
+		"              type: object\n",
+		"                \"instruction\":\n",
+	} {
+		if !strings.Contains(section, want) {
+			t.Fatalf("the request body is not nested where OpenAPI reads it — missing %q in:\n%s", want, section)
+		}
+	}
+}
+
+// The undescribed bodies are a debt, and this is the ratchet on it: naming one
+// is welcome, un-naming one is not. Without a number here the count drifts back
+// up one convenient handler at a time.
+func TestTheNumberOfUndescribedBodiesOnlyFalls(t *testing.T) {
+	// Raise this only by describing MORE. If this fails because the number
+	// went up, a route was added without a named body type or one was removed.
+	const described = 9
+
+	d := newDoor(t)
+	got, mutating := describedBodies(d.srv.Routes())
+	if got < described {
+		t.Fatalf("%d of %d mutating routes describe their body, down from %d.\nStill undescribed:\n  %s",
+			got, mutating, described, strings.Join(mutatingWithoutBody(d.srv.Routes()), "\n  "))
+	}
+	if got > described {
+		t.Fatalf("%d routes now describe their body, up from %d — raise the constant in this test, "+
+			"which is the point of it", got, described)
+	}
+}

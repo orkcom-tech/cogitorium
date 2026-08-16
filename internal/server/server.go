@@ -192,7 +192,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "DELETE /api/v1/models/{id}", s.handleDeleteModel)
 
 	s.route(mux, "GET /api/v1/workspaces", s.handleListWorkspaces)
-	s.route(mux, "POST /api/v1/workspaces", s.handleCreateWorkspace)
+	s.routeIn(mux, "POST /api/v1/workspaces", s.handleCreateWorkspace, CreateWorkspaceBody{})
 	s.route(mux, "GET /api/v1/workspaces/{id}", s.handleGetWorkspace)
 	s.route(mux, "DELETE /api/v1/workspaces/{id}", s.handleDeleteWorkspace)
 	s.route(mux, "POST /api/v1/workspaces/{id}/clone", s.handleCloneWorkspace)
@@ -201,7 +201,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "POST /api/v1/workspaces/{id}/teams", s.handleShareWorkspace)
 	s.route(mux, "DELETE /api/v1/workspaces/{id}/teams/{teamId}", s.handleUnshareWorkspace)
 	s.route(mux, "GET /api/v1/workspaces/{id}/agents", s.handleListAgents)
-	s.route(mux, "POST /api/v1/workspaces/{id}/agents", s.handleCreateAgent)
+	s.routeIn(mux, "POST /api/v1/workspaces/{id}/agents", s.handleCreateAgent, CreateAgentBody{})
 	s.route(mux, "PATCH /api/v1/agents/{id}", s.handleUpdateAgent)
 	s.route(mux, "DELETE /api/v1/agents/{id}", s.handleDeleteAgent)
 	s.route(mux, "GET /api/v1/workspaces/{id}/wires", s.handleListWires)
@@ -259,16 +259,16 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "DELETE /api/v1/workspaces/{id}/env/{name}", s.handleDeleteWorkspaceEnv)
 
 	s.route(mux, "GET /api/v1/gears", s.handleListGears)
-	s.route(mux, "POST /api/v1/gears", s.handleCreateGear)
+	s.routeIn(mux, "POST /api/v1/gears", s.handleCreateGear, CreateGearBody{})
 	s.route(mux, "GET /api/v1/gears/{id}", s.handleGetGear)
-	s.route(mux, "POST /api/v1/gears/{id}/run", s.handleRunGear)
+	s.routeIn(mux, "POST /api/v1/gears/{id}/run", s.handleRunGear, RunGearBody{})
 	// Distinct from the dry run above on purpose: /run bypasses approval and
 	// /invoke enforces it. Two verbs because they are two different promises,
 	// and collapsing them into one flag is how the safe one becomes optional.
-	s.route(mux, "POST /api/v1/gears/{id}/invoke", s.handleInvokeGear)
+	s.routeIn(mux, "POST /api/v1/gears/{id}/invoke", s.handleInvokeGear, InvokeGearBody{})
 	s.route(mux, "GET /api/v1/gears/{id}/runs", s.handleListGearRuns)
 	s.route(mux, "GET /api/v1/gears/{id}/connections", s.handleListGearConnections)
-	s.route(mux, "PATCH /api/v1/gears/{id}", s.handleSetGearStatus)
+	s.routeIn(mux, "PATCH /api/v1/gears/{id}", s.handleSetGearStatus, SetGearStatusBody{})
 	s.route(mux, "DELETE /api/v1/gears/{id}", s.handleDeleteGear)
 	s.route(mux, "GET /api/v1/workspaces/{id}/gears", s.handleListGearBindings)
 	s.route(mux, "POST /api/v1/workspaces/{id}/gears", s.handleCreateGearBinding)
@@ -279,15 +279,15 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// same access rule as everything else in that workspace. Only delivery
 	// lives outside the authentication middleware, and it lives at /i/.
 	s.route(mux, "GET /api/v1/workspaces/{id}/inlets", s.handleListInlets)
-	s.route(mux, "POST /api/v1/workspaces/{id}/inlets", s.handleCreateInlet)
+	s.routeIn(mux, "POST /api/v1/workspaces/{id}/inlets", s.handleCreateInlet, CreateInletBody{})
 	s.route(mux, "GET /api/v1/inlets/{id}", s.handleGetInlet)
 	s.route(mux, "DELETE /api/v1/inlets/{id}", s.handleDeleteInlet)
 	s.route(mux, "POST /api/v1/inlets/{id}/key", s.handleRotateInletKey)
-	s.route(mux, "POST /api/v1/inlets/{id}/tasks", s.handleAddInletTask)
+	s.routeIn(mux, "POST /api/v1/inlets/{id}/tasks", s.handleAddInletTask, InletTaskBody{})
 	// PUT, not PATCH: the body is the whole task. A merge would have to decide
 	// what an absent schema means, and "accept anything" is not a thing that
 	// may happen because a field was left out.
-	s.route(mux, "PUT /api/v1/inlet-tasks/{id}", s.handleUpdateInletTask)
+	s.routeIn(mux, "PUT /api/v1/inlet-tasks/{id}", s.handleUpdateInletTask, InletTaskBody{})
 	s.route(mux, "DELETE /api/v1/inlet-tasks/{id}", s.handleDeleteInletTask)
 	s.route(mux, "GET /api/v1/workspaces/{id}/inlet-runs", s.handleListInletRuns)
 	s.route(mux, "GET /api/v1/inlet-runs/{id}", s.handleGetInletRun)

@@ -30,11 +30,13 @@ info:
     route table by a test that fails when the two disagree — so this lists every
     endpoint that exists, and only those.
 
-    Request and response bodies are not yet described. Every path, method,
-    parameter and credential below is exact; the shape of what travels in the
-    body is documented in the reference at
-    https://orkcom-tech.github.io/cogitorium/ until the handlers carry named
-    types this can be generated from.
+    Request bodies are described where the handler decodes into a named type,
+    and those schemas are the parser's own definition rather than a second
+    account of it. The rest are being named route by route; until then their
+    shape is in the reference at https://orkcom-tech.github.io/cogitorium/.
+    A test holds the count of undescribed ones so it can only fall.
+
+    Response bodies are not described yet.
 
     The version above is the API surface — everything here lives under /api/v1 —
     and deliberately not the build's version: a document that changed with every
@@ -83,6 +85,11 @@ paths:
 				b.WriteString("      security: []\n")
 			case AuthInletKey:
 				b.WriteString("      security:\n        - inletKey: []\n")
+			}
+			if schema := jsonSchema(r.Body); schema != "" {
+				b.WriteString("      requestBody:\n        required: true\n        content:\n")
+				b.WriteString("          application/json:\n            schema:\n")
+				b.WriteString(schema)
 			}
 			b.WriteString("      responses:\n        default:\n          description: see the reference\n")
 		}
