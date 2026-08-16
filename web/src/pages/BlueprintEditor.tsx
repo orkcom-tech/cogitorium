@@ -25,6 +25,7 @@ import {
 } from '../api'
 import { KINDS } from './GraphCanvas'
 import WireEdge from './WireEdge'
+import { layered, positionsFor } from './layout'
 
 // Declared once, outside the component: React Flow warns and re-renders every
 // edge if this object is a new identity on each pass.
@@ -66,25 +67,6 @@ const LAYER_HINT = {
 // wire is the capability rather than a picture of one.
 const OUTWARD = 'outward'
 const egressEdge = (id: number) => `x-${id}`
-
-// Agents keep their stored positions; gears are laid out beneath them.
-function layoutAgents(agents: Agent[]): Map<number, { x: number; y: number }> {
-  const out = new Map<number, { x: number; y: number }>()
-  agents.forEach((a) => {
-    if (a.pos_x != null && a.pos_y != null) out.set(a.id, { x: a.pos_x, y: a.pos_y })
-  })
-  const unplaced = agents.filter((a) => !out.has(a.id))
-  const workers = unplaced.filter((a) => !a.is_orchestrator)
-  unplaced.forEach((a) => {
-    if (a.is_orchestrator) {
-      out.set(a.id, { x: 0, y: 0 })
-      return
-    }
-    const idx = workers.indexOf(a)
-    out.set(a.id, { x: (idx - (workers.length - 1) / 2) * 220, y: 220 })
-  })
-  return out
-}
 
 export default function BlueprintEditor({
   wsId,
@@ -146,7 +128,11 @@ export default function BlueprintEditor({
   }, [reloadGraph, agents])
 
   const gearById = useMemo(() => new Map(catalog.map((g) => [g.id, g])), [catalog])
-  const positions = useMemo(() => layoutAgents(agents), [agents])
+  // A stored position wins; everything else is laid out by the wires. See
+  // layout.ts — the old version put every unplaced agent in one row, which for
+  // eight of them was a straight line that said nothing about who delegates to
+  // whom.
+  const positions = useMemo(() => positionsFor(agents, wires), [agents, wires])
 
   // Nodes rebuild only on structural change; statuses are applied in place
   // below so a live turn cannot snap a dragged node back.
@@ -385,6 +371,22 @@ export default function BlueprintEditor({
     [onNodesChange, onError],
   )
 
+  // Tidy re-lays out every agent and stores it, which is the difference
+  // between this and a view mode: after tidying, the arrangement is what the
+  // canvas will show next time, on every screen, to everybody.
+  const tidy = useCallback(() => {
+    const want = layered(agents, wires)
+    Promise.all(
+      agents.map((a) => {
+        const p = want.get(a.id)
+        if (!p || (a.pos_x === p.x && a.pos_y === p.y)) return Promise.resolve()
+        return api.agents.update(a.id, { pos_x: p.x, pos_y: p.y })
+      }),
+    )
+      .then(onChanged)
+      .catch((e: Error) => onError(e.message))
+  }, [agents, wires, onChanged, onError])
+
   const inWorkspace = new Set(bindings.map((b) => b.gear_id))
   const addable = catalog.filter((g) => !inWorkspace.has(g.id))
 
@@ -416,6 +418,17 @@ export default function BlueprintEditor({
             🧠 memory branches · 📄 bound documents · 📘 instructions — dotted links show what each agent knows
           </span>
         )}
+        {/* Tidy re-lays out every agent by its wires and STORES the result, so
+            the arrangement is what everybody sees next time rather than a view
+            this one screen holds. Dragging is still the last word: it writes a
+            position too, and a stored one always wins. */}
+        <button
+          className="legend-item bp-tidy"
+          onClick={tidy}
+          title="Arrange every agent by the wires between them, and keep it. Drag any of them afterwards."
+        >
+          ⤢ tidy
+        </button>
       </div>
       {/* Adding things to the graph.
           

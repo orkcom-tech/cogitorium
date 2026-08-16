@@ -167,6 +167,27 @@ and the capability is gone on the next turn — click the edge and press Delete.
 Wires are created and deleted, never edited; to change one, remove it and draw
 the new one.
 
+### It arranges itself
+
+You do not place agents by hand unless you want to. The canvas lays them out by
+the wires between them — rank by distance from the orchestrator, ordered within
+each rank so the wires cross as little as possible:
+
+```
+                 orchestrator
+                  /        \
+             lead-a        lead-b
+             /    \        /    \
+      worker-1  worker-2  worker-3  worker-4
+             \    |        |    /
+                 reporter
+```
+
+**⤢ tidy** re-lays out everything and stores it, so the arrangement is what
+everybody sees next time rather than a view your screen is holding. Drag any
+node afterwards and that wins — a dragged position is kept and the layout leaves
+it alone. Tidy again to take it back.
+
 ![A wired workspace](assets/02-workspace-wired.png)
 
 This is the part worth slowing down on, because it is **graph engineering** and
