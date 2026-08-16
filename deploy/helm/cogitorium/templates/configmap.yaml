@@ -14,6 +14,16 @@ data:
     log_level: {{ .Values.config.logLevel }}
     contextd_path: contextd
     sandbox: {{ .Values.config.sandbox }}
+    {{- if .Values.config.sandboxImage }}
+    sandbox_image: {{ .Values.config.sandboxImage }}
+    {{- end }}
+    {{- if eq .Values.config.sandbox "kubernetes" }}
+    # The claim and the node are NOT here: one is the release's own name and the
+    # other is only known to the kubelet, so both arrive as environment
+    # variables from the deployment instead.
+    kube_cpu: {{ .Values.config.gearResources.cpu | quote }}
+    kube_memory: {{ .Values.config.gearResources.memory | quote }}
+    {{- end }}
     terminal: {{ .Values.config.terminal }}
     egress: {{ .Values.config.egress }}
     {{- if .Values.config.variablesConfigMap }}

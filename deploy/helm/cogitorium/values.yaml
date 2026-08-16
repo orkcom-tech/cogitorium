@@ -76,31 +76,46 @@ config:
   logLevel: info
 
   # ───────────────────────────────────────────────────────────────────────────
-  # CANNOT BE CHANGED (yet): gears are not isolated in this deployment
+  # How gears execute
   #
-  # Off-cluster, gears run in a throwaway Docker container with no network and
-  # none of the server's files. There is no Docker inside a pod, so in-cluster
-  # they run as a subprocess of the server — which means agent-authored code
-  # holds the server's own file access, including the SQLite database and the
-  # provider API keys in it.
+  # "kubernetes" runs each gear as a Job that mounts the SAME volume the data
+  # directory is on, with subPath set to that run's own directory — so the gear
+  # sees its payload at /work and nothing else on the volume. Not the SQLite
+  # database, not the provider keys in it, not another workspace's files. The
+  # kubelet enforces that before the container starts.
   #
-  # The fix is gear execution as Kubernetes Jobs, which is designed and not yet
-  # built. Until it is: the approval gate is the ONLY control, and this chart
-  # refuses to enable the terminal at all (see below). Treat approving a gear in
-  # a cluster as granting it everything the server has.
+  # It needs three things this chart provides: a Role letting the server create
+  # Jobs in its own namespace, a mounted service account token to use it, and
+  # the node name from the downward API — a ReadWriteOnce volume attaches to one
+  # node, so a Job scheduled elsewhere would wait forever on a volume it cannot
+  # have.
+  #
+  # "subprocess" is what this chart could offer before that existed: gears run
+  # as a child of the server, holding the server's own file access. It is still
+  # here because a cluster whose policy forbids the Role above has to be able to
+  # deploy — but on that setting, approving a gear grants it everything the
+  # server has, and the terminal and the outward gate stay refused. Note also
+  # that this image carries no python3, node or bash — they belong to the gear's
+  # own container — so on "subprocess" only a "binary" gear can run at all.
   # ───────────────────────────────────────────────────────────────────────────
-  sandbox: subprocess
+  sandbox: kubernetes
 
-  # The in-UI shell is refused in-cluster and this value cannot turn it on. It
-  # is interactive code execution with the server's file access and no sandbox
-  # to contain it; the server itself also refuses without a sandbox, so this is
-  # the second of two locks rather than the only one.
+  # The image gears run in. Empty means the server's own default.
+  sandboxImage: ""
+
+  # Bounds one gear Job. Empty means the cluster's own defaults.
+  gearResources:
+    cpu: "1"
+    memory: 512Mi
+
+  # The in-UI shell. It needs a sandbox and the chart refuses it without one —
+  # interactive code execution with the server's file access is not something a
+  # value should be able to turn on.
   terminal: false
 
-  # Agents reaching the internet. Off by default. Turning it on ALSO requires a
-  # sandbox — the server refuses to start otherwise, because an unsandboxed gear
-  # can rewrite the configuration and the grants table, which would make the
-  # gate decorative. So in-cluster this cannot be enabled until gear Jobs exist.
+  # Agents reaching the internet. Off by default, and it needs a sandbox: an
+  # unsandboxed gear can rewrite the configuration and the grants table, which
+  # would make the gate decorative.
   egress: false
   egressKey: ""
   egressExistingSecret: ""
@@ -174,14 +189,25 @@ networkPolicy:
   # Namespaces and pods allowed to reach the service.
   allowFrom: []
 
+# Cuts egress for gear Jobs the operator did not grant the network. Enabled by
+# default because "no network unless granted" is what the product promises
+# everywhere else — but a NetworkPolicy is enforced by the CNI plugin, not by
+# Kubernetes, and on a cluster whose CNI ignores them (kindnet, plain flannel)
+# this object is accepted and enforces nothing. Check yours; treat an ungranted
+# gear as networked until you have.
+gearNetworkPolicy:
+  enabled: true
+
 serviceAccount:
   create: true
   name: ""
   annotations: {}
-  # The server does not talk to the Kubernetes API. Mounting a token would give
-  # agent-authored code — which runs in this pod today — a credential for the
-  # cluster.
-  automountServiceAccountToken: false
+  # Required by sandbox: kubernetes — the server creates a Job per gear run, and
+  # that is what it authenticates with. It is no longer a credential inside a
+  # gear's blast radius: the gear runs in its own pod, and that pod sets
+  # automountServiceAccountToken: false, so agent-authored code holds no token
+  # at all. Set this to false only alongside sandbox: subprocess.
+  automountServiceAccountToken: true
 
 nodeSelector: {}
 tolerations: []

@@ -31,12 +31,29 @@ Two things about this deployment that are not preferences:
      so two pods on one volume corrupt it. The Deployment is pinned and the
      strategy is Recreate.
 
-  2. Gears are NOT isolated here. Off-cluster they run in a throwaway container
-     with no network and none of the server's files; there is no Docker in a
-     pod, so in-cluster they run as a subprocess with the server's own access —
-     including the database and the provider keys in it. Approving a gear in
-     this deployment grants it everything the server has. Gear execution as
-     Kubernetes Jobs is the fix; it is designed and not built.
+  2. Gears run as Kubernetes Jobs{{ if ne .Values.config.sandbox "kubernetes" }} — but NOT in this deployment{{ end }}.
+{{- if eq .Values.config.sandbox "kubernetes" }}
+     Each gear run is a Job that mounts this release's data claim with subPath
+     set to that run's own directory, so the gear sees its payload at /work and
+     nothing else on the volume — not the database, not the provider keys in
+     it. The gear's own pod mounts no service account token.
 
-     Because of that, this chart refuses to enable the in-UI terminal or the
-     outward gate at all.
+     Two things to check on your cluster, because this chart cannot:
+
+       - The claim is ReadWriteOnce, so gear Jobs are pinned to this pod's
+         node. On a multi-node cluster with node pressure a gear waits for
+         room here rather than running elsewhere.
+       - "No network unless granted" is a NetworkPolicy, and a NetworkPolicy is
+         enforced by your CNI plugin rather than by Kubernetes. On kindnet or
+         plain flannel it is accepted and enforces NOTHING. Calico and Cilium
+         enforce it. Until you have checked, treat an ungranted gear as
+         networked.
+{{- else }}
+     You set sandbox: subprocess, so gears run as a child of the server with
+     the server's own file access — the database and the provider keys in it.
+     Approving a gear here grants it everything the server has, and the
+     terminal and the outward gate stay refused.
+
+     This image also carries no python3, node or bash, so on this setting only
+     a "binary" gear can run at all.
+{{- end }}

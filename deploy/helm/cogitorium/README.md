@@ -20,22 +20,43 @@ Horizontal scale needs a different store behind the same `store` package. That
 is a project, not a values flag, and smuggling it in as one would be worse than
 not having it.
 
-**Gears are not isolated in this deployment.** Off-cluster, a gear runs in a
-throwaway container with no network and none of the server's files. There is no
-Docker inside a pod, so in-cluster it runs as a subprocess of the server and
-holds the server's own file access — the SQLite database, and the provider API
-keys in it.
+**Gears run as Kubernetes Jobs.** One Job per run. It mounts this release's own
+data claim with `subPath` set to that run's directory, so the gear sees its
+payload at `/work` and nothing else on the volume — not the SQLite database and
+not the provider keys in it. The kubelet enforces that before the container
+starts; nothing depends on the gear respecting a boundary.
 
-So in this deployment, approving a gear grants it everything the server has.
-The approval gate is the only control. The chart therefore refuses, at template
-time, to enable the in-UI terminal or the outward gate: both are meaningless
-without a sandbox, and the server refuses them too.
+The Job's pod runs as the same unprivileged user that owns the payload, drops
+every capability, refuses privilege escalation, takes a read-only root
+filesystem, mounts **no** service account token, and carries the gear's timeout
+as `activeDeadlineSeconds` as well as in the server. `backoffLimit: 0`, because
+a gear re-run after failing may already have sent a request or spent money.
 
-The fix is gear execution as Kubernetes Jobs — one Job per run, its own
-filesystem, no service-account token, a deny-all egress policy, and
-`activeDeadlineSeconds` enforced by the kernel instead of by a timer in the
-server. It is designed in `docs/planning/cogitorium-kubernetes.md`. It is not
-built, and this chart does not pretend otherwise.
+Two properties this chart cannot deliver on its own, stated rather than assumed:
+
+- **The claim is ReadWriteOnce**, which one node may mount for several pods. So
+  gear Jobs are pinned to the server's own node. On a multi-node cluster under
+  pressure a gear waits for room there instead of running elsewhere. A
+  ReadWriteMany claim removes the pin's necessity but not the single-writer rule
+  above.
+- **"No network unless granted" is a NetworkPolicy**, and a NetworkPolicy is
+  enforced by the CNI plugin rather than by Kubernetes. `gearNetworkPolicy`
+  selects gear pods the operator did not grant the network and cuts their
+  egress — on Calico or Cilium. On kindnet, or flannel with no policy add-on,
+  the object is accepted and enforces nothing, silently. Check yours; until you
+  have, treat an ungranted gear as networked. Off-cluster this is
+  `--network none` on the container and needs no such caveat.
+
+`sandbox: subprocess` is still available for a cluster whose policy forbids the
+Role above, and on it a gear runs as a child of the server with the server's own
+file access — approving one grants it everything the server has, and the
+terminal and the outward gate stay refused. Note also that this image carries no
+`python3`, `node` or `bash`: on that setting only a `binary` gear can run at all.
+
+**The terminal is not available in-cluster on either setting.** A terminal is an
+interactive attachment and a gear Job is run-to-completion; the Kubernetes
+backend implements running a gear, not attaching to one. The chart refuses it at
+template time and the server refuses it at startup.
 
 ## Credentials
 
@@ -69,10 +90,15 @@ so `HOME` is set there rather than into the image.
 A chart that renders something broken and lets the cluster discover it turns a
 five-second failure into a debugging session. These fail at template time:
 
-- `config.terminal: true` — interactive code execution with no sandbox to
-  contain it.
-- `config.egress: true` without a sandbox — an unsandboxed gear can rewrite the
-  configuration and the grants table, so the gate would be decorative.
+- `config.terminal: true` — on `subprocess` there is no sandbox containing it;
+  on `kubernetes` there is no interactive attachment to give.
+- `config.egress: true` on `sandbox: subprocess` — an unsandboxed gear can
+  rewrite the configuration and the grants table, so the gate would be
+  decorative.
+- `sandbox: kubernetes` with `serviceAccount.automountServiceAccountToken:
+  false` — the server would have no credential to create Jobs with.
+- A `config.sandbox` other than `kubernetes` or `subprocess`. There is no Docker
+  daemon inside a pod.
 - `persistence.enabled: false` with no `existingClaim` — the database would live
   in the pod and be destroyed on every restart.
 - An `auth.adminToken` shorter than 24 characters.

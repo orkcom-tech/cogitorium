@@ -1,0 +1,39 @@
+{{- if and (eq .Values.config.sandbox "kubernetes") .Values.gearNetworkPolicy.enabled }}
+# A gear reaches the network only if the operator granted it one.
+#
+# Off-cluster this is `--network none` on the container, which the daemon
+# enforces whatever the container does. Kubernetes has no equivalent: a pod is
+# on the pod network the moment it exists. So the runner labels every gear Job
+# with what the operator decided, and this policy cuts egress for the ones that
+# were not granted.
+#
+# READ THIS BEFORE RELYING ON IT: a NetworkPolicy is enforced by the CNI plugin,
+# not by Kubernetes. On a cluster whose CNI does not implement them — kindnet,
+# flannel without an add-on, and some managed defaults — this object is accepted
+# by the API and enforces NOTHING, silently. Calico, Cilium and the managed
+# offerings built on them do enforce it. Check yours rather than assuming, and
+# treat an ungranted gear as networked until you have.
+#
+# DNS is allowed to everything, granted or not, because a pod that cannot
+# resolve fails in a way that looks like every other failure. The gate a granted
+# gear's traffic actually goes through is the server's own, which checks each
+# destination against the grant and writes it down.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cogitorium.fullname" . }}-gears
+  labels: {{- include "cogitorium.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cogitorium
+      app.kubernetes.io/component: gear
+      cogitorium.orkcom.tech/network: denied
+  policyTypes: ["Egress"]
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+{{- end }}

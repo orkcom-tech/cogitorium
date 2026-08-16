@@ -38,6 +38,21 @@ spec:
           securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
           args: ["serve", "--config", "/etc/cogitorium/config.yaml"]
           env:
+            {{- if eq .Values.config.sandbox "kubernetes" }}
+            # A gear Job mounts this same claim at its run directory's subPath.
+            - name: COGITORIUM_KUBE_CLAIM
+              value: {{ .Values.persistence.existingClaim | default (printf "%s-data" (include "cogitorium.fullname" .)) }}
+            # Pinned to this pod's node: a ReadWriteOnce volume attaches to one
+            # node at a time, and a Job scheduled elsewhere would sit Pending on
+            # a volume it can never have — which looks exactly like a gear that
+            # hung.
+            - name: COGITORIUM_KUBE_NODE
+              valueFrom:
+                fieldRef: { fieldPath: spec.nodeName }
+            - name: COGITORIUM_KUBE_NAMESPACE
+              valueFrom:
+                fieldRef: { fieldPath: metadata.namespace }
+            {{- end }}
             - name: HOME
               # contextd keeps its space under HOME, and the root filesystem is
               # read-only — so HOME has to be on the volume or the context layer

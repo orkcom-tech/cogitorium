@@ -1,0 +1,39 @@
+{{- if eq .Values.config.sandbox "kubernetes" }}
+# The permissions gear execution needs, and not one verb more.
+#
+# Namespaced, so this grants nothing outside the release's own namespace. Jobs
+# are created and deleted because that is what running a gear IS here; pods are
+# only read, so that a Job which never starts can be reported as "the image does
+# not exist" rather than as a gear that hung.
+#
+# What is deliberately absent: secrets, configmaps, deployments, and any verb on
+# a pod other than reading its status. A gear's own container holds no token —
+# the Job sets automountServiceAccountToken: false — so these permissions belong
+# to the server alone.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "cogitorium.fullname" . }}-gears
+  labels: {{- include "cogitorium.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "cogitorium.fullname" . }}-gears
+  labels: {{- include "cogitorium.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "cogitorium.fullname" . }}-gears
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "cogitorium.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

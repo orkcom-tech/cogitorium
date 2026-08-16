@@ -1293,6 +1293,9 @@ So that you do not go looking:
 - No receiver may target a gear directly; a task names an agent, and the agent calls the gear.
 - No streaming from a receiver, and no fan-out of one delivery to several agents.
 - Cogitorium serves MCP but does not consume it: an agent cannot yet be granted an external MCP server's tools.
-- Gears do not run as Kubernetes Jobs, and there are no remote agents.
+- No remote agents: every agent's turn is taken by this server's own process.
+- No terminal in-cluster. A terminal is an interactive attachment and a gear Job
+  is run-to-completion; the Kubernetes backend runs a gear rather than attaching
+  to one.
 - No private thread inside a shared workspace: two people in one workspace share its
   conversation. Separate workspaces are how two people stay out of each other's way.

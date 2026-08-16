@@ -53,6 +53,11 @@ rebuilt. One Go binary, your own models, no telemetry.
   tasks to Claude Desktop, Cursor or anything else that speaks the Model Context
   Protocol. The approval gate holds through it: a gear you have not approved is
   not listed and will not run. [→](https://orkcom-tech.github.io/cogitorium/#mcp--this-install-as-a-tool-provider)
+- ☸️ **Gears run as Kubernetes Jobs in-cluster** — one Job per run, mounting the
+  data claim at that run's own subPath, so the gear sees its payload and nothing
+  else on the volume. No token in the gear's pod, every capability dropped, the
+  timeout enforced by the cluster as well as by the server.
+  [→](https://orkcom-tech.github.io/cogitorium/#install)
 - ⌨️ **A command line over the same API** — `cogitorium gears run`,
   `receivers deliver`, `queue cancel`, `workspaces export | import`. It exits
   with the gear's own code, so a shell script branches on what the gear said.

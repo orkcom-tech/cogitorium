@@ -26,8 +26,10 @@ type Config struct {
 	// context layer. Default: "contextd" resolved from PATH.
 	ContextdPath string `yaml:"contextd_path"`
 	// Sandbox selects how gears and the terminal execute: "docker" isolates
-	// them from the server's files, "subprocess" does not. Default "auto"
-	// uses Docker when it answers and says so plainly when it does not.
+	// them from the server's files, "kubernetes" runs each as a Job, and
+	// "subprocess" does not isolate them at all. Default "auto" uses Docker
+	// when it answers and says so plainly when it does not — it never selects
+	// "kubernetes", which is a deliberate deployment rather than a guess.
 	Sandbox string `yaml:"sandbox"`
 	// SandboxImage is the container image gears run in.
 	SandboxImage string `yaml:"sandbox_image"`
@@ -39,6 +41,23 @@ type Config struct {
 	// refuses at startup if the daemon does not have it, which is the honest
 	// boundary — the isolation belongs to the runtime, not to this product.
 	SandboxRuntime string `yaml:"sandbox_runtime"`
+	// KubeNamespace, KubeClaim and KubeNode configure the "kubernetes"
+	// sandbox, where a gear runs as a Job rather than a container this
+	// process creates.
+	//
+	// Only the claim has to be supplied: it names the volume the data
+	// directory is on, and a gear Job mounts that same claim at the run
+	// directory's own subPath so it sees its payload and nothing else.
+	// The namespace defaults to the pod's own, and the node comes from the
+	// downward API — a ReadWriteOnce volume attaches to one node, so a Job
+	// scheduled elsewhere would wait forever on a volume it cannot have.
+	KubeNamespace string `yaml:"kube_namespace"`
+	KubeClaim     string `yaml:"kube_claim"`
+	KubeNode      string `yaml:"kube_node"`
+	// KubeCPU and KubeMemory bound one gear Job. Empty means the cluster's
+	// own defaults, which is usually a LimitRange or nothing at all.
+	KubeCPU    string `yaml:"kube_cpu"`
+	KubeMemory string `yaml:"kube_memory"`
 	// Terminal opens a shell in the UI. Off by default: it is interactive
 	// code execution over HTTP, so switching it on is a deliberate act. It
 	// also requires a sandbox — without one the request is refused rather
@@ -254,6 +273,24 @@ func Load(path, dataDirOverride string) (Config, error) {
 	}
 	if v := os.Getenv("COGITORIUM_SANDBOX_RUNTIME"); v != "" {
 		cfg.SandboxRuntime = v
+	}
+	// The claim and the node come from the chart rather than from a file: one
+	// is a Helm release's own name and the other is the downward API, and
+	// neither is knowable when the ConfigMap is written.
+	if v := os.Getenv("COGITORIUM_KUBE_NAMESPACE"); v != "" {
+		cfg.KubeNamespace = v
+	}
+	if v := os.Getenv("COGITORIUM_KUBE_CLAIM"); v != "" {
+		cfg.KubeClaim = v
+	}
+	if v := os.Getenv("COGITORIUM_KUBE_NODE"); v != "" {
+		cfg.KubeNode = v
+	}
+	if v := os.Getenv("COGITORIUM_KUBE_CPU"); v != "" {
+		cfg.KubeCPU = v
+	}
+	if v := os.Getenv("COGITORIUM_KUBE_MEMORY"); v != "" {
+		cfg.KubeMemory = v
 	}
 	if v := os.Getenv("COGITORIUM_TERMINAL"); v != "" {
 		cfg.Terminal = v == "1" || strings.EqualFold(v, "true")

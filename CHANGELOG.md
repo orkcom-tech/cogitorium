@@ -1,5 +1,117 @@
 # Changelog
 
+## v0.10.0
+
+Stage 5 of the parity plan, and the largest: in a cluster, a gear runs as a
+Kubernetes Job.
+
+### The chart's oldest warning is gone
+
+Every version of this chart until now said the same thing: there is no Docker
+daemon inside a pod, so in-cluster a gear ran as a **subprocess of the server**
+— holding the server's own file access, which is the SQLite database and every
+provider key in it. Approving a gear there granted it everything the server had,
+and the chart refused to enable the terminal or the outward gate at all.
+
+Now each gear run is a **Job**. It mounts the release's own data claim with
+`subPath` set to that run's directory, so the container sees its payload at
+`/work` and nothing else on the volume. Run against a real cluster, a gear
+written to go looking:
+
+```
+cwd: /work
+here: ['.cogitorium', 'main.py']
+/data -> FileNotFoundError [Errno 2] No such file or directory: '/data'
+..    -> ['bin', 'dev', 'etc', 'home', 'lib', 'media', 'mnt', 'opt']
+db glob: []
+uid: 65532
+```
+
+The isolation is the mount, which the kubelet enforces before the container
+starts, rather than anything the gear is trusted to respect. The pod also drops
+every capability, refuses privilege escalation, takes a read-only root
+filesystem, mounts **no** service account token, and carries the gear's timeout
+as `activeDeadlineSeconds` as well as in the server. `backoffLimit: 0`, because
+a gear re-run after failing may already have sent a request or spent money.
+
+Because there is now a sandbox in-cluster, the chart's refusal of the outward
+gate is lifted. The terminal stays refused, for a different and honest reason: a
+terminal is an interactive attachment and a Job is run-to-completion.
+
+### No copy step, in either direction
+
+The payload does not travel. A gear's run directory is already a directory on
+the data volume, and the Job mounts that exact path — so there is nothing to
+copy in, and `out/` needs no collecting: the gear writes it and the server is
+already looking at it. Caught in the act on a real cluster, while the Job was
+still running:
+
+```
+$ kubectl exec -n cog <server-pod> -- cat /data/gears/writer/v1.run-…/out/answer.txt
+written by the Job
+```
+
+Arguments and named values reach the container as files in a hidden control
+directory rather than as fields of the Job object — a gear's named values
+include secrets, and the Job's spec is readable by anything that can list Jobs
+in the namespace and sits in etcd until the object is collected. The two output
+streams are files for a different reason: a pod log is one stream, so a gear's
+warnings would come back as its answer.
+
+### An image that does not exist took sixty seconds to say so
+
+Found by pointing the sandbox image at a registry that is not there. Kubernetes
+does **not** fail a Job whose image cannot be pulled — the pod sits in
+`ImagePullBackOff` and is retried until the deadline — so waiting for the Job to
+report failure meant waiting out the gear's entire timeout and then reporting a
+timeout, which is a true sentence about the wrong thing.
+
+The pod is now asked first, and the difference is the whole point of asking:
+
+```
+59.3s  the gear's Job did not run: ContainerCreating:
+ 3.0s  the gear's Job did not run: ErrImagePull: failed to pull and unpack image
+       "example.invalid/nope:1": … dial tcp: lookup example.invalid: no such host
+```
+
+A pod nothing will schedule is reported the same way, rather than as a gear that
+hung.
+
+### No network unless granted, with the caveat stated
+
+Off-cluster this is `--network none` on the container and the daemon enforces
+it. Kubernetes has no equivalent — a pod is on the pod network the moment it
+exists — so the runner labels every gear pod with what the operator decided and
+the chart ships a NetworkPolicy that cuts egress for the ungranted ones.
+
+**A NetworkPolicy is enforced by the CNI plugin, not by Kubernetes.** On kindnet
+or plain flannel the object is accepted and enforces nothing, silently. Calico
+and Cilium enforce it. That is written into the chart's README, its values, and
+the notes printed after `helm install`, because a promise that quietly depends
+on somebody else's plugin has to say so.
+
+### Also true, and now written down
+
+This image carries no `python3`, `node` or `bash` — they belong to the gear's own
+container. So on `sandbox: subprocess`, which is still available for a cluster
+whose policy forbids the Role, only a `binary` gear can run at all. That was
+already the case; it had never been said.
+
+### How this was checked
+
+Against a real single-node cluster, not a description of one: the image built,
+loaded, and `helm install`ed, then gears forged through the API and run. A gear
+returned `5` for five words; another kept its streams apart and its exit code
+(`3`); one that slept past its ten-second timeout came back at ten seconds with
+`timed_out` and the output it had already produced; Jobs and their control
+directories were gone afterwards.
+
+The manifest itself has a test, because every line of it is a promise made in
+prose elsewhere. Dropping the `subPath` mounts the whole data volume into
+agent-authored code, and nothing else in the system would notice — so that,
+the absent service account token, the network label and the stream redirection
+were each broken in turn to confirm the test fails.
+
 ## v0.9.0
 
 Stage 4 of the parity plan: a command line over the API the interface already

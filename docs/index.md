@@ -94,15 +94,28 @@ helm install cogitorium ./deploy/helm/cogitorium \
   --set auth.adminToken="$(openssl rand -hex 24)"
 ```
 
-Two things about that deployment are consequences rather than preferences, and
-the chart enforces both rather than documenting them. **One replica**: SQLite
-has a single writer, so two pods on one volume corrupt it — there is no
-`replicaCount` value and the strategy is `Recreate`. **Gears are not isolated
-there**: there is no Docker inside a pod, so a gear runs as a subprocess with
-the server's own file access, and approving one grants it everything the server
-has. Because of that the chart refuses, at template time, to enable the in-UI
-terminal or the outward gate. Gear execution as Kubernetes Jobs is the fix and
-is not built. `deploy/helm/cogitorium/README.md` has the rest.
+**One replica** is a consequence rather than a preference, and the chart
+enforces it: SQLite has a single writer, so two pods on one volume corrupt it —
+there is no `replicaCount` value and the strategy is `Recreate`.
+
+**Gears run as Kubernetes Jobs** (`sandbox: kubernetes`, the chart's default).
+Each run is a Job mounting the release's own data claim with `subPath` set to
+that run's directory, so the gear sees its payload at `/work` and nothing else
+on the volume — not the database, not the provider keys in it. Its pod mounts no
+service account token. The chart adds a Role letting the server create Jobs in
+its own namespace, and takes the node name from the downward API: the claim is
+ReadWriteOnce, so a Job scheduled elsewhere would wait forever on a volume it
+cannot attach.
+
+Two caveats the chart states rather than hides. "No network unless granted" is a
+NetworkPolicy in-cluster, and a NetworkPolicy is enforced by the CNI plugin
+rather than by Kubernetes — on kindnet or plain flannel it is accepted and
+enforces nothing. And the **terminal is not available in-cluster**: it is an
+interactive attachment, and a Job is run-to-completion. `sandbox: subprocess` is
+still there for a cluster whose policy forbids the Role, with the same warning
+it always carried — and the image ships no `python3`, `node` or `bash`, so on
+that setting only a `binary` gear runs at all.
+`deploy/helm/cogitorium/README.md` has the rest.
 
 **From source.** Go 1.25 and Node (the UI is built by Vite 7). Docker is
 optional but strongly recommended — without it, gears run with the server's own
@@ -1100,7 +1113,11 @@ then defaults.
 | `data_dir` | `COGITORIUM_DATA_DIR` | `~/.cogitorium` | SQLite database and server-owned files. |
 | `log_level` | `COGITORIUM_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 | `contextd_path` | `COGITORIUM_CONTEXTD` | `contextd` | How to find the Contextverse CLI. |
-| `sandbox` | `COGITORIUM_SANDBOX` | `auto` | `auto`, `docker` or `subprocess`. `auto` uses Docker when it answers and says so when it cannot. |
+| `sandbox` | `COGITORIUM_SANDBOX` | `auto` | `auto`, `docker`, `kubernetes` or `subprocess`. `auto` uses Docker when it answers and says so when it cannot; it never selects `kubernetes`, which is a deliberate deployment. |
+| `kube_claim` | `COGITORIUM_KUBE_CLAIM` | — | The claim the data directory is on. A gear Job mounts it at the run's own subPath. Required by `sandbox: kubernetes`; the chart sets it. |
+| `kube_node` | `COGITORIUM_KUBE_NODE` | — | The node to pin gear Jobs to. The chart takes it from the downward API — a ReadWriteOnce volume attaches to one node. |
+| `kube_namespace` | `COGITORIUM_KUBE_NAMESPACE` | the pod's own | Where gear Jobs are created. |
+| `kube_cpu`, `kube_memory` | `COGITORIUM_KUBE_CPU`, `COGITORIUM_KUBE_MEMORY` | — | Limits on one gear Job. Empty means the cluster's own defaults. |
 | `sandbox_image` | `COGITORIUM_SANDBOX_IMAGE` | `python:3.12-alpine` | The image gears run in. Fetched once at startup so the first gear does not pay for the pull inside its own timeout. |
 | `sandbox_runtime` | `COGITORIUM_SANDBOX_RUNTIME` | — | The OCI runtime the daemon uses for gear containers: `runsc` for gVisor, `kata-runtime` for Kata. Empty means the daemon's own default. Checked against `docker info` at startup and **refused** if the daemon does not have it. |
 | `terminal` | `COGITORIUM_TERMINAL` | off | Enables the in-UI shell. Requires a sandbox. |

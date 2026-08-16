@@ -48,11 +48,20 @@ are refusals the server itself also makes; failing here means failing before
 anything is applied.
 */}}
 {{- define "cogitorium.validate" -}}
-{{- if .Values.config.terminal -}}
-{{- fail "config.terminal cannot be enabled in-cluster: the shell is interactive code execution and there is no sandbox to contain it here. The server refuses it too — this is the earlier of the two refusals." -}}
+{{- if and .Values.config.terminal (eq .Values.config.sandbox "subprocess") -}}
+{{- fail "config.terminal needs a sandbox: the shell is interactive code execution, and on sandbox: subprocess there is nothing containing it. The server refuses it too — this is the earlier of the two refusals. Use sandbox: kubernetes." -}}
 {{- end -}}
-{{- if and .Values.config.egress (ne .Values.config.sandbox "docker") -}}
-{{- fail "config.egress needs a sandbox. An unsandboxed gear runs with the server's file access and can rewrite the configuration and the grants table, so the gate would be decorative. Gear execution as Kubernetes Jobs is the fix and is not built yet." -}}
+{{- if and .Values.config.terminal (eq .Values.config.sandbox "kubernetes") -}}
+{{- fail "config.terminal is not available on sandbox: kubernetes. A terminal is an interactive attachment and a gear Job is run-to-completion; the Kubernetes backend implements running a gear, not attaching to one. The server refuses it too." -}}
+{{- end -}}
+{{- if and .Values.config.egress (eq .Values.config.sandbox "subprocess") -}}
+{{- fail "config.egress needs a sandbox. An unsandboxed gear runs with the server's file access and can rewrite the configuration and the grants table, so the gate would be decorative. Use sandbox: kubernetes." -}}
+{{- end -}}
+{{- if and (eq .Values.config.sandbox "kubernetes") (not .Values.serviceAccount.automountServiceAccountToken) -}}
+{{- fail "sandbox: kubernetes needs serviceAccount.automountServiceAccountToken: true — the server creates a Job per gear run and that is what it authenticates with. The gear's own pod still mounts no token." -}}
+{{- end -}}
+{{- if not (has .Values.config.sandbox (list "kubernetes" "subprocess")) -}}
+{{- fail "config.sandbox must be kubernetes or subprocess in this chart. There is no Docker daemon inside a pod." -}}
 {{- end -}}
 {{- if and (not .Values.persistence.enabled) (not .Values.persistence.existingClaim) -}}
 {{- fail "persistence.enabled is false: the SQLite database would live in the pod's filesystem and be destroyed on every restart. Set persistence.enabled or persistence.existingClaim." -}}

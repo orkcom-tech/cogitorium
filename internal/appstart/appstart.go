@@ -25,8 +25,40 @@ import (
 // isolation and says plainly when it cannot get it — it never pretends. A gear
 // running unsandboxed holds the server's own file access, which is enough to
 // read the database and the provider API keys in it.
-func SelectSandbox(ctx context.Context, mode, image, runtime string) (sandbox.Runner, error) {
+func SelectSandbox(ctx context.Context, cfg config.Config) (sandbox.Runner, error) {
+	mode, image, runtime := cfg.Sandbox, cfg.SandboxImage, cfg.SandboxRuntime
 	switch mode {
+	case "kubernetes":
+		// Never reached by "auto": a cluster is somewhere an operator deployed
+		// this deliberately, with a claim and a RoleBinding, and guessing at it
+		// from an environment variable would turn a laptop with a stale KUBERNETES_*
+		// in its shell into one that files Jobs against somebody's cluster.
+		if runtime != "" {
+			return nil, errors.New("sandbox_runtime is a Docker daemon setting and sandbox is \"kubernetes\", " +
+				"where the runtime is the cluster's (a RuntimeClass). Remove sandbox_runtime")
+		}
+		k, err := sandbox.NewKube(image, cfg.DataDir, cfg.KubeNamespace, cfg.KubeClaim, cfg.KubeNode)
+		if err != nil {
+			return nil, err
+		}
+		k.CPU, k.Memory = cfg.KubeCPU, cfg.KubeMemory
+		// Asked now rather than when a gear needs it. A missing RoleBinding
+		// otherwise surfaces as the first gear an agent runs failing with a 403
+		// from an API the operator was not thinking about, hours later.
+		if err := k.Check(ctx); err != nil {
+			return nil, err
+		}
+		slog.Info("gears run sandboxed", "backend", k.Name(), "namespace", k.Namespace,
+			"claim", k.Claim, "node", k.Node)
+		if k.Node == "" {
+			// Not fatal: a single-node cluster and a ReadWriteMany volume are
+			// both cases where this is fine. Said out loud because the failure
+			// it causes elsewhere — a Job Pending on a volume it cannot attach —
+			// reads as a gear that hung.
+			slog.Warn("gear Jobs are not pinned to this server's node: on a ReadWriteOnce volume a Job " +
+				"scheduled elsewhere will wait forever. Set COGITORIUM_KUBE_NODE from the downward API")
+		}
+		return k, nil
 	case "subprocess":
 		if runtime != "" {
 			// Refused rather than ignored. A sandbox_runtime set beside
