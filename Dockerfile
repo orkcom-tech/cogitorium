@@ -1,5 +1,13 @@
 # Stage 1 — build the web UI
-FROM node:22-alpine AS ui
+# --platform=$BUILDPLATFORM: this stage runs on the machine doing the building,
+# once, whatever architectures are being produced. Its output is a directory of
+# static files, which has no architecture at all.
+#
+# Without it, a multi-arch build runs npm twice, and the second time under QEMU:
+# measured at more than eleven minutes for `npm ci` against about one native,
+# which is what took a release past its timeout and had it reported as
+# "cancelled".
+FROM --platform=$BUILDPLATFORM node:22-alpine AS ui
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -7,13 +15,18 @@ COPY web/ ./
 RUN npm run build
 
 # Stage 2 — build the Go binary with the UI embedded
-FROM golang:1.26-alpine AS build
+# Cross-compiled rather than emulated. Go does this natively and always has;
+# running an arm64 toolchain under QEMU to produce an arm64 binary is paying an
+# emulator to do what the compiler already does with a variable.
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=ui /src/web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -o /out/cogitorium ./cmd/cogitorium
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/cogitorium ./cmd/cogitorium
 
 # Stage 2b — Contextverse, built from its own module rather than vendored.
 #
@@ -24,9 +37,23 @@ RUN CGO_ENABLED=0 go build -o /out/cogitorium ./cmd/cogitorium
 #
 # Pinned to a tag rather than @latest: an image that rebuilds into a different
 # Contextverse than it was tested against is a supply chain nobody is watching.
-FROM golang:1.26-alpine AS contextd
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS contextd
 ARG CONTEXTD_VERSION=v0.30.0
-RUN CGO_ENABLED=0 go install github.com/orkcom-tech/contextverse/cmd/contextd@${CONTEXTD_VERSION}
+ARG TARGETOS
+ARG TARGETARCH
+# The same cross-compile, and this is where the cost actually showed: 800
+# seconds under arm64 emulation against 133 native, for one `go install`.
+#
+# A cross-compiled `go install` writes to $GOPATH/bin/$GOOS_$GOARCH/ rather
+# than $GOPATH/bin/, so the binary moves depending on whether the build host
+# happens to match the target. GOBIN would pin it — and Go refuses GOBIN with a
+# cross-compile outright ("cannot install cross-compiled binaries when GOBIN is
+# set"), which is how that attempt failed rather than silently producing the
+# wrong thing. So it is found and put somewhere fixed.
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+        go install github.com/orkcom-tech/contextverse/cmd/contextd@${CONTEXTD_VERSION} \
+    && mkdir -p /out \
+    && cp "$(find /go/bin -type f -name contextd | head -1)" /out/contextd
 
 # Stage 3 — runtime
 FROM alpine:3.21
@@ -42,7 +69,7 @@ RUN adduser -D cogitorium \
  && mkdir -p /data /home/cogitorium/.context \
  && chown -R cogitorium:cogitorium /data /home/cogitorium
 COPY --from=build /out/cogitorium /usr/local/bin/cogitorium
-COPY --from=contextd /go/bin/contextd /usr/local/bin/contextd
+COPY --from=contextd /out/contextd /usr/local/bin/contextd
 # The licence and its NOTICE travel with the image for the same reason they
 # travel with the archives: pulling it is a redistribution.
 COPY LICENSE NOTICE /usr/share/doc/cogitorium/
