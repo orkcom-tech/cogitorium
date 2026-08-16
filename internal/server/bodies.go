@@ -77,3 +77,44 @@ type CreateAgentBody struct {
 	Role    string `json:"role"`
 	ModelID int64  `json:"model_id"`
 }
+
+// CreateMCPServerBody installs an external MCP server. It arrives pending:
+// installing is not approving.
+type CreateMCPServerBody struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	// Command and Args are separate, and never one string: one string means a
+	// shell, and a shell means the arguments are parsed by something with its
+	// own opinion about quoting.
+	Command        string   `json:"command"`
+	Args           []string `json:"args"`
+	Dir            string   `json:"cwd"`
+	EnvNames       []string `json:"env_names"`
+	TimeoutSeconds int      `json:"timeout_seconds"`
+}
+
+// UpdateMCPServerBody edits one, or changes its status — never both in one
+// request, because approving what you just changed is approving something you
+// have not seen.
+type UpdateMCPServerBody struct {
+	Status         *string   `json:"status"`
+	Description    *string   `json:"description"`
+	Command        *string   `json:"command"`
+	Args           *[]string `json:"args"`
+	Dir            *string   `json:"cwd"`
+	EnvNames       *[]string `json:"env_names"`
+	TimeoutSeconds *int      `json:"timeout_seconds"`
+}
+
+// ApproveMCPToolBody approves one tool, which is the granularity that matters:
+// a server that grows a tool after approval does not thereby acquire it.
+type ApproveMCPToolBody struct {
+	Approved bool `json:"approved"`
+}
+
+// CreateMCPBindingBody grants a server to a whole workspace (agent_id absent)
+// or to one agent in it.
+type CreateMCPBindingBody struct {
+	ServerID int64  `json:"server_id"`
+	AgentID  *int64 `json:"agent_id"`
+}

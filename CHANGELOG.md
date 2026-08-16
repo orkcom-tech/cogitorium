@@ -1,5 +1,85 @@
 # Changelog
 
+## v0.14.0
+
+The half of stage 2 that was never built: an agent can be granted somebody
+else's MCP server as tools. Off unless you switch it on.
+
+### Read this before switching it on
+
+Everything else this product executes is its own code, or a gear whose complete
+source is in this install — versioned, approved line by line, run in a container
+that cannot see the server's files. An external MCP server is a **command**.
+Cogitorium never sees its source, cannot version it, and the tool list is the
+server's own account of itself. The child runs **on the host, as this server's
+user, outside the sandbox**, so an approved MCP server can open the SQLite
+database and read every provider key in it.
+
+That is the same attack `internal/sandbox` exists to prevent, and it is written
+into the package doc, the migration, the reference and the guide rather than
+into a release note nobody reads twice.
+
+What bounds it is **policy rather than isolation**:
+
+- off unless `mcp_clients: true`;
+- every install, approval and grant is admin-only, and **no agent can reach any
+  of them** — there is no forge_mcp_server and no model-facing installer;
+- three separate acts: install (pending), **probe** (started once, given nothing
+  at all, asked what it offers), then approve the server and **each tool
+  individually**;
+- the command is fingerprinted at approval and recomputed at every spawn; a
+  mismatch refuses and returns it to pending;
+- a `sampling/createMessage` from the server is refused, so it cannot spend this
+  install's model budget on text it chose.
+
+The fingerprint covers the command line, not the bytes at the end of it.
+`npx thing@latest` refetches on every spawn and nothing here notices. Said
+plainly rather than left to be discovered.
+
+### The order in runMCPTool is the feature
+
+The grant is checked first, then the approval and the fingerprint, and only then
+does anything start — because here **the spawn is the dangerous act**. Everywhere
+else an unauthorised call is refused and that is the end of it; a refusal after
+somebody else's binary has started on this host came too late.
+
+Not an assertion about the shape of the code: the MCP server in the tests writes
+a file the moment it starts, so "nothing ran" is checked against the filesystem.
+Moving that check after the spawn fails two tests.
+
+### Driven against real processes, not stubs
+
+Every hazard in a client is a property of two processes and a pipe, so the tests
+spawn a real second program: a notification arriving between a request and its
+answer, answers returning out of order, a child dying mid-call, a request FROM
+the server.
+
+Three bugs came out of that, and two were in the tests:
+
+- closing a pending channel when the child died handed the caller a zero-valued
+  message, so a dead server was reported as "an answer this cannot read",
+  quoting nothing;
+- two tests **could not observe what the client wrote back at all** — a mutation
+  that answered every notification, which is a protocol error, passed both. The
+  counterpart now counts unsolicited responses and the tests ask it;
+- `go vet`'s lostcancel found the connection's cancel function unused on Dial's
+  error paths, and the process-group hook beside it, which vet does not check.
+
+### Two latent defects in the MCP server half
+
+Found while extracting the shared envelope into `internal/mcp/mcpwire`: the
+response type declared `Result any`, which encodes but **cannot decode**, so no
+client could ever have read one; and the error object dropped `data`, which the
+specification defines and servers use to say what went wrong. The server's own
+test is unmodified and still passes, which is the proof the wire did not move.
+
+### Sixteen mutations
+
+Every guard was broken to confirm its test fails: the four gates on what a model
+is offered, per-tool approval, the fingerprint, name truncation, the six
+protocol hazards, the admin gate, workspace scoping of a grant, and an edit
+riding along with an approval.
+
 ## v0.13.0
 
 Stage 8, the last of the parity plan: warm containers, off by default.

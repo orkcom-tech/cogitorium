@@ -985,8 +985,51 @@ tool list. And the two credentials are separate on purpose — `--token` decides
 what can be listed, a receiver's own key decides what may be delivered to it,
 and there is no default for the second.
 
-Consuming somebody else's MCP server — granting an agent external tools the way
-you grant it a gear — is not built yet.
+### The other direction: somebody else's MCP server as an agent's tools
+
+An agent can also be granted an external MCP server's tools, the way it is
+granted a gear. It is off unless you switch it on:
+
+```yaml
+mcp_clients: true
+```
+
+**Why it is off.** A gear is source this install holds — you read it, you
+approved it, and it runs in a container that cannot see the server's files. An
+external MCP server is a command. Cogitorium never sees its source, and the
+child runs on this host as the server's own user, so approving one means it can
+read the database and the provider keys in it. What bounds that is who may do
+it, not what it can reach.
+
+So it is three deliberate acts, all administrator-only, and no agent can reach
+any of them:
+
+```bash
+# 1. Install it. It exists, and it is pending.
+curl -X POST http://127.0.0.1:8688/api/v1/mcp-servers -H 'Content-Type: application/json' \
+  -d '{"name":"files","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","/srv/shared"]}'
+
+# 2. Probe it: started once, given nothing at all, and asked what it offers.
+curl -X POST http://127.0.0.1:8688/api/v1/mcp-servers/1/probe
+
+# 3. Approve the server, then each tool you actually want.
+curl -X PATCH http://127.0.0.1:8688/api/v1/mcp-servers/1 -H 'Content-Type: application/json' -d '{"status":"approved"}'
+curl -X PATCH http://127.0.0.1:8688/api/v1/mcp-tools/3  -H 'Content-Type: application/json' -d '{"approved":true}'
+
+# Then grant it — to a workspace, or to one agent in it.
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/mcp-bindings \
+  -H 'Content-Type: application/json' -d '{"server_id":1}'
+```
+
+The tools then appear to that agent as `mcp_files__read_file` and so on, beside
+its gears, and a call is dispatched to the server you installed.
+
+**Per tool, not per server**, and that is the part worth keeping: a server that
+grows a `run_shell` tool after you approved it has grown one nobody agreed to,
+and it stays inert until you look. Editing the command puts the server back to
+pending, and the command is re-checked at every spawn — though that check covers
+the command line, not the bytes at the end of it, so `@latest` refetches and
+nothing notices.
 
 ---
 
@@ -1362,7 +1405,8 @@ So that you do not go looking:
 - A bundle carries the conversation nowhere — it is a template, not a transcript.
 - No receiver may target a gear directly; a task names an agent, and the agent calls the gear.
 - No streaming from a receiver, and no fan-out of one delivery to several agents.
-- Cogitorium serves MCP but does not consume it: an agent cannot yet be granted an external MCP server's tools.
+- Consuming MCP is off unless you switch it on, and an external MCP server runs
+  on the host outside the sandbox — see the reference before you do.
 - No remote agents: every agent's turn is taken by this server's own process.
 - No warm containers unless you ask: `sandbox_pool` is 0, so every gear gets a
   machine with no history. Turning it on is faster and is a real trade — the

@@ -558,6 +558,146 @@ paths:
       responses:
         default:
           description: see the reference
+  "/api/v1/mcp-bindings/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete mcp-bindings/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/mcp-servers":
+    get:
+      summary: "Read mcp-servers"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create mcp-servers"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "args":
+                  type: array
+                  items:
+                    type: string
+                "command":
+                  type: string
+                "cwd":
+                  type: string
+                "description":
+                  type: string
+                "env_names":
+                  type: array
+                  items:
+                    type: string
+                "name":
+                  type: string
+                "timeout_seconds":
+                  type: integer
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/mcp-servers/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete mcp-servers/{id}"
+      responses:
+        default:
+          description: see the reference
+    patch:
+      summary: "Update mcp-servers/{id}"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "args":
+                  type: array
+                  items:
+                    type: string
+                "command":
+                  type: string
+                "cwd":
+                  type: string
+                "description":
+                  type: string
+                "env_names":
+                  type: array
+                  items:
+                    type: string
+                "status":
+                  type: string
+                "timeout_seconds":
+                  type: integer
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/mcp-servers/{id}/probe":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create mcp-servers/{id}/probe"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/mcp-servers/{id}/tools":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read mcp-servers/{id}/tools"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/mcp-tools/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    patch:
+      summary: "Update mcp-tools/{id}"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "approved":
+                  type: boolean
+      responses:
+        default:
+          description: see the reference
   "/api/v1/messages/{id}":
     parameters:
       - name: "id"
@@ -1139,6 +1279,35 @@ paths:
                   type: string
                 "description":
                   type: string
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/mcp-bindings":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/mcp-bindings"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create workspaces/{id}/mcp-bindings"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "agent_id":
+                  type: integer
+                "server_id":
+                  type: integer
       responses:
         default:
           description: see the reference

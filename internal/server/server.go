@@ -28,6 +28,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/inlet"
 	"github.com/orkcom-tech/cogitorium/internal/library"
+	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/schedule"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
@@ -50,7 +51,11 @@ type Server struct {
 	env *secrets.Resolver
 	// gearNet is the outward gate for gears — the other half of the same
 	// approval decision, and the log of what a granted gear actually reached.
-	gearNet  *gearnet.Gate
+	gearNet *gearnet.Gate
+	// mcp is external MCP servers — somebody else's tools, granted to an agent.
+	// Nil unless the operator switched it on, because it is the one thing this
+	// product runs that it never saw the source of.
+	mcp      *mcpstore.Store
 	library  *library.Store
 	identity *identity.Store
 	inlets   *inlet.Store
@@ -112,6 +117,17 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	gears := gear.NewStore(db)
 	gearExec := gear.NewExecutor(gears, cfg.DataDir, sb, env, gate)
 	gearExec.SetBrowserImage(cfg.BrowserImage)
+
+	// External MCP servers, only if asked for. The engine's path stays
+	// unreachable otherwise rather than merely unused.
+	var mcpStore *mcpstore.Store
+	if cfg.MCPClients {
+		mcpStore = mcpstore.NewStore(db)
+		slog.Warn("external MCP servers are ON: an approved one runs on this host as this server's user, "+
+			"outside the sandbox, with this server's file access — including the database and the provider "+
+			"keys in it. Every install, approval and grant is admin-only and no agent can reach any of them",
+			"note", "set mcp_clients: false to switch it off")
+	}
 	lib := library.NewStore(db)
 	broker := egress.New()
 	queue := work.NewStore(db)
@@ -132,6 +148,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		gearExec:   gearExec,
 		env:        env,
 		gearNet:    gate,
+		mcp:        mcpStore,
 		library:    lib,
 		identity:   identity.NewStore(db),
 		inlets:     inlet.NewStore(db),
@@ -167,6 +184,12 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// The clock, on the same lifetime as the workers and for the same reason:
 	// a scheduler that only ran while the HTTP listener did is one no test and
 	// no embedding ever sees.
+	// The engine is told last, and only when the operator asked for it: nil
+	// leaves the whole MCP path unreachable rather than merely unused.
+	if mcpStore != nil {
+		s.engine.SetMCP(mcpStore, env)
+	}
+
 	s.startScheduler(poolCtx)
 
 	// A terminal is only offered when the sandbox can host one: without it
@@ -274,6 +297,20 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "GET /api/v1/workspaces/{id}/gears", s.handleListGearBindings)
 	s.route(mux, "POST /api/v1/workspaces/{id}/gears", s.handleCreateGearBinding)
 	s.route(mux, "DELETE /api/v1/gear-bindings/{id}", s.handleDeleteGearBinding)
+
+	// External MCP servers. Reading is open to any authenticated caller; every
+	// write is admin-only, and there is deliberately no agent-reachable path to
+	// any of them.
+	s.route(mux, "GET /api/v1/mcp-servers", s.handleListMCPServers)
+	s.routeIn(mux, "POST /api/v1/mcp-servers", s.handleInstallMCPServer, CreateMCPServerBody{})
+	s.routeIn(mux, "PATCH /api/v1/mcp-servers/{id}", s.handleUpdateMCPServer, UpdateMCPServerBody{})
+	s.route(mux, "DELETE /api/v1/mcp-servers/{id}", s.handleDeleteMCPServer)
+	s.route(mux, "POST /api/v1/mcp-servers/{id}/probe", s.handleProbeMCPServer)
+	s.route(mux, "GET /api/v1/mcp-servers/{id}/tools", s.handleListMCPTools)
+	s.routeIn(mux, "PATCH /api/v1/mcp-tools/{id}", s.handleApproveMCPTool, ApproveMCPToolBody{})
+	s.route(mux, "GET /api/v1/workspaces/{id}/mcp-bindings", s.handleListMCPBindings)
+	s.routeIn(mux, "POST /api/v1/workspaces/{id}/mcp-bindings", s.handleCreateMCPBinding, CreateMCPBindingBody{})
+	s.route(mux, "DELETE /api/v1/mcp-bindings/{id}", s.handleDeleteMCPBinding)
 
 	// Inlet MANAGEMENT. It is under /api/ on purpose: creating a door, issuing
 	// its key and adding tasks to it are workspace administration, gated by the

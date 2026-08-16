@@ -68,6 +68,17 @@ type Config struct {
 	// given named values or the network are never pooled, and the payload is
 	// destroyed between runs, but /tmp is shared and that is the trade.
 	SandboxPool int `yaml:"sandbox_pool"`
+	// MCPClients lets an operator install external MCP servers and grant their
+	// tools to an agent. Off by default, and the default is the point.
+	//
+	// Everything else this product executes is either its own code or a gear
+	// whose complete source is in this install, versioned, approved line by
+	// line, and run in a container. An external MCP server is a command: the
+	// source is never seen, and in this first cut the child runs on the host as
+	// this server's user, so an approved one can read the database and the
+	// provider keys in it. Every install, approval and grant is admin-only and
+	// no agent can reach any of them, but that is policy rather than isolation.
+	MCPClients bool `yaml:"mcp_clients"`
 	// KubeNamespace, KubeClaim and KubeNode configure the "kubernetes"
 	// sandbox, where a gear runs as a Job rather than a container this
 	// process creates.
@@ -304,6 +315,9 @@ func Load(path, dataDirOverride string) (Config, error) {
 	}
 	if v := os.Getenv("COGITORIUM_BROWSER_IMAGE"); v != "" {
 		cfg.BrowserImage = v
+	}
+	if v := os.Getenv("COGITORIUM_MCP_CLIENTS"); v != "" {
+		cfg.MCPClients = v == "1" || strings.EqualFold(v, "true")
 	}
 	if v := os.Getenv("COGITORIUM_SANDBOX_POOL"); v != "" {
 		n, err := strconv.Atoi(v)

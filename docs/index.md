@@ -665,8 +665,55 @@ same route as `/run`, which is the dry run and bypasses the gate so an operator
 can see what code does before trusting it. Two routes because they are two
 different promises.
 
-Consuming external MCP servers — granting an agent somebody else's tools the
-way it is granted a gear — is not built yet.
+## Consuming MCP — somebody else's tools, granted to an agent
+
+The other direction, and the one to read before switching on. Set
+`mcp_clients: true` and the routes exist; leave it and they answer 404 saying so.
+
+**Read this first.** Everything else this product executes is either its own
+code or a gear whose complete source is in this install — versioned, approved
+line by line by an operator who read it, and run in a container that cannot see
+the server's files. An external MCP server is a **command**. Cogitorium never
+sees its source, cannot version it, and the tool list is the server's own account
+of itself. In this first cut the child runs **on the host, as this server's user,
+outside the sandbox**, so an approved MCP server can open the SQLite database and
+read every provider key in it.
+
+| | a gear | an external MCP server |
+|---|---|---|
+| what you read before approving | its complete source, versioned | a command line, and a tool list it reported |
+| approval covers | exact content; a new version resets it | a hash of the command, args, cwd and named values |
+| isolation | a container; no network unless granted | none — a host process with this server's uid |
+| its secrets | stand-ins, substituted at the gate | resolved into its environment at spawn |
+
+What bounds it is **policy rather than isolation**, which is the honest word:
+
+- off unless configured on;
+- every install, approval and grant is admin-only, and **no agent can reach any
+  of them** — there is no `forge_mcp_server` and no model-facing installer;
+- three separate acts in order: install (it exists, pending), **probe** (started
+  once and asked what it offers, given nothing at all), then approve — the
+  server, and **each tool individually**, so one that grows a tool afterwards has
+  grown an inert one;
+- the command is fingerprinted at approval and recomputed at every spawn; a
+  mismatch refuses and returns the server to pending;
+- a `sampling/createMessage` from the server is refused, so it cannot spend this
+  install's model budget on text it chose.
+
+The fingerprint's limit, stated because it matters: it covers the command line,
+not the bytes at the end of it. `npx some-server@latest` refetches on every spawn
+and nothing here notices.
+
+Tools reach a model as `mcp_<server>__<tool>`, which cannot collide with a gear's
+`gear_` or with another server's. The list is cached in the database rather than
+fetched live, because an agent's tool list is rebuilt on every iteration of its
+loop and asking a child process each time would be several round-trips per model
+call.
+
+**Not in this cut:** HTTP and SSE transports (stdio only), `resources/*` and
+`prompts/*`, sampling, elicitation, progress notifications, image and audio
+content (named in the answer rather than dropped in silence), and a connection
+pool — one connection per call, so a server starts and stops around each one.
 
 ---
 
@@ -1198,6 +1245,8 @@ then defaults.
 | `log_level` | `COGITORIUM_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 | `contextd_path` | `COGITORIUM_CONTEXTD` | `contextd` | How to find the Contextverse CLI. |
 | `browser_image` | `COGITORIUM_BROWSER_IMAGE` | `mcr.microsoft.com/playwright:v1.56.0-noble` | What the `browser` environment resolves to. Pinned rather than a moving tag: an image that changed under an approved gear would change what it runs inside without the approval changing. |
+| `mcp_clients` | `COGITORIUM_MCP_CLIENTS` | `false` | Lets an operator install external MCP servers and grant their tools to an agent. It runs a command this install never saw the source of, on the host — see above. |
+| `mcp_clients` | `COGITORIUM_MCP_CLIENTS` | `false` | Lets an operator install external MCP servers and grant their tools to an agent. It runs a command this install never saw the source of, on the host — read the section above before switching it on. |
 | `sandbox_pool` | `COGITORIUM_SANDBOX_POOL` | `0` | Warm containers to keep per image instead of creating one per run. Zero is off. The one setting here that trades isolation for latency — see below. |
 | `sandbox` | `COGITORIUM_SANDBOX` | `auto` | `auto`, `docker`, `kubernetes` or `subprocess`. `auto` uses Docker when it answers and says so when it cannot; it never selects `kubernetes`, which is a deliberate deployment. |
 | `kube_claim` | `COGITORIUM_KUBE_CLAIM` | — | The claim the data directory is on. A gear Job mounts it at the run's own subPath. Required by `sandbox: kubernetes`; the chart sets it. |

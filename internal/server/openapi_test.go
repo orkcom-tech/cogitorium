@@ -135,7 +135,7 @@ func TestADescribedBodyIsWhereASchemaBelongs(t *testing.T) {
 func TestTheNumberOfUndescribedBodiesOnlyFalls(t *testing.T) {
 	// Raise this only by describing MORE. If this fails because the number
 	// went up, a route was added without a named body type or one was removed.
-	const described = 9
+	const described = 13
 
 	d := newDoor(t)
 	got, mutating := describedBodies(d.srv.Routes())

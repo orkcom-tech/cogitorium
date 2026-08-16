@@ -53,6 +53,11 @@ rebuilt. One Go binary, your own models, no telemetry.
   tasks to Claude Desktop, Cursor or anything else that speaks the Model Context
   Protocol. The approval gate holds through it: a gear you have not approved is
   not listed and will not run. [→](https://orkcom-tech.github.io/cogitorium/#mcp--this-install-as-a-tool-provider)
+- 🔗 **And consumes it, when you say so** — an agent can be granted an external
+  MCP server's tools the way it is granted a gear: install, probe, approve the
+  server *and each tool*, then grant. Off by default, admin-only, and the
+  documentation says plainly what it costs — the child runs on the host outside
+  the sandbox. [→](https://orkcom-tech.github.io/cogitorium/#consuming-mcp--somebody-elses-tools-granted-to-an-agent)
 - 🌐 **A browser, when you grant one** — an operator can give a gear an
   environment with a real browser in it, on the same screen as its network
   grant. Screenshots and page text come back as ordinary run artifacts; there
