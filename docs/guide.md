@@ -1364,6 +1364,9 @@ So that you do not go looking:
 - No streaming from a receiver, and no fan-out of one delivery to several agents.
 - Cogitorium serves MCP but does not consume it: an agent cannot yet be granted an external MCP server's tools.
 - No remote agents: every agent's turn is taken by this server's own process.
+- No warm containers unless you ask: `sandbox_pool` is 0, so every gear gets a
+  machine with no history. Turning it on is faster and is a real trade — the
+  reference says exactly what it costs.
 - No browser an agent drives directly: a gear granted the browser environment
   drives one, and the agent calls the gear. There is no live page an agent
   clicks around in, and no session that survives a run.

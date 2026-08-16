@@ -1,5 +1,53 @@
 # Changelog
 
+## v0.13.0
+
+Stage 8, the last of the parity plan: warm containers, off by default.
+
+### What it buys and what it costs
+
+Creating and destroying a container costs a few hundred milliseconds — noise for
+a gear that runs for a minute, most of the wall clock for one that answers in
+two hundred. `sandbox_pool: N` keeps N containers alive per image and hands a
+run one instead.
+
+This is the only setting in this product that trades isolation for latency, so
+it is off unless an operator turns it on, and the warning at startup is a WARN
+rather than an INFO. A pooled container is **not** a fresh machine: whatever a
+previous run left outside its payload is still there.
+
+The bounds are narrow and each one is enforced rather than described:
+
+- the payload is emptied before and after every run, so no gear reads another's
+  code or output;
+- a run given **named values or the network** is never pooled — exactly the runs
+  that could leave a credential behind. The executor decides, because only it
+  knows what a run was given;
+- a run with a **read-only payload** is never pooled either (below);
+- a run that **timed out** retires its container, since whatever timed out is
+  still in it;
+- twenty runs per container, ten minutes idle, then retired;
+- the confinement is identical on both paths, from one list they share.
+
+### Two bugs the tests only found because they were driven at a real daemon
+
+**The cleanup could never have worked.** Emptying the payload ran `rm -rf /work`
+as root, and `--cap-drop=ALL` takes `CAP_DAC_OVERRIDE` with it — a root that
+cannot override file permissions cannot write into a directory the sandbox user
+owns. Every container failed to clear and was retired, so *nothing was ever
+pooled*, silently. It clears the directory's contents as the sandbox user now,
+and a read-only payload is not pooled at all rather than weakening the container
+to make it possible.
+
+**A test passed for the wrong reason.** The first version proved two runs shared
+a container by comparing `/proc/sys/kernel/random/boot_id` — which is the
+**host's**, identical in every container on the machine. It would have passed
+whether or not anything was reused, and did, while nothing was. It compares the
+container's own hostname now.
+
+Both were found by pointing the tests at a real Docker daemon and reading what
+came back, rather than by reading the code.
+
 ## v0.12.0
 
 Stage 7 of the parity plan: an operator can give a gear a machine with a browser

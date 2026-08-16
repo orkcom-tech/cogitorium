@@ -35,6 +35,10 @@ type Docker struct {
 	// about a container that could not be created.
 	Runtime string
 	bin     string
+	// pool holds warm containers when an operator turned them on. Nil is off,
+	// and off is the default: a pooled container has a history, and every run
+	// getting a machine with none is what this package otherwise promises.
+	pool *pool
 }
 
 const (
@@ -55,6 +59,15 @@ func NewDocker(image, runtime string) *Docker {
 		image = DefaultImage
 	}
 	return &Docker{Image: image, Runtime: runtime, bin: bin}
+}
+
+// SetPool turns warm containers on, keeping at most n idle per image. Zero is
+// off, which is the default and the only setting that gives every run a machine
+// with no history.
+func (d *Docker) SetPool(n int) {
+	if d != nil {
+		d.pool = newPool(n)
+	}
 }
 
 func (d *Docker) Name() string {
@@ -145,17 +158,24 @@ func (d *Docker) Pull(ctx context.Context) error {
 // to a daemon that can see the host's filesystem, which rules out a remote
 // or rootless daemon and depends on file-sharing settings; copying works
 // everywhere and is the same shape a Kubernetes Job will need.
-func (d *Docker) createArgs(spec Spec, interactive bool) []string {
-	a := []string{
-		"create", "-i",
+// confinement is what makes a container a sandbox, in one place, because a
+// pooled container has to be confined exactly as a per-run one is. Two copies
+// of this list would be two copies that drift, and the drift would be silent
+// and in the wrong direction.
+func (d *Docker) confinement() []string {
+	return []string{
 		"--cap-drop=ALL",
 		"--security-opt", "no-new-privileges",
 		"--pids-limit", "256",
 		"--memory", "512m",
 		"--cpus", "1",
 		"--user", "65534:65534",
-		"--workdir", workDir,
 	}
+}
+
+func (d *Docker) createArgs(spec Spec, interactive bool) []string {
+	a := append([]string{"create", "-i"}, d.confinement()...)
+	a = append(a, "--workdir", workDir)
 	if d.Runtime != "" {
 		a = append(a, "--runtime", d.Runtime)
 	}
@@ -232,41 +252,44 @@ func (d *Docker) create(ctx context.Context, spec Spec, interactive bool) (strin
 	id := strings.TrimSpace(out.String())
 
 	if spec.Dir != "" {
-		// Streamed as a tar rather than `docker cp <dir>/.`, so the payload's
-		// ownership and modes are ours to state instead of the host's to leak.
-		// See payload.go: the plain copy is why the sandbox could not enter a
-		// subdirectory it had been handed, and why it owned nothing it was
-		// given and so could not write at all.
-		cp := exec.CommandContext(ctx, d.bin, "cp", "-", id+":/")
-		var cpErr bytes.Buffer
-		cp.Stderr = &cpErr
-		stdin, err := cp.StdinPipe()
-		if err != nil {
+		if err := d.copyPayload(ctx, id, spec); err != nil {
 			d.remove(context.WithoutCancel(ctx), id)
-			return "", fmt.Errorf("open the payload stream: %w", err)
-		}
-		if err := cp.Start(); err != nil {
-			d.remove(context.WithoutCancel(ctx), id)
-			return "", fmt.Errorf("copy code into container: %w", err)
-		}
-		writeErr := writePayload(stdin, spec.Dir, workDir, payloadOwner{writable: spec.Writable, out: spec.Out})
-		// Close before Wait either way: docker only finishes once the stream
-		// ends, so returning early on a write error would deadlock.
-		closeErr := stdin.Close()
-		if err := cp.Wait(); err != nil {
-			d.remove(context.WithoutCancel(ctx), id)
-			return "", fmt.Errorf("copy code into container: %w: %s", err, strings.TrimSpace(cpErr.String()))
-		}
-		if writeErr != nil {
-			d.remove(context.WithoutCancel(ctx), id)
-			return "", fmt.Errorf("build the payload: %w", writeErr)
-		}
-		if closeErr != nil {
-			d.remove(context.WithoutCancel(ctx), id)
-			return "", fmt.Errorf("finish the payload stream: %w", closeErr)
+			return "", err
 		}
 	}
 	return id, nil
+}
+
+// copyPayload streams the code in as a tar rather than `docker cp <dir>/.`, so
+// the payload's ownership and modes are ours to state instead of the host's to
+// leak. See payload.go: the plain copy is why the sandbox could not enter a
+// subdirectory it had been handed, and why it owned nothing it was given and so
+// could not write at all.
+func (d *Docker) copyPayload(ctx context.Context, id string, spec Spec) error {
+	cp := exec.CommandContext(ctx, d.bin, "cp", "-", id+":/")
+	var cpErr bytes.Buffer
+	cp.Stderr = &cpErr
+	stdin, err := cp.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("open the payload stream: %w", err)
+	}
+	if err := cp.Start(); err != nil {
+		return fmt.Errorf("copy code into container: %w", err)
+	}
+	writeErr := writePayload(stdin, spec.Dir, workDir, payloadOwner{writable: spec.Writable, out: spec.Out})
+	// Close before Wait either way: docker only finishes once the stream ends,
+	// so returning early on a write error would deadlock.
+	closeErr := stdin.Close()
+	if err := cp.Wait(); err != nil {
+		return fmt.Errorf("copy code into container: %w: %s", err, strings.TrimSpace(cpErr.String()))
+	}
+	if writeErr != nil {
+		return fmt.Errorf("build the payload: %w", writeErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("finish the payload stream: %w", closeErr)
+	}
+	return nil
 }
 
 // collect copies the writable subdirectory back out of the container, into the
@@ -313,6 +336,10 @@ func (d *Docker) Run(ctx context.Context, spec Spec) (Result, error) {
 	}
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
+
+	if d.warmable(spec) {
+		return d.warmRun(ctx, runCtx, spec)
+	}
 
 	id, err := d.create(runCtx, spec, false)
 	if err != nil {
@@ -365,6 +392,39 @@ func (d *Docker) Run(ctx context.Context, spec Spec) (Result, error) {
 		return res, fmt.Errorf("could not run container: %w: %s", runErr, strings.TrimSpace(res.Stderr))
 	}
 	return res, nil
+}
+
+// warmRun takes a container from the pool, runs in it, and decides whether it
+// may serve another.
+//
+// A run that timed out never goes back: what timed out is still in there, and
+// handing the next gear a machine with somebody else's process on it is exactly
+// the trade this is supposed to bound rather than make.
+func (d *Docker) warmRun(ctx, runCtx context.Context, spec Spec) (Result, error) {
+	image := d.Image
+	if spec.Image != "" {
+		image = spec.Image
+	}
+	w, err := d.warmFor(runCtx, image)
+	if err != nil {
+		return Result{ExitCode: -1}, err
+	}
+	res, runErr := d.runWarm(ctx, runCtx, w, spec)
+
+	keep := !res.TimedOut
+	if keep {
+		// Cleared before it is offered back as well as before it is used: an
+		// idle container holding the last gear's code is the last gear's code
+		// sitting in a machine nobody is watching.
+		if err := d.clearPayload(context.WithoutCancel(ctx), w.id); err != nil {
+			slog.Warn("could not clear a warm container; retiring it", "id", w.id, "err", err)
+			keep = false
+		}
+	}
+	if !keep || !d.pool.put(w, func(id string) { d.remove(context.Background(), id) }) {
+		d.remove(context.WithoutCancel(ctx), w.id)
+	}
+	return res, runErr
 }
 
 // tap returns a writer that fills buf and, when on is set, reports each chunk

@@ -454,6 +454,37 @@ user, every capability dropped, no new privileges, and no network unless it was
 granted one. A browser's own sandbox cannot start under those, so a browser gear
 passes `--no-sandbox`: the container is the boundary, and it is the same one.
 
+### Warm containers
+
+Off by default, and the only setting in this product that gives something up.
+
+Creating and destroying a container costs a few hundred milliseconds. That is
+noise for a gear that runs for a minute and most of the wall clock for one that
+answers in two hundred. `sandbox_pool: N` keeps N containers alive per image and
+hands a run one instead.
+
+**A pooled container is not a fresh machine.** Whatever a previous run left
+outside its payload — a file in `/tmp`, a package it installed — is still there.
+That is the trade, and these are its bounds:
+
+- The payload is emptied before and after every run, so no gear reads another's
+  code or output.
+- A run is pooled only if it was given **no named values and no network**. Those
+  are exactly the runs that could leave a credential behind. The executor
+  decides, because only it knows what a run was given.
+- A run whose payload is **read-only** — the file-carrying call — is never
+  pooled: that payload is root-owned, and clearing it would need a root that can
+  override file permissions, which this container deliberately does not have.
+- A run that **timed out** retires its container, because whatever timed out is
+  still in it.
+- A container serves at most twenty runs, and is retired after ten minutes idle.
+- The confinement is identical either way — the same dropped capabilities, the
+  same user, the same limits, from one list used by both paths.
+
+It needs an image with a shell, since a pooled container holds itself open with
+one. An install whose gears run `FROM scratch` cannot use it, and the error says
+so.
+
 ### The network
 
 A gear has no network unless it is granted one at approval, with the hosts it may
@@ -1167,6 +1198,7 @@ then defaults.
 | `log_level` | `COGITORIUM_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 | `contextd_path` | `COGITORIUM_CONTEXTD` | `contextd` | How to find the Contextverse CLI. |
 | `browser_image` | `COGITORIUM_BROWSER_IMAGE` | `mcr.microsoft.com/playwright:v1.56.0-noble` | What the `browser` environment resolves to. Pinned rather than a moving tag: an image that changed under an approved gear would change what it runs inside without the approval changing. |
+| `sandbox_pool` | `COGITORIUM_SANDBOX_POOL` | `0` | Warm containers to keep per image instead of creating one per run. Zero is off. The one setting here that trades isolation for latency — see below. |
 | `sandbox` | `COGITORIUM_SANDBOX` | `auto` | `auto`, `docker`, `kubernetes` or `subprocess`. `auto` uses Docker when it answers and says so when it cannot; it never selects `kubernetes`, which is a deliberate deployment. |
 | `kube_claim` | `COGITORIUM_KUBE_CLAIM` | — | The claim the data directory is on. A gear Job mounts it at the run's own subPath. Required by `sandbox: kubernetes`; the chart sets it. |
 | `kube_node` | `COGITORIUM_KUBE_NODE` | — | The node to pin gear Jobs to. The chart takes it from the downward API — a ReadWriteOnce volume attaches to one node. |

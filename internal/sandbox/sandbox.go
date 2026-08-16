@@ -61,6 +61,15 @@ type Spec struct {
 	// Empty means the process produces no files and nothing is copied back,
 	// which is every call that existed before gears could be handed one.
 	Out string
+	// Reusable says this run may be given a container that has already run
+	// something, and may leave one behind for the next.
+	//
+	// The caller decides because only the caller knows what the run was given.
+	// A run holding named values or the network is not reusable: a warm
+	// container shares /tmp with whatever ran in it before, and those are
+	// exactly the runs that could leave a credential there. Off by default,
+	// which is the safe reading for any caller that has not thought about it.
+	Reusable bool
 	// Image overrides the backend's own image for this run. Empty is the
 	// ordinary one.
 	//

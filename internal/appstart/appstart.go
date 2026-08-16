@@ -82,6 +82,16 @@ func SelectSandbox(ctx context.Context, cfg config.Config) (sandbox.Runner, erro
 				return nil, err
 			}
 			slog.Info("gears run sandboxed", "backend", d.Name())
+			if cfg.SandboxPool > 0 {
+				d.SetPool(cfg.SandboxPool)
+				// Said at WARN because it is the one setting in this package
+				// that gives something up, and an operator who set it from an
+				// example config should meet the sentence rather than find it.
+				slog.Warn("warm containers are ON: a gear may be given a machine that has already run "+
+					"something, sharing its /tmp. Runs holding named values or the network are never pooled, "+
+					"and the payload is destroyed between runs",
+					"idle_per_image", cfg.SandboxPool)
+			}
 			// Fetch the image now, in the background, so the first gear does
 			// not pay for it inside its own timeout — a sixty-second gear
 			// failing because it spent ninety pulling an image is a failure

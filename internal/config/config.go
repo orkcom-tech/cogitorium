@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -58,6 +59,15 @@ type Config struct {
 	// most installs never grant it, and paying for it on every start would be
 	// a minute of every boot spent on a capability nobody used.
 	BrowserImage string `yaml:"browser_image"`
+	// SandboxPool keeps this many warm containers per image instead of
+	// creating and destroying one per gear run. Zero — the default — is off.
+	//
+	// It is the one setting here that trades isolation for latency, so it is
+	// off unless asked for. A pooled container has a history: whatever a
+	// previous run left outside its payload is still there. Runs that were
+	// given named values or the network are never pooled, and the payload is
+	// destroyed between runs, but /tmp is shared and that is the trade.
+	SandboxPool int `yaml:"sandbox_pool"`
 	// KubeNamespace, KubeClaim and KubeNode configure the "kubernetes"
 	// sandbox, where a gear runs as a Job rather than a container this
 	// process creates.
@@ -294,6 +304,14 @@ func Load(path, dataDirOverride string) (Config, error) {
 	}
 	if v := os.Getenv("COGITORIUM_BROWSER_IMAGE"); v != "" {
 		cfg.BrowserImage = v
+	}
+	if v := os.Getenv("COGITORIUM_SANDBOX_POOL"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return cfg, fmt.Errorf("COGITORIUM_SANDBOX_POOL must be a number of containers to keep warm, "+
+				"or 0 for none (got %q)", v)
+		}
+		cfg.SandboxPool = n
 	}
 	// The claim and the node come from the chart rather than from a file: one
 	// is a Helm release's own name and the other is the downward API, and

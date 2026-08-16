@@ -757,6 +757,12 @@ func (e *Executor) execSandboxed(ctx context.Context, g Gear, dir, argsJSON stri
 		// The environment the operator granted, resolved to one of this
 		// install's images. A gear never names an image.
 		Image: e.imageFor(g),
+		// Whether this run may be given a machine that has already run
+		// something. A gear holding named values or the network is not: a warm
+		// container shares /tmp with whatever ran in it before, and those are
+		// exactly the runs that could leave a credential there. The sandbox
+		// cannot work this out — only the caller knows what the run was given.
+		Reusable: len(g.EnvNames) == 0 && !g.NetworkGranted,
 	}
 	if fc != nil {
 		spec.Writable = false
