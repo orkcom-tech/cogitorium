@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Field, Fields } from './Field'
+import { Select } from './Select'
 import {
   api,
   inletDeliveryUrl,
@@ -240,7 +242,6 @@ function NewInletForm({
 
   return (
     <form
-      className="row"
       onSubmit={(e) => {
         e.preventDefault()
         setBusy(true)
@@ -255,21 +256,23 @@ function NewInletForm({
           .finally(() => setBusy(false))
       }}
     >
-      <input
-        required
-        placeholder="address, e.g. tickets"
-        value={address}
-        onChange={(e) => setAddress(e.target.value)}
-      />
-      <input
-        className="grow"
-        placeholder="what comes through this receiver"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-      />
-      <button type="submit" disabled={busy || !address.trim()}>
-        add a receiver
-      </button>
+      {/* Fields, not a row. In an overlay this form is about 570px wide, and a
+          row squeezed the description input down to 65 pixels — the operator
+          read "wha". A field carries a 13rem basis and wraps to the next line
+          rather than collapsing. */}
+      <Fields>
+        <Field label="Address" hint="the last part of the URL callers post to">
+          <input required placeholder="tickets" value={address} onChange={(e) => setAddress(e.target.value)} />
+        </Field>
+        <Field label="Description" hint="what comes through this receiver, for whoever reads the list later">
+          <input value={description} onChange={(e) => setDescription(e.target.value)} />
+        </Field>
+      </Fields>
+      <div className="row form-actions">
+        <button type="submit" className="primary" disabled={busy || !address.trim()}>
+          add a receiver
+        </button>
+      </div>
     </form>
   )
 }
@@ -625,20 +628,30 @@ function TaskForm({
   return (
     <form className="card inlet-task-form" onSubmit={submit}>
       <div className="row">
-        <input required placeholder="task name, e.g. classify" value={name} onChange={(e) => setName(e.target.value)} />
-        <select value={accepts} onChange={(e) => setAccepts(e.target.value as 'json' | 'file')}>
-          <option value="json">accepts JSON</option>
-          <option value="file">accepts a file</option>
-        </select>
-        <select className="grow" required value={agent} onChange={(e) => setAgent(e.target.value)}>
-          <option value="">which agent does the work…</option>
-          {agents.map((a) => (
-            <option key={a.id} value={a.name}>
-              {a.name}
-              {a.model_id === null ? ' — no model bound' : ''}
-            </option>
-          ))}
-        </select>
+        <Field label="Task name" hint="what a caller names when posting to this receiver">
+          <input required placeholder="classify" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Select
+          value={accepts}
+          aria-label="What this task accepts"
+          onChange={(v) => setAccepts(v as 'json' | 'file')}
+          options={[
+            { value: 'json', label: 'accepts JSON' },
+            { value: 'file', label: 'accepts a file' },
+          ]}
+        />
+        <Select
+          value={agent}
+          aria-label="Which agent does the work"
+          placeholder="which agent does the work…"
+          className="grow"
+          required
+          onChange={setAgent}
+          options={agents.map((a) => ({
+            value: a.name,
+            label: `${a.name}${a.model_id === null ? ' — no model bound' : ''}`,
+          }))}
+        />
       </div>
 
       {accepts === 'json' ? (
@@ -748,10 +761,15 @@ function TaskForm({
 
         <label className="field">
           <span className="muted">what the caller gets back</span>
-          <select value={answerFrom} onChange={(e) => setAnswerFrom(e.target.value as 'agent' | 'gear')}>
-            <option value="agent">the agent’s own answer</option>
-            <option value="gear">the output of the last gear that succeeded</option>
-          </select>
+          <Select
+            value={answerFrom}
+            aria-label="What the caller gets back"
+            onChange={(v) => setAnswerFrom(v as 'agent' | 'gear')}
+            options={[
+              { value: 'agent', label: 'the agent’s own answer' },
+              { value: 'gear', label: 'the output of the last gear that succeeded' },
+            ]}
+          />
           <span className="hint">
             For a deterministic job the model is a router and its retelling of a gear’s output is one paraphrase away
             from being wrong. Taking the gear’s output means the prose is not returned at all — and a delivery in which

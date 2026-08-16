@@ -87,6 +87,11 @@ type Workspace struct {
 	// team_id column, which made "share it with the platform team as well"
 	// impossible without taking it away from research first.
 	TeamIDs []int64 `json:"team_ids"`
+	// Hue is the colour somebody gave this workspace, in degrees, or nil when
+	// nobody has. The distinction matters: only an uncoloured workspace may be
+	// given one derived from its id, and a nil here is what tells the
+	// interface it is allowed to.
+	Hue *int `json:"hue"`
 }
 
 type Agent struct {
@@ -261,8 +266,8 @@ func modelForLog(id *int64) any {
 func (s *Store) GetWorkspace(ctx context.Context, id int64) (Workspace, error) {
 	var w Workspace
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, description, branch, owner_id FROM workspaces WHERE id = ?`, id).
-		Scan(&w.ID, &w.Name, &w.Description, &w.Branch, &w.OwnerID)
+		`SELECT id, name, description, branch, owner_id, hue FROM workspaces WHERE id = ?`, id).
+		Scan(&w.ID, &w.Name, &w.Description, &w.Branch, &w.OwnerID, &w.Hue)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Workspace{}, fmt.Errorf("workspace %d: %w", id, ErrNotFound)
 	}
@@ -281,14 +286,14 @@ func (s *Store) GetWorkspace(ctx context.Context, id int64) (Workspace, error) {
 
 func (s *Store) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, description, branch, owner_id FROM workspaces ORDER BY name`)
+		`SELECT id, name, description, branch, owner_id, hue FROM workspaces ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list workspaces: %w", err)
 	}
 	out := []Workspace{}
 	for rows.Next() {
 		var w Workspace
-		if err := rows.Scan(&w.ID, &w.Name, &w.Description, &w.Branch, &w.OwnerID); err != nil {
+		if err := rows.Scan(&w.ID, &w.Name, &w.Description, &w.Branch, &w.OwnerID, &w.Hue); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("scan workspace: %w", err)
 		}
@@ -332,6 +337,30 @@ func Visible(w Workspace, u identity.User) bool {
 }
 
 // ListWorkspacesFor returns only what this user may see.
+// SetHue colours a workspace, or clears the colour when hue is nil.
+//
+// The value is taken modulo 360 rather than rejected: a hue is an angle, so
+// 420 and 60 are the same colour and refusing one of them would be pedantry
+// at an API nobody would enjoy. A negative angle wraps the same way.
+func (s *Store) SetHue(ctx context.Context, id int64, hue *int) (Workspace, error) {
+	var v any
+	if hue != nil {
+		h := ((*hue % 360) + 360) % 360
+		v = h
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE workspaces SET hue = ?, updated_at = ? WHERE id = ?`,
+		v, now(), id)
+	if err != nil {
+		return Workspace{}, fmt.Errorf("set hue on workspace %d: %w", id, err)
+	}
+	// A silent no-op on a workspace that is not there is how a delete race
+	// ends up looking like a successful edit.
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return Workspace{}, fmt.Errorf("workspace %d: %w", id, ErrNotFound)
+	}
+	return s.GetWorkspace(ctx, id)
+}
+
 func (s *Store) ListWorkspacesFor(ctx context.Context, u identity.User) ([]Workspace, error) {
 	all, err := s.ListWorkspaces(ctx)
 	if err != nil {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, auth, type GraphData, type Team, type User } from '../api'
 import GraphCanvas from './GraphCanvas'
+import { Select } from './Select'
 
 // Users and teams. A single-operator install never needs this page — the
 // seeded admin is the only account — so it exists for the moment an install
@@ -157,14 +158,20 @@ function NewUserForm({
       }}
     >
       <input required placeholder="user name" value={name} onChange={(e) => setName(e.target.value)} />
-      <select value={role} onChange={(e) => setRole(e.target.value)}>
-        <option value="member">member</option>
-        <option value="team-lead">team-lead</option>
-        <option value="admin">admin</option>
-      </select>
+      <Select
+        value={role}
+        aria-label="Role"
+        onChange={setRole}
+        options={[
+          { value: 'member', label: 'member' },
+          { value: 'team-lead', label: 'team-lead' },
+          { value: 'admin', label: 'admin' },
+        ]}
+      />
       <input
         type="password"
-        placeholder="password (optional — token works without one)"
+        aria-label="Password"
+        placeholder="optional"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
       />
@@ -198,18 +205,14 @@ function NewTeamForm({ onDone, onError }: { onDone: () => void; onError: (m: str
 function TeamPicker({ teams, onPick }: { teams: Team[]; onPick: (id: number) => void }) {
   if (teams.length === 0) return null
   return (
-    <select
+    <Select
       value=""
-      onChange={(e) => {
-        if (e.target.value) onPick(Number(e.target.value))
+      aria-label="Add to team"
+      placeholder="add to team…"
+      options={teams.map((t) => ({ value: String(t.id), label: t.name }))}
+      onChange={(v) => {
+        if (v) onPick(Number(v))
       }}
-    >
-      <option value="">add to team…</option>
-      {teams.map((t) => (
-        <option key={t.id} value={t.id}>
-          {t.name}
-        </option>
-      ))}
-    </select>
+    />
   )
 }

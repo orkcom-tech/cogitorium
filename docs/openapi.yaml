@@ -997,6 +997,11 @@ paths:
       responses:
         default:
           description: see the reference
+    patch:
+      summary: "Update workspaces/{id}"
+      responses:
+        default:
+          description: see the reference
   "/api/v1/workspaces/{id}/agents":
     parameters:
       - name: "id"

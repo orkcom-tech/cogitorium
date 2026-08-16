@@ -1,5 +1,252 @@
 # Changelog
 
+## v1.0.0
+
+The interface is rebuilt. The server is broadly the one it was — the same
+routes, the same records, one new column — and almost everything an operator
+touches has moved. A large amount of software was deleted rather than carried
+forward, and this note says which, because an upgrade that only lists additions
+is one you discover the rest of by looking for a control that is gone.
+
+### One row across the top, and no sidebar
+
+A white sheet on a grey ground. Everything you navigate by is in a single
+header row: the brand, a centred pill of the places you work — Workspaces, Map,
+Gears, Instructions, Models, plus Context and People for an administrator —
+then the theme button, the documentation link and the account button. Variables
+& secrets, the server-wide Terminal, the server's version and sign out are
+behind the account button.
+
+What that replaced was a 200px left rail carrying nine destinations, a collapse
+toggle, the brand, the account block and the sign-out button: a sixth of every
+screen given to things most of which are opened once a week. The split is by
+frequency rather than by kind. Nothing that was reachable is hidden; some of it
+is one click further away, and the working area is a sixth wider.
+
+**There is no ⌘B, no ⌘J and no collapse**, because there is nothing left to
+collapse. There is no global key binding in the application at all. Escape is
+deliberately absent from the chrome: the approval dialog owns it, scoped to
+itself, so one keypress can never both dismiss some furniture and silently
+refuse a pending web search.
+
+### A workspace is three views and four overlays
+
+Chat, Blueprint and Editor sit side by side on a track that slides. One is on
+screen; the others are off it.
+
+**Every view stays mounted, at full size, for its whole life.** That is a
+correctness requirement rather than an animation. Hiding a view with
+`display:none` makes xterm's fit measure zero and React Flow's `fitView`
+produce NaN; shrinking one to a strip refits xterm and destroys the scrollback
+structure for good, which expanding again does not undo. Switching away from a
+running terminal session or a laid-out blueprint now does nothing to it. An
+off-screen view is `inert` and hidden from a screen reader, so the tab order is
+not three views deep.
+
+Agents, Receivers, Queue and Variables are **overlays**: opened from the header
+one at a time, read, and gone on the next click outside, resizable from a grip
+at the bottom-left corner. None of them is a place you work, so none of them
+holds a permanent share of the width.
+
+The Editor is the one view with parts, because editing genuinely is three
+things at once — the Files tree, the file, and a shell in the same directory.
+The tree and the shell roll up to their own header rather than closing, so
+there is no "where did it go" state to recover from. Clicking a file moves the
+deck to the Editor; the conversation slides off screen and keeps running.
+
+**A shell never starts by itself.** It is behind a button that states what
+opening it again does not do: a session is not restored, and the previous
+one's scrollback and working directory are gone. That shell is the
+workspace's own and open to anyone who can reach the workspace — the
+server-wide Terminal in the account menu is still an administrator's, and they
+are two different things.
+
+Where you were is stored split by lifetime: this tab's view in
+`sessionStorage`, the seed a new tab starts from in `localStorage` under a key
+carrying the server and the user. One tab watching a long run while you work in
+another is the normal use of this product, and a single shared key means the
+tab you are not looking at decides what the one you are looking at shows.
+`?layout=reset` clears both, and works at a blank screen where nothing else
+would.
+
+### What was removed
+
+None of this is deprecated or hidden behind a setting. It is gone.
+
+- **Floating panels.** A panel could be lifted out and dragged around the
+  viewport, up to four at once, each with a remembered rectangle.
+- **Docking.** Six slots, each pushing the centre or overlaying it, any panel
+  in any slot. It could express more arrangements than anyone could read: six
+  panels shared one side slot, so opening the blueprint, the queue and the
+  variables stacked them into a tab strip that looked like windows nested
+  inside a window, while the header went on listing them as separate things.
+  Expressiveness was never the problem.
+- **Layout presets and saved layouts.** An arrangement with no state worth
+  naming needs no way to name it, and three views on a track have none.
+- **The palette** — three gradient stops, a grain dial, a tint dial, a
+  glass/solid switch, a blur radius, a lightness dial, a glow with an x, a y
+  and a strength, and a drift toggle with a speed.
+- **Custom backdrops** — an image or a looping video behind the interface.
+
+Upgrading migrates none of it and needs no action. A stored arrangement from a
+previous version is read field by field and whatever no longer exists is
+dropped; a stored theme keeps its look and its mode and the dozen dead fields
+beside them are ignored where they sit.
+
+### Appearance is a look and a mode
+
+Eleven looks — Air, Calm, Slate, Paper, Terminal, Blueprint, Ember, Mono, Nord,
+Bloom, Contrast — and system, light or dark. That is the whole of the screen's
+configuration.
+
+A look is not a set of dials. It is a finished visual world — its ground, its
+accent, its corners, its idea of whether a surface has an edge or a shadow —
+authored once in tokens and drawn in both modes. Every colour lives in
+`tokens.css` under `:root[data-look=…]`, and applying a theme writes two
+attributes and nothing else, so the stylesheet can be read on its own to know
+what anything will look like. The version this replaces wrote eighteen custom
+properties from JavaScript, and could not.
+
+**Air is the default, and a fresh install opens light rather than system.** The
+choice is kept in `localStorage` under `cogitorium.theme`, and nothing about
+appearance is fetched from the server.
+
+An existing choice survives per field: a look that no longer exists lands on
+Air rather than on an attribute nothing styles, which would render an unthemed
+page.
+
+### The install map
+
+`/map` draws the install as one zoomable scene at three depths, because zooming
+should approach a thing rather than navigate to it. The organisation, its
+people and its teams are the core; the workspaces are a ring around it; open one
+and its agents and their memory grow out of it. Links inside the core appear
+only as you zoom in far enough to read them.
+
+Position encodes relation: a node sits in the angular sector of whatever it
+belongs to, so a grant is a short radial stub rather than a chord across the
+canvas. Mush comes from edges having to travel, which is a placement problem.
+Only the kinds the server actually sends are drawn — a permanently empty lane
+is not a neutral omission, it is a positive claim that the install has no doors
+in and no outward addresses.
+
+It is open to every role. The scoping is the server's.
+
+### The map endpoint is scoped to the caller instead of refused to them
+
+`GET /api/v1/map` was admin-only. It now answers anybody, with what they can
+already reach: an administrator sees the install, and everyone else sees their
+own teams, the people they share a team with, and the workspaces already
+visible to them. The workspace list comes from the same call that answers "may
+this person use it", so the map and the workspaces page can never disagree.
+
+Filtering this in the browser would not have been a smaller version of the same
+thing — the response would still have named every workspace on the server, and
+one member reading one HTTP response would have learned the shape of rooms they
+hold no grant on. So the tests read the raw JSON rather than the rendered
+graph: a member's map contains neither the name nor the node id of a workspace
+they cannot reach, does not name a person they share no team with, and does not
+name a team they are not in. And no edge outlives its own node, because an edge
+pointing at something that was filtered out names the thing it points at.
+
+`GET /api/v1/map` is no longer in the list of routes that must refuse a
+non-admin, and the reason is written where that list is.
+
+### A workspace has a colour
+
+`PATCH /api/v1/workspaces/{id}` with `{"hue": 210}` sets it; `{"hue": null}`
+takes it away. Degrees, wrapping rather than refusing — 420 is 60, -30 is 330.
+
+**Anyone who can reach the workspace may colour it, not only its owner.** A
+colour is how a team refers to a room out loud, and making it a privilege would
+mean the person who works in it every day cannot fix a shade they cannot tell
+apart from the one beside it. Nothing here grants access, so there is nothing
+to escalate — and it goes through the same access check as every other
+workspace-scoped route, so somebody outside is refused rather than told the id
+exists.
+
+Two deliberate restraints. An unset hue is **derived from the id and never
+written back**: the moment a derived colour is persisted, "nobody chose this"
+and "somebody chose exactly this" become the same state and an install can
+never again be told apart from one that was hand-tuned. And only the hue is
+stored — saturation and lightness belong to the interface, because they have to
+move with the look and the mode, and a `#rrggbb` picked under one look is
+unreadable under the next with no migration able to repair it.
+
+Absent and null are kept apart on the wire, which is why the handler reads raw
+bytes: an absent field means leave the colour alone and an explicit null means
+clear it, and no depth of pointer expresses that difference in `encoding/json`.
+Every future field on this route would otherwise erase somebody's colour as a
+side effect of editing something else.
+
+Migration 0028 adds one nullable column and there is nothing to do on upgrade.
+A colour is not carried in an export bundle.
+
+### Every select is drawn by the application
+
+There is no `<select>` left in this interface. A native one opens the operating
+system's own list — a different typeface, a different corner radius, a
+different highlight, and on macOS a list that overlaps the control it came
+from — and no styling reaches inside a native popup to fix it.
+
+What is not given up in exchange, because these are the reasons people keep the
+native one: a real `<button>` with `aria-expanded` and `aria-activedescendant`,
+a listbox with option roles, up, down, home, end, enter, escape and tab all
+behaving as expected, typing a letter to jump, and closing on an outside click
+or on an ancestor scrolling. A hidden mirror of the value keeps the browser's
+own form validation, so a required picker still refuses to submit empty — the
+first cut of this dropped that and turned "you must pick an agent" into a
+refusal the server issued after the fact.
+
+It deliberately is not a combo box. Nothing here has a list long enough to need
+searching, and when something does, that is a different control rather than an
+option on this one.
+
+### A field has a label
+
+Forms named a field and gave an example of its value in one placeholder — "name
+(e.g. anthropic, ollama)", "base URL (default: api.anthropic.com)". That fails
+twice, and the second failure is the one that matters. A placeholder is clipped
+rather than wrapped, so a row of three fields read "name (e.g. anthropic, o"
+and "API key (optional for lo" — neither the name nor the example. And it
+vanishes the moment you type, at exactly the point you would want to check you
+are filling in the right box; for anyone tabbing through with a screen reader
+there was no label at any point, only a hint assistive technology is free to
+ignore.
+
+The name is now a real `<label>` above the field, always there. The example is
+a hint below it, where it can wrap to as many lines as it needs. A placeholder
+is a bare specimen value or nothing at all.
+
+### The documentation was rebuilt against the code
+
+Rewritten against what the software does now rather than edited around it, and
+`docs/openapi.yaml` describes **92 path items and 124 operations**, still
+generated from the server's own route table — the new PATCH is in it because
+the route registers itself on the way to the mux.
+
+All fourteen screenshots are re-shot by one command,
+`web/scripts/shoot-docs.mjs`, from a running install: headless, all 1440×900 at
+2x, all in Air. The set they replace was thirteen pictures of software that had
+been deleted, and nobody noticed for one reason — re-shooting was a manual
+afternoon, so it was never done.
+
+Claims that were wrong and are corrected, each verified in the code:
+
+- the access map is no longer admin-only (above);
+- a workspace's own shell is open to any member, and only the server-wide
+  Terminal is an administrator's;
+- a gear's network grant and its timeout are per gear, set at approval;
+- `grant_gear` is offered only to the orchestrator, so a worker reports what it
+  forged and the orchestrator hands it on;
+- the blueprint's four legend buttons are independent toggles — delegation,
+  tools and outward start on, memory starts off;
+- `COGITORIUM_ADMIN_TOKEN` is environment-only, at least 24 characters, and
+  seeds the first admin's token rather than printing a generated one;
+- booleans in configuration are case-insensitive;
+- the browser environment for a gear is API-only; there is no control for it in
+  the interface.
+
 ## v0.15.0
 
 A fourth look, and the blueprint arranges itself.

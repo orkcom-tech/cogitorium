@@ -1,25 +1,32 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { DEFAULT_THEME, PRESET_THEMES, applyTheme, loadTheme, saveTheme, withLook, type Theme } from '../styles/theme'
+import { LOOKS, applyTheme, loadTheme, saveTheme, type Look, type Theme } from '../styles/theme'
 
 /**
- * The operator's palette: up to three colours and a grain dial.
+ * Appearance: pick a look, pick a mode, close it.
  *
- * Only the ground and the accent are themed. Text and border tokens are
- * deliberately left on the light-dark() layer, so no palette anyone picks can
- * make their own interface unreadable — the failure mode of every "pick any
- * colour" feature that ships without a floor.
+ * What this replaced was fourteen controls — three colour wells, a grain dial,
+ * a tint dial, a glass/solid switch, a blur radius, a lightness dial, a pad
+ * for dragging a glow around with a strength and a drift speed, and a file
+ * picker for a backdrop image or video. Every one of them could be set to a
+ * combination that made the interface worse, several could put unreadable text
+ * on a surface the operator had just tinted, and none of them was a decision
+ * anybody wanted to make twice.
+ *
+ * Ten finished looks is the same expressiveness with none of the rope. Each
+ * swatch is painted from the look's own tokens rather than from a copy of
+ * them, so what the button shows and what the interface becomes cannot drift
+ * apart — the failure this whole file was rebuilt to remove.
  */
 export default function ThemeMenu() {
   const [theme, setTheme] = useState<Theme>(() => loadTheme())
   const [open, setOpen] = useState(false)
-  const [bgError, setBgError] = useState<string | null>(null)
+  const [warning, setWarning] = useState<string | null>(null)
 
   useEffect(() => {
     applyTheme(theme)
-    if (!saveTheme(theme)) {
-      setBgError('this backdrop is too large to keep — it will be gone after a reload')
-    }
+    if (!saveTheme(theme)) setWarning('this browser refused to store the choice — it will be gone after a reload')
+    else setWarning(null)
   }, [theme])
 
   useEffect(() => {
@@ -31,18 +38,18 @@ export default function ThemeMenu() {
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
-  const setColor = (i: number, v: string) => {
-    const colors = [...theme.colors]
-    colors[i] = v
-    setTheme({ ...theme, colors })
-  }
-
-  const stops = [theme.colors[0] ?? '#1a1a19', theme.colors[1] ?? '', theme.colors[2] ?? '']
+  const current = LOOKS.find((l) => l.id === theme.look) ?? LOOKS[0]
 
   return (
     <>
-      <button className="layout-chip theme-chip" onClick={() => setOpen((v) => !v)} title="Palette">
-        <span className="swatch" style={{ background: `linear-gradient(135deg, ${stops.filter(Boolean).join(', ')})` }} />
+      <button
+        className="layout-chip theme-chip round"
+        // the bead paints itself, so it says so — see tokens.css
+        data-own
+        onClick={() => setOpen((v) => !v)}
+        title="Appearance"
+      >
+        <span className="swatch" data-look={theme.look} />
         {/* A label, not a bare text node: a bare one cannot be hidden when the
             sidebar collapses, so it kept forcing the chip wider than the rail. */}
         <span className="chip-label">theme</span>
@@ -58,242 +65,42 @@ export default function ThemeMenu() {
                   ×
                 </button>
               </div>
-              <div className="theme-body">
-          <span className="menu-head">Look</span>
-          <div className="look-choice">
-            {([
-              ['instrument', 'Instrument', 'Dense. Hairlines, no rounding, figures in monospace. The conversation stays in the centre.'],
-              ['canvas', 'Canvas-first', 'The wiring graph becomes the application; the conversation floats above it and the menu is a rail.'],
-              ['sketch', 'Sketch', 'Drawn. Paper ground, ink outlines that are not quite straight, handwriting on the chrome — and code, figures and logs left alone in monospace, because those have to stay readable.'],
-              ['calm', 'Calm', 'Quiet. Rounded surfaces, one soft shadow, almost no borders — and colour kept back entirely for state, so the one thing that needs you is the only coloured thing on the screen. Drawn in both light and dark.'],
-            ] as const).map(([v, name, why]) => (
-              <button
-                key={v}
-                className={`look-option ${theme.look === v ? 'active' : ''}`}
-                /* A look is a whole visual world — ground, accent, surface and
-                   arrangement — so picking one lands you in it rather than
-                   changing one attribute of the last one. Everything below
-                   stays live: this is where you arrive, not where you stay. */
-                onClick={() => setTheme(withLook(theme, v))}
-              >
-                <span className={`look-thumb look-${v}`} aria-hidden />
-                <span className="look-text">
-                  <strong>{name}</strong>
-                  <span className="muted">{why}</span>
-                </span>
-              </button>
-            ))}
-          </div>
 
-          <span className="menu-head">Ready-made</span>
-          <div className="theme-presets">
-            {PRESET_THEMES.map((p) => (
-              <button
-                key={p.name}
-                className="theme-preset"
-                title={p.name}
-                onClick={() => setTheme({ ...theme, ...p.theme })}
-              >
-                <span
-                  className="swatch lg"
-                  style={{ background: `linear-gradient(135deg, ${p.theme.colors.join(', ')})` }}
-                />
-                {p.name}
-              </button>
-            ))}
-          </div>
-
-          <span className="menu-head">Your gradient</span>
-          <div className="theme-stops">
-            {[0, 1, 2].map((i) => (
-              <label key={i} className="stop">
-                <input
-                  type="color"
-                  value={stops[i] || '#222222'}
-                  onChange={(e) => setColor(i, e.target.value)}
-                  aria-label={`gradient colour ${i + 1}`}
-                />
-                <span className="muted">{i === 2 ? 'accent' : i === 0 ? 'base' : 'mid'}</span>
-              </label>
-            ))}
-            {theme.colors.length > 1 && (
-              <button
-                className="bn-icon"
-                title="Drop the last colour"
-                onClick={() => setTheme({ ...theme, colors: theme.colors.slice(0, -1) })}
-              >
-                −
-              </button>
-            )}
-          </div>
-
-          <span className="menu-head">Background</span>
-          <div className="row backdrop-row">
-            <label className="file-btn">
-              picture or clip…
-              <input
-                type="file"
-                accept="image/*,video/mp4,video/webm"
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  e.target.value = ''
-                  if (!f) return
-                  // Read locally and store as a data URL. Nothing is uploaded
-                  // and nothing is ever fetched from a remote address.
-                  const r = new FileReader()
-                  r.onload = () => {
-                    const data = String(r.result)
-                    const kind = f.type.startsWith('video') ? 'video' : 'image'
-                    try {
-                      setTheme({ ...theme, bg: { ...theme.bg, kind, data } })
-                      setBgError(null)
-                    } catch {
-                      setBgError('too large to keep')
-                    }
-                  }
-                  r.readAsDataURL(f)
-                }}
-              />
-            </label>
-            {theme.bg.kind !== 'none' && (
-              <button onClick={() => setTheme({ ...theme, bg: { ...theme.bg, kind: 'none', data: '' } })}>clear</button>
-            )}
-          </div>
-          {bgError && <span className="hint warn">{bgError}</span>}
-          {theme.bg.kind !== 'none' && (
-            <label className="dial">
-              dim it
-              <input
-                type="range"
-                min={0}
-                max={0.9}
-                step={0.05}
-                value={theme.bg.dim}
-                onChange={(e) => setTheme({ ...theme, bg: { ...theme.bg, dim: Number(e.target.value) } })}
-              />
-            </label>
-          )}
-
-          <span className="menu-head">Panels</span>
-          <div className="row mode-row">
-            {(['glass', 'solid'] as const).map((v) => (
-              <button key={v} className={theme.surface === v ? 'active' : ''} onClick={() => setTheme({ ...theme, surface: v })}>
-                {v}
-              </button>
-            ))}
-          </div>
-          {theme.surface === 'glass' && (
-            <label className="dial">
-              blur
-              <input
-                type="range"
-                min={0}
-                max={40}
-                step={2}
-                value={theme.blur}
-                onChange={(e) => setTheme({ ...theme, blur: Number(e.target.value) })}
-              />
-            </label>
-          )}
-          <label className="dial">
-            {theme.surface === 'glass' ? 'darken' : 'lighten'}
-            <input
-              type="range"
-              min={0.25}
-              max={1}
-              step={0.05}
-              value={theme.dim}
-              onChange={(e) => setTheme({ ...theme, dim: Number(e.target.value) })}
-            />
-          </label>
-
-          <span className="menu-head">Light source</span>
-          {/* Strength first, and off is one drag away. Everything below it is
-              about WHERE the light is, which is a question that only matters
-              once there is any — so the position pad and the drift are hidden
-              when it is off rather than sitting there doing nothing. */}
-          <label className="dial">
-            strength
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={theme.glowStrength}
-              onChange={(e) => setTheme({ ...theme, glowStrength: Number(e.target.value) })}
-            />
-            <span className="muted dial-value">
-              {theme.glowStrength === 0 ? 'off' : `${Math.round(theme.glowStrength * 100)}%`}
-            </span>
-          </label>
-          {theme.glowStrength > 0 && (
-            <GlowPad
-              glow={theme.glow}
-              disabled={theme.drift}
-              onMove={(glow) => setTheme({ ...theme, glow })}
-            />
-          )}
-          {theme.glowStrength > 0 && (
-            <label className="dial">
-              <input
-                type="checkbox"
-                checked={theme.drift}
-                onChange={(e) => setTheme({ ...theme, drift: e.target.checked })}
-              />
-              drift it around
-            </label>
-          )}
-          {theme.glowStrength > 0 && theme.drift && (
-            <label className="dial">
-              speed
-              <input
-                type="range"
-                min={20}
-                max={300}
-                step={10}
-                // Inverted: dragging right should mean faster, and faster is a
-                // SHORTER circuit.
-                value={320 - theme.driftSpeed}
-                onChange={(e) => setTheme({ ...theme, driftSpeed: 320 - Number(e.target.value) })}
-              />
-            </label>
-          )}
-
-          <label className="dial">
-            grain
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={theme.grain}
-              onChange={(e) => setTheme({ ...theme, grain: Number(e.target.value) })}
-            />
-          </label>
-          <label className="dial">
-            tint
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={theme.tint}
-              onChange={(e) => setTheme({ ...theme, tint: Number(e.target.value) })}
-            />
-          </label>
-
-          <div className="row mode-row">
-            {(['system', 'dark', 'light'] as const).map((m) => (
-              <button key={m} className={theme.mode === m ? 'active' : ''} onClick={() => setTheme({ ...theme, mode: m })}>
-                {m}
-              </button>
-            ))}
-          </div>
-
-          <hr />
-          <button onClick={() => setTheme(DEFAULT_THEME)}>reset palette</button>
-                <span className="hint">the palette is saved on this device</span>
+              <div className="look-grid">
+                {LOOKS.map((l) => (
+                  <button
+                    key={l.id}
+                    className={`look-option ${theme.look === l.id ? 'on' : ''}`}
+                    aria-pressed={theme.look === l.id}
+                    onClick={() => setTheme((t) => ({ ...t, look: l.id }))}
+                  >
+                    <LookSwatch look={l.id} />
+                    <span className="look-name">{l.name}</span>
+                  </button>
+                ))}
               </div>
+
+              <p className="hint look-blurb">{current.blurb}</p>
+
+              <p className="menu-head">LIGHT OR DARK</p>
+              <div className="row mode-row">
+                {(['system', 'light', 'dark'] as const).map((m) => (
+                  <button
+                    key={m}
+                    className={theme.mode === m ? 'on' : ''}
+                    aria-pressed={theme.mode === m}
+                    onClick={() => setTheme((t) => ({ ...t, mode: m }))}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+              <p className="hint">
+                Every look is drawn in both. <strong>system</strong> follows the operating system, and changes with it.
+              </p>
+
+              {warning && <p className="error">{warning}</p>}
+              <p className="hint">the choice is saved on this device</p>
             </div>
           </div>,
           document.body,
@@ -303,43 +110,19 @@ export default function ThemeMenu() {
 }
 
 /**
- * A miniature of the screen: drag inside it to put the light where you want.
+ * A miniature of the look, drawn from the look's own tokens.
  *
- * Disabled while the drift is on, because two authorities over one position is
- * how a control ends up fighting an animation and losing.
+ * `data-look` on the swatch means the CSS resolves the same variables it will
+ * resolve on the real interface, in the mode currently in force — so a swatch
+ * cannot promise a colour the look does not have, and the light and dark
+ * halves are both correct without a second table of preview colours.
  */
-function GlowPad({
-  glow,
-  disabled,
-  onMove,
-}: {
-  glow: { x: number; y: number }
-  disabled: boolean
-  onMove: (g: { x: number; y: number }) => void
-}) {
-  const set = (e: React.PointerEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect()
-    onMove({
-      x: Math.round(Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100))),
-      y: Math.round(Math.max(0, Math.min(100, ((e.clientY - r.top) / r.height) * 100))),
-    })
-  }
+function LookSwatch({ look }: { look: Look }) {
   return (
-    <div
-      className={`glow-pad ${disabled ? 'off' : ''}`}
-      title={disabled ? 'Turn the drift off to place it by hand' : 'Drag to move the light'}
-      onPointerDown={(e) => {
-        if (disabled) return
-        e.currentTarget.setPointerCapture(e.pointerId)
-        set(e)
-      }}
-      onPointerMove={(e) => {
-        if (disabled || !e.currentTarget.hasPointerCapture(e.pointerId)) return
-        set(e)
-      }}
-      onPointerUp={(e) => e.currentTarget.releasePointerCapture(e.pointerId)}
-    >
-      <span className="glow-dot" style={{ left: `${glow.x}%`, top: `${glow.y}%` }} />
-    </div>
+    <span className="look-swatch" data-look={look} aria-hidden>
+      <span className="look-swatch-ground" />
+      <span className="look-swatch-card" />
+      <span className="look-swatch-accent" />
+    </span>
   )
 }

@@ -1,5 +1,5 @@
 @import './styles/tokens.css';
-@import './styles/bench.css';
+@import './styles/deck.css';
 
 :root {
   font-family: system-ui, -apple-system, sans-serif;
@@ -18,45 +18,24 @@ body {
   height: 100dvh;
 }
 
-.layout {
-  height: 100dvh;
-  min-height: 0;
-}
 
-.layout {
-  display: grid;
-  grid-template-columns: var(--nav-w) 1fr;
-}
+
+
 
 /* Collapsed, the menu is GONE — not a rail of glyphs. The column closes to
    zero and the panel slides out to the left, so the content takes the whole
    width rather than living beside a strip.
    The toggle sits outside the sidebar for the obvious reason: inside it, it
    would slide away with the thing it is meant to bring back. */
-.layout.nav-collapsed {
-  --nav-w: 0px;
-}
+
 
 :root {
   --nav-w-open: 200px;
 }
 
-.sidebar {
-  /* The panel keeps its own width, independent of the grid track.
-     translateX(-100%) is a percentage of the ELEMENT, so with the track
-     collapsed to zero the element was zero too and the slide moved it nowhere
-     — it simply spilled its contents over the workspace. */
-  width: var(--nav-w-open);
-  transition: transform 160ms ease;
-  will-change: transform;
-  overflow: hidden;
-}
 
-.layout.nav-collapsed .sidebar {
-  transform: translateX(calc(-1 * var(--nav-w-open)));
-  pointer-events: none;
-  visibility: hidden;
-}
+
+
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar {
@@ -64,21 +43,7 @@ body {
   }
 }
 
-.nav-toggle {
-  position: fixed;
-  top: var(--s2);
-  left: var(--s2);
-  z-index: 60;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  font-size: var(--t-chrome);
-  border-radius: var(--r1);
-  background: var(--surface);
-  border: 1px solid var(--border);
-}
+
 
 /* With the menu open the button sits on the panel; closed, it floats over the
    content, so it never covers the workspace title.
@@ -87,80 +52,40 @@ body {
    transparent button simply sat on top of it; with a real mark there, the
    chevron landed inside the drawing. The mark and the name move right by the
    width of the button rather than the button moving somewhere unfindable. */
-.layout:not(.nav-collapsed) .nav-toggle {
-  background: transparent;
-  border-color: transparent;
-}
 
 
-.ws-head,
-.page-head,
-.page > h2:first-child {
-  padding-left: 2.2rem;
-}
 
-.layout:not(.nav-collapsed) .ws-head,
-.layout:not(.nav-collapsed) .page-head,
-.layout:not(.nav-collapsed) .page > h2:first-child {
-  padding-left: 0;
-}
+/* The 2.2rem gutter that used to be here made room for the fixed menu button
+   that floated over the top-left corner. Both the button and the rail it
+   opened are gone, and the rule that cancelled this gutter was keyed to
+   `.layout:not(.nav-collapsed)` — a class that no longer exists — so the
+   compensation applied permanently and every page title hung a third of an
+   inch to the right of its own content. A dead canceller is worse than a dead
+   rule: the rule keeps working. */
 
 
-.sidebar {
-  padding: var(--s2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  min-height: 0;
-}
 
-.side-pane {
-  border: 1px solid var(--border);
-  border-radius: var(--r2);
-  padding: var(--s2);
-}
 
-.sidebar .brand {
-  padding: 0 var(--s2);
-}
+
+
+
+
+
 
 .brand {
   font-size: 1.15rem;
   margin: 0;
 }
 
-.sidebar nav {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
 
-.sidebar nav a {
-  color: inherit;
-  text-decoration: none;
-  padding: 0.35rem 0.5rem;
-  border-radius: 6px;
-  opacity: 0.75;
-}
 
-.sidebar nav a:hover {
-  opacity: 1;
-}
 
-.sidebar nav a.active {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  opacity: 1;
-}
 
-.sidebar-footer {
-  margin-top: auto;
-  gap: var(--s1);
-  font-size: 0.75rem;
-  opacity: 0.6;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
+
+
+
+
+
 
 .linkish {
   border: none;
@@ -1507,8 +1432,7 @@ th {
 }
 
 .tree-row.selected,
-.agent-row.selected,
-.sidebar nav a.active {
+.agent-row.selected {
   background: var(--selected);
 }
 
@@ -1539,9 +1463,9 @@ th {
   font-size: 1.05rem;
 }
 
-/* A panel body fills its slot and owns its own scrolling. Panels must never
-   inherit the page's viewport maths — that is what the bench replaced. */
-.bn-body {
+/* A view body fills its slide and owns its own scrolling. Nothing here ever
+   inherits the page's viewport maths — that is what the deck replaced. */
+.dk-body {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1549,7 +1473,7 @@ th {
   padding: var(--s2);
 }
 
-.bn-scroll {
+.dk-scroll {
   overflow-y: auto;
 }
 
@@ -1562,18 +1486,18 @@ th {
   min-height: 0;
 }
 
-/* Inside a panel these already sit in a sized box, so their own floors would
-   only fight the slot they were given. */
-.bn-body .canvas,
-.bn-body .code-edit,
-.bn-body .terminal-holder,
-.bn-body .transcript {
+/* Inside a view these already sit in a sized box, so their own floors would
+   only fight the room they were given. */
+.dk-body .canvas,
+.dk-body .code-edit,
+.dk-body .terminal-holder,
+.dk-body .transcript {
   min-height: 0;
 }
 
-.bn-body .page,
-.bn-body .blueprint,
-.bn-body .files {
+.dk-body .page,
+.dk-body .blueprint,
+.dk-body .files {
   max-width: none;
   flex: 1;
   min-height: 0;
@@ -1595,7 +1519,6 @@ th {
 
 /* Nothing in the shell may scroll sideways. A horizontal scrollbar on the app
    means a track was sized against the window instead of its container. */
-.layout,
 .content,
 .ws-shell {
   overflow-x: hidden;
@@ -1656,20 +1579,6 @@ th {
   border-radius: 4px;
   border: 1px solid var(--border);
   display: inline-block;
-}
-
-.swatch.lg {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-}
-
-
-
-.theme-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s1);
 }
 
 .theme-preset {
@@ -1738,33 +1647,6 @@ th {
   flex: 0 0 auto;
 }
 
-.glow-pad {
-  position: relative;
-  height: 68px;
-  margin: var(--s1) var(--s2);
-  border: 1px solid var(--border);
-  border-radius: var(--r1);
-  background: linear-gradient(150deg, var(--theme-a), var(--theme-b));
-  cursor: crosshair;
-  touch-action: none;
-  overflow: hidden;
-}
-
-.glow-pad.off {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.glow-dot {
-  position: absolute;
-  width: 26px;
-  height: 26px;
-  margin: -13px 0 0 -13px;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--theme-c) 0%, transparent 70%);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-c) 45%, transparent);
-}
-
 .dial input[type='checkbox'] {
   width: auto;
   accent-color: var(--accent);
@@ -1782,11 +1664,7 @@ th {
   padding: var(--s3);
 }
 
-.account-who {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-}
+
 
 .avatar {
   width: 30px;
@@ -1801,42 +1679,19 @@ th {
   background: linear-gradient(140deg, var(--accent), color-mix(in srgb, var(--accent) 40%, var(--theme-c)));
 }
 
-.account-id {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-  min-width: 0;
-}
 
-.account-id strong {
-  font-size: var(--t-ui);
-}
 
-.account-server {
-  font-size: var(--t-micro);
-  color: var(--text-dim);
-}
 
-.account-out {
-  border: 1px solid var(--border);
-  border-radius: var(--r1);
-  padding: var(--s1);
-}
 
-.account-out button {
-  width: 100%;
-  font-size: var(--t-chrome);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--s1);
-}
+
+
+
+
+
 
 /* The power glyph was for a 32px rail. The menu is either present in full or
    absent, so the button is always the full labelled control. */
-.out-icon {
-  display: none;
-}
+
 
 .account .theme-chip {
   width: 100%;
@@ -1878,7 +1733,36 @@ th {
   max-height: min(80vh, 46rem);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* Gap, not margins: the dialog's children are a heading, a grid, a blurb, a
+     label, a row of modes and two hints, and per-element margins had the last
+     three sitting on top of each other. */
+  gap: var(--s2);
+  padding: var(--s3);
+  overflow-y: auto;
+}
+
+.theme-dialog > * {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.theme-dialog .theme-head {
+  margin: 0;
+}
+
+.theme-dialog .menu-head {
+  font-size: var(--t-micro);
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  padding: var(--s2) 0 0;
+}
+
+.theme-dialog .mode-row {
+  gap: var(--s1);
+}
+
+.theme-dialog .mode-row button {
+  flex: 1;
 }
 
 .theme-head {
@@ -1889,59 +1773,6 @@ th {
 .theme-head h3 {
   margin: 0;
 }
-
-.theme-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s1);
-  padding: var(--s2) var(--s3) var(--s3);
-  overflow-y: auto;
-  min-height: 0;
-}
-
-.theme-body .menu-head {
-  font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-dim);
-  padding: var(--s3) 0 var(--s1);
-}
-
-.theme-body .dial,
-.theme-body .backdrop-row,
-.theme-body .mode-row,
-.theme-body .theme-stops {
-  padding: var(--s1) 0;
-}
-
-.theme-body .glow-pad {
-  margin: var(--s1) 0;
-}
-
-.theme-body > button {
-  text-align: left;
-  border: 0;
-  background: transparent;
-  padding: var(--s2) 0;
-  font-size: var(--t-ui);
-}
-
-.theme-body .theme-presets {
-  gap: var(--s2);
-}
-
-/* Flex children shrink by default, which flattened the light-source map to a
-   sliver inside the dialog's column. */
-.theme-body .glow-pad {
-  flex: 0 0 auto;
-  height: 84px;
-}
-
-.theme-body > * {
-  flex: 0 0 auto;
-}
-
-/* Workspaces page */
 
 .page-head {
   align-items: center;
@@ -2048,12 +1879,6 @@ button.big {
   font-size: var(--t-chrome);
 }
 
-.look-choice {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s1);
-}
-
 .look-option {
   display: flex;
   align-items: flex-start;
@@ -2071,19 +1896,6 @@ button.big {
   background: var(--selected);
 }
 
-.look-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: var(--t-chrome);
-}
-
-.look-text strong {
-  font-size: var(--t-ui);
-}
-
-/* Each thumbnail is the arrangement it stands for, drawn in miniature —
-   a swatch would say nothing about a layout. */
 .look-thumb {
   width: 46px;
   height: 34px;
@@ -2495,4 +2307,906 @@ button.big {
 
 .bp-new-agent {
   margin-bottom: var(--s2);
+}
+
+
+/* The chip's swatch and the ten miniatures in the dialog.
+ *
+ * Both carry data-look, so the browser resolves the SAME custom properties it
+ * will resolve on the real interface, in whichever mode is in force. A preview
+ * cannot therefore promise a colour the look does not have — which a second
+ * table of preview hexes eventually always does. */
+.swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  display: inline-block;
+  background: linear-gradient(135deg, var(--ground, var(--bg)) 0 55%, var(--accent) 55% 100%);
+}
+
+.look-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: var(--s2);
+  padding: var(--s2) 0;
+}
+
+.look-option {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--s2);
+  padding: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.look-option.on {
+  border-color: var(--accent);
+  background: var(--selected);
+}
+
+.look-name {
+  font-size: var(--t-chrome);
+}
+
+/* The miniature: ground, a card on it, and the accent. Three rectangles is
+   enough to tell ten looks apart, and it stays honest because all three come
+   from the tokens rather than from a copy of them. */
+.look-swatch {
+  position: relative;
+  display: block;
+  height: 46px;
+  border-radius: var(--r1);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--ground, var(--bg));
+}
+
+.look-swatch-card {
+  position: absolute;
+  left: 8%;
+  top: 18%;
+  width: 58%;
+  height: 64%;
+  border-radius: calc(var(--r1) * 0.7);
+  border: 1px solid var(--border);
+  background: var(--surface-base);
+  box-shadow: var(--lift-2);
+}
+
+.look-swatch-accent {
+  position: absolute;
+  right: 10%;
+  top: 30%;
+  width: 18%;
+  height: 40%;
+  border-radius: calc(var(--r1) * 0.7);
+  background: var(--accent);
+}
+
+.look-blurb {
+  min-height: 2.4em;
+}
+
+.mode-row button.on {
+  border-color: var(--accent);
+  background: var(--selected);
+}
+
+
+/* A workspace's colour.
+ *
+ * A spine down the leading edge rather than a tinted card: the card's fill is
+ * the look's, and ten cards each washed a different colour is a fruit salad
+ * that fights every theme. One saturated edge identifies the room and leaves
+ * the surface alone. */
+.ws-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.ws-hue {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+}
+
+/* The whole leading edge is the control, so there is no target to find. */
+.ws-spine {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: hsl(var(--ws-hue) 68% 52%);
+  cursor: pointer;
+}
+
+.ws-spine:hover {
+  width: 7px;
+}
+
+.hue-pop {
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  z-index: var(--z-menu);
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  padding: var(--s2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--lift-2);
+}
+
+.ws-card .card-head {
+  padding-left: var(--s3);
+}
+
+.hue-dot {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  cursor: pointer;
+}
+
+.hue-dot:hover {
+  transform: scale(1.18);
+}
+
+/* The chosen one is ringed rather than merely bigger: on a row of ten dots a
+   size difference is not readable, and the operator has to be able to see
+   which colour is actually stored. */
+.hue-dot.on {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px hsl(var(--ws-hue) 68% 52%);
+}
+
+.hue-clear {
+  font-size: var(--t-micro);
+  padding: 2px 7px;
+}
+
+.hue-clear:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+
+/* ===========================================================================
+   THE SHELL — a sheet on a ground.
+   =========================================================================== */
+
+.app-shell {
+  height: 100%;
+  padding: var(--s3);
+  display: flex;
+  min-height: 0;
+}
+
+/* The sheet is the application. Everything else on screen is the ground it
+   rests on, and the ground is never written to — that is what stops the app
+   feeling like a document that runs to the edges of the window. */
+.sheet {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: var(--r-sheet, var(--r3));
+  box-shadow: var(--lift-2);
+}
+
+.sheet-head {
+  flex: 0 0 auto;
+  display: grid;
+  /* Three tracks, not flexbox: the pill group has to be centred on the SHEET
+     rather than on the space left over, and with flex it drifts whenever the
+     brand or the tools change width. */
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+}
+
+.sheet-head .brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  text-decoration: none;
+  color: inherit;
+  justify-self: start;
+}
+
+.sheet-head .brand-mark {
+  display: block;
+}
+
+.sheet-head .wordmark {
+  font-size: var(--t-ui);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* The pill group. One track of the header grid, so it is centred on the sheet
+   however wide the brand and the tools happen to be. */
+.pill-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.pill-nav a {
+  display: block;
+  padding: 7px 15px;
+  border-radius: 999px;
+  font-size: var(--t-chrome);
+  color: var(--muted, var(--text-dim));
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.pill-nav a:hover {
+  color: var(--text);
+}
+
+/* The one you are on is a raised white pill, the way a physical tab sits
+   proud of the track it slides in. No accent: green means running in this
+   product, and spending it on "you are here" would make the only colour that
+   matters ambiguous. */
+.pill-nav a.active {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 500;
+  box-shadow: var(--lift);
+}
+
+.head-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  justify-self: end;
+}
+
+.tool-btn,
+.acct-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--t-chrome);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.tool-btn:hover,
+.acct-btn:hover {
+  background: var(--surface-2);
+}
+
+.acct-btn {
+  font-weight: 600;
+  background: var(--surface-2);
+}
+
+.acct {
+  position: relative;
+  display: flex;
+}
+
+.acct-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: var(--z-menu);
+  min-width: 13rem;
+  display: flex;
+  flex-direction: column;
+  padding: var(--s2);
+  gap: 1px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  box-shadow: var(--lift-2);
+}
+
+.acct-menu a,
+.acct-out {
+  padding: var(--s2);
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: inherit;
+  font-size: var(--t-ui);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.acct-menu a:hover,
+.acct-out:hover {
+  background: var(--surface-2);
+}
+
+/* The one control here that ends the session is the only red thing in the
+   menu, and it is separated by a rule from the items that merely navigate. */
+.acct-out {
+  color: var(--danger);
+}
+
+.acct-who {
+  display: flex;
+  flex-direction: column;
+  padding: var(--s2);
+}
+
+.acct-who .muted {
+  font-size: var(--t-micro);
+}
+
+.acct-server {
+  padding: var(--s1) var(--s2);
+  font-size: var(--t-micro);
+  color: var(--muted, var(--text-dim));
+}
+
+.acct-menu hr {
+  width: 100%;
+  margin: var(--s1) 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* The page fills what the header leaves, and owns its own scrolling. */
+.sheet > .content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: 0 var(--s4) var(--s4);
+}
+
+/* A workspace is canvas-first: it takes the whole sheet and does its own
+   padding, because a deck that inherits page padding loses it to the seam. */
+.sheet > .content:has(.ws-shell) {
+  padding: 0;
+  overflow: hidden;
+}
+
+
+/* In the header the theme control is one of three circular buttons, so it
+   drops its label and keeps only the swatch. The word "theme" beside a
+   coloured dot said what the dot already said, and it was the only thing in
+   the row wide enough to push the pill group off centre. */
+.head-tools .theme-chip {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  /* A bead of the accent, lit from the top left.
+   *
+   * The first cut split the circle diagonally with a hard colour stop, which
+   * put a stepped edge across it — a hard stop inside a rounded, clipped box
+   * is aliased twice over, once by the stop and once by the clip, and it read
+   * as stripes along the rim. There is no stop here at all: the colour is one
+   * fill and the light is a soft radial highlight over it, so nothing has an
+   * edge to alias. */
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0) 52%),
+    radial-gradient(circle at 68% 78%, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0) 58%),
+    var(--accent);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.55),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.18),
+    var(--lift);
+  overflow: hidden;
+}
+
+.head-tools .theme-chip:hover {
+  filter: brightness(1.06);
+}
+
+.head-tools .theme-chip .chip-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* The inner swatch is redundant once the button itself carries the colours. */
+.head-tools .theme-chip .swatch {
+  display: none;
+}
+
+
+/* The workspace list.
+ *
+ * Air, and the same air on every card: one column of generous rows rather
+ * than a grid of dense ones, because the name and what it is for are the only
+ * things read at a glance and both are text. */
+.ws-card {
+  padding: var(--s4);
+}
+
+.ws-card + .ws-card {
+  margin-top: var(--s3);
+}
+
+.ws-card .ws-title strong {
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.ws-card .card-head {
+  gap: var(--s3);
+  align-items: baseline;
+}
+
+.ws-card .share-row {
+  margin-top: var(--s3);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--border);
+  font-size: var(--t-chrome);
+}
+
+/* A row of counts across the top of a page, the way a control room states
+   what it is looking after before it shows the detail. The number is the
+   thing, so it is set large and light and the label under it is small. */
+.stat-row {
+  display: flex;
+  gap: var(--s6);
+  padding: var(--s2) 0 var(--s4);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-n {
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted, var(--text-dim));
+}
+
+
+/* ===========================================================================
+   FIELDS — see Field.tsx for why a placeholder is not a label.
+   =========================================================================== */
+
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3) var(--s4);
+  align-items: flex-start;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 13rem;
+}
+
+/* Wide is for a value that is genuinely long — an address, a path. It takes
+   the row so the field is as wide as the thing it holds, which is the whole
+   reason the old placeholders were being clipped. */
+.field-wide {
+  flex: 1 1 100%;
+}
+
+.field-label {
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted, var(--text-dim));
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  min-width: 0;
+}
+
+/* The hint wraps to as many lines as it needs, which a placeholder never
+   could. It stays visible while the field is being filled in. */
+.field-hint {
+  font-size: var(--t-micro);
+  line-height: 1.45;
+  color: var(--muted, var(--text-dim));
+}
+
+.form-actions {
+  margin-top: var(--s3);
+  gap: var(--s3);
+  align-items: center;
+}
+
+
+/* ===========================================================================
+   PAGE RHYTHM
+   One vertical scale for every page, so Models, Gears and Instructions read as
+   the same document in different words rather than three that were each
+   spaced by hand.
+   =========================================================================== */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+  padding-top: var(--s4);
+}
+
+.page > h2:first-child {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.page > section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  margin: 0;
+}
+
+/* A section heading labels what follows; it does not compete with the page's
+   own title. Small, tracked out, quiet. */
+.page > section > h3 {
+  margin: 0;
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted, var(--text-dim));
+}
+
+/* Tables sit on a surface like everything else, and their rows breathe. */
+.page table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  overflow: hidden;
+}
+
+.page table th {
+  padding: var(--s2) var(--s3);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted, var(--text-dim));
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.page table td {
+  padding: var(--s3);
+  border-top: 1px solid var(--border);
+}
+
+.page table tbody tr:first-child td {
+  border-top: 0;
+}
+
+.page table tbody tr:hover {
+  background: var(--surface-2);
+}
+
+
+/* The maker's mark, back in the header where the brand block used to carry it.
+   It sits under the wordmark rather than beside it, so the header's left track
+   stays one column wide and the pill group stays centred on the sheet. */
+.sheet-head .brand {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  justify-self: start;
+}
+
+.sheet-head .brand-link {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  text-decoration: none;
+  color: inherit;
+}
+
+.by-ork {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 32px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted, var(--text-dim));
+  text-decoration: none;
+}
+
+.by-ork:hover {
+  color: var(--text);
+}
+
+/* Masked rather than coloured, so the mark takes the ink of whatever look is
+   in force instead of carrying a palette of its own. */
+.ork-mark {
+  display: inline-block;
+  width: 46px;
+  height: 15px;
+  background: currentColor;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  -webkit-mask-position: center;
+}
+
+
+/* ===========================================================================
+   THE INSTALL MAP
+   Canvas-first: it takes the whole sheet and floats its own chrome, the way a
+   map view does. Nothing here is in the document flow except the panel.
+   =========================================================================== */
+
+.imap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.imap-canvas {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+
+.imap-card {
+  position: absolute;
+  top: var(--s4);
+  right: var(--s4);
+  width: 17rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  box-shadow: var(--lift-2);
+}
+
+.imap-card h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.imap-card .sub {
+  margin: 0;
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted, var(--text-dim));
+}
+
+.imap-card dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px var(--s3);
+}
+
+.imap-card dt {
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted, var(--text-dim));
+}
+
+.imap-card dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.imap-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--s3);
+  margin: 0;
+  text-align: center;
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
+  color: var(--muted, var(--text-dim));
+  pointer-events: none;
+}
+
+/* The map owns the sheet, so the page padding that every other route wants
+   would only push the canvas away from its own edges. */
+.sheet > .content:has(.imap) {
+  padding: 0;
+  overflow: hidden;
+}
+
+
+/* ===========================================================================
+   SELECT — see Select.tsx for why the native one is not used.
+   =========================================================================== */
+
+.sel {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.sel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  width: 100%;
+  min-width: 7rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r1);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sel-btn:hover {
+  border-color: var(--border-strong);
+}
+
+.sel-empty {
+  color: var(--muted, var(--text-dim));
+}
+
+.sel-caret {
+  font-size: 9px;
+  color: var(--muted, var(--text-dim));
+}
+
+.sel-list {
+  /* Fixed and portalled to the body: the control is routinely inside a card
+     with overflow: hidden, and an absolutely positioned list inside one of
+     those is clipped out of existence. Its coordinates come from the button's
+     own rect, measured when it opens. */
+  position: fixed;
+  max-height: 15rem;
+  overflow: auto;
+  z-index: var(--z-menu);
+  padding: var(--s1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  box-shadow: var(--lift-2);
+}
+
+.sel-opt {
+  padding: var(--s2);
+  border-radius: var(--r1);
+  font-size: var(--t-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* The keyboard's position and the mouse's are the same thing, so there is one
+   highlight rather than two that can disagree. */
+.sel-opt[data-active='true'] {
+  background: var(--surface-2);
+}
+
+.sel-opt.on {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.sel-opt.off {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.field .sel {
+  width: 100%;
+}
+
+
+/* The mirror that carries `required` into the browser's own validation. It has
+   to be focusable enough to be reported on, and invisible. */
+.sel-required {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sel.grow {
+  flex: 1;
+}
+
+
+/* The way out of a workspace. Same circle as the header's own tools, so the
+   two controls that leave a screen look like each other, and inset from the
+   edge rather than pressed against it. */
+.ws-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  margin-left: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.ws-back:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+
+.ws-head {
+  align-items: center;
+  padding: var(--s3) var(--s3) var(--s2);
+  gap: var(--s3);
 }

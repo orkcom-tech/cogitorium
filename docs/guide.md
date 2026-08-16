@@ -2,17 +2,20 @@
 layout: default
 title: Guide
 permalink: /guide/
-description: A worked walkthrough of Cogitorium — from an empty install to a pipeline with models in it that behaves the same way twice, with every command and every error message taken from a real run.
+description: One section per screen of Cogitorium — what each one is for, the two or three things people actually do on it, and what it refuses to do, with every command and every error message taken from a real run.
 ---
 
 # Guide
 
-This walks from an empty install to a workflow you can hand to another system:
-agents with their own models, tools they keep, a door your own services deliver
-through, and a clock that starts work without you. The thread running through
-it is the one thing the whole product is for — **a pipeline with a model in it
-that behaves the same way twice**, which is why so much of what follows is
-about what gets checked rather than what gets said.
+This is the interface, screen by screen, in the order the navigation offers
+them. Each section says what a screen is for, how to do the things people
+actually do on it, and what it will not do — because half of what is worth
+knowing about this product is where it stops.
+
+The thread running through all of it is the one thing the whole product is
+for: **a pipeline with a model in it that behaves the same way twice**, which
+is why so much of what follows is about what gets checked rather than what
+gets said.
 
 Every command below was run against a real install, and every error message is
 the exact text the software produces. Where something does not exist, it says
@@ -25,7 +28,29 @@ anywhere else.
 
 ---
 
-## 1. From nothing to an answer
+## Where everything is
+
+A white sheet on a grey ground, and one row across the top of it.
+
+On the left, the brand. In the middle, a pill of the places you work:
+**Workspaces**, **Map**, **Gears**, **Instructions**, **Models**, plus
+**Context** and **People** if you are an administrator. On the right, three
+controls: the theme button, a link to this documentation, and your account
+button.
+
+The account menu holds what you configure rather than what you navigate:
+**Variables & secrets**, **Terminal**, the server's version, and sign out.
+
+There is no sidebar. There is no keyboard shortcut for any of this chrome, and
+that is deliberate: Escape belongs to the search approval dialog and to nothing
+else, so one keypress can never both dismiss something and silently refuse a
+pending search.
+
+---
+
+## First run
+
+Not a screen — the four minutes before you have one worth looking at.
 
 ### Install and start
 
@@ -38,8 +63,9 @@ Other routes are in [Install](./#install). The server listens on
 <http://127.0.0.1:8688>.
 
 `serve` takes exactly four flags — `--config`, `--data`, `--listen`,
-`--log-level` — and the binary has exactly two subcommands, `serve` and
-`version`. There is no `--port`, no `--debug`, and no `cogitorium init`.
+`--log-level`. There is no `--port`, no `--debug`, and no `cogitorium init`.
+The other subcommands are a client for a running server and an MCP bridge; they
+are in [From a terminal, and from a script](#from-a-terminal-and-from-a-script).
 
 ### The token, and when you need it
 
@@ -52,6 +78,10 @@ admin token created; local requests are admin automatically  token=cg-admin-b1e8
 You do not need it on your own machine — a request from loopback *is* the
 admin. You need it the moment the server listens anywhere else. Only the SHA-256
 hash is stored, so a lost token cannot be recovered; there is no reset command.
+
+`COGITORIUM_ADMIN_TOKEN` seeds that credential instead of letting the server
+generate one. It is read from the environment only — there is no config file key
+for it — and it must be at least 24 characters.
 
 Two things people try here that do not work:
 
@@ -71,7 +101,19 @@ To give the admin a password — there is no screen for this, only the route:
 curl -X PUT http://127.0.0.1:8688/api/v1/users/1/password -H 'Content-Type: application/json' -d '{"password":"correct-horse-battery"}'
 ```
 
-### A provider and a model
+---
+
+## Workspaces
+
+![The workspaces list: coloured cards, one of them shared with two teams. The
+colour is the stripe down the left edge, and clicking that stripe is how you
+change it.](assets/01-workspaces.png)
+
+The list of every workspace you can reach: the ones you own, plus the ones
+shared with a team you belong to. A workspace is a group of agents behind one
+orchestrator chat.
+
+### Make one
 
 A workspace cannot exist without a model, because its orchestrator needs
 something to think with. Until the catalog has one, **+ New workspace** is
@@ -79,463 +121,71 @@ disabled and the page says so:
 
 > A workspace needs a model for its orchestrator, and the catalog is empty. Add one under Models first.
 
-Go to **Models** → fill in the provider row → **add provider**, then add a model
-from the provider's card. Or:
-
-```bash
-curl -X POST http://127.0.0.1:8688/api/v1/providers -H 'Content-Type: application/json' -d '{"name":"local","type":"openai-compatible","base_url":"http://127.0.0.1:11434/v1","api_key":""}'
-```
-
-```json
-{"id":1,"name":"local","type":"openai-compatible","base_url":"http://127.0.0.1:11434/v1","has_key":false}
-```
-
-`has_key` is the only thing ever said about the key. The key itself is not in
-that response, nor in any other — the field holding it is unexported, so the
-JSON encoder cannot see it.
-
-Two provider types exist: `anthropic` and `openai-compatible`. Anthropic has a
-default address; an openai-compatible provider does not, and leaving it empty is
-refused with *"base_url is required for openai-compatible providers"*. There is
-no environment variable and no config file key for a provider key — the catalog
-is the only place keys live.
-
-```bash
-curl -X POST http://127.0.0.1:8688/api/v1/models -H 'Content-Type: application/json' -d '{"provider_id":1,"model_name":"qwen2.5:0.5b","label":"local / tiny"}'
-```
-
-```json
-{"id":1,"provider_id":1,"provider_name":"local","provider_type":"openai-compatible","model_name":"qwen2.5:0.5b","label":"local / tiny"}
-```
-
-### A workspace
-
-**Workspaces** → **+ New workspace** → name it, pick the orchestrator model →
-**create workspace**. Or:
+With a model in the catalog: **+ New workspace** → name it, say what it is for,
+pick the orchestrator model → **create workspace**. Or:
 
 ```bash
 curl -X POST http://127.0.0.1:8688/api/v1/workspaces -H 'Content-Type: application/json' -d '{"name":"research","description":"release notes","orchestrator_model_id":1}'
 ```
 
 ```json
-{"id":1,"name":"research","description":"release notes","branch":"workspaces/research-1","shared_branch":"workspaces/research-1/shared","owner_id":1,"team_ids":[]}
+{"id":1,"name":"research","description":"release notes","branch":"workspaces/research-1","shared_branch":"workspaces/research-1/shared","owner_id":1,"team_ids":[],"hue":null}
 ```
 
-Name a model id that is not in the catalog and you get `404 {"error":{"message":"model 1: not found"}}` — the workspace is not half-created.
+Name a model id that is not in the catalog and you get
+`404 {"error":{"message":"model 1: not found"}}` — the workspace is not
+half-created.
 
-The workspace opens with one agent already in it, called `orchestrator`. Type
-into **tell the orchestrator what you need…** and press **send**. That is the
-whole first loop.
+The workspace opens with one agent already in it, called `orchestrator`.
 
-![The workspaces list](assets/01-workspaces.png)
+### Give it a colour
 
----
-
-## 2. A second agent
-
-Two ways, and they land in the same place.
-
-**By hand:** open **Blueprint** and press **`+ agent`**. Give it a name, a model
-and a role. It appears on the canvas with no capabilities at all — nothing may
-delegate to it and it may delegate to nothing — until you draw an edge, which
-is what a new node in a graph honestly is.
-
-**Or ask the orchestrator**, which is often faster when you know the shape of
-the team but not the names:
-
-> Create a worker agent named researcher with the role "You summarize sources accurately and cite them." and delegate to it: summarise what a blueprint wire does in this product.
-
-The orchestrator calls `agent_create` and then `delegate`. You see a ⚙ chip per
-tool call, a collapsible ✓/✗ result row, and the worker's answer in its own
-labelled bubble.
-
-Through the API instead:
+The stripe down the left edge of a card is the colour, and it is also the
+picker: click it, choose one of ten hues, or **clear**.
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/agents -H 'Content-Type: application/json' -d '{"name":"researcher","role":"You summarize sources accurately and cite them.","model_id":1}'
+curl -X PATCH http://127.0.0.1:8688/api/v1/workspaces/1 -H 'Content-Type: application/json' -d '{"hue": 210}'
 ```
 
-### The wire is the capability
-
-Open **Blueprint**. Drag from one agent to another to connect them. The hint on
-the canvas says it exactly:
-
-> Drag between nodes to connect — a wire IS the capability, not a picture of one.
-
-An agent can delegate to another **only** if a wire runs to it. Delete the edge
-and the capability is gone on the next turn — click the edge and press Delete.
-Wires are created and deleted, never edited; to change one, remove it and draw
-the new one.
-
-### It arranges itself
-
-You do not place agents by hand unless you want to. The canvas lays them out by
-the wires between them — rank by distance from the orchestrator, ordered within
-each rank so the wires cross as little as possible:
-
-```
-                 orchestrator
-                  /        \
-             lead-a        lead-b
-             /    \        /    \
-      worker-1  worker-2  worker-3  worker-4
-             \    |        |    /
-                 reporter
-```
-
-**⤢ tidy** re-lays out everything and stores it, so the arrangement is what
-everybody sees next time rather than a view your screen is holding. Drag any
-node afterwards and that wins — a dragged position is kept and the layout leaves
-it alone. Tidy again to take it back.
-
-![A wired workspace](assets/02-workspace-wired.png)
-
-This is the part worth slowing down on, because it is **graph engineering** and
-not decoration. The canvas holds four layers of the same graph, and the buttons
-above it show one at a time:
-
-| Layer | An edge means |
-|---|---|
-| **delegation** | this agent may hand work to that one |
-| **tools** | this agent may call that gear |
-| **memory** | this is what the agent knows going into a turn |
-| **outward** | this agent may ask to reach the internet |
-
-Every one of them is a permission the runtime checks, not a note about
-intentions. So the arrangement you are looking at is the program: to change
-what the system can do, you change the graph — and to know what it can do, you
-look at it, rather than reading four prompts and hoping.
-
-### What an agent carries into a turn
-
-Open **Agents**, click an agent, and read the inspector. Everything the model
-sees is listed there in the order it is assembled, and each part can be changed
-or dropped:
-
-1. its **role** — the system prompt it always carries
-2. any **instructions** bound to it from the library
-3. the **context** bound to the workspace or to that agent
-4. the **conversation**, replayed in full
-
-Click **show what this agent sees** for the exact assembled prompt. Hover a chat
-entry and click **forget** to stop that entry being replayed — the confirmation
-reads *"Forget this from the conversation? It stops being replayed to the model."*
-
-The inspector also carries the running token count per agent, and the **Agents**
-panel shows each agent's share of the workspace total.
-
-![An agent inspector](assets/05-agent.png)
-
----
-
-## 3. Gears — tools your agents keep
-
-A gear is a small program an agent can call. It survives the conversation, it
-runs in a throwaway container with none of the server's files and no network
-unless you grant it one, and **nothing an agent calls runs until you approve
-it**.
-
-### Write one yourself
-
-**Gears** → **write a gear**. Or:
-
-```bash
-curl -X POST http://127.0.0.1:8688/api/v1/gears -H 'Content-Type: application/json' -d '{"name":"word_count","description":"count words in a string","tags":["text"],"runtime":"python","code":"import sys, json\nargs = json.load(sys.stdin)\nprint(len(args[\"text\"].split()))\n","args_schema":"{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[\"text\"]}"}'
-```
-
-```json
-{"id":1,"name":"word_count","tags":["text"],"version":1,"runtime":"python",
- "entrypoint":"main.py","status":"pending","timeout_seconds":60}
-```
-
-Note what came back: `status` is `pending` and `entrypoint` was filled in for
-you. Runtimes are `python` (`main.py`), `node` (`main.js`), `bash` (`main.sh`)
-and `binary`. The name must match `^[a-z][a-z0-9_]{1,48}$` — it becomes a tool
-name every model has to be able to call.
-
-Arguments arrive as JSON on stdin. Whatever the gear prints on stdout is the
-result.
-
-### Try it before you trust it
-
-The dry run works on an unapproved gear — that is its entire purpose:
-
-```bash
-curl -X POST 'http://127.0.0.1:8688/api/v1/gears/1/run?dry=1' -H 'Content-Type: application/json' -d '{"args":{"text":"one two three"}}'
-```
-
-```json
-{"exit_code":0,"stderr":"","stdout":"3\n","timed_out":false}
-```
-
-In the interface this is **review & run** on the gear card: read the source,
-run it with arguments you choose, and only then press **approve**. Output
-streams while it runs rather than appearing at the end.
-
-Call it without approving and without `dry=1` and it is refused — an unapproved
-gear does not execute, whoever asks.
-
-### Versions
-
-Saving new code makes a new version and returns the gear to `pending`. Approval
-covers exact content, never a moving target. There is no per-version approval
-and no rollback: `status` is one column on the gear.
-
-![The gears list](assets/07-gears.png)
-
-### What the sandbox does, and does not
-
-With Docker: a read-only copy of only the files the gear was given, 512 MB, one
-CPU, 256 processes, no network unless you granted it one, and the whole
-container is removed afterwards. Those limits are fixed — there is no per-gear
-setting for them.
-
-Without Docker the gear runs as a subprocess of the server, **with the server's
-own file access** — including the database, and the provider keys in it. The
-server says so at startup:
-
-```
-gears will run as unsandboxed subprocesses with this server's file access — an approved gear can read the database, including provider API keys; install Docker or set sandbox: docker to isolate them
-```
-
-In that configuration the approval gate is the only control there is. `sandbox: docker`
-refuses to start when the daemon does not answer; `auto` warns and continues.
-
-### Harder isolation, if you have installed it
-
-A container is a process with a restricted view, not a machine. If that is not
-enough for what your gears run, point Docker at a stronger runtime and name it:
-
-```yaml
-sandbox: docker
-sandbox_runtime: runsc        # gVisor. Or kata-runtime for Kata Containers.
-```
-
-**Cogitorium does not install or configure these.** You install gVisor or Kata,
-register it with your Docker daemon, and this names it — the isolation is the
-runtime's work, and claiming otherwise would be claiming somebody else's. What
-this adds is that a name your daemon does not have is refused **at startup**,
-with the names it does have in the message:
-
-```
-sandbox_runtime "runsc" is not one this Docker daemon has: it offers io.containerd.runc.v2, runc. The runtime has to be installed and registered with the daemon first — Cogitorium selects one, it does not install one
-```
-
-Without that check the mistake surfaces on the first gear run, possibly days
-later, as `create container: exit status 125`.
-
-Two refusals worth knowing. `sandbox_runtime` with `sandbox: subprocess` is an
-error rather than an ignored setting — it reads as hardened isolation and is in
-fact no isolation at all. And every other restriction stays exactly as it was:
-naming a runtime does not quietly return capabilities, the network or the
-memory ceiling.
-
-The sandbox image is also fetched once at startup now, so the first gear does
-not spend its own timeout pulling a distribution.
-
-### Names a gear is given
-
-A gear that needs a key does not receive one in its arguments. It declares a
-**name** — `API_KEY` — and reads the value from its own environment when it
-runs. You say what the name means; the model never sees the value. That is not
-caution for its own sake: an agent's answer leaves the building, in the chat and
-in an inlet response, so a secret in a prompt is a secret published.
-
-Set them under **Variables** (install-wide, administrators) or in a workspace's
-own **Variables** panel. A **variable**'s value is shown afterwards. A
-**secret**'s is shown once, when you set it, and never again — not behind a
-reveal button; the server has nowhere to put it in a response, and it is removed
-from anything the gear prints, from the recorded run, from the log line and from
-the live output you are watching.
-
-Three sources, later winning:
-
-1. this install's own store, encrypted with `COGITORIUM_SECRET_KEY` from the
-   environment (without that key, variables still work and a secret cannot be
-   stored — it would have to go to disk in plaintext, and it will not);
-2. a directory on disk, one file per name, contents being the value —
-   `variables_dir` and `secrets_dir`. That is the shape Kubernetes mounts a
-   ConfigMap and a Secret in, and the chart wires exactly that up:
-   `config.variablesConfigMap` and `config.secretsSecret` name the objects,
-   the server reads the mounted files, and rotation is the cluster's own;
-3. the workspace's own overrides, which is how one gear serves staging and
-   production without being edited.
-
-A name nothing supplies **stops the run and names it**, rather than handing the
-gear an empty string that fails somewhere far away with a message about nothing.
-The approval screen says so in advance, per name.
-
-### And the gear does not get the secret
-
-A gear granted the network is not handed its secrets at all. What it finds in
-its environment is a stand-in, and the gate puts the real value in on the way
-out. This is a real run, and the gear is printing what it was given:
-
-```
-HELD=cogitorium-secret-jMDrxMgeHate9cewY3k73-vfWcfPIJIF
-STATUS=200 BODY=the-origin-answered
-```
-
-The destination received `Bearer sk-live-…`, the real credential. The container
-never had it. A stand-in is random, minted for that one run, known only to this
-install's gate, and worthless the moment the run ends — so a gear that sends its
-environment somewhere has sent a string that opens nothing.
-
-Two consequences worth knowing before you rely on it.
-
-**The gate reads inside those runs' TLS.** It cannot substitute into bytes it
-cannot see, so for a run holding stand-ins — and only that kind of run — it
-terminates TLS with its own certificate, which the run is given, and opens its
-own verified connection onward. A granted gear with no secrets is tunnelled as
-before, and the gate sees nothing but hosts and byte counts.
-
-**A gear that was not granted the network gets the real value.** There is no
-edge to substitute at, so a stand-in would simply be a credential that cannot
-work. If your gear uses a key locally rather than in a request, that is the case
-you are in, and nothing changes for you.
-
-### Giving a gear a browser
-
-A gear runs in the ordinary sandbox image, which has no browser in it. On the
-approval screen you can give it the **browser** environment instead — the same
-place and the same act as the network grant, because it is the same kind of
-decision.
-
-```bash
-curl -X PATCH http://127.0.0.1:8688/api/v1/gears/1 -H 'Content-Type: application/json' \
-  -d '{"environment":"browser","network":{"granted":true,"hosts":["example.com"]},"status":"approved"}'
-```
-
-The gear then finds a real browser in its container and drives it however it
-likes. A few lines of shell is enough:
-
-```bash
-CHROME=$(ls -d /ms-playwright/chromium-*/chrome-linux/chrome | head -1)
-mkdir -p out
-"$CHROME" --headless --no-sandbox --screenshot=out/shot.png https://example.com
-"$CHROME" --headless --no-sandbox --dump-dom https://example.com > out/page.txt
-```
-
-That is a real run:
-
-```
-BROWSER=/ms-playwright/chromium-1194/chrome-linux/chrome
-SHOT=7012 TEXT=97
-```
-
-`out/` is collected the way it always is, so the screenshot and the page text
-come back as run artifacts an agent can hand on and you can open. Nothing about
-the record is new.
-
-Three things worth knowing. **`--no-sandbox` is required**: a gear already runs
-as an unprivileged user with every capability dropped, which is exactly where a
-browser's own sandbox cannot start — the container is the boundary, and it is
-the same one every gear has. **The image is about a gigabyte** and is not
-fetched until a gear needs it, so give the first such run a longer timeout or
-pull it on the host first. And **the browser is not the network**: a gear that
-has a browser and no network grant can render a local file and nothing else.
-
-### Letting a gear reach out
-
-A gear has no network. You grant it one when you approve it, on the same screen
-as the source, and you say where:
-
-```
-api.example.com
-*.internal.example.com
-```
-
-Empty allows anywhere, which is a choice you are allowed to make. A list is what
-makes the record worth reading afterwards — **connections** on the gear card
-shows every connection it opened, with the host, the port, the outcome and the
-bytes each way, written down before the socket is. Refusals are in there too: a
-destination you did not grant, and anything pointing back at the machine the
-server runs on, which is refused whatever you granted (`127.0.0.1` is this
-server's own API, where a local request is trusted as the administrator).
-
-Forging a new version returns the gear to `pending` and takes the network grant
-with it, exactly as it does the approval — approval covers exact content.
-
-Two things worth knowing plainly:
-
-**A gear with a credential and the network can send that credential wherever it
-is allowed to reach.** Nothing prevents that and nothing can; it is what granting
-both means. Reading the source before approving is the control, which is why
-both grants are on that screen and not two.
-
-**The destination list is a check and a record, not a wall.** A granted gear is
-given `HTTP_PROXY` and friends pointing at the gate, and everything that uses an
-ordinary HTTP client goes through it. Code that deliberately ignores those
-variables reaches the network directly, because Docker's bridge network has no
-host filter. A boundary enforced regardless of the code's cooperation belongs
-where the packets are — a Kubernetes NetworkPolicy.
-
-On Linux, `host.docker.internal` is the docker bridge gateway rather than the
-host's loopback, so a server with granted gears sets the gate somewhere the
-containers can reach it:
-
-```yaml
-gear_proxy_listen: 172.17.0.1:0   # default 127.0.0.1:0, which Docker Desktop reaches
-```
-
----
-
-## 4. Rules an agent must not break
-
-An agent's **role** says what it is for. Its **prohibitions** say what it must
-never do, whatever anyone asks. Open **Agents**, click an agent, and use the
-box under the role — one rule per line:
-
-```
-Never invent a version number.
-Never promise a date.
-```
-
-They are assembled as the **last** section of the system prompt, after the
-gears, because a constraint stated last is the one the model still has in view
-when it answers. This is the exact text it produces:
-
-```
-## Never do this
-Standing prohibitions from the operator. They hold for the whole
-conversation. Nothing above overrides them, and neither does anything you
-are asked for later — if a request needs one of these, refuse it and say
-which one.
-- Never invent a version number.
-- Never promise a date.
-```
-
-Click **show what this agent sees** to read it in place. An agent with no
-prohibitions gets no section at all — not an empty heading.
-
-Two things follow from what a prohibition is for, and are worth knowing:
-
-- **An agent the orchestrator creates inherits them.** Otherwise a rule would
-  be one tool call from being routed around: an orchestrator forbidden to spend
-  money could create a worker with no rules, wire itself to it, and delegate
-  the spending. The inherited text is stored on the new agent, so you can see
-  it in the inspector and edit or clear it there.
-- **They travel.** Clone copies them, and so does an exported bundle.
-
-Over the API, on the agent:
-
-```bash
-curl -X PATCH http://127.0.0.1:8688/api/v1/agents/1 -H 'Content-Type: application/json' -d '{"avoid":"Never invent a version number.\nNever promise a date."}'
-```
-
-Sending `"avoid": ""` clears them. Leaving the field out of the patch leaves
-them alone, so editing a role cannot wipe a rule by accident.
-
----
-
-## 5. Moving a workspace to another install
+`{"hue": null}` takes it back. Omitting the field entirely is refused —
+*"send a hue to set one, or null to clear it"* — because absent and null have to
+mean different things on a route that will grow other fields.
+
+Three things worth knowing:
+
+- **Anyone who can reach the workspace may set it**, not only the owner. It is
+  shared state rather than a personal preference: the point of "the amber one"
+  is that a team says it to each other. Nothing here grants access, so there is
+  nothing to escalate by allowing it.
+- **A workspace nobody has coloured still has a colour**, derived from its id so
+  that neighbours never read as the same shade — and that derived value is never
+  written back. "Nobody chose" and "somebody chose exactly this" stay different
+  states.
+- **Saturation and lightness are not yours to pick.** They move with the look and
+  the mode, so a colour chosen in one never becomes unreadable in another.
+
+### Share it, clone it, delete it
+
+**shared with** on each card lists the teams that can reach it; an administrator
+adds one from **add a team…** and withdraws one with the `×` on its chip.
+Sharing is per team, never per person.
+
+**clone** copies the agents and the wiring into a workspace of your own — the
+history stays where it was, so somebody can build on your arrangement without
+touching it.
+
+**delete** takes the workspace with its agents and its history. Owners and
+administrators only.
+
+### Take one to another install
+
+**export** is on the workspace's own header; **import** is here on the list.
+Together they move an arrangement between installs.
 
 A workspace exports as one JSON document — the arrangement you built, not a
 database dump. Agents with their roles and prohibitions, the wires between
-them, and, if you ask for them, the gears bound to the workspace and its
+them, and, if you tick the boxes, the gears bound to the workspace and its
 context.
-
-**Workspace page → export.** Two checkboxes: gears, and context. Or:
 
 ```bash
 curl -sO -J 'http://127.0.0.1:8688/api/v1/workspaces/1/export?gears=1&context=1'
@@ -569,12 +219,12 @@ Read the shape of it, because it is the whole design. **Wires name agents, not
 ids** — ids from another install mean nothing. **Models are named, not
 referenced** — a bundle cannot carry a provider key, so it can only say which
 model the agent used and let the other install look for it. And there is
-nowhere in the document for a key, a token, a user, an owner, a team or a chat
-message: a bundle is handed to someone else, so it carries nothing private.
+nowhere in the document for a key, a token, a user, an owner, a team, a colour
+or a chat message: a bundle is handed to someone else, so it carries nothing
+private and nothing local.
 
-### Importing it
-
-**Workspaces page → import**, pick the file, tick what you want, name it. Or:
+**import** takes that file, shows you what is in it before anything is created,
+and asks for a name:
 
 ```bash
 curl -X POST http://127.0.0.1:8688/api/v1/workspaces/import -H 'Content-Type: application/json' \
@@ -609,31 +259,407 @@ them. Neither has a model, because this install has never heard of
 `qwen2.5:0.5b` — and it says so instead of quietly binding them to whatever it
 had. Add the model under **Models**, or point each agent at a local one.
 
-### What import will not do
+### What this screen will not do
 
+- **No renaming.** A workspace's name and description are fixed at creation.
 - **An imported gear is always `pending`.** A bundle is somebody else's
-  executable code, and approval does not travel. Read it, dry-run it, then
-  approve it — the same gate as a gear an agent forged for you.
+  executable code, and approval does not travel.
 - **A gear name already in use is skipped, not overwritten.** Other workspaces
   may depend on that gear; a bundle does not get to replace it, unapprove it,
   or bind itself to it.
-- **A bundle does not choose a gear's timeout.** Raising one is an
-  administrator's decision on the gear itself.
+- **A bundle does not choose a gear's timeout.** That stays a decision on the
+  gear itself.
 - **Context lands under the new workspace's own branch.** Paths in a bundle are
-  relative, and anything trying to climb out of the branch is refused before
-  the import creates anything at all.
-
-The last one is why a refused bundle leaves nothing behind: the whole document
-is checked first, so you never have to work out which half of an import
-happened.
+  relative, and anything trying to climb out of the branch is refused before the
+  import creates anything at all — which is why a refused bundle leaves nothing
+  behind.
 
 ---
 
-## 6. A receiver — a door for the rest of your system
+## A workspace
+
+![A workspace: the three view tabs on the left of the header, the four overlay
+buttons beside them, and the Agents overlay open over the chat with one card per
+agent.](assets/02-workspace-deck.png)
+
+Three **views** on a sliding track — **Chat**, **Blueprint**, **Editor** — one
+on screen at a time. The other two are not unmounted: they stay off-screen at
+full size, which is why a running shell and a laid-out canvas survive you
+switching away and back.
+
+Four **overlays** open from the same header — **Agents**, **Receivers**,
+**Queue**, **Variables**. One at a time; a click anywhere outside dismisses it,
+and the grip at its bottom-left corner resizes it. An overlay is something you
+consult, so none of them is restored when you come back to the workspace.
+
+The header also carries the way out (the arrow, back to the list) and
+**export**.
+
+### Chat
+
+The workspace entry point. You talk to the orchestrator; it creates the other
+agents, wires them together and hands them work. Type into **tell the
+orchestrator what you need…** and press **send**. **stop** appears in its place
+while a turn is running.
+
+What appears in the transcript, and what each part is:
+
+- your own message, with anything you attached shown on it;
+- the orchestrator's reply, with a ⚙ chip per tool call;
+- a collapsible ✓/✗ row per tool result;
+- a delegate's answer in its own bubble, labelled with that agent's name. Only
+  a delegate is named — the orchestrator is the voice of the workspace.
+
+**Asking for a second agent** is a worked example of the whole loop:
+
+> Create a worker agent named researcher with the role "You summarize sources accurately and cite them." and delegate to it: summarise what a blueprint wire does in this product.
+
+The orchestrator calls `agent_create` and then `delegate`, and you watch both
+happen. The same thing over the API:
+
+```bash
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/agents -H 'Content-Type: application/json' -d '{"name":"researcher","role":"You summarize sources accurately and cite them.","model_id":1}'
+```
+
+**Attaching files.** The **+** beside the composer takes anything at all.
+Each file is uploaded the moment it is picked, not when you press send: it lands
+under `attachments/` in the workspace's own directory, and the answer comes back
+before the message goes anywhere. That answer is the part worth reading — the
+chip for each file says whether **the model is shown it**, or whether it is
+going to your agents as a **path** for a gear to open, marked `→ gear`. Hover it
+for the full truth: the path, the media type, and the server's own sentence
+about why the model is not being shown it.
+
+A `⚠` on a chip means the orchestrator's model was never declared able to take
+that kind of file — flagged before you send rather than explained afterwards by
+a failed turn. The `×` takes a file off the message; the file stays in the
+workspace either way.
+
+The message itself carries only paths. That is what lets a gear open a
+megabyte-long archive, and what stops a megabyte of base64 landing in a prompt.
+
+**Forgetting something.** Hover any entry and press **forget**. The confirmation
+reads *"Forget this from the conversation? It stops being replayed to the model."*
+— which is exactly what it does, because the timeline is replayed in full on
+every turn.
+
+What chat will not do:
+
+- **You cannot talk to a worker directly.** Every turn goes through the
+  orchestrator.
+- **A delivery through a receiver writes nothing here.** Otherwise request two
+  hundred would carry the previous hundred and ninety-nine.
+- **One run at a time per workspace.** Anything arriving while a turn is running
+  waits in the Queue overlay rather than being turned away.
+- **Two people in one workspace share its conversation.** There is no private
+  thread; separate workspaces are how two people stay out of each other's way.
+
+### Blueprint
+
+![The blueprint: agents, the gears bound to them, and the internet node above
+them. Every line on this canvas is a permission the runtime
+checks.](assets/03-blueprint.png)
+
+The graph *is* the program. The hint on the canvas says it exactly:
+
+> Drag between nodes to connect — a wire IS the capability, not a picture of one.
+
+An agent can delegate to another **only** if a wire runs to it. Delete the edge
+and the capability is gone on the next turn — click the edge and press Delete.
+Wires are created and deleted, never edited; to change one, remove it and draw
+the new one.
+
+**Four layers, four buttons.** The legend at the top left is four independent
+toggles, not a picker: any combination is legal. Delegation, tools and outward
+start on; memory starts off.
+
+| Layer | An edge means |
+|---|---|
+| **delegation** | this agent may hand work to that one |
+| **tools** | this agent may call that gear |
+| **memory** | this is what the agent knows going into a turn |
+| **outward** | this agent may ask to reach the internet |
+
+Every one of them is a permission the runtime checks, not a note about
+intentions. To change what the system can do you change the graph; to know what
+it can do you look at it, rather than reading four prompts and hoping.
+
+**Adding to the canvas.** **`+ agent`** takes a name, a model and a role. A model
+is required and not defaulted — an agent with nothing to think with cannot take
+a turn, and picking one for you would spend somebody's money on a choice they
+did not make. The new agent arrives with no capabilities at all: nothing may
+delegate to it and it may delegate to nothing until you draw an edge, which is
+what a new node in a graph honestly is.
+
+Beside it, **+ gear** binds one from the catalogue to the whole workspace. To
+bind one to a single agent, drag from the gear node to that agent.
+
+**It arranges itself.** You do not place agents by hand unless you want to. The
+canvas lays them out by the wires between them — rank by distance from the
+orchestrator, ordered within each rank so the wires cross as little as possible:
+
+```
+                 orchestrator
+                  /        \
+             lead-a        lead-b
+             /    \        /    \
+      worker-1  worker-2  worker-3  worker-4
+             \    |        |    /
+                 reporter
+```
+
+**⤢ tidy** re-lays out everything and stores it, so the arrangement is what
+everybody sees next time rather than a view your screen is holding. Drag any
+node afterwards and that wins — a dragged position is kept and the layout leaves
+it alone. Tidy again to take it back.
+
+Double-click an agent to open its inspector.
+
+#### Letting an agent reach the internet
+
+With the **outward** layer on, the canvas carries one node that is not part of
+this workspace: the internet. Wiring an agent to it *is* the grant, the same
+rule the delegation wires follow. Drag from the internet node onto an agent and
+you are asked to confirm:
+
+> Let "researcher" ask to search the web?
+>
+> This grants only the right to ASK: every search still stops and waits for you
+> to approve that exact query.
+
+If other agents can delegate to that one, the confirmation names them and says
+they gain an indirect path outward. Only a person can draw this edge: no agent
+tool creates, edits or deletes it. Select it and press Delete to revoke.
+
+When the install-wide switch is off, the node says *"off in this server's
+configuration"* and no edges are drawn even where grants exist — "nobody can go
+out" and "nobody is allowed to ask" are different facts and must look different.
+Turning the switch on is [three locks, one of them in the config
+file](#letting-an-agent-search-the-web).
+
+#### The per-query approval
+
+Every individual search stops the turn and puts a dialog in front of you. It is
+the last control before data leaves the machine, so read what it shows:
+
+- **which agent**, by id first and then name — ids are not spoofable, names are;
+- **the path**, the delegation chain that led here, with a warning when the
+  request arrived through a delegation rather than from that agent directly;
+- **who granted it**, and when;
+- **the query itself, verbatim**, in its own box. It is the only part a model
+  authored, and therefore the only part worth reading closely;
+- **facts about it**: runes, bytes, non-ASCII count, whether the run is
+  blob-shaped, and any characters it shares with something on this install;
+- **the budget**: which request of this turn it is, and how many searches this
+  agent has sent in 24 hours;
+- **what this agent usually searches for**, collapsed.
+
+There is deliberately no free-text "reason" field. A box the model fills,
+displayed at the moment of decision, would be a prompt injection aimed at you.
+
+**Refuse** is focused when the dialog opens. **Allow once** arms after a second,
+the way a browser's permission prompt does, so a click already queued for
+whatever was under the cursor cannot land on it. Escape refuses, clicking away
+refuses, and if nobody answers at all the search is refused and the turn carries
+on. Refusing also stops that turn from asking again.
+
+#### A worked arrangement: a court that judges code
+
+Everything above has been one agent doing one job. This is what the wiring is
+for: eight agents, four models, and a decision made on evidence.
+
+The operator states a requirement. Four authors, each on a different model,
+write a program for it and then read one another's submissions. Two critics look
+at every submission from one angle each. A referee reads all of it and picks the
+winner. Read the edges, because they are the arrangement:
+
+| edge | from → to | what it makes possible |
+|---|---|---|
+| `writes` | orchestrator → four authors | the orchestrator may hand the requirement out |
+| `submits` | each author → both critics | a critic may be asked about any submission |
+| `reports` | each critic → referee | the referee may ask a critic what it found |
+| `decides` | orchestrator → referee | the verdict comes back to the operator |
+
+Nobody's role says "you may review the others". The wire says it. Delete the
+edge from `author-mini` to `critic-speed` and that submission stops being
+measurable, on the next turn, with no prompt edited.
+
+**The part that is not an opinion.** "The best program" is a judgement. "The
+fastest program" is a measurement, and the two must not be confused, so
+`critic-speed` does not read code and guess — its role says to call a timing
+gear on every submission with the same input and report what it measured. The
+referee carries prohibitions to match, the second of which is:
+
+```
+Never call a program fastest without a measurement.
+```
+
+Those are the last thing in its prompt and they are not overridable by anything
+the authors write in their own defence. That is the whole reason prohibitions
+exist as a separate field rather than a paragraph in a role.
+
+**Take this arrangement.** The workspace above is a download. It carries the
+agents with their roles and prohibitions, the wires, and the canvas positions —
+and no key, no token, no conversation, because a bundle has nowhere to put one.
+
+**[code-court.cogitorium.json](assets/code-court.cogitorium.json)** — 4 KB.
+
+```bash
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/import \
+  -H 'Content-Type: application/json' \
+  -d "{\"name\":\"code court\",\"bundle\":$(cat code-court.cogitorium.json)}"
+```
+
+```json
+{ "agents": 8, "wires": 15, "gears_imported": [], "gears_skipped": [],
+  "context_files": 0, "unresolved_models": [] }
+```
+
+That report is from importing this exact file. `unresolved_models` is empty
+because the install it landed on had those four models in its catalog; on one
+that does not, each agent still arrives — with its role, its prohibitions and
+its wires — and the models it could not find are named there for you to bind.
+Nothing is silently substituted. The timing gear is not in the file: gears
+travel only when you ask for them, and this arrangement is more useful with one
+you wrote for your own language and your own definition of fast.
+
+#### What the blueprint will not do
+
+- **Memory is not draggable.** A document reaches an agent by being bound in the
+  inspector, so those links are drawn and not editable here.
+- **Every connection must end at an agent.** Wires grant delegation, gear links
+  grant a tool; nothing else is a legal edge.
+- **A workspace-wide gear draws no per-agent edges.** It would draw one to every
+  agent and drown the graph; the node says `all agents` instead.
+- **Gear positions are not stored.** Agents' are.
+
+### Editor
+
+![The Editor view: the file tree on the left, the file in the middle, and the
+shell rolled up to its header along the bottom until you start
+one.](assets/05-editor.png)
+
+Three parts in one view: the **Files** tree, the file itself, and a **shell**.
+The tree and the shell roll up to their own header rather than closing, and the
+seams between them drag.
+
+Clicking a file in the tree moves the whole deck to this view. The chat does not
+sit beside it — it slides off-screen and stays alive, exactly as it was.
+
+**The tree.** Each workspace has its own directory. Directories load a level at
+a time, so a deep `node_modules` does not stall the view. **New file** takes a
+path and makes the folders it needs; **refresh** re-reads the tree.
+
+**The file.** A real editor with syntax highlighting, not a preview. **save**
+writes it (⌘S works too), **revert** throws your edits away, **changes** shows a
+diff of what you are about to save against what is on disk, computed locally —
+there is no git involved anywhere in this. **wrap** is there for long lines.
+
+Files up to 2 MiB are editable; larger ones and binaries are refused by the
+server with the reason in place of the file, and that limit is not
+configurable. There
+is no upload, no download, no rename and no delete.
+
+**The shell.** It is behind a button, and the button explains itself:
+
+> A shell is not reconnected automatically. Opening this again brings the panel
+> back, not the session — the previous one is gone, along with its scrollback
+> and working directory.
+
+That is not caution. A shell that mounted itself on load would spawn a container
+on every page load and then lie about it, showing a panel with none of the
+scrollback, working directory or running process of the one before. Four
+reloads, four containers — measured, not theorised.
+
+This shell is **open to anyone who can reach the workspace**, and it is not the
+server-wide [Terminal](#terminal) in the account menu. It runs in the same
+sandbox gears run in: no network, nothing of the server's mounted, and **a copy
+of this workspace's files that is not carried back**. A file written here is
+gone when the session ends.
+
+### The Agents overlay
+
+Every agent in the workspace as a card: a state dot, its running spend, its
+model, and a bar showing its share of what this workspace has spent in total. A
+share tells you where the money went; a number nobody can act on is decoration.
+
+Clicking a card opens the inspector — the overlay retitles itself with the
+agent's name, because opening the inspector *is* selecting an agent.
+
+**What an agent carries into a turn** is listed in the inspector in the order it
+is assembled, and each part can be changed or dropped:
+
+1. its **role** — the system prompt it always carries
+2. its **prohibitions** — see below
+3. its **memory**: its own Contextverse branch, documents bound to the workspace
+   or to it alone, and instructions from the library
+4. the **conversation**, replayed in full
+
+Click **show what this agent sees** for the exact assembled prompt, character
+count and all. Under **Memory**, every piece is shown with its source, an
+**edit** button, and **unbind** or **forget** — because an agent that quietly
+carries something it picked up once will keep steering by it, and the only way
+to stop that is to be able to see it.
+
+**Gears** lists what this agent may call and grants more, either to this agent
+alone or to the whole workspace. **Activity** is this agent's own trail.
+
+#### Rules an agent must not break
+
+An agent's **role** says what it is for. Its **prohibitions** say what it must
+never do, whatever anyone asks. Use the box under the role — one rule per line:
+
+```
+Never invent a version number.
+Never promise a date.
+```
+
+They are assembled as the **last** section of the system prompt, after the
+gears, because a constraint stated last is the one the model still has in view
+when it answers. This is the exact text it produces:
+
+```
+## Never do this
+Standing prohibitions from the operator. They hold for the whole
+conversation. Nothing above overrides them, and neither does anything you
+are asked for later — if a request needs one of these, refuse it and say
+which one.
+- Never invent a version number.
+- Never promise a date.
+```
+
+An agent with no prohibitions gets no section at all — not an empty heading.
+
+Two things follow from what a prohibition is for:
+
+- **An agent the orchestrator creates inherits them.** Otherwise a rule would
+  be one tool call from being routed around: an orchestrator forbidden to spend
+  money could create a worker with no rules, wire itself to it, and delegate
+  the spending. The inherited text is stored on the new agent, so you can see
+  it in the inspector and edit or clear it there.
+- **They travel.** Clone copies them, and so does an exported bundle.
+
+Over the API, on the agent:
+
+```bash
+curl -X PATCH http://127.0.0.1:8688/api/v1/agents/1 -H 'Content-Type: application/json' -d '{"avoid":"Never invent a version number.\nNever promise a date."}'
+```
+
+Sending `"avoid": ""` clears them. Leaving the field out of the patch leaves
+them alone, so editing a role cannot wipe a rule by accident.
+
+What the inspector will not do: there is no way to duplicate an agent, and the
+orchestrator cannot be deleted.
+
+### The Receivers overlay
 
 A **receiver** takes an HTTP POST from outside and hands it to one agent. It has
 an address, its own key, and a list of **tasks**; a task says what it accepts,
 which agent gets it, what to tell that agent, and what counts as success.
+
+![The Receivers overlay on support triage: the `tickets` receiver with its two
+tasks, `classify` and `draft_reply`, each naming the agent that runs
+it.](assets/15-receivers.png)
 
 It is called a receiver on screen and an **inlet** everywhere else — the URLs,
 the API paths, the tables and the config keys. The word on screen changed
@@ -642,10 +668,7 @@ knowing; the strings did not, because callers outside your install hold them.
 
 Any number of receivers per workspace, any number of tasks per receiver.
 
-### Making one, in the interface
-
-Open a workspace and turn on the **Receivers** panel from the row of panel
-buttons at the top right.
+#### Making one
 
 1. **Give it an address.** One word, lowercase — `sites`, `tickets`, `drop`. It
    becomes part of every URL under this door: `POST /i/sites/…`. The second
@@ -673,7 +696,7 @@ The fields on that form, and what each one decides:
 | tell somebody when it finishes | a URL the finished run is posted to. Empty is normal: the answer goes back on the caller's own connection |
 | what has to have happened | the checks under **expect** — a gear that must have run, files that must exist, the shape of the answer |
 
-### A worked receiver: a worker hands a page to the workspace
+#### A worked receiver: a worker hands a page to the workspace
 
 Something in your system already knows a URL needs looking at — a crawler, a
 queue worker, a webhook. It should not have to know which agent, which model, or
@@ -742,7 +765,7 @@ The other two refusals, in full:
 401 and 404. An unknown address answers exactly as an unknown task does, so
 somebody probing for names learns nothing you did not tell them.
 
-### When the work takes longer than a request should
+#### When the work takes longer than a request should
 
 Reading a page and thinking about it can take a minute, and a worker that has to
 hold a connection open for it is a worker you cannot restart. Hand the job off
@@ -771,11 +794,7 @@ makes the worker safe to retry: the same key twice is the same run, not two.
 Without `Prefer: respond-async` nothing changes — the answer comes back on the
 same response, exactly as it always has.
 
-A task does not need a caller at all: the **Queue** panel can put it on a
-schedule — `every 15m`, or five cron fields — and the payload is fixed when you
-write the schedule. Same task, same instruction, same checks; nobody posting.
-
-### Fixing a task
+#### Fixing a task
 
 Press **edit** on the task row. Everything is there as you left it, and saving
 keeps the task's id — so the deliveries already on record and any schedule
@@ -802,7 +821,7 @@ otherwise mean *accept anything*, and widening a door is not something that may
 happen because a field was left out. Everything that refuses a bad task on the
 way in refuses it here too — one validator, both routes.
 
-### The same, over the API
+#### The same, over the API
 
 ```bash
 curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/inlets -H 'Content-Type: application/json' -d '{"address":"drop","description":"files from outside"}'
@@ -810,7 +829,7 @@ curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/inlets -H 'Content-Type: 
 
 The response carries the first key. `POST /api/v1/inlets/1/key` issues a new one.
 
-### A task that unpacks an archive
+#### A task that unpacks an archive
 
 Everything below is a real capture from a running install, not an illustration.
 
@@ -859,10 +878,10 @@ curl -X POST http://127.0.0.1:8688/i/drop/archive \
 ```
 
 The file was written into the workspace and the agent was given its **path**,
-never its bytes — which is what lets a gear open it, and what stops a megabyte
-of base64 landing in a prompt.
+never its bytes — the same rule an attachment in the chat follows, and for the
+same reason.
 
-### Read `did`, not the sentence
+#### Read `did`, not the sentence
 
 `did` is the record of what happened: which tools ran and whether they
 succeeded, which files exist afterwards, what it cost. It is on every response
@@ -880,7 +899,7 @@ reads:
 
 An empty tool list is the answer.
 
-### `expect` — say what success is, and have it checked
+#### `expect` — say what success is, and have it checked
 
 Every field is optional; a task without the block behaves exactly as it did
 before.
@@ -906,7 +925,7 @@ That is a real refusal, from a run where the gear was called and died. Note it
 says *no successful call* rather than guessing that it never ran — the record
 knows the difference, and so does whoever is paged.
 
-### `answer_from: "gear"` — take the model out of the answer
+#### `answer_from: "gear"` — take the model out of the answer
 
 For a deterministic job the agent is a router and its narration is not
 evidence. A task that formats a file:
@@ -939,29 +958,666 @@ ada    engineer  london
 grace  admiral   new york
 ```
 
-### What a receiver will not do
+#### Deliveries
+
+Below the receivers, every delivery is recorded — before the work starts, so a
+run that never came back still left a row. The fifty most recent are listed and
+any older one comes back by its number. Open one to see what it did.
+
+#### What a receiver will not do
 
 - **An unknown key is 401, an unknown task 404**, and a payload that does not
   match the task is **400 before any model is called** — a malformed request
   from somebody's cron costs nothing.
-- **A delivery writes nothing into the operator's conversation.** Otherwise
-  request two hundred would carry the previous hundred and ninety-nine.
+- **A delivery writes nothing into the operator's conversation.**
 - **The run is treated as third-party from the first byte**, so the agent
   behind a receiver cannot write to the instruction library, the gear catalog or
   the workspace graph — the same latch that stops text from the web doing it.
 - **`web_search` is not offered**: it pauses the turn waiting for a person to
   approve the query, and there is nobody there.
+- **No receiver may target a gear directly.** A task names an agent, and the
+  agent calls the gear.
+- **No streaming, and no fan-out** of one delivery to several agents.
 - **One run at a time per workspace.** A delivery that arrives while one is
   running **waits** — it is `queued`, which is a state in the ledger and a row
-  in the Queue panel, not a failure. What is refused is a queue that has stopped
-  being one: past `queue_max_per_workspace` waiting deliveries the next gets 429
-  and says how many are ahead of it.
+  in the Queue overlay, not a failure. What is refused is a queue that has
+  stopped being one: past `queue_max_per_workspace` waiting deliveries the next
+  gets 429 and says how many are ahead of it.
+
+### The Queue overlay
+
+What this workspace is doing, what is waiting, and what starts on its own. The
+two live together because they answer one question — "why is nothing happening,
+or why is everything happening" — and a queue that can be seen but not stopped
+is worse than one that cannot be seen at all.
+
+![The Queue overlay: nothing running, and below it the schedule that fires
+`audit_batch` at 03:00 Europe/Berlin. Pause, Run now and Delete are on the
+schedule itself.](assets/16-queue.png)
+
+The list shows one row per unit: running or `#n waiting`, what kind it is (a
+delivery through a door, your own turn, telling a listener), the run number and
+how long it has been going. **Stop** stops the work, not just the row. It
+refreshes every two seconds while it is open and not at all when it is shut.
+
+**Schedules** fire an inlet task on a clock. **+ New schedule** takes the task,
+a name, a spec, a timezone and the payload the task is given:
+
+```
+every 15m
+0 7 * * 1-5
+```
+
+Two forms: `every <duration>`, or five cron fields — minute, hour, day of month,
+month, day of week. A tick box decides whether a run may start while the
+previous one is still going; by default it is skipped. Each schedule shows when
+it fires next, how many times it has fired and skipped, and its last outcome,
+with **Pause**, **Run now** (which does not move its clock) and **Delete**.
+
+What it will not do:
+
+- **A schedule has no job of its own.** It fires a task that already says which
+  agent, what to tell it and what counts as success — a schedule with its own
+  copy of all that would be a second definition to keep in step. Until the
+  workspace has one inlet task, there is nothing to schedule and the button is
+  disabled.
+- **A scheduled run never gets web search.** Every search waits for a person to
+  approve that exact query, and on a schedule there is nobody to ask.
+
+### The Variables overlay
+
+The same mechanism as [Variables & secrets](#variables--secrets), scoped to this
+workspace: a name set here wins over the same name set install-wide, which is
+how one gear serves staging and production without being edited. A secret's
+value is shown once, when you set it, and never again.
+
+![The Variables overlay: two variables with their values in full, and a secret
+whose value reads *set, and never shown again* — the server does not send it
+back.](assets/17-variables.png)
 
 ---
 
-## 6b. Handing this install to Claude Desktop or Cursor
+## Map
 
-Everything you just built can be a tool in somebody else's client. Cogitorium
+![The install map: the organisation and its people at the centre, workspaces on
+a ring around it, each in its own colour.](assets/09-map.png)
+
+One zoomable scene at three depths, because zooming should approach rather than
+navigate:
+
+1. **the organisation** — the people, the teams they are in, and the gears this
+   install holds, as shells of drifting particles around the centre;
+2. **the workspaces**, on a ring outside it, each on its own bearing and in its
+   own colour;
+3. **inside one workspace** — its agents, the tools and documents they reach for,
+   and its memory — when you open it.
+
+Scroll to zoom, drag to pan, click a workspace to open it, click the ground to
+come back out. Whatever you click comes to you; the card that appears counts its
+agents, its memory and its links.
+
+Two things about how it is drawn. **Position encodes relation**: a node sits in
+the sector of whatever it is related to, so its links barely travel — mush is
+caused by edges having to cross the canvas, which is a placement problem. And
+**links inside the core appear only as you zoom in**: at map scale forty small
+things joined by lines is a haze that hides the very particles it connects, so
+the relationships fade in at the distance where a single one of them could be
+followed.
+
+The layout is deterministic. The same install draws the same map every time,
+because an operator's memory of where a thing sits is the only reason a spatial
+view beats a list.
+
+![One workspace opened: its agents fan out from the hub, with its tools and its
+memory further out.](assets/10-map-open.png)
+
+**It is open to every role.** What differs is the payload, and it is scoped on
+the server rather than in the browser: an administrator sees the install;
+anybody else sees only their own teams, the people they share a team with, and
+the workspaces they can already reach. Filtering that in the client would not be
+a smaller version of the same thing — the response would still name every
+workspace on the server.
+
+What it will not do:
+
+- **Nothing here is editable.** It is a picture of what is, not a canvas.
+- **Only kinds the server actually sends are drawn.** There are no doors,
+  addresses or gates on this map, because a lane that is permanently empty is
+  not a neutral omission: it is a positive claim that the install has none.
+- **A workspace's contents are fetched only when it is opened.** Sixty
+  workspaces must not be sixty requests on load.
+
+---
+
+## Gears
+
+![The gear catalogue. Each card carries its status, its version, and the two
+grants it holds — the named credentials and the network — on one line, so the
+list can be scanned without opening anything.](assets/07-gears.png)
+
+A gear is a small program an agent can call. It survives the conversation, it
+runs in a throwaway container with none of the server's files and no network
+unless you grant it one, and **nothing an agent calls runs until you approve
+it**.
+
+This screen is the catalogue: search by name or description, filter by tag, and
+a banner counts what is waiting for you.
+
+### Write one yourself
+
+**write a gear** takes a name, a runtime, a description agents read, tags, and
+either code you type or files from disk — a script, a set of them, or a compiled
+executable. Or:
+
+```bash
+curl -X POST http://127.0.0.1:8688/api/v1/gears -H 'Content-Type: application/json' -d '{"name":"word_count","description":"count words in a string","tags":["text"],"runtime":"python","code":"import sys, json\nargs = json.load(sys.stdin)\nprint(len(args[\"text\"].split()))\n","args_schema":"{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[\"text\"]}"}'
+```
+
+```json
+{"id":1,"name":"word_count","tags":["text"],"version":1,"runtime":"python",
+ "entrypoint":"main.py","status":"pending","timeout_seconds":60}
+```
+
+Note what came back: `status` is `pending` and `entrypoint` was filled in for
+you. Runtimes are `python` (`main.py`), `node` (`main.js`), `bash` (`main.sh`)
+and `binary`. The name must match `^[a-z][a-z0-9_]{1,48}$` — it becomes a tool
+name every model has to be able to call. Arguments arrive as JSON on stdin;
+whatever the gear prints on stdout is the result.
+
+A gear you write here lands pending, exactly like one an agent forged.
+
+### Review it, then approve it
+
+![What approving a gear grants: the named credentials it will be given and where
+each comes from, the network grant and the hosts it is limited to, and the
+button that confers both.](assets/08-gear-review.png)
+
+The button on a gear's card reads **review & approve** while it is pending and
+**review & run** once it is approved. Either way it only opens the review —
+nothing is ever approved from a collapsed card.
+
+Inside, in this order:
+
+- **the source**, file by file, with the entrypoint open. A compiled blob says
+  plainly that it cannot be read here rather than pretending base64 is
+  reviewable.
+- **compare with v*n*−1**, on any version after the first. An approval covers
+  exact content, so the useful question about a new version is not what it does
+  but what changed since the one you already read.
+- **the arguments schema**.
+- **What approving this grants** — the two halves of the decision, beside the
+  source rather than on another screen:
+  - **credentials**: every name this gear reads from its environment, and what
+    each one resolves to on this install. A name nothing supplies is called out
+    here — *"nothing on this install supplies it, so every run of this gear will
+    be refused"* — which beats learning it at three in the morning.
+  - **network**: whether this code may reach out, and where. One host per line,
+    `*.example.com` for any subdomain. Empty allows anywhere, which is a choice
+    you are allowed to make; a list is what makes the connection log worth
+    reading afterwards.
+
+  Grant both and the screen says what that means, because it cannot be designed
+  away: code that holds a credential and can reach out can send that credential
+  wherever it is allowed to reach. Reading the source above is the control.
+
+- **approve, with these grants** — the most consequential button in the product,
+  and the reason everything above it is on the same screen. Only an
+  administrator sees it; anyone else is told so.
+- **dry run** — executes the gear right now, even while pending, with arguments
+  you choose. That is its entire purpose:
+
+  ```bash
+  curl -X POST 'http://127.0.0.1:8688/api/v1/gears/1/run?dry=1' -H 'Content-Type: application/json' -d '{"args":{"text":"one two three"}}'
+  ```
+
+  ```json
+  {"exit_code":0,"stderr":"","stdout":"3\n","timed_out":false}
+  ```
+
+  Output streams while it runs rather than appearing at the end, and stdout and
+  stderr go into one pane in the order they arrived. Only an administrator may
+  dry-run a gear *with* the network, for the same reason only an administrator
+  may grant it.
+
+- **timeout**, in seconds, per gear.
+- **execution history** — every run, who by, the arguments, the exit code and how
+  long it took.
+- **connections** — every connection this gear opened, with the host, the port,
+  the outcome and the bytes each way, written down before the socket is.
+  Refusals are in there too: a destination you did not grant, and anything
+  pointing back at the machine the server runs on, which is refused whatever you
+  granted (`127.0.0.1` is this server's own API, where a local request is trusted
+  as the administrator).
+
+Call an unapproved gear without `dry=1` and it is refused — an unapproved gear
+does not execute, whoever asks.
+
+### Versions
+
+Saving new code makes a new version and returns the gear to `pending`,
+**taking the network grant with it**. Approval covers exact content, never a
+moving target. There is no per-version approval and no rollback: `status` is one
+column on the gear.
+
+### What the sandbox does, and does not
+
+With Docker: a read-only copy of only the files the gear was given, 512 MB, one
+CPU, 256 processes, no network unless you granted it one, and the whole
+container is removed afterwards. Memory and CPU are fixed — the network grant
+and the timeout are the two things set per gear, at approval.
+
+Without Docker the gear runs as a subprocess of the server, **with the server's
+own file access** — including the database, and the provider keys in it. The
+server says so at startup:
+
+```
+gears will run as unsandboxed subprocesses with this server's file access — an approved gear can read the database, including provider API keys; install Docker or set sandbox: docker to isolate them
+```
+
+In that configuration the approval gate is the only control there is. The
+catalogue page says which of the two you are on, rather than making a general
+claim. `sandbox: docker` refuses to start when the daemon does not answer;
+`auto` warns and continues.
+
+### Harder isolation, if you have installed it
+
+A container is a process with a restricted view, not a machine. If that is not
+enough for what your gears run, point Docker at a stronger runtime and name it:
+
+```yaml
+sandbox: docker
+sandbox_runtime: runsc        # gVisor. Or kata-runtime for Kata Containers.
+```
+
+**Cogitorium does not install or configure these.** You install gVisor or Kata,
+register it with your Docker daemon, and this names it — the isolation is the
+runtime's work, and claiming otherwise would be claiming somebody else's. What
+this adds is that a name your daemon does not have is refused **at startup**,
+with the names it does have in the message:
+
+```
+sandbox_runtime "runsc" is not one this Docker daemon has: it offers io.containerd.runc.v2, runc. The runtime has to be installed and registered with the daemon first — Cogitorium selects one, it does not install one
+```
+
+Without that check the mistake surfaces on the first gear run, possibly days
+later, as `create container: exit status 125`.
+
+Two refusals worth knowing. `sandbox_runtime` with `sandbox: subprocess` is an
+error rather than an ignored setting — it reads as hardened isolation and is in
+fact no isolation at all. And every other restriction stays exactly as it was:
+naming a runtime does not quietly return capabilities, the network or the
+memory ceiling.
+
+The sandbox image is fetched once at startup, so the first gear does not spend
+its own timeout pulling a distribution.
+
+### Names a gear is given
+
+A gear that needs a key does not receive one in its arguments. It declares a
+**name** — `API_KEY` — and reads the value from its own environment when it
+runs. You say what the name means; the model never sees the value. That is not
+caution for its own sake: an agent's answer leaves the building, in the chat and
+in a receiver's response, so a secret in a prompt is a secret published.
+
+Set what a name means under [Variables & secrets](#variables--secrets)
+install-wide, or in a workspace's own Variables overlay. Three sources, later
+winning:
+
+1. this install's own store, encrypted with `COGITORIUM_SECRET_KEY` from the
+   environment (without that key, variables still work and a secret cannot be
+   stored — it would have to go to disk in plaintext, and it will not);
+2. a directory on disk, one file per name, contents being the value —
+   `variables_dir` and `secrets_dir`. That is the shape Kubernetes mounts a
+   ConfigMap and a Secret in, and the chart wires exactly that up:
+   `config.variablesConfigMap` and `config.secretsSecret` name the objects,
+   the server reads the mounted files, and rotation is the cluster's own;
+3. the workspace's own overrides.
+
+A name nothing supplies **stops the run and names it**, rather than handing the
+gear an empty string that fails somewhere far away with a message about nothing.
+The review screen says so in advance, per name.
+
+### And the gear does not get the secret
+
+A gear granted the network is not handed its secrets at all. What it finds in
+its environment is a stand-in, and the gate puts the real value in on the way
+out. This is a real run, and the gear is printing what it was given:
+
+```
+HELD=cogitorium-secret-jMDrxMgeHate9cewY3k73-vfWcfPIJIF
+STATUS=200 BODY=the-origin-answered
+```
+
+The destination received `Bearer sk-live-…`, the real credential. The container
+never had it. A stand-in is random, minted for that one run, known only to this
+install's gate, and worthless the moment the run ends — so a gear that sends its
+environment somewhere has sent a string that opens nothing.
+
+Two consequences worth knowing before you rely on it.
+
+**The gate reads inside those runs' TLS.** It cannot substitute into bytes it
+cannot see, so for a run holding stand-ins — and only that kind of run — it
+terminates TLS with its own certificate, which the run is given, and opens its
+own verified connection onward. A granted gear with no secrets is tunnelled as
+before, and the gate sees nothing but hosts and byte counts.
+
+**A gear that was not granted the network gets the real value.** There is no
+edge to substitute at, so a stand-in would simply be a credential that cannot
+work. If your gear uses a key locally rather than in a request, that is the case
+you are in, and nothing changes for you.
+
+### The destination list is a check and a record, not a wall
+
+A granted gear is given `HTTP_PROXY` and friends pointing at the gate, and
+everything that uses an ordinary HTTP client goes through it. Code that
+deliberately ignores those variables reaches the network directly, because
+Docker's bridge network has no host filter. A boundary enforced regardless of
+the code's cooperation belongs where the packets are — a Kubernetes
+NetworkPolicy.
+
+On Linux, `host.docker.internal` is the docker bridge gateway rather than the
+host's loopback, so a server with granted gears sets the gate somewhere the
+containers can reach it:
+
+```yaml
+gear_proxy_listen: 172.17.0.1:0   # default 127.0.0.1:0, which Docker Desktop reaches
+```
+
+### Giving a gear a browser
+
+A gear runs in the ordinary sandbox image, which has no browser in it. It can be
+given the **browser** environment instead — **this is API-only; there is no
+control for it on this screen**:
+
+```bash
+curl -X PATCH http://127.0.0.1:8688/api/v1/gears/1 -H 'Content-Type: application/json' \
+  -d '{"environment":"browser","network":{"granted":true,"hosts":["example.com"]},"status":"approved"}'
+```
+
+The gear then finds a real browser in its container and drives it however it
+likes. A few lines of shell is enough:
+
+```bash
+CHROME=$(ls -d /ms-playwright/chromium-*/chrome-linux/chrome | head -1)
+mkdir -p out
+"$CHROME" --headless --no-sandbox --screenshot=out/shot.png https://example.com
+"$CHROME" --headless --no-sandbox --dump-dom https://example.com > out/page.txt
+```
+
+That is a real run:
+
+```
+BROWSER=/ms-playwright/chromium-1194/chrome-linux/chrome
+SHOT=7012 TEXT=97
+```
+
+`out/` is collected the way it always is, so the screenshot and the page text
+come back as run artifacts an agent can hand on and you can open. Nothing about
+the record is new.
+
+Three things worth knowing. **`--no-sandbox` is required**: a gear already runs
+as an unprivileged user with every capability dropped, which is exactly where a
+browser's own sandbox cannot start — the container is the boundary, and it is
+the same one every gear has. **The image is about a gigabyte** and is not
+fetched until a gear needs it, so give the first such run a longer timeout or
+pull it on the host first. And **the browser is not the network**: a gear that
+has a browser and no network grant can render a local file and nothing else.
+
+### What this screen will not do
+
+- **No editing a gear's source here.** Saving new code is a new version, made
+  wherever the code came from.
+- **No per-version approval and no rollback.**
+- **No per-gear memory or CPU setting.** Those limits are fixed.
+- **Only an administrator can approve one**, or change what it may reach.
+  Anybody signed in may read a gear and dry-run it without the network.
+
+---
+
+## Instructions
+
+![The instruction library: guidance worth keeping, with the same searching,
+tagging and provenance as the gear catalogue.](assets/11-instructions.png)
+
+Guidance written once and reused, so nobody retypes house style into every
+agent's role. It mirrors the gear catalogue on purpose and differs where it
+should: nothing here executes, so nothing needs approving.
+
+**write one** takes a name, what it is for (an agent reads this when deciding
+whether to pin it, so write it for them), tags, and the instruction itself in
+markdown — pinned onto an agent verbatim.
+
+**read** opens the text and names the path it lives at in Contextverse.
+**unlist** takes it out of this catalogue; its text and its versions stay in
+Contextverse, which is where they live.
+
+Binding one to a workspace or a single agent happens in the [agent
+inspector](#the-agents-overlay), not here — this is the catalogue that makes
+them findable.
+
+Agents save what they work out here too, with `save_instruction`. The card says
+which agent saved it and in which workspace.
+
+---
+
+## Models
+
+![The model catalog: providers with their keys unstated, and every model those
+providers have been asked for.](assets/12-models.png)
+
+Two sections: the providers, and the models drawn from them. Nothing else in the
+product can create a workspace or an agent until there is at least one model
+here.
+
+**add provider** takes a name of your choosing, a kind, a base URL and a key:
+
+```bash
+curl -X POST http://127.0.0.1:8688/api/v1/providers -H 'Content-Type: application/json' -d '{"name":"local","type":"openai-compatible","base_url":"http://127.0.0.1:11434/v1","api_key":""}'
+```
+
+```json
+{"id":1,"name":"local","type":"openai-compatible","base_url":"http://127.0.0.1:11434/v1","has_key":false}
+```
+
+`has_key` is the only thing ever said about the key. The key itself is not in
+that response, nor in any other — the field holding it is unexported, so the
+JSON encoder cannot see it.
+
+Two provider types exist: `anthropic` and `openai-compatible`. Anthropic has a
+default address; an openai-compatible provider does not, and leaving it empty is
+refused with *"base_url is required for openai-compatible providers"*. There is
+no environment variable and no config file key for a provider key — this catalog
+is the only place keys live.
+
+**test / list models** on a provider card asks it what it has and offers each
+one as a button; the ones already in the catalog are ticked and disabled. For a
+server that cannot list its own, **add a model by name**:
+
+```bash
+curl -X POST http://127.0.0.1:8688/api/v1/models -H 'Content-Type: application/json' -d '{"provider_id":1,"model_name":"qwen2.5:0.5b","label":"local / tiny"}'
+```
+
+```json
+{"id":1,"provider_id":1,"provider_name":"local","provider_type":"openai-compatible","model_name":"qwen2.5:0.5b","label":"local / tiny"}
+```
+
+Deleting a provider takes its catalog models with it, and the confirmation says
+so.
+
+---
+
+## Context
+
+Administrators only, and the only screen in the product that is not really about
+Cogitorium: context and memory are stored and versioned by Contextverse's
+`contextd`, and this reads and writes through it.
+
+![The Context screen: the files contextd holds on the left, the selected one
+open for editing on the right.](assets/18-context.png)
+
+Pick a file on the left, edit it on the right, **save new version** — the notice
+that comes back says *"contextd created a new version"*, because the versioning
+is Contextverse's and not this product's.
+
+Without `contextd` the server starts, says so at `GET /api/v1/context/status`,
+and memory does nothing:
+
+```json
+{"available":false,"error":"no context space initialized — run: contextd init solo"}
+```
+
+The page says the same thing in place of the file list, with the two ways out:
+run `contextd init solo`, or point Cogitorium at the binary with `contextd_path`
+in config.yaml (or `COGITORIUM_CONTEXTD`).
+
+Homebrew, Scoop and the container image bring `contextd` along. The container
+initialises the space on first start, which fetches a template from GitHub — so
+a first `docker compose up` on a machine with no outbound network comes up with
+memory unavailable and says why in the log.
+
+Each workspace gets its own branch plus a shared one, and each agent its own
+under that, so one workspace's memory does not leak into another's. Putting a
+document in front of a model is done by binding it in the [agent
+inspector](#the-agents-overlay); this screen is the space itself.
+
+---
+
+## People
+
+![People: the users and teams, and above them the access map — who owns what and
+who can reach it.](assets/06-people.png)
+
+Administrators only. A single-operator install never needs this page; it exists
+for the moment an install stops being one.
+
+**add user** takes a name, a role and an optional password. A token is shown
+once:
+
+> — shown once, only its hash is stored. Copy it now.
+
+Three roles exist: `admin`, `team-lead`, `member`. A member sees the workspaces
+they own plus those shared with a team they belong to, and nothing else.
+
+**Teams** are what workspaces are shared with — never individual people. Adding
+a user to a team is a picker on their row; deleting a team unshares every
+workspace that went to it, and the confirmation says so.
+
+The **access map** at the top of the page draws the same relationships the
+permission checks use, rather than making you piece them together from the two
+tables below. Click a colour in the legend to hide that layer. For the whole
+install as one scene, including what is inside each workspace, use
+[Map](#map) instead.
+
+Admin-only across the product: Context, the server-wide Terminal, People,
+Variables & secrets, approving a gear, changing what a gear may reach, sharing a
+workspace with a team, and the internet gate.
+
+---
+
+## Variables & secrets
+
+![The account menu: Variables & secrets and Terminal, the server's version, and
+the way out.](assets/13-account.png)
+
+In the account button's menu, and administrators only. The install-wide half of
+the mechanism a gear's credentials come from — the per-workspace half is the
+Variables overlay inside a workspace.
+
+The rule this screen exists to make visible: **a gear is given names, and reads
+the values from its own environment**. A model never sees a value.
+
+**set** takes a name — upper case, the way a shell expects it, and upper-cased in
+the field as you type — a kind, a value and an optional note for whoever
+inherits this install.
+
+- A **variable**'s value is shown in the table afterwards.
+- A **secret**'s is shown once, at the moment you set it, and never again. Not
+  behind a reveal button, not fetched on demand: the server has nowhere to put it
+  in a response, and it is removed from anything the gear prints, from the
+  recorded run, from the log line and from live output you are watching.
+
+Saving an existing name replaces it, which is how a key is rotated.
+
+Two notices appear when they apply. Without `COGITORIUM_SECRET_KEY` a secret
+cannot be stored at all — it would have to be written to disk in plaintext, and
+it will not be — so that option is disabled and the page says why. And when
+`variables_dir` or `secrets_dir` are mounted, the page names them and states the
+precedence: a file there wins over what is set here install-wide, and a
+workspace's own value wins over both.
+
+Deleting a name warns what breaks: *"Every gear that asks for it stops running
+until something else supplies it."*
+
+---
+
+## Terminal
+
+In the same account menu, and administrators only. A shell over HTTP, on the
+server rather than in a workspace.
+
+![The Terminal screen, with the shell not yet started.](assets/19-terminal.png)
+
+It is off by default: it is interactive code execution reachable over a network.
+Turning it on takes `terminal: true`, and it **also** requires a sandbox —
+without one the request is refused rather than served with the server's own file
+access, which is exactly the hole that made sandboxing necessary in the first
+place. When it is unavailable the page says which of the two is missing and
+names the gear execution backend it would have used.
+
+In Kubernetes the chart refuses to enable it at all, because there is no Docker
+inside a pod: a terminal is an interactive attachment and a gear Job is
+run-to-completion.
+
+This is **not** the shell inside a workspace's [Editor](#editor) view. That one
+is open to anyone who can reach the workspace and starts in a copy of the
+workspace's files; this one is the administrator's and is not tied to a
+workspace at all. Both run in the sandbox, with no network and nothing of the
+server's mounted, and neither survives being closed.
+
+---
+
+## Appearance
+
+![Appearance: eleven looks and a mode. Picking one is the whole
+interaction.](assets/04-appearance.png)
+
+The theme button in the header opens two choices and nothing else.
+
+**A look** — a finished visual world: its ground, its accent, its corners, its
+idea of whether a surface has an edge or a shadow, authored in tokens and drawn in
+both light and dark. Eleven of them, in this order: **Air**, Calm, Slate, Paper,
+Terminal, Blueprint, Ember, Mono, Nord, Bloom, Contrast. Each swatch is painted
+from that look's own tokens, so what the button shows and what the interface
+becomes cannot disagree.
+
+**A mode** — system, light or dark. Every look is drawn in both; `system`
+follows the operating system and changes with it.
+
+A fresh install opens on **Air**, in **light**. The choice is stored on the
+device, in `localStorage` under `cogitorium.theme`, and nothing about it is
+fetched or sent anywhere. If the browser refuses to store it the dialog says so
+rather than losing it quietly.
+
+Changing either one repaints everything that draws itself rather than being
+styled: an open shell re-reads its colours, and so does the map, so neither is
+left painting near-black ink on a near-black ground.
+
+![The same install, dark.](assets/14-dark.png)
+
+There is nothing else to tune. What this replaced was fourteen dials, most
+combinations of which made the interface worse and several of which could make
+text unreadable on a surface that had just been tinted.
+
+---
+
+## Beyond the interface
+
+The rest is not a screen. It is what the same install looks like from a client,
+a shell, or a config file.
+
+### Handing this install to Claude Desktop or Cursor
+
+Everything you built can be a tool in somebody else's client. Cogitorium
 speaks MCP over stdio:
 
 ```bash
@@ -1006,7 +1662,7 @@ tool list. And the two credentials are separate on purpose — `--token` decides
 what can be listed, a receiver's own key decides what may be delivered to it,
 and there is no default for the second.
 
-### The other direction: somebody else's MCP server as an agent's tools
+#### The other direction: somebody else's MCP server as an agent's tools
 
 An agent can also be granted an external MCP server's tools, the way it is
 granted a gear. It is off unless you switch it on:
@@ -1052,9 +1708,7 @@ pending, and the command is re-checked at every spawn — though that check cove
 the command line, not the bytes at the end of it, so `@latest` refetches and
 nothing notices.
 
----
-
-## 6c. From a terminal, and from a script
+### From a terminal, and from a script
 
 The same binary that serves the interface is also a client for it. Nothing in
 this section can do anything the browser cannot; what it adds is an exit code a
@@ -1178,10 +1832,10 @@ UNIT  STATE    KIND      RUN  SINCE
 2     claimed  delivery  2    2026-08-16T02:28:47Z
 ```
 
-`cancel` stops the work, not just the row — the same route the interface's stop
-button uses, and it takes a unit that is already running as readily as one that
-is still waiting. Unit 2 moved up on its own once the workspace was free again.
-The ledger keeps what happened rather than losing the run:
+`cancel` stops the work, not just the row — the same route the Queue overlay's
+Stop button uses, and it takes a unit that is already running as readily as one
+that is still waiting. Unit 2 moved up on its own once the workspace was free
+again. The ledger keeps what happened rather than losing the run:
 
 ```
 $ cogitorium run 1
@@ -1191,7 +1845,8 @@ error: stopped by admin
 ```
 
 **Move a workspace between installs.** The export is the same document as the
-one in section 5; these are the two commands that carry it:
+one under [Workspaces](#take-one-to-another-install); these are the two commands
+that carry it:
 
 ```
 $ cogitorium workspaces export 1 --gears -o court.json
@@ -1215,122 +1870,10 @@ than counted, because a bundle whose gears were all skipped imports
 approving gears. Those are decisions made while looking at a canvas or a source
 listing, and a flag is a worse place to make them than a screen that shows what
 is being decided. Everything the command line does, it does over the same HTTP
-API described in [openapi.yaml](openapi.yaml) — so anything missing here is one
-`curl` away, not blocked.
+API described in [openapi.yaml](openapi.yaml) — 92 path items and 124
+operations — so anything missing here is one `curl` away, not blocked.
 
----
-
-## 7. A worked arrangement: a panel that judges code
-
-Everything so far has been one agent doing one job. This is what the wiring is
-for: eight agents, four models, and a decision made on evidence.
-
-The operator states a requirement. Four authors, each on a different model,
-write a program for it and then read one another's submissions. Two critics look
-at every submission from one angle each. A referee reads all of it and picks the
-winner.
-
-![The code court on the blueprint](assets/13-code-court.png)
-
-Read the edges, because they are the arrangement:
-
-| edge | from → to | what it makes possible |
-|---|---|---|
-| `writes` | orchestrator → four authors | the orchestrator may hand the requirement out |
-| `submits` | each author → both critics | a critic may be asked about any submission |
-| `reports` | each critic → referee | the referee may ask a critic what it found |
-| `decides` | orchestrator → referee | the verdict comes back to the operator |
-
-Nobody's role says "you may review the others". The wire says it. Delete the
-edge from `author-mini` to `critic-speed` and that submission stops being
-measurable, on the next turn, with no prompt edited.
-
-### The part that is not an opinion
-
-"The best program" is a judgement. "The fastest program" is a measurement, and
-the two must not be confused, so `critic-speed` does not read code and guess —
-its role says to call the bench gear on every submission with the same input and
-report what it measured. The referee carries prohibitions to match:
-
-```
-Never pick a program the bench did not run.
-Never call a program fastest without a measurement.
-```
-
-Those are the last thing in its prompt and they are not overridable by anything
-the authors write in their own defence. That is the whole reason prohibitions
-exist as a separate field rather than a paragraph in a role.
-
-### Take this arrangement
-
-The workspace above is a download. It carries the agents with their roles and
-prohibitions, the wires, and the canvas positions — and no key, no token, no
-conversation, because a bundle has nowhere to put one.
-
-**[code-court.cogitorium.json](assets/code-court.cogitorium.json)** — 4 KB.
-
-```bash
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces/import \
-  -H 'Content-Type: application/json' \
-  -d "{\"name\":\"code court\",\"bundle\":$(cat code-court.cogitorium.json)}"
-```
-
-```json
-{ "agents": 8, "wires": 15, "gears_imported": [], "gears_skipped": [],
-  "context_files": 0, "unresolved_models": [] }
-```
-
-That report is from importing this exact file. `unresolved_models` is empty
-because the install it landed on had those four models in its catalog; on one
-that does not, each agent still arrives — with its role, its prohibitions and
-its wires — and the models it could not find are named there for you to bind.
-Nothing is silently substituted.
-
-The bench gear is not in the file. Gears travel only when you ask for them, and
-this arrangement is more useful with a bench you wrote for your own language and
-your own definition of fast.
-
----
-
-## 8. Files, the editor and diffs
-
-Each workspace has its own directory. **Files** shows the tree; clicking a file
-opens it in **Editor**, which is a real editor with syntax highlighting, not a
-preview. Save writes the file; the diff view shows what changed, computed
-locally — there is no git involved anywhere in this.
-
-Files up to 2 MiB are editable; larger ones open read-only, and that limit is
-not configurable. There is no upload, no download, no rename and no delete — a
-directory comes into existence when you save a file into it.
-
-![A diff](assets/12-diff.png)
-
----
-
-## 9. Memory
-
-Context and memory are stored and versioned by Contextverse's `contextd`.
-Without it the server starts, says so at `GET /api/v1/context/status`, and
-memory does nothing:
-
-```json
-{"available":false,"error":"no context space initialized — run: contextd init solo"}
-```
-
-Homebrew, Scoop and the container image bring `contextd` along. The container
-initialises the space on first start, which fetches a template from GitHub — so
-a first `docker compose up` on a machine with no outbound network comes up with
-memory unavailable and says why in the log.
-
-Each workspace gets its own branch plus a shared one, so one workspace's memory
-does not leak into another's. **Context** (admin only) lists the space and lets
-you read and edit files in it. Binding context to a workspace or to a single
-agent is what puts it in front of the model — see the agent inspector for the
-order it lands in.
-
----
-
-## 10. Letting an agent search the web
+### Letting an agent search the web
 
 Off by default, and there are three locks. All three must be open, in order:
 
@@ -1347,47 +1890,19 @@ Off by default, and there are three locks. All three must be open, in order:
    proxy is refused rather than ignored — `HTTPS_PROXY` set means every address
    check would inspect the proxy instead of the real destination.
 
-2. **The grant.** An operator draws it on the blueprint, per agent.
+2. **The grant.** Drawn on the [blueprint](#letting-an-agent-reach-the-internet),
+   per agent, by a person.
 
 3. **The query.** Every individual search stops the turn and waits for a person
    to approve that exact query. The audit records which kind of authentication
-   each decision had, so a row is never mistaken for stronger evidence than it is.
+   each decision had, so a row is never mistaken for stronger evidence than it
+   is.
 
-Only `1` and a case-insensitive `true` count as on. `COGITORIUM_EGRESS=yes`
-evaluates to false — and overrides a config file that said true.
+Booleans in configuration are case-insensitive, and only `1` and `true` count as
+on: `COGITORIUM_EGRESS=yes` evaluates to false — and overrides a config file that
+said true. The same rule holds for `terminal` and `mcp_clients`.
 
----
-
-## 11. The terminal
-
-Off by default: it is interactive code execution over HTTP. Turning it on takes
-`terminal: true`, and it **also** requires a sandbox — without one the request
-is refused rather than served with the server's own file access. In Kubernetes
-the chart refuses to enable it at all, because there is no Docker inside a pod.
-
-While a gear runs, its output streams here live.
-
----
-
-## 12. More than one person
-
-**People** (admin only) → **add user**. A token is shown once:
-
-> — shown once, only its hash is stored. Copy it now.
-
-Three roles exist: `admin`, `team-lead`, `member`. A member sees the workspaces
-they own plus those shared with a team they belong to, and nothing else. Sharing
-is per team, not per person. **clone** copies a workspace to you — blueprint and
-all — so someone can build on your arrangement without touching it.
-
-Admin-only: Context, Terminal, People, the model catalog's destructive actions,
-and the internet gate.
-
-![The access map](assets/06-people-map.png)
-
----
-
-## 13. When it refuses
+### When it refuses
 
 Every message below is the exact text.
 
@@ -1402,14 +1917,13 @@ Every message below is the exact text.
 | Asked for `sandbox: docker` with the daemon down | `sandbox: docker was requested but the daemon does not answer` |
 | Built with `go build` and skipped the UI build | `web UI is not built into this binary — build with make build` (503) |
 | Ran a gear that was never approved | the run is refused; the gear is not executed |
-| Used `--port` | `Error: unknown flag: --port` |
+| PATCHed a workspace with no `hue` field | `send a hue to set one, or null to clear it` (400) |
+| Used `--port` | `error: unknown flag: --port` |
 
 `config.yaml` is only ever read, never written — a fresh data directory contains
 the database and nothing else.
 
----
-
-## 14. What is not here
+### What is not here
 
 So that you do not go looking:
 
@@ -1417,13 +1931,15 @@ So that you do not go looking:
 - No way to chat with a worker agent directly — every turn goes through the orchestrator.
 - No editing a workspace's name or description after it is created.
 - No editing a gear's source in the interface, no per-version approval, no rollback.
-- No per-gear network, memory or CPU setting; the sandbox limits are fixed.
+- No per-gear memory or CPU setting; those sandbox limits are fixed. The network
+  grant and the timeout are per gear.
+- No control for the gear browser environment in the interface; it is API-only.
 - No upload, download, rename or delete for workspace files.
 - No token management: tokens cannot be listed, named, rotated or expired individually.
 - No self-service signup, and no password-change screen.
 - No screen for the search audit log, though the route exists.
 - No workspace-wide prohibitions; they are per agent, and a created agent inherits its creator's.
-- A bundle carries the conversation nowhere — it is a template, not a transcript.
+- A bundle carries the conversation nowhere, and no colour — it is a template, not a transcript.
 - No receiver may target a gear directly; a task names an agent, and the agent calls the gear.
 - No streaming from a receiver, and no fan-out of one delivery to several agents.
 - Consuming MCP is off unless you switch it on, and an external MCP server runs
@@ -1432,11 +1948,9 @@ So that you do not go looking:
 - No warm containers unless you ask: `sandbox_pool` is 0, so every gear gets a
   machine with no history. Turning it on is faster and is a real trade — the
   reference says exactly what it costs.
-- No browser an agent drives directly: a gear granted the browser environment
+- No browser an agent drives directly: a gear given the browser environment
   drives one, and the agent calls the gear. There is no live page an agent
   clicks around in, and no session that survives a run.
-- No terminal in-cluster. A terminal is an interactive attachment and a gear Job
-  is run-to-completion; the Kubernetes backend runs a gear rather than attaching
-  to one.
+- No terminal in-cluster, and no shell session that survives being closed.
 - No private thread inside a shared workspace: two people in one workspace share its
   conversation. Separate workspaces are how two people stay out of each other's way.

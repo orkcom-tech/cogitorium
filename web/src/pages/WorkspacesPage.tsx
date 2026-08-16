@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { PALETTE, hueOf, isChosen } from './hue'
+import { Select } from './Select'
 import {
   api,
   auth,
@@ -123,8 +125,19 @@ function WorkspaceCard({
   const shared = teams.filter((t) => w.team_ids?.includes(t.id))
   const rest = teams.filter((t) => !w.team_ids?.includes(t.id))
 
+  const hue = hueOf(w)
+
   return (
-    <div className="card ws-card">
+    // The colour is carried as a variable rather than baked into each rule, so
+    // the card, its spine and the picker below all read the one value.
+    <div className="card ws-card" style={{ '--ws-hue': hue } as React.CSSProperties}>
+      {/* The spine IS the picker.
+          Ten saturated dots on every card meant thirty of them on a page whose
+          whole rule is that green means running and red means broken. The
+          colour is shown by the edge it colours, and choosing one is a click
+          on that edge — which is also where you would point if asked to change
+          it. */}
+      <HuePicker w={w} onChanged={onChanged} onError={onError} />
       <div className="card-head">
         <Link to={`/workspaces/${w.id}`} className="ws-title">
           <strong>{w.name}</strong>
@@ -176,23 +189,19 @@ function WorkspaceCard({
           </span>
         ))}
         {mayShare && rest.length > 0 && (
-          <select
+          <Select
             value=""
-            onChange={(e) => {
-              if (!e.target.value) return
+            aria-label="Share with a team"
+            placeholder="add a team…"
+            onChange={(v) => {
+              if (!v) return
               api.workspaces
-                .share(w.id, Number(e.target.value))
+                .share(w.id, Number(v))
                 .then(onChanged)
                 .catch((err: Error) => onError(err.message))
             }}
-          >
-            <option value="">add a team…</option>
-            {rest.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
+            options={rest.map((t) => ({ value: String(t.id), label: t.name }))}
+          />
         )}
       </div>
     </div>
@@ -506,13 +515,15 @@ function CreateDialog({
           </label>
           <label className="field">
             orchestrator model
-            <select value={modelId} onChange={(e) => setModelId(e.target.value ? Number(e.target.value) : '')}>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.provider_name} / {m.label || m.model_name}
-                </option>
-              ))}
-            </select>
+            <Select
+              value={modelId === '' ? '' : String(modelId)}
+              aria-label="orchestrator model"
+              onChange={(v) => setModelId(v ? Number(v) : '')}
+              options={models.map((m) => ({
+                value: String(m.id),
+                label: `${m.provider_name} / ${m.label || m.model_name}`,
+              }))}
+            />
             <span className="hint">
               This is the agent you will talk to. It creates the others and hands them work, so give it a model
               you trust to reason — the workers can be cheaper ones.
@@ -530,6 +541,89 @@ function CreateDialog({
           </div>
         </form>
       </div>
+    </div>
+  )
+}
+
+/**
+ * The colour, chosen from the edge it colours.
+ *
+ * It is shared state rather than a personal preference — the point of "the
+ * amber one" is that a team says it to each other — so anyone who can reach
+ * the workspace may set it. Nothing here grants access, so there is nothing to
+ * escalate by allowing it.
+ */
+function HuePicker({
+  w,
+  onChanged,
+  onError,
+}: {
+  w: Workspace
+  onChanged: () => void
+  onError: (m: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const away = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    // Deferred, or the click that opened it closes it on the same tick.
+    const t = setTimeout(() => document.addEventListener('mousedown', away), 0)
+    document.addEventListener('keydown', key)
+    return () => {
+      clearTimeout(t)
+      document.removeEventListener('mousedown', away)
+      document.removeEventListener('keydown', key)
+    }
+  }, [open])
+
+  const set = (hue: number | null) =>
+    api.workspaces
+      .colour(w.id, hue)
+      .then(() => {
+        setOpen(false)
+        onChanged()
+      })
+      .catch((e: Error) => onError(e.message))
+
+  return (
+    <div className="ws-hue" ref={box}>
+      <button
+        className="ws-spine"
+        // The spine paints itself the workspace's colour, so it says so. Without
+        // this the blanket button rule in tokens.css wins on weight and fills it
+        // with the ordinary five-percent grey — the colour simply disappears.
+        data-own
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        title={isChosen(w) ? 'change this workspace colour' : 'give this workspace a colour'}
+      >
+        <span className="sr-only">Colour</span>
+      </button>
+      {open && (
+        <div className="hue-pop">
+          {PALETTE.map((h) => (
+            <button
+              key={h}
+              className={`hue-dot ${w.hue === h ? 'on' : ''}`}
+              style={{ background: `hsl(${h} 68% 52%)` }}
+              title={w.hue === h ? 'this colour' : 'give it this colour'}
+              onClick={() => set(h)}
+            />
+          ))}
+          {/* Clearing is not choosing grey: it hands the workspace back the
+              colour derived from its id and records that nobody picked. */}
+          <button className="hue-clear" disabled={!isChosen(w)} onClick={() => set(null)}>
+            {isChosen(w) ? 'clear' : 'unset'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

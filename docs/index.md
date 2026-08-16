@@ -16,7 +16,7 @@ rebuilt.
 Every part of it is a part you can move — the agents, the wires between them,
 the context each one carries, the tools they forge, the receivers your own
 systems deliver through, the clock that starts work without you. And each is
-configurable twice over: by hand on the bench, or by telling the orchestrator.
+configurable twice over: by hand in the interface, or by telling the orchestrator.
 Both write to the same objects, so nothing has to be redone in the other place.
 
 Everything below describes what the software does today. Where something is
@@ -56,7 +56,7 @@ message taken from a real run.
 Intel), Windows and Linux — the same server and the same interface in a native
 window instead of a browser tab. It is not a second application: it imports the
 same code, serves the same bundle and reads the same data directory, so there is
-nothing in it that can drift out of step with the web shell.
+nothing in it that can fall out of step with the web shell.
 
 It listens on a port the kernel picks rather than 8688, so a desktop window and
 a `cogitorium serve` can run side by side without either one deciding whether
@@ -84,13 +84,13 @@ path nothing pushes to, so build the image and point the chart at wherever you
 pushed it:
 
 ```sh
-docker build -t <your-registry>/cogitorium:0.1.1 .
-docker push <your-registry>/cogitorium:0.1.1
+docker build -t <your-registry>/cogitorium:1.0.0 .
+docker push <your-registry>/cogitorium:1.0.0
 
 helm install cogitorium ./deploy/helm/cogitorium \
   --namespace cogitorium --create-namespace \
   --set image.repository=<your-registry>/cogitorium \
-  --set image.tag=0.1.1 \
+  --set image.tag=1.0.0 \
   --set auth.adminToken="$(openssl rand -hex 24)"
 ```
 
@@ -153,7 +153,9 @@ than loopback and the token becomes required.
 orchestrator needs something to think with. Go to **Models**, add a provider,
 then a model from it.
 
-![The workspaces list](assets/01-workspaces.png)
+![The model catalogue: a provider, then the models it offers](assets/12-models.png)
+
+![The workspaces list — each room carries a colour, and the middle one is shared with two teams](assets/01-workspaces.png)
 
 ---
 
@@ -168,7 +170,7 @@ so the arrangement can be judged on its actual cost rather than on how it feels.
 
 **Graph engineering — the edge is the capability.** What you build here is a
 graph, and its edges are enforced rather than illustrated. Agents are nodes;
-four kinds of edge share the canvas, on four layers you can show one at a time:
+four kinds of edge share the canvas, on four layers you switch independently:
 
 | Layer | An edge means |
 |---|---|
@@ -185,11 +187,11 @@ structure: you can look at it, change it, export it and hand it to somebody
 else.
 
 **Tools outlive the conversation.** An agent that needs a capability can forge
-one, and it lands in a catalog rather than evaporating with the session. It runs
+one, and it lands in a catalogue rather than evaporating with the session. It runs
 only after you approve it, and only inside a container.
 
 **Two hands on the same controls.** Every arrangement here can be built by
-telling the orchestrator or by working the panels yourself — a wire drawn on
+telling the orchestrator or by drawing it yourself — a wire drawn on
 the canvas is a capability the orchestrator now has, an agent it hired is a card
 you can rebind to another model, a gear you wrote by hand is one it can call. It
 is the same objects and the same rules underneath, so there is no conversion
@@ -232,7 +234,7 @@ Talking to it is the only way in, by design. It can:
 
 | It can | Tool |
 |---|---|
-| list the model catalog | `models_list` |
+| list the model catalogue | `models_list` |
 | list, create and reconfigure agents | `agent_list`, `agent_create`, `agent_update` |
 | wire agents together | `wire_create` |
 | hand work to an agent it is wired to | `delegate` |
@@ -240,11 +242,16 @@ Talking to it is the only way in, by design. It can:
 | find and share existing tools | `list_gears`, `grant_gear` |
 | read and write the instruction library | `list_instructions`, `read_instruction`, `save_instruction` |
 | attach or detach context documents | `context_list`, `context_bind`, `context_unbind` |
+| read and write files in the workspace | `list_files`, `read_file`, `write_file` |
 | search the web, if you have granted it | `web_search` |
 
 Worker agents get a smaller set: `delegate`, the gear tools, the instruction
-tools, and `web_search` when granted. Workspace management belongs to the
-orchestrator alone.
+tools, the file tools, and `web_search` when granted. Workspace management
+belongs to the orchestrator alone.
+
+`grant_gear` is offered to the orchestrator and to nobody else. A worker that
+forges a tool reports what it built; handing that tool to a third agent is a
+change to the graph, and the graph is the orchestrator's.
 
 A turn runs at most **16 tool iterations**, and delegation nests at most **4
 deep**. Both are compiled in.
@@ -254,7 +261,7 @@ any error. You can delete an entry, and deleting it is genuinely forgetting:
 the timeline is replayed into the model on every turn, so removing a line
 removes it from what the agent knows.
 
-![An agent under inspection](assets/05-agent.png)
+![A workspace: the three views on the track, the four overlay buttons beside them, and the roster open](assets/02-workspace-deck.png)
 
 ---
 
@@ -265,22 +272,26 @@ nodes are agents and gears, the edges are permissions, and the drawing is the
 program rather than a diagram of it. Nothing here is a note about what the
 system is supposed to do.
 
-The canvas holds four layers you can switch independently:
+The canvas holds four layers. The legend's four buttons are independent
+toggles, not a selector — any combination is a legal picture, including none:
 
-- **delegation** — who may hand work to whom
-- **tools** — which gears each agent may call
-- **memory** — the branches and documents each agent reads
-- **outward** — which agents may ask to search the web
+- **delegation** — who may hand work to whom. On.
+- **tools** — which gears each agent may call. On.
+- **memory** — the branches and documents each agent reads. **Off**, because it
+  doubles the node count and is the layer you go looking for rather than the one
+  you want by default.
+- **outward** — which agents may ask to search the web. On, and drawn only when
+  egress is enabled at all.
 
 Drag between two agents to create a wire. Drag a gear onto an agent to grant it.
-Select an edge and press Delete to revoke it. Double-click an agent to open its
-inspector.
+Select an edge and press Delete to revoke it. Click an agent to open its
+inspector, which arrives as an overlay over the canvas.
 
 Nodes are coloured and captioned by kind, and the legend names every colour it
 uses — a canvas where everything looks alike is a picture of connectivity, not
 an explanation.
 
-![The blueprint beside the conversation](assets/02-workspace-wired.png)
+![The blueprint: every wire on it is a capability, and cutting one takes the capability away](assets/03-blueprint.png)
 
 ---
 
@@ -298,9 +309,15 @@ The lifecycle is deliberate:
 3. An **admin** approves it. Only then can agents invoke it.
 4. It can be **disabled** later without being deleted.
 
-Gears enter one global catalog tagged with which workspace produced them. Bind a
-gear to a whole workspace or to individual agents; the agent that forged it is
-bound automatically and can grant it to others.
+Gears enter one global catalogue tagged with which workspace produced them. Bind
+a gear to a whole workspace or to individual agents; the agent that forged it is
+bound automatically, and the orchestrator can grant it to others.
+
+**A gear's card carries the way in.** A pending gear's button reads
+**review & approve**; once it is approved the same button reads
+**review & run**. Either one opens the source, the named values, the network
+grant and the timeout on one screen — there is no route to approval that does
+not go through reading the code, because that is the whole of the control.
 
 **Isolation.** With Docker available, a gear runs in a container started with
 `--network none`, `--cap-drop=ALL`, `--security-opt no-new-privileges`,
@@ -321,7 +338,7 @@ what still holds:
 - The gear runs as the account the server runs as, with its file access. It can
   read the database and the provider keys in it. **Approval is then the only
   control**, which is why the server logs a warning at startup and the gear
-  catalog says so on the page rather than in a footnote.
+  catalogue says so on the page rather than in a footnote.
 - **Dry runs are refused entirely.** Unapproved code never runs at all here —
   the one path that bypasses approval exists only because a container makes it
   cheap, so without a container it is closed.
@@ -347,14 +364,21 @@ order they actually arrived — splitting them puts an error above the line that
 caused it. The recorded run is identical either way: whether anyone was watching
 never changes what is stored.
 
-![The gear catalog](assets/07-gears.png)
+![The gear catalogue: approved gears, and pending ones carrying the way in](assets/07-gears.png)
 
 ---
 
 ## What a gear may hold, and where it may reach
 
 Both are decided at approval, on the same screen as the source, and neither is
-something an agent can arrange for itself.
+something an agent can arrange for itself. So is the **timeout**: it is a
+number on that one gear, not an install-wide setting, because a gear that
+fetches a page and a gear that renders one are not the same job. The button
+that commits all of it reads **approve, with these grants**, and it says so
+because approving a gear and granting it a credential and a network are one
+act rather than three screens.
+
+![Approving a gear: the source, the named values it will hold, the hosts it may reach, and its own timeout](assets/08-gear-review.png)
 
 ### Named values
 
@@ -438,6 +462,12 @@ A screenshot and the page's text, written into `out/`, collected as run
 artifacts by the same path that already carries any file a gear produces. There
 is no browser pipeline and no new record — the point of doing it this way is
 that there is nothing new to learn.
+
+**Granting one is API-only.** `PATCH /api/v1/gears/{id}` takes an
+`environment` beside `status`, `timeout_seconds` and `network`; there is no
+control for it in the interface. That is stated rather than hidden: an
+operator reading the approval screen is reading everything that screen can
+decide, and a browser is granted deliberately, with a request written by hand.
 
 A gear **names an environment, never an image**. A gear that could name one
 would be agent-authored code choosing what it runs inside, and a gear that
@@ -546,7 +576,7 @@ signed-in caller and the new workspace belongs to them.
 endpoints, because ids from another install mean nothing here.
 
 *Models are named, not carried.* An entry is `provider_type` plus `model_name`,
-resolved against the importing install's own catalog. A miss creates the agent
+resolved against the importing install's own catalogue. A miss creates the agent
 with no model and names it in the report under `unresolved_models` — it never
 substitutes one.
 
@@ -578,9 +608,9 @@ first turn.
 ## The API description
 
 [`docs/openapi.yaml`](https://github.com/orkcom-tech/cogitorium/blob/main/docs/openapi.yaml)
-is an OpenAPI 3.1 document listing every endpoint this server has: 85 paths,
-their methods, their path parameters, and which credential opens each — a
-user's token, a receiver's own key, or nothing.
+is an OpenAPI 3.1 document listing every endpoint this server has: 92 path
+items carrying 124 operations, their path parameters, and which credential
+opens each — a user's token, a receiver's own key, or nothing.
 
 **It is generated from the server's own route table**, by a test that fails when
 the two disagree. Every route registers itself into that table, so a route
@@ -598,13 +628,14 @@ After a deliberate change, `go test ./internal/server -run TestOpenAPI -update`
 rewrites it.
 
 **Request bodies are described where the handler decodes into a named type** —
-nine of the forty-two mutating routes so far, including creating a receiver,
-writing and editing its task, forging a gear, running one, approving one, and
-creating a workspace or an agent. Those schemas are generated by reflecting
-over the very struct the server decodes into, walked the way `encoding/json`
-walks it, so a renamed field is renamed in the document by the same edit.
+thirteen of the forty-eight mutating routes so far, including creating a
+receiver, writing and editing its task, forging a gear, running one, approving
+one, and creating a workspace or an agent. Those schemas are generated by
+reflecting over the very struct the server decodes into, walked the way
+`encoding/json` walks it, so a renamed field is renamed in the document by the
+same edit.
 
-The remaining thirty-three are being named route by route, and a test holds the
+The remaining thirty-five are being named route by route, and a test holds the
 count so it can only fall: describing one more asks you to raise a number,
 un-describing one fails the build and lists what is left. Until then their
 shape is on this page.
@@ -627,11 +658,18 @@ holds.
 
 ```sh
 cogitorium mcp --server http://127.0.0.1:8688 --token $COGITORIUM_TOKEN \
-  --inlet-key tickets=cgi-tickets-…
+  --inlet-key tickets=cgi-tickets-… \
+  --workspace 3
 ```
 
 That command line is the whole integration; in a client's configuration it goes
 where the client keeps its servers.
+
+**`--workspace`** narrows the receivers offered to one workspace's own. Without
+it a client sees every receiver the token can reach, which is right for an
+install with one workspace and wrong the moment there are six — a tool list is
+something a model reads on every turn, and a client pointed at one project has
+no business being offered another's doors.
 
 **What becomes a tool.** Two kinds, and nothing else:
 
@@ -747,7 +785,12 @@ the ledger records.
 shell branches on what the gear said rather than on whether the HTTP call
 worked. `run <id>` exits non-zero for anything that did not complete. A refused
 delivery, an unapproved gear and a missing run are all non-zero with the
-server's own sentence on stderr.
+server's own sentence on stderr, under a lowercase prefix:
+
+```
+$ cogitorium serve --port 9000
+error: unknown flag: --port
+```
 
 **What it deliberately does not do.** Create agents, draw wires, edit
 prohibitions or approve gears. Those are decisions made while looking at a
@@ -776,8 +819,16 @@ GET/DELETE /api/v1/inlets/{id}
 POST /api/v1/inlets/{id}/key        issued once, stored hashed
 POST /api/v1/inlets/{id}/tasks
 PUT/DELETE /api/v1/inlet-tasks/{id} PUT carries the whole task, not a patch
-GET  /api/v1/workspaces/{id}/inlet-runs
+GET  /api/v1/workspaces/{id}/inlet-runs   the ledger for one workspace
+GET  /api/v1/inlet-runs/{id}              one run, whatever door it came through
 ```
+
+`GET /api/v1/inlet-runs/{id}` is the operator's way back to a delivery: the
+answer, the record of what ran, and how it settled, for anyone who may reach
+the workspace it belongs to. It is not the same route as
+`GET /i/{address}/runs/{id}` further down, which a *receiver's own key* opens
+and which is confined to the runs that arrived through that one door. Two
+routes because they are two callers with two different reasons to look.
 
 **A task is editable in place.** `PUT` keeps its id, so the runs on record and
 the schedules pointing at it survive a correction; the alternative was delete
@@ -801,10 +852,26 @@ reaching a prompt.
 **A delivery is not a conversation.** It writes nothing to the operator's
 timeline: the timeline is replayed into every turn, so a pipeline posting to the
 chat endpoint would make request two hundred carry the previous hundred and
-ninety-nine. It is also treated as third-party from the first byte, so the agent
-behind a receiver cannot write to the instruction library, the gear catalog or
-the workspace graph, and is not offered `web_search` — which waits for a person
-to approve a query, and there is nobody there. One run at a time per workspace;
+ninety-nine. It is also treated as third-party from the first byte.
+
+**What an unattended run may not do.** The turn is marked tainted before the
+first model call, and these are closed for the whole of it, including for any
+agent the payload reaches by delegation:
+
+| Withheld | Because |
+|---|---|
+| `save_instruction` | the library is global; anything written there reaches every agent on every later turn |
+| `forge_gear` | code the caller's payload composed, waiting for an approval |
+| `context_bind`, `context_unbind` | what an agent knows going in |
+| `agent_create`, `agent_update`, `wire_create` | the graph |
+| `grant_gear` | handing a tool to an agent that was not given it |
+| `web_search` | every search stops the turn and waits for a person to approve that exact query, and there is nobody there |
+
+`web_search` is simply not offered — advertising a tool that is refused on
+every call spends a provider round-trip per iteration. The rest are offered and
+refused at dispatch, so the latch is exercised where it can be seen working.
+
+One run at a time per workspace;
 a delivery that arrives meanwhile is `queued` and waits, and only a queue past
 `queue_max_per_workspace` refuses with 429.
 
@@ -884,6 +951,24 @@ A schedule points at an inlet task rather than carrying its own agent and
 instruction. The task already says which agent, what to tell it, what it accepts
 and what success means; a firing is that same job with nobody on the other end.
 
+```
+GET/POST /api/v1/workspaces/{id}/schedules
+PATCH  /api/v1/schedules/{id}       {"enabled": false} — the pause button
+DELETE /api/v1/schedules/{id}
+POST   /api/v1/schedules/{id}/run   fire it now; answers 202 with the queued unit
+```
+
+**Enabling and disabling is its own route**, carrying one field, because
+turning a schedule off is the thing an operator does in a hurry and at night.
+Sending back the fields they are not changing is how a pause becomes an edit
+nobody meant to make.
+
+**Run-now does not move the clock.** `POST /api/v1/schedules/{id}/run` enqueues
+the same unit a tick would and leaves the next firing where it was. It exists
+because the first thing anybody does with a new schedule is want to know whether
+it works, and waiting until 02:00 to find out is how a broken job stays broken
+for a day.
+
 Two spec forms:
 
 ```
@@ -913,10 +998,12 @@ never use it on this job, so this is not a reason to refuse the schedule; it is
 a reason to know before you write one that depends on it.
 
 **A firing whose previous run has not finished is skipped**, and recorded as a
-skip rather than a failure. A job slower than its own interval never catches up,
+skip rather than a failure. That is `on_miss: skip`, and it is what an
+unset `on_miss` becomes — a job slower than its own interval never catches up,
 and queueing every missed tick turns that into a backlog outliving the reason
 for it. `on_miss: run` is there for the operator who genuinely wants each tick
-attempted.
+attempted; those are the only two values, and anything else is refused when the
+schedule is saved.
 
 ---
 
@@ -997,15 +1084,45 @@ Read-only there is ownership rather than a flag: the sandbox user owns `out/`
 and nothing else, and a directory you do not own is one you cannot add to or
 delete from.
 
-Agents have `list_files`, `read_file` and `write_file` over their own workspace.
-`read_file` refuses a binary rather than base64-ing it into a prompt.
+Agents have `list_files`, `read_file` and `write_file` over their own
+workspace, and the paths they take are the ones `list_files` gives back — the
+same paths a gear's file argument takes, so a file an agent found is a file it
+can hand on without translating anything. `read_file` refuses a binary rather
+than base64-ing it into a prompt.
 
 **What a model can be shown is text, images and PDFs.** Anything else — a zip,
 a spreadsheet, a video — is refused in the model layer with a message naming the
 gear route, because no model can look inside it. Whether a particular model
-accepts images is declared on the model in the catalog: it is never probed and
+accepts images is declared on the model in the catalogue: it is never probed and
 never guessed from a name, since a wrong guess fails at the provider with an
 error nobody can act on.
+
+### Attaching a file to a message
+
+The composer's **`+`** takes any file at all. Each one is uploaded as it is
+picked rather than held until send — `POST /api/v1/workspaces/{id}/attachments`,
+one file per call — so a fourth file the server refuses does not take the three
+that worked with it, and the error names the file it belongs to.
+
+It lands under `attachments/` in the workspace directory, in a directory named
+for the moment it arrived, keeping the name it came with. The uniqueness is in
+the directory rather than the filename because the filename is what a person
+reads and what a model is told; an upload must still never overwrite bytes an
+earlier message already pointed an agent at.
+
+**The chip says which of two things is about to happen**, and it is the only
+part an operator cannot work out for themselves:
+
+- the model is **shown** the file, as text, an image or a PDF; or
+- the model is not shown it, and the agent is given its **path** — marked
+  `→ gear` — for a gear to open.
+
+A file this model was never declared to accept is marked before you send rather
+than explained after it fails. Taking a chip off the message leaves the file in
+the workspace; what was attached is part of what was said, so it is shown again
+on the message afterwards. The answer to "why am I not being shown this?" is
+the server's own sentence, the same one the agent is given, so operator and
+agent are never told two stories.
 
 ---
 
@@ -1034,37 +1151,98 @@ bound document or an instruction. Items can be edited or removed. That last part
 exists for a specific failure: an agent that remembered something you never
 wanted it to keep, and kept bringing it up.
 
-The **instruction library** is a catalog of reusable instruction texts, so a
+The **instruction library** is a catalogue of reusable instruction texts, so a
 prompt you have refined once can be attached again rather than retyped. Names
 are validated (lowercase letters, digits, dashes and underscores) *before*
 anything is written, so a rejected save leaves nothing behind.
+
+![The instruction library: what each text is for, and who is already bound to it](assets/11-instructions.png)
 
 ---
 
 ## The interface
 
-Panels on a grid, not tabs. Six slots — left, top, centre, beside-centre, bottom
-and right — hold chat, blueprint, files, editor, terminal, the agent roster and
-the agent inspector.
+### The shell
 
-- **Place** a panel at any edge from its `⋯` menu.
-- **Slide out**: a dock can push the centre aside or float over it.
-- **Float** a panel into a window you can move, resize, roll up, expand and
-  close.
-- **Collapse** any dock to a rail; the panel stays alive behind it.
-- **Maximize** with `⌘↵`, toggle the sidebar with `⌘B`, the bottom dock with
-  `⌘J`.
+A white sheet resting on a grey ground, with everything you navigate by in one
+row across its top:
 
-**Opening a file clears the bench for it.** The tree and the editor are two
-panels, not two halves of one — a tree is a narrow thing and a file is a wide
-one, and sharing a width meant the file got whatever the tree left over.
-Clicking a file puts the blueprint and the rosters away and hands the room to
-the editor; the conversation and the shell stay, because watching a turn while
-editing what it produced is why both are on screen. Nothing is destroyed —
-every panel put away is one chip away in the top bar, and the editor floats out
-into its own window like any other panel.
+- the **brand** on the left, and the maker's mark beside it;
+- a centred **pill nav** — Workspaces, Map, Gears, Instructions, Models, and
+  Context and People for an administrator;
+- on the right, the **theme** button, a link to this documentation, and the
+  **account** button.
 
-![Unsaved edits, shown as a diff against what is on disk — in Instrument](assets/12-diff.png)
+The account menu holds what you configure rather than what you navigate:
+Variables & secrets, the server-wide Terminal, the version the server reports,
+and sign out. Both of the first two are an administrator's.
+
+There is **no sidebar**. What replaced it was a 200px column carrying nine
+destinations, a collapse toggle, the brand and the account block — a sixth of
+every screen, holding things most of which are opened once a week. The split is
+by frequency, not by kind: what you move between all day is a pill in the
+middle, what you configure occasionally is one click further away behind the
+account button, and nothing that was reachable before is unreachable now.
+
+There are **no global keybindings** at all — no `⌘B`, no `⌘J`, nothing to
+collapse. `Escape` is deliberately left to whichever dialog is open, because
+the egress approval owns it, scoped to itself: one keypress must never both
+dismiss some chrome and silently refuse a pending web search. The only keys
+bound anywhere are the editor's own, inside the editor.
+
+![The account menu: variables and secrets, the terminal, the server's version, and the way out](assets/13-account.png)
+
+### A workspace: three views and four overlays
+
+Inside a workspace, two rules decide where everything goes.
+
+**A VIEW is a place you go.** Three of them — **Chat**, **Blueprint**,
+**Editor** — sitting side by side on a track that slides, one on screen at a
+time. Nothing overlaps, nothing stacks, and the header always names exactly
+where you are.
+
+Every view stays mounted at full size for its whole life, including the ones
+off screen. That is a correctness requirement rather than an animation trick: a
+hidden terminal measures zero and loses its scrollback structure permanently, a
+hidden canvas fits to `NaN`. So switching views never destroys a shell session
+or a graph you had positioned — the track moves, and nothing is added, removed
+or reparented.
+
+**An OVERLAY is a thing you consult.** Four buttons in the same header —
+**Agents**, **Receivers**, **Queue**, **Variables** — each opening a box under
+the header, one at a time, dismissed by clicking away from it. Picking an agent
+from the roster opens that agent's inspector in the same place, because opening
+an inspector *is* selecting an agent. Each box is resizable from a grip at its
+**bottom-left**: it is anchored top-right, so a bottom-right grip would be
+pinned against the edge it grows from and could only ever make it smaller. One
+size is remembered for all four, since they are read in the same corner and
+four sizes would be four settings for one habit.
+
+An overlay that is shut does not load and does not poll. Receivers cost two
+queries and the queue runs a timer; a workspace using neither pays for neither.
+
+### The Editor view
+
+The one view with parts, because editing genuinely is three things at once: the
+**Files** tree, the **file**, and a **shell** in the same directory. The tree
+and the shell each roll up to their own header rather than closing, so there is
+no "where did it go" state to recover from and no arrangement worth naming or
+saving.
+
+**Clicking a file moves the deck to the Editor view.** The chat does not stay
+beside it — it slides off screen and stays alive, mounted and streaming, so a
+turn you started is still running and still there when you slide back.
+
+**The shell never starts by itself.** It is behind a button that says why: a
+fresh shell is started per connection with no resume, so a view that opened one
+on mount would spawn a container on every page load and then show a shell with
+none of the scrollback, working directory or running process the operator
+expects. Four reloads, four containers — measured, not theorised. This is the
+per-workspace shell, scoped to that workspace's directory and open to anyone who
+can reach it; the server-wide Terminal in the account menu is a different thing
+and is an administrator's alone.
+
+![The Editor view: the tree, the file, and a shell you start yourself](assets/05-editor.png)
 
 **Diffs.** With unsaved edits open, **changes** shows them against what is on
 disk — two line-number columns, a sign column, and long runs of unchanged lines
@@ -1080,95 +1258,63 @@ indents rather than leaving the field, and long lines wrap on request. Like
 everything else here it is written in the product rather than installed — there
 is no highlighter library and no editor component behind it.
 
-Layouts persist per browser tab, with a seed for new tabs. Five arrangements
-ship ready-made — Converse, Build, Wire up, Canvas-first, Watch one agent — and
-you can save your own. `?layout=reset` in the URL recovers from anything.
-
-![The tree, the conversation, a file open in the editor and a shell underneath](assets/03-build-layout.png)
-
-![The conversation and the file tree as floating windows](assets/11-floats.png)
-
 ### Looks
 
-The interface has three, and they are whole designs rather than a density
-switch: each carries its own ground, accent, surface treatment and arrangement.
-Every screenshot in this document is Sketch unless its caption names another
-look.
+Appearance is two choices and nothing else: a **look**, and a **mode**. What
+this replaced was fourteen dials over the ground, the texture, the tint, the
+transparency of a surface and where the light on it came from. Every one of
+them could be set to a combination that made the interface worse, several could
+put unreadable text on a surface an operator had just tinted, and none of them
+was a decision anybody wanted to make twice.
 
-**Sketch** — the default, and what a fresh install opens on. Drawn: paper ground
-with the grain multiplied into it as tooth, ink outlines whose corners disagree,
-and handwriting on the chrome — panel names, buttons, the nav, headings. What it
-deliberately leaves alone is content. Code, logs, schemas, token counts and the
-transcript stay in the type they were already in, because a workbench whose
-stack traces are in a handwriting face is one nobody can read a stack trace in.
+A look is not a set of dials. It is a finished visual world — its ground, its
+accent, its corners, its idea of whether a surface has an edge or a shadow —
+authored once in tokens and drawn in **both** light and dark. Picking one is
+the whole interaction; there is nothing left to tune afterwards.
 
-It lands in light mode, since paper is light, and it does not pin it: every
-colour in it is a light/dark pair, so switching to dark gives the same drawing
-in chalk on slate. The handwriting is whatever the operating system already
-has — Bradley Hand, Segoe Print, Comic Sans in that order — because this
-interface downloads nothing at runtime and a webfont would be the first thing it
-ever fetched. Where none of them exists the chrome falls back to the UI face and
-the drawing carries the look on its own.
+Eleven of them, in the order they are offered:
 
-**Instrument** — a bench instrument. No light at all, hairlines carrying every
-boundary, nothing rounded, panel names stencilled in monospace, and every figure
-monospaced so a column of token spends lines up down the panel. The conversation
-stays in the centre.
+| Look | What it is for |
+|---|---|
+| **Air** | A white sheet on a grey ground. Two colours only: green means running, red means broken. |
+| **Calm** | Rounded and quiet. Nothing asks for attention until something needs it. |
+| **Slate** | The neutral one. No character to get tired of, which is the character. |
+| **Paper** | Warm stock and thin rules. Nothing hovers; everything is printed. |
+| **Terminal** | Phosphor on carbon. Square, hairlined, and green when it is live. |
+| **Blueprint** | A drafting table. Indigo ground, cyan for anything drawn on it. |
+| **Ember** | A warm room. Deep charcoal, orange for state, generous corners. |
+| **Mono** | No hue anywhere. Only weight and edge can stand out. |
+| **Nord** | Cool and low contrast on purpose. For a long session in a dim room. |
+| **Bloom** | Light, airy, violet. The decorative one, and the only graded ground. |
+| **Contrast** | Built for legibility. Real borders, pure grounds, no shadow to muddy an edge. |
 
-![Instrument](assets/13-instrument.png)
+**Air is the default**, and a fresh install opens in **light** rather than
+following the system — Air is a white sheet, and the first thing a new operator
+sees should be the thing the product is cut around rather than whichever half
+of it their laptop happened to pick at 6pm.
 
-**Canvas-first** — the wiring graph becomes the application. The menu shrinks to
-a rail of glyphs, the ground becomes a drafting grid, and panels float over it on
-shadows instead of dividing it. This deliberately contradicts the rule that the
-orchestrator chat is the way in, which is why it is a choice and not the default.
+The mode is **system**, **light** or **dark**, and it stays the operator's in
+all eleven looks: every one is drawn in both, because a look that only works
+dark is half a look. `system` follows the operating system and changes with it.
 
-![Canvas-first](assets/08-canvas-first.png)
+Every screenshot in this document is Air.
 
-![The three looks in Appearance](assets/04-appearance.png)
+![Appearance: a look, and a mode](assets/04-appearance.png)
 
-Choosing a look applies its arrangement too — picking Canvas-first and then
-hunting for a matching layout preset would be two decisions for one intention.
-A plain reload never overwrites an arrangement you built by hand, and neither
-does an upgrade: moving the default moved it for FRESH installs only.
+![The same install in dark](assets/14-dark.png)
 
-**Calm** is the fourth, and the opposite bet to Instrument: most of the time
-nothing in an install needs attention, so nothing in the interface asks for it.
-Rounded surfaces, one soft shadow, no borders except around something you type
-into — and colour held back entirely for state, so the one row that needs you is
-the only coloured thing on the screen. Both halves are drawn: the dark side
-lifts surfaces with light rather than dropping a shadow that a near-black ground
-would swallow.
+Each swatch in the dialog is painted from the look's own tokens, in the mode
+currently in force, rather than from a copy of them — so a swatch cannot
+promise a colour the look does not have.
 
-### Palette
-
-Independent of the look, so either one can wear any of it.
-
-One to three colours make the background gradient, and when there is a third it
-becomes the accent. Dials control grain and tint; the light has a strength dial
-whose left end is **off**, and while there is any it can be placed by hand or
-set drifting slowly around the screen. Turning it off hides the position pad and
-the drift with it — where the light falls is not a question worth asking when
-there is none. Panels are frosted glass or solid
-fill — solid genuinely switches the compositing off rather than blurring by
-zero — with the blur and the fill darkness on their own sliders. Five palettes
-ship ready-made: Graphite, Lime, Cobalt, Ember, Moss.
-
-![The same workspace in a warmer palette](assets/09-palette.png)
-
-You can put your own picture or looping clip behind everything, with a scrim
-dial so text stays readable over whatever you chose.
-
-![An operator's own backdrop — in Instrument](assets/10-backdrop.png)
-
-Light and dark both work and follow the system unless you pin one. In light mode
-the palette becomes a tint carried into a light ground rather than the ground
-itself, so your colours choose the character of the room without deciding
-whether it is lit.
-
-Everything here is stored on your device, and the interface fetches nothing at
-runtime: the grain texture, the maker's mark and your own backdrop are all
-carried inside the page. Nothing about your appearance settings leaves the
-machine.
+The choice is stored on the device, under `cogitorium.theme` in
+`localStorage`, and **nothing is fetched**: a look is `data-look` and
+`data-theme` on the root element and a table of custom properties in the
+stylesheet. A stored theme carrying fields nothing reads any more is fine, and
+a stored look that no longer exists lands on the default rather than on an
+attribute nothing styles. If the browser refuses to store the choice, the
+dialog says so instead of losing it quietly. Nothing about your appearance
+settings leaves the machine.
 
 ---
 
@@ -1185,10 +1331,110 @@ to any team it is shared with.
 the original's conversation behind. That is how two people run the same setup
 without sharing one.
 
-Admins get a map of the whole thing: users, teams, workspaces, and the owns /
-shared / member relationships between them.
+The **People** page is where users and teams are administered, and it draws the
+access map beside them: users, teams, workspaces, and the owns / shared /
+member relationships between them.
 
-![The access map](assets/06-people-map.png)
+![People, and the access map: who owns what, and which teams reach it](assets/06-people.png)
+
+---
+
+## The install map
+
+`/map`, in the pill nav, and open to every role.
+
+One zoomable scene at three depths, because zooming should approach rather than
+navigate:
+
+1. **the organisation** at the centre — this install, its people, its teams and
+   what it holds;
+2. **the workspaces** on a ring around it, each in the angular sector of
+   whatever it is related to, so a workspace granted to a team sits in that
+   team's wedge and its grant line is a short radial stub instead of a chord
+   across the canvas;
+3. **inside one** — click a workspace and its agents and their memory grow out
+   along its own bearing.
+
+Position encodes relation, deliberately. Mush is not caused by having many
+edges; it is caused by edges having to travel, which is a placement problem.
+And the links inside the core are drawn only as you zoom in: at map scale they
+are forty small things and the lines between them, which is a smudge, so they
+fade in at the depth where they can be read. The layout is deterministic — the
+same install draws the same map on every load, because an operator's memory of
+where a thing sits is the only reason a spatial view beats a list.
+
+Only kinds the server actually sends are drawn. `GET /api/v1/map` returns
+users, teams and workspaces; a workspace's own graph returns agents, gears,
+shared and private memory, documents and instructions. There are no skills,
+gates or receivers on it: a lane that is permanently empty is not a neutral
+omission, it is a positive claim that the install has no doors in.
+
+**`GET /api/v1/map` is no longer admin-only, and the scope is enforced on the
+server.** An administrator sees the install. Anybody else sees only what they
+can already reach: their own teams, the people they share a team with, and the
+workspaces visible to them. Filtering it in the browser would not be a smaller
+version of the same thing — the payload would still name every workspace on
+the server, and a member reading one HTTP response would learn the shape of
+rooms they have no grant on. The test that matters greps the raw JSON for a
+name, not the rendered graph.
+
+After that filtering an edge may point at something no longer there — a
+workspace owned by somebody the caller cannot see. Those edges are dropped
+rather than left dangling, and such a workspace reads as `unowned`: an edge to
+a missing node is worse than no edge, because it names the thing it points at.
+
+Gears are fetched separately and are allowed to fail: a member cannot list
+them, and a core with one shell fewer is honest where a map that refuses to
+load because an optional shell answered 403 is not. People are **not** fetched
+separately — they are already in the map payload, filtered server-side, and a
+second endpoint would be a second answer to the same question, the one that is
+not permission-scoped.
+
+![The install map: the organisation at the centre, the workspaces on a ring around it](assets/09-map.png)
+
+![One workspace opened: its agents and their memory, grown along its own bearing](assets/10-map-open.png)
+
+---
+
+## Workspace colour
+
+A workspace carries a **hue**, in degrees.
+
+```
+PATCH /api/v1/workspaces/{id}    {"hue": 210}   set it
+PATCH /api/v1/workspaces/{id}    {"hue": null}  clear it
+```
+
+In the interface it is chosen from the coloured edge of the workspace's own
+card, which is the thing the colour colours. **Anyone who can reach the
+workspace may set it**, not only its owner: a colour is how a team refers to a
+room out loud, and making it the owner's privilege would mean the person who
+works in it every day cannot fix a shade they cannot tell from the one next to
+it. Nothing here grants access, so there is nothing to escalate.
+
+**An unset hue is derived from the id and never written back.** A workspace
+nobody has coloured still gets a colour — walked by id through a ring of ten
+hues, so it is stable and two neighbouring workspaces are never the same
+shade — but
+that colour is not persisted. The moment an unset hue is stored, "nobody chose
+this" and "somebody chose exactly this" become the same state, and an install
+can never again be told apart from one that was hand-tuned. Clearing a colour
+returns it to derived, and the picker's clear button is disabled when there is
+nothing to clear.
+
+Saturation and lightness are not stored either. They are resolved in the
+interface so they move with the look and the mode: a stored `#rrggbb` picked
+under one look is unreadable under another, and there is no migration that can
+repair a colour somebody chose under different rules.
+
+The absent-versus-null distinction is carried in the route on purpose. An
+absent `hue` means *do not touch the colour* and an explicit `null` means *take
+it away*, and those must not collapse — otherwise every future field on this
+route would erase somebody's colour as a side effect of editing something else.
+Sending neither is refused with `send a hue to set one, or null to clear it`.
+
+A colour is **not carried in an export bundle**. A bundle is a template handed
+to somebody else, and which colour a room wears in their install is theirs.
 
 ---
 
@@ -1235,8 +1481,16 @@ Off by default. Set `terminal: true` and restart. It requires a sandbox: without
 Docker the request is refused rather than served with the server's own file
 access.
 
-A workspace terminal is scoped to that workspace's directory and open to its
-members. A server-wide terminal is admin-only. No agent can open either.
+There are two of them, and only one is an administrator's.
+
+- **A workspace's own shell** lives in the Editor view, is scoped to that
+  workspace's directory, and is open to **anyone who can reach the workspace**.
+  It starts only when you press the button, because a session is never
+  restored.
+- **The server-wide Terminal**, in the account menu, is **admin-only**. It is
+  not scoped to anything, which is the whole of the reason.
+
+No agent can open either.
 
 ---
 
@@ -1253,7 +1507,6 @@ then defaults.
 | `log_level` | `COGITORIUM_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 | `contextd_path` | `COGITORIUM_CONTEXTD` | `contextd` | How to find the Contextverse CLI. |
 | `browser_image` | `COGITORIUM_BROWSER_IMAGE` | `mcr.microsoft.com/playwright:v1.56.0-noble` | What the `browser` environment resolves to. Pinned rather than a moving tag: an image that changed under an approved gear would change what it runs inside without the approval changing. |
-| `mcp_clients` | `COGITORIUM_MCP_CLIENTS` | `false` | Lets an operator install external MCP servers and grant their tools to an agent. It runs a command this install never saw the source of, on the host — see above. |
 | `mcp_clients` | `COGITORIUM_MCP_CLIENTS` | `false` | Lets an operator install external MCP servers and grant their tools to an agent. It runs a command this install never saw the source of, on the host — read the section above before switching it on. |
 | `sandbox_pool` | `COGITORIUM_SANDBOX_POOL` | `0` | Warm containers to keep per image instead of creating one per run. Zero is off. The one setting here that trades isolation for latency — see below. |
 | `sandbox` | `COGITORIUM_SANDBOX` | `auto` | `auto`, `docker`, `kubernetes` or `subprocess`. `auto` uses Docker when it answers and says so when it cannot; it never selects `kubernetes`, which is a deliberate deployment. |
@@ -1276,10 +1529,22 @@ then defaults.
 | `public_url` | — | — | How this install is reached from outside. Used only to put fetchable file links into a callback. |
 | `budget_run_tokens` | — | 0 (off) | The most one run may spend before it is stopped. Bounds what a caller through an inlet can cost; there is no workspace-wide version on purpose. |
 | — | `COGITORIUM_SECRET_KEY` | — | Encrypts secrets held in this install's database. Has no config-file key on purpose: on Kubernetes the config file is a ConfigMap, and a key beside its own ciphertext protects nothing. |
+| — | `COGITORIUM_ADMIN_TOKEN` | — | Seeds the first admin's token instead of generating one and printing it. At least 24 characters, checked at startup rather than at first use. Environment-only for the same reason as the key above. |
+
+**`COGITORIUM_ADMIN_TOKEN` exists for a cluster.** Without it the server
+generates a token and prints it once, which is correct on a laptop and wrong in
+a pod, where "printed once" means "in the log, for anyone who can read logs".
+With it, nothing sensitive is ever written to the log. It has no `config.yaml`
+key on purpose: the config file is a ConfigMap, a ConfigMap is not a secret,
+and leaving the key out of the file means it cannot be put there by mistake. A
+short one is refused at startup rather than accepted quietly — a seeded admin
+token is the whole front door, and `admin` as a token would be worse than the
+generated one it replaced.
 
 `--config` points at a config file; `--listen`, `--data` and `--log-level` are
-the only flags. Booleans are strict: only `1` and `true` enable, so
-`COGITORIUM_EGRESS=0` is a working off-switch over a file that says otherwise.
+the only flags. Booleans take `1` or `true`, case-insensitively, and nothing
+else enables — so `COGITORIUM_EGRESS=0` is a working off-switch over a file
+that says otherwise.
 
 The server refuses to start if egress is enabled without a sandbox, without a
 credential, or with any `*_PROXY` variable set — a proxy would make every
@@ -1309,7 +1574,9 @@ What is actually true, without softening:
   cannot be — that is what granting a key and a network means together, and the
   approval screen is the whole of the control.
 - **The terminal** is off by default, requires a sandbox, and is never reachable
-  by an agent.
+  by an agent. A workspace's own shell is open to anyone who can reach that
+  workspace and confined to its directory; the server-wide one, confined to
+  nothing, is an administrator's alone.
 - **Egress** is off by default and needs two human decisions plus a per-query
   approval. It bounds and records; it does not prevent exfiltration.
 - **Provider credentials** can only be changed by an admin, and repointing a
@@ -1335,10 +1602,13 @@ What is actually true, without softening:
 Open defects, stated rather than discovered. Each one is real, reproduced, and
 has a fix that deserves its own thinking rather than a quick loosening.
 
-**A shell does not survive a reload.** Restoring a layout brings the terminal
-panel back, not the session — the previous shell is gone along with its
-scrollback and working directory. This is deliberate rather than broken, and it
-is stated here because the panel coming back empty looks like a fault.
+**A shell does not survive a reload.** A fresh shell is started per connection
+with no resume, so reopening the Editor view brings back the button, not the
+session — the previous shell is gone along with its scrollback and working
+directory. This is deliberate rather than broken, and it is why the shell is
+behind a button that says so: starting one automatically would spawn a
+container on every page load and then show an empty session as though it were
+the one you left.
 
 **The shell works on a copy, and nothing is carried back.** A workspace's files
 are streamed into the container when the session opens; the shell can read and

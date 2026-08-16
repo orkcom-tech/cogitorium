@@ -290,7 +290,13 @@ func TestAdminOnlyRoutesRefuseNonAdmins(t *testing.T) {
 		{"delete team", "DELETE", "/api/v1/teams/" + id(tm.reviewers.ID), ""},
 		{"add team member", "POST", "/api/v1/teams/" + id(tm.reviewers.ID) + "/members", `{"user_id":` + id(tm.alice.ID) + `}`},
 		{"remove team member", "DELETE", "/api/v1/teams/" + id(tm.reviewers.ID) + "/members/" + id(tm.bob.ID), ""},
-		{"access map", "GET", "/api/v1/map", ""},
+		// The map is deliberately NOT on this list any more. It is scoped to
+		// the caller rather than refused: an administrator sees the install,
+		// and anybody else sees only their own teams, the people they share a
+		// team with, and the workspaces already visible to them. What that
+		// scoping must never leak is asserted in map_scope_test.go against the
+		// raw response body — a route that answers 403 proves nothing about a
+		// route that answers 200 with somebody else's workspace in it.
 		{"create provider", "POST", "/api/v1/providers", `{"name":"theirs","type":"openai-compatible","base_url":"` + deadProvider + `","api_key":"k"}`},
 		{"update provider", "PATCH", "/api/v1/providers/" + id(tm.providerID), `{"name":"renamed"}`},
 		{"delete provider", "DELETE", "/api/v1/providers/" + id(tm.providerID), ""},

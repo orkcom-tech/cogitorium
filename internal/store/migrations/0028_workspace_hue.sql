@@ -1,0 +1,12 @@
+-- A workspace's colour, so a team can say "the amber one" and mean something.
+--
+-- NULL rather than a default hue on purpose: a workspace nobody has coloured
+-- is DIFFERENT from one somebody chose grey for, and only the first may be
+-- given a colour derived from its id. Writing a default in here would erase
+-- that distinction on every existing row and make every install look
+-- hand-tuned when nothing had been tuned.
+--
+-- Stored as a hue in degrees rather than a hex string. The interface owns
+-- saturation and lightness — those have to move with the look and the mode,
+-- and a stored #rrggbb chosen against one look is unreadable on the next.
+ALTER TABLE workspaces ADD COLUMN hue INTEGER;

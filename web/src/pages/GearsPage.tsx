@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Select } from './Select'
+import { Field, Fields } from './Field'
 import {
   api,
   type EnvStatus,
@@ -99,14 +101,13 @@ export default function GearsPage({ me }: { me: User }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <select value={tag} onChange={(e) => setTag(e.target.value)}>
-          <option value="">all tags</option>
-          {allTags.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={tag}
+          aria-label="Filter by tag"
+          placeholder="all tags"
+          onChange={setTag}
+          options={[{ value: '', label: 'all tags' }, ...allTags.map((t) => ({ value: t, label: t }))]}
+        />
         <button onClick={() => setAuthoring((v) => !v)}>{authoring ? 'cancel' : 'write a gear'}</button>
       </div>
       {authoring && (
@@ -286,7 +287,17 @@ function GearCard({
             without seeing which credentials this code gets or whether it may
             reach out, and that is the decision this whole screen exists to
             make possible. Same single click, moved to where the facts are. */}
-        <button onClick={onToggle}>
+        {/* On a pending gear this is the primary action of the card and it is
+            styled like one. It was a plain button in a row of plain buttons,
+            indistinguishable from "delete" — on the one screen whose entire
+            purpose is deciding whether agent-written code may run, the way in
+            had to be hunted for.
+
+            Loud here, considered inside: this button only OPENS the review.
+            The approval itself is still below, beside the credentials and the
+            network grant it confers, so nothing is ever approved from a
+            collapsed card. */}
+        <button className={g.status === 'pending' && !open ? 'primary' : ''} onClick={onToggle}>
           {open ? 'hide' : g.status === 'approved' ? 'review & run' : 'review & approve'}
         </button>
         {g.status === 'approved' && <button onClick={() => setStatus('disabled')}>disable</button>}
@@ -459,10 +470,18 @@ function GearCard({
               </p>
             )}
 
+            {/* The most consequential button in the product is the first one
+                below: it is what lets agent-written code run on this machine.
+                It is styled as the primary action because it IS the decision
+                this screen exists to make — and it sits here, under the source
+                and beside the grants it confers, so it can only be pressed by
+                somebody who has been shown both. */}
             {isAdmin ? (
               <div className="row">
                 {g.status !== 'approved' ? (
-                  <button onClick={() => setStatus('approved')}>approve, with these grants</button>
+                  <button className="primary" onClick={() => setStatus('approved')}>
+                    approve, with these grants
+                  </button>
                 ) : (
                   <button onClick={saveNetwork} disabled={!netChanged}>
                     {netChanged ? 'save the network grant' : 'network grant saved'}
@@ -487,7 +506,8 @@ function GearCard({
                 className="grow"
                 value={dryArgs}
                 onChange={(e) => setDryArgs(e.target.value)}
-                placeholder='arguments as JSON, e.g. {"numbers": [1, 2, 3]}'
+                aria-label="Arguments"
+                placeholder='{"numbers": [1, 2, 3]}'
               />
               <button onClick={dryRun} disabled={running}>
                 {running ? 'running…' : 'run'}
@@ -701,22 +721,34 @@ function AuthorGearForm({ onDone, onError }: { onDone: () => void; onError: (m: 
           .catch((err: Error) => onError(err.message))
       }}
     >
-      <div className="row">
-        <input required placeholder="name, e.g. csv_summarize" value={name} onChange={(e) => setName(e.target.value)} />
-        <select value={runtime} onChange={(e) => setRuntime(e.target.value)}>
-          <option value="python">python</option>
-          <option value="node">node</option>
-          <option value="bash">bash</option>
-          <option value="binary">executable</option>
-        </select>
-        <input
-          className="grow"
-          placeholder="what it does — agents read this"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <input placeholder="tags, comma separated" value={tags} onChange={(e) => setTags(e.target.value)} />
-      </div>
+      <Fields>
+        <Field label="Name" hint="lower case with underscores — this is what an agent calls the tool by">
+          <input required placeholder="csv_summarize" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="Runtime" hint="what runs the file; executable takes a compiled binary">
+          <Select
+            value={runtime}
+            aria-label="Runtime"
+            onChange={setRuntime}
+            options={[
+              { value: 'python', label: 'python' },
+              { value: 'node', label: 'node' },
+              { value: 'bash', label: 'bash' },
+              { value: 'binary', label: 'executable' },
+            ]}
+          />
+        </Field>
+        <Field
+          wide
+          label="Description"
+          hint="an agent reads this to decide whether to reach for the tool, so write it for the agent"
+        >
+          <input value={description} onChange={(e) => setDescription(e.target.value)} />
+        </Field>
+        <Field label="Tags" hint="comma separated; the catalogue filters on these">
+          <input placeholder="csv, reporting" value={tags} onChange={(e) => setTags(e.target.value)} />
+        </Field>
+      </Fields>
 
       <div className="tabs">
         <button type="button" className={source === 'write' ? 'active' : ''} onClick={() => setSource('write')}>
@@ -756,14 +788,13 @@ function AuthorGearForm({ onDone, onError }: { onDone: () => void; onError: (m: 
               ))}
               <label className="field">
                 <span className="muted">which of them runs</span>
-                <select value={entrypoint} onChange={(e) => setEntrypoint(e.target.value)}>
-                  <option value="">pick the entrypoint…</option>
-                  {files.map((f) => (
-                    <option key={f.path} value={f.path}>
-                      {f.path}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  value={entrypoint}
+                  aria-label="Entrypoint — which of the files runs"
+                  placeholder="pick the entrypoint…"
+                  onChange={setEntrypoint}
+                  options={files.map((f) => ({ value: f.path, label: f.path }))}
+                />
               </label>
             </>
           )}

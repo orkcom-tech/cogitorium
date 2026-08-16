@@ -421,6 +421,10 @@ export const api = {
     create: (w: { name: string; description: string; orchestrator_model_id: number }) =>
       req<Workspace>('/api/v1/workspaces', { method: 'POST', body: JSON.stringify(w) }),
     remove: (id: number) => req<void>(`/api/v1/workspaces/${id}`, { method: 'DELETE' }),
+    // null clears the colour. Omitting the field is a 400 rather than a
+    // silent no-op, so there is deliberately no way to call this with nothing.
+    colour: (id: number, hue: number | null) =>
+      req<Workspace>(`/api/v1/workspaces/${id}`, { method: 'PATCH', body: JSON.stringify({ hue }) }),
     clone: (id: number, name: string) =>
       req<Workspace>(`/api/v1/workspaces/${id}/clone`, { method: 'POST', body: JSON.stringify({ name }) }),
     share: (id: number, teamId: number) =>
@@ -785,6 +789,10 @@ export type Workspace = {
   shared_branch: string
   owner_id: number | null
   team_ids: number[]
+  // The colour somebody gave this workspace, in degrees, or null when nobody
+  // has. Null is not "grey" — only an uncoloured workspace may be given one
+  // derived from its id, and this is what says it is allowed to be.
+  hue: number | null
 }
 
 // A portable workspace: agents, wiring, and optionally the source of its gears

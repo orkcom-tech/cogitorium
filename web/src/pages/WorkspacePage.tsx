@@ -9,15 +9,10 @@ import ApprovalDialog from './ApprovalDialog'
 import InletsPanel from './InletsPanel'
 import QueuePanel from './QueuePanel'
 import EnvPanel from './EnvPanel'
-import Bench, { type PanelDef } from '../bench/Bench'
-import { useLayout } from '../bench/store'
-import { loadTheme } from '../styles/theme'
-import { PRESETS } from '../bench/presets'
-import LayoutMenu from '../bench/LayoutMenu'
-
-// The set of ids the layout parser will accept. A restored layout naming a
-// panel nothing can render would otherwise be a permanent white screen.
-const PANEL_IDS = new Set(['chat', 'blueprint', 'files', 'editor', 'terminal', 'agents', 'agent', 'inlets', 'queue', 'env'])
+import { Select } from './Select'
+import { Deck, DeckBar, OverlayHost, ShellGate, Workbench } from '../deck/Deck'
+import { useDeck } from '../deck/store'
+import type { OverlayId } from '../deck/types'
 import {
   api,
   wsChatStream,
@@ -213,86 +208,40 @@ export default function WorkspacePage() {
       .catch((e: Error) => setError(e.message))
   }
 
-  const layout = useLayout(1, (id) => PANEL_IDS.has(id))
+  const deck = useDeck(1)
+  // The one overlay currently open, if any. Not persisted, deliberately: an
+  // overlay is something you consulted a minute ago, not part of how the
+  // workspace is arranged, and restoring one on load would put a panel over
+  // the operator's work for a question they already had answered.
+  const [overlay, setOverlay] = useState<OverlayId | null>(null)
+  // Whether the operator has asked for a shell IN THIS SESSION. Never
+  // persisted: see ShellGate.
+  const [shell, setShell] = useState(false)
 
-  // The look carries its own arrangement. Choosing "canvas-first" and then
-  // having to hunt for a matching layout preset would be two decisions for
-  // one intention.
-  const lookRef = useRef<string | null>(null)
-  useEffect(() => {
-    const apply = () => {
-      const look = loadTheme().look
-      if (lookRef.current === look) return
-      const first = lookRef.current === null
-      lookRef.current = look
-      if (first) return // never overwrite an arrangement on a plain reload
-      const preset = PRESETS.find((p) => (look === 'canvas' ? p.id === 'canvasfirst' : p.id === 'wire'))
-      if (preset) layout.apply(preset.build())
-    }
-    apply()
-    const t = setInterval(apply, 1200)
-    return () => clearInterval(t)
-  }, [layout])
-
-  // Opening a file clears the bench for it.
+  // Opening a file goes to the workbench, which is the view a file lives in.
   //
-  // A file wants width. Everything except the conversation, the shell and the
-  // tree you clicked in is put away, and the conversation simply narrows
-  // rather than closing — watching a turn while editing what it produced is
-  // the whole reason both are on screen. Nothing is destroyed: every panel put
-  // away here is one chip away in the top bar, and the editor itself can be
-  // floated out like any other.
-  const KEEP_WITH_EDITOR = new Set(['chat', 'terminal', 'files', 'editor'])
+  // This used to be nine lines that closed five panels by name and then asked
+  // the side dock for 760px, because a file had to fight the blueprint and the
+  // queue for the same slot. A view does not share, so there is nothing to
+  // clear and nothing to size.
   const openFile = useCallback(
     (path: string) => {
       setOpenPath(path)
-      for (const id of PANEL_IDS) if (!KEEP_WITH_EDITOR.has(id)) layout.close(id)
-      setSelectedAgent(null)
-      layout.show('editor', 'aux')
-      // A file needs width, and the side slot arrives at whatever the last
-      // panel to sit in it left behind — 460px from the blueprint, which is
-      // not a file. Ask for a generous one; the bench clamps stored sizes at
-      // paint time against its own box, so this is an intent rather than a
-      // measurement, and it survives being asked for on a small screen.
-      layout.resize('aux', 760)
+      deck.go('workbench')
     },
-    // KEEP_WITH_EDITOR is a module-level constant in spirit; rebuilding it per
-    // render costs nothing and keeps it beside the rule it encodes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layout],
+    [deck],
   )
 
-  // The inspector opens by clicking an agent and closes when the selection
-  // goes. A restored layout must not bring back an empty one — that is the
-  // "Agents / Agent, which is which?" confusion, rebuilt on every reload.
+  // The inspector belongs to a selection, so it closes with it — and opening
+  // it IS selecting an agent. That removes the "Agents / Agent, which is
+  // which?" confusion by construction rather than by naming them apart.
   useEffect(() => {
-    if (!selectedAgent && layout.slotOf('agent')) layout.close('agent')
-  }, [selectedAgent, layout])
+    if (!selectedAgent && overlay === 'agent') setOverlay(null)
+  }, [selectedAgent, overlay])
 
-  // Same rule as the agent inspector: a restored layout must not bring back an
-  // editor with no file in it.
-  useEffect(() => {
-    if (!openPath && layout.slotOf('editor')) layout.close('editor')
-  }, [openPath, layout])
-
-  // ⌘↵ maximizes the focused panel; Escape is deliberately NOT bound here —
-  // the approval dialog owns it, so one keypress can never both dismiss chrome
-  // and silently refuse a pending web search.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        e.preventDefault()
-        layout.maximize(layout.layout.slots.main.active)
-      }
-      // ⌘J toggles the bottom dock, the way an editor's panel key works.
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
-        e.preventDefault()
-        if (layout.layout.slots.bottom.panels.length > 0) layout.toggleOpen('bottom')
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [layout])
+  // Escape is deliberately bound nowhere: the approval dialog owns it, so one
+  // keypress can never both dismiss chrome and silently refuse a pending web
+  // search. An overlay closes by clicking away from it, or on its own button.
 
   if (!workspace) {
     return (
@@ -308,200 +257,188 @@ export default function WorkspacePage() {
   const agentName = (id: number | null) =>
     id == null ? '(deleted agent)' : agents.find((a) => a.id === id)?.name ?? `agent #${id}`
 
-  // Panel nodes are rebuilt on every render, which is exactly what happened
-  // before the bench existed. What matters is that the ARRAY is stable and
-  // keyed by id: React keeps each subtree alive, so the terminal's socket and
-  // the blueprint's canvas survive being moved between slots.
-  const panels: PanelDef[] = [
-    {
-      id: 'chat',
-      minW: 520,
-      title: 'Chat',
-      home: 'main',
-      canClose: false,
-      node: (
-        <div className="bn-body chat-body">
-          <Timeline messages={messages} streams={streams} agentName={agentName} busy={busy} onForget={forget} />
-          <Composer
-            busy={busy}
-            onSend={send}
-            onStop={() => abortRef.current?.abort()}
-            onAttach={(file) => api.workspaces.attach(wsId, file)}
-          />
-        </div>
-      ),
-    },
-    {
-      id: 'blueprint',
-      minW: 420,
-      title: 'Blueprint',
-      home: 'aux',
-      node: (
-        <div className="bn-body">
-          <BlueprintEditor
-            wsId={wsId}
-            agents={agents}
-            models={models}
-            statuses={statuses}
-            onChanged={reloadAgents}
-            onSelectAgent={(a) => {
+  // The three views, and the four things you consult.
+  //
+  // Every view is mounted for the whole life of the page — see Deck's
+  // invariant. The nodes below are rebuilt on each render and that is fine;
+  // what matters is that the tree shape never changes, so the terminal's
+  // socket and the blueprint's canvas are never torn down.
+  const roster = (
+    <div className="dk-body agent-cards">
+      {agents.map((a) => {
+        const st = statuses.get(a.id)
+        const state = st?.state ?? 'idle'
+        const u = usage.get(a.id)
+        // The bar is this agent's share of the workspace's spend, not a
+        // percentage of some invented budget. A number nobody can act on is
+        // decoration; a share tells you where the money went.
+        const total = [...usage.values()].reduce((n, x) => n + x.input_tokens + x.output_tokens, 0)
+        const mine = u ? u.input_tokens + u.output_tokens : 0
+        const share = total > 0 ? Math.round((mine / total) * 100) : 0
+        return (
+          <button
+            key={a.id}
+            className={`agent-card ${selectedAgent?.id === a.id ? 'selected' : ''}`}
+            onClick={() => {
               setSelectedAgent(a)
-              layout.show('agent', 'aux')
+              setOverlay('agent')
             }}
-            onError={setError}
-          />
-        </div>
-      ),
-    },
-    {
-      id: 'files',
-      minW: 200,
-      title: 'Files',
-      home: 'left',
-      node: (
-        <div className="bn-body bn-scroll">
-          <FilesPage wsId={wsId} openPath={openPath} savedTick={savedTick} onOpen={openFile} onError={setError} />
-        </div>
-      ),
-    },
-    {
-      id: 'editor',
-      minW: 460,
-      // The title is the file, so a tab strip never says "Editor" twice.
-      title: openPath ? openPath.slice(openPath.lastIndexOf('/') + 1) : 'Editor',
-      home: 'aux',
-      node: (
-        <CodeEditor
-          wsId={wsId}
-          path={openPath}
-          onClose={() => {
-            setOpenPath(null)
-            layout.close('editor')
-          }}
-          onSaved={() => setSavedTick((n) => n + 1)}
-          onError={setError}
+          >
+            <span className="agent-card-head">
+              <span className={`dot ${state}`} title={state + (st?.detail ? `: ${st.detail}` : '')} />
+              <span className="agent-name">{a.name}</span>
+              {a.is_orchestrator && <span className="star" title="the workspace entry point">★</span>}
+            </span>
+            <span className="agent-spend-big" title={spendTitle(u)}>
+              {spendLabel(u)}
+            </span>
+            <span className="agent-model muted">{a.model_label || 'no model'}</span>
+            <span className="share-bar" aria-hidden>
+              <span style={{ width: `${share}%` }} />
+            </span>
+            <span className="muted share-label">{total > 0 ? `${share}% of this workspace` : 'no spend yet'}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+
+  // An overlay that is shut does not load and does not poll. The receivers
+  // cost two queries, the queue runs a timer, and a workspace using neither
+  // should pay for neither.
+  const OVERLAYS: { id: OverlayId; title: string }[] = [
+    { id: 'agents', title: 'Agents' },
+    { id: 'inlets', title: 'Receivers' },
+    { id: 'queue', title: 'Queue' },
+    { id: 'env', title: 'Variables' },
+  ]
+  const overlayTitle =
+    overlay === 'agent'
+      ? (selectedAgent?.name ?? 'Agent')
+      : (OVERLAYS.find((o) => o.id === overlay)?.title ?? '')
+
+  return (
+    <div className="ws-shell">
+      {approval && <ApprovalDialog request={approval} onAnswer={answerApproval} busy={answering} />}
+      {exporting && <ExportDialog wsId={wsId} name={workspace.name} onClose={() => setExporting(false)} />}
+      <div className="ws-head">
+        {/* The way out of a workspace is a real control, not a glyph.
+            It was a bare arrow in muted grey, hard against the left edge and
+            the same size as body text — the operator had to hunt for the
+            button that leaves the screen they are on. */}
+        <Link to="/workspaces" className="ws-back round" title="Back to all workspaces" aria-label="Back to all workspaces">
+          <span aria-hidden>←</span>
+        </Link>
+        <h2>{workspace.name}</h2>
+        <span className="muted">{workspace.description}</span>
+        <span className="spacer" />
+        <DeckBar
+          view={deck.deck.view}
+          onGo={deck.go}
+          overlay={overlay}
+          onOverlay={setOverlay}
+          overlays={OVERLAYS}
         />
-      ),
-    },
-    {
-      id: 'terminal',
-      minW: 360,
-      title: 'Terminal',
-      home: 'bottom',
-      restore: 'onDemand',
-      node: (
-        <div className="bn-body">
-          <TerminalPage workspaceId={wsId} />
-        </div>
-      ),
-    },
-    {
-      id: 'agents',
-      minW: 200,
-      title: 'Agents',
-      home: 'right',
-      node: (
-        <div className="bn-body bn-scroll agent-cards">
-          {agents.map((a) => {
-            const st = statuses.get(a.id)
-            const state = st?.state ?? 'idle'
-            const u = usage.get(a.id)
-            // The bar is this agent's share of the workspace's spend, not a
-            // percentage of some invented budget. A number nobody can act on
-            // is decoration; a share tells you where the money went.
-            const total = [...usage.values()].reduce((n, x) => n + x.input_tokens + x.output_tokens, 0)
-            const mine = u ? u.input_tokens + u.output_tokens : 0
-            const share = total > 0 ? Math.round((mine / total) * 100) : 0
-            return (
-              <button
-                key={a.id}
-                className={`agent-card ${selectedAgent?.id === a.id ? 'selected' : ''}`}
-                onClick={() => {
-                  setSelectedAgent(a)
-                  layout.show('agent', 'aux')
-                }}
-              >
-                <span className="agent-card-head">
-                  <span className={`dot ${state}`} title={state + (st?.detail ? `: ${st.detail}` : '')} />
-                  <span className="agent-name">{a.name}</span>
-                  {a.is_orchestrator && <span className="star" title="the workspace entry point">★</span>}
-                </span>
-                <span className="agent-spend-big" title={spendTitle(u)}>
-                  {spendLabel(u)}
-                </span>
-                <span className="agent-model muted">{a.model_label || 'no model'}</span>
-                <span className="share-bar" aria-hidden>
-                  <span style={{ width: `${share}%` }} />
-                </span>
-                <span className="muted share-label">{total > 0 ? `${share}% of this workspace` : 'no spend yet'}</span>
-              </button>
-            )
-          })}
-        </div>
-      ),
-    },
-    {
-      id: 'inlets',
-      minW: 460,
-      title: 'Receivers',
-      home: 'aux',
-      node: (
-        <div className="bn-body bn-scroll">
-          {/* Whether the panel is placed at all decides whether it loads: the
-              bench keeps every panel mounted, and a workspace with no doors
-              should not pay two queries on every open for a feature it does
-              not use. */}
-          <InletsPanel wsId={wsId} agents={agents} shown={!!layout.slotOf('inlets')} onError={setError} />
-        </div>
-      ),
-    },
-    {
-      id: 'queue',
-      minW: 460,
-      title: 'Queue',
-      home: 'aux',
-      node: (
-        <div className="bn-body bn-scroll">
-          {/* Same rule as the inlets panel: placed decides loaded. This one
-              polls while it is on screen, so a panel nobody put out must not
-              be running a timer. */}
-          <QueuePanel wsId={wsId} shown={!!layout.slotOf('queue')} onError={setError} />
-        </div>
-      ),
-    },
-    {
-      id: 'env',
-      minW: 460,
-      title: 'Variables',
-      home: 'aux',
-      node: (
-        <div className="bn-body bn-scroll">
-          {/* Placed or not decides whether it loads, exactly as the inlets
-              panel does: the bench keeps every panel mounted, and a workspace
-              that overrides no names should not pay a query on every open. */}
-          <EnvPanel wsId={wsId} shown={!!layout.slotOf('env')} onError={setError} />
-        </div>
-      ),
-    },
-    {
-      id: 'agent',
-      minW: 420,
-      // The title IS the agent's name, so "Agents" (the roster) and this can
-      // never be mistaken for each other on a tab strip.
-      title: selectedAgent ? selectedAgent.name : 'Agent',
-      home: 'aux',
-      node: (
-        <div className="bn-body bn-scroll">
-          {selectedAgent ? (
+        <button
+          onClick={() => setExporting(true)}
+          title="Download this workspace as a bundle another install can rebuild it from"
+        >
+          export
+        </button>
+      </div>
+      {error && (
+        <p className="error" onClick={() => setError(null)} title="dismiss">
+          {error}
+        </p>
+      )}
+
+      <Deck
+        view={deck.deck.view}
+        views={[
+          {
+            id: 'chat',
+            node: (
+              <div className="dk-body chat-body">
+                <Timeline messages={messages} streams={streams} agentName={agentName} busy={busy} onForget={forget} />
+                <Composer
+                  busy={busy}
+                  onSend={send}
+                  onStop={() => abortRef.current?.abort()}
+                  onAttach={(file) => api.workspaces.attach(wsId, file)}
+                />
+              </div>
+            ),
+          },
+          {
+            id: 'blueprint',
+            node: (
+              <div className="dk-body">
+                <BlueprintEditor
+                  wsId={wsId}
+                  agents={agents}
+                  models={models}
+                  statuses={statuses}
+                  onChanged={reloadAgents}
+                  onSelectAgent={(a) => {
+                    setSelectedAgent(a)
+                    setOverlay('agent')
+                  }}
+                  onError={setError}
+                />
+              </div>
+            ),
+          },
+          {
+            id: 'workbench',
+            node: (
+              <Workbench
+                deck={deck}
+                files={
+                  <div className="dk-body dk-scroll">
+                    <FilesPage
+                      wsId={wsId}
+                      openPath={openPath}
+                      savedTick={savedTick}
+                      onOpen={openFile}
+                      onError={setError}
+                    />
+                  </div>
+                }
+                editor={
+                  <CodeEditor
+                    wsId={wsId}
+                    path={openPath}
+                    onClose={() => setOpenPath(null)}
+                    onSaved={() => setSavedTick((n) => n + 1)}
+                    onError={setError}
+                  />
+                }
+                terminal={
+                  <ShellGate started={shell} onStart={() => setShell(true)}>
+                    <div className="dk-body">
+                      <TerminalPage workspaceId={wsId} />
+                    </div>
+                  </ShellGate>
+                }
+              />
+            ),
+          },
+        ]}
+      />
+
+      <OverlayHost open={overlay} title={overlayTitle} deck={deck} onClose={() => setOverlay(null)}>
+        {overlay === 'agents' && roster}
+        {overlay === 'inlets' && <InletsPanel wsId={wsId} agents={agents} shown onError={setError} />}
+        {overlay === 'queue' && <QueuePanel wsId={wsId} shown onError={setError} />}
+        {overlay === 'env' && <EnvPanel wsId={wsId} shown onError={setError} />}
+        {overlay === 'agent' &&
+          (selectedAgent ? (
             <AgentPanel
               agent={selectedAgent}
               models={models}
               wsId={wsId}
               status={statuses.get(selectedAgent.id)}
-              onClose={() => {
-                setSelectedAgent(null)
-                layout.close('agent')
-              }}
+              onClose={() => setSelectedAgent(null)}
               onChanged={(a) => {
                 setSelectedAgent(a)
                 void reloadAgents()
@@ -510,53 +447,8 @@ export default function WorkspacePage() {
             />
           ) : (
             <p className="hint">Pick an agent from the roster to inspect it.</p>
-          )}
-        </div>
-      ),
-    },
-  ]
-
-  return (
-    <div className="ws-shell">
-      {approval && <ApprovalDialog request={approval} onAnswer={answerApproval} busy={answering} />}
-      {exporting && <ExportDialog wsId={wsId} name={workspace.name} onClose={() => setExporting(false)} />}
-      <div className="ws-head">
-        <Link to="/workspaces" className="muted">
-          ←
-        </Link>
-        <h2>{workspace.name}</h2>
-        <span className="muted">{workspace.description}</span>
-        <span className="spacer" />
-        <button
-          onClick={() => setExporting(true)}
-          title="Download this workspace as a bundle another install can rebuild it from"
-        >
-          export
-        </button>
-        <div className="row appearance">
-          <LayoutMenu layout={layout} />
-        </div>
-        <div className="tabs">
-          {panels
-            .filter((p) => p.id !== 'agent')
-            .map((p) => (
-            <button
-              key={p.id}
-              className={layout.slotOf(p.id) ? 'active' : ''}
-              onClick={() => (layout.slotOf(p.id) ? layout.close(p.id) : layout.show(p.id, p.home))}
-              title={layout.slotOf(p.id) ? `Hide ${p.title}` : `Show ${p.title}`}
-            >
-                {p.title}
-              </button>
-            ))}
-        </div>
-      </div>
-      {error && (
-        <p className="error" onClick={() => setError(null)} title="dismiss">
-          {error}
-        </p>
-      )}
-      <Bench panels={panels} layout={layout} />
+          ))}
+      </OverlayHost>
     </div>
   )
 }
@@ -952,7 +844,7 @@ function Composer({
               {a.warning && <span className="warn">⚠</span>}
               <button
                 type="button"
-                className="attachment-drop"
+                className="attachment-drop" data-own
                 title="Take this off the message. The file stays in the workspace."
                 onClick={() => setAttached((all) => all.filter((x) => x.path !== a.path))}
               >
@@ -1130,18 +1022,18 @@ function AgentPanel({
 
       <label className="field">
         <span className="muted">model</span>
-        <select value={modelId} onChange={(e) => setModelId(e.target.value ? Number(e.target.value) : '')}>
-          {/* Clearing a bound model isn't supported by the API; the empty
-              option exists only to display agents that never had one. */}
-          <option value="" disabled>
-            no model
-          </option>
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.provider_name} / {m.label || m.model_name}
-            </option>
-          ))}
-        </select>
+        {/* Clearing a bound model isn't supported by the API; the placeholder
+            exists only to display agents that never had one. */}
+        <Select
+          value={modelId === '' ? '' : String(modelId)}
+          aria-label="Model"
+          placeholder="no model"
+          onChange={(v) => setModelId(v ? Number(v) : '')}
+          options={models.map((m) => ({
+            value: String(m.id),
+            label: `${m.provider_name} / ${m.label || m.model_name}`,
+          }))}
+        />
       </label>
 
       <label className="field">
@@ -1366,7 +1258,8 @@ function BranchDocs({
       >
         <input
           className="grow"
-          placeholder="new note in this agent's branch, e.g. house-style"
+          aria-label="New note"
+          placeholder="house-style"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
@@ -1399,18 +1292,23 @@ function GrantGearForm({
         setGearId('')
       }}
     >
-      <select className="grow" value={gearId} onChange={(e) => setGearId(e.target.value ? Number(e.target.value) : '')}>
-        <option value="">grant a gear from the catalog…</option>
-        {gears.map((g) => (
-          <option key={g.id} value={g.id}>
-            {g.name} ({g.status})
-          </option>
-        ))}
-      </select>
-      <select value={scope} onChange={(e) => setScope(e.target.value as 'agent' | 'workspace')}>
-        <option value="agent">this agent only</option>
-        <option value="workspace">whole workspace</option>
-      </select>
+      <Select
+        value={gearId === '' ? '' : String(gearId)}
+        aria-label="Grant a gear from the catalog"
+        placeholder="grant a gear from the catalog…"
+        className="grow"
+        onChange={(v) => setGearId(v ? Number(v) : '')}
+        options={gears.map((g) => ({ value: String(g.id), label: `${g.name} (${g.status})` }))}
+      />
+      <Select
+        value={scope}
+        aria-label="Scope of this grant"
+        onChange={(v) => setScope(v as 'agent' | 'workspace')}
+        options={[
+          { value: 'agent', label: 'this agent only' },
+          { value: 'workspace', label: 'whole workspace' },
+        ]}
+      />
       <button type="submit" disabled={gearId === ''}>
         grant
       </button>
@@ -1438,18 +1336,23 @@ function BindForm({
         setPath('')
       }}
     >
-      <select className="grow" value={path} onChange={(e) => setPath(e.target.value)}>
-        <option value="">bind a context file…</option>
-        {files.map((f) => (
-          <option key={f.path} value={f.path}>
-            {f.path}
-          </option>
-        ))}
-      </select>
-      <select value={scope} onChange={(e) => setScope(e.target.value as 'agent' | 'workspace')}>
-        <option value="agent">this agent only</option>
-        <option value="workspace">whole workspace</option>
-      </select>
+      <Select
+        value={path}
+        aria-label="Bind a context file"
+        placeholder="bind a context file…"
+        className="grow"
+        onChange={setPath}
+        options={files.map((f) => ({ value: f.path, label: f.path }))}
+      />
+      <Select
+        value={scope}
+        aria-label="Scope of this binding"
+        onChange={(v) => setScope(v as 'agent' | 'workspace')}
+        options={[
+          { value: 'agent', label: 'this agent only' },
+          { value: 'workspace', label: 'whole workspace' },
+        ]}
+      />
       <button type="submit" disabled={!path}>
         bind
       </button>

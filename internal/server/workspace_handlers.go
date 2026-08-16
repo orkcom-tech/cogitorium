@@ -67,6 +67,53 @@ func (s *Server) handleCloneWorkspace(w http.ResponseWriter, r *http.Request) {
 
 // handleSetWorkspaceTeam shares a workspace with a team, or withdraws it.
 // Only the owner or an admin may change who else can reach their work.
+// handlePatchWorkspace is the colour, and for now only the colour.
+//
+// Anyone who can reach the workspace may set it, deliberately: a colour is how
+// a team refers to a room out loud, and making it an owner's privilege would
+// mean the person who actually works in it every day cannot fix a colour they
+// cannot tell apart from the one next to it. Nothing here grants access, so
+// there is nothing to escalate.
+func (s *Server) handlePatchWorkspace(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.workspaceScoped(w, r)
+	if !ok {
+		return
+	}
+	// RawMessage, not **int.
+	//
+	// Absent means "do not touch the colour" and an explicit null means "take
+	// it away", and those must not collapse — otherwise every future field on
+	// this route erases somebody's colour as a side effect of editing
+	// something else. encoding/json cannot express that distinction with any
+	// depth of pointer: a JSON null sets the outermost pointer to nil, which is
+	// exactly what an absent field leaves it as. Only the raw bytes know.
+	var in struct {
+		Hue json.RawMessage `json:"hue"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if len(in.Hue) == 0 {
+		writeError(w, http.StatusBadRequest, "send a hue to set one, or null to clear it")
+		return
+	}
+	var hue *int
+	if string(in.Hue) != "null" {
+		var n int
+		if err := json.Unmarshal(in.Hue, &n); err != nil {
+			writeError(w, http.StatusBadRequest, "hue must be a whole number of degrees, or null")
+			return
+		}
+		hue = &n
+	}
+	ws, err := s.workspaces.SetHue(r.Context(), id, hue)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ws)
+}
+
 func (s *Server) handleShareWorkspace(w http.ResponseWriter, r *http.Request) {
 	id, ok := s.workspaceScoped(w, r)
 	if !ok {

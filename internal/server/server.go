@@ -218,6 +218,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "GET /api/v1/workspaces", s.handleListWorkspaces)
 	s.routeIn(mux, "POST /api/v1/workspaces", s.handleCreateWorkspace, CreateWorkspaceBody{})
 	s.route(mux, "GET /api/v1/workspaces/{id}", s.handleGetWorkspace)
+	s.route(mux, "PATCH /api/v1/workspaces/{id}", s.handlePatchWorkspace)
 	s.route(mux, "DELETE /api/v1/workspaces/{id}", s.handleDeleteWorkspace)
 	s.route(mux, "POST /api/v1/workspaces/{id}/clone", s.handleCloneWorkspace)
 	s.route(mux, "GET /api/v1/workspaces/{id}/export", s.handleExportWorkspace)

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type Model, type Provider, type TestResult } from '../api'
+import { Field, Fields } from './Field'
+import { Select } from './Select'
 
 export default function ModelsPage() {
   const [providers, setProviders] = useState<Provider[]>([])
@@ -100,20 +102,41 @@ function AddProviderForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <form className="row" onSubmit={submit}>
-      <input required placeholder="name (e.g. anthropic, ollama)" value={name} onChange={(e) => setName(e.target.value)} />
-      <select value={type} onChange={(e) => setType(e.target.value)}>
-        <option value="anthropic">anthropic</option>
-        <option value="openai-compatible">openai-compatible</option>
-      </select>
-      <input
-        placeholder={type === 'anthropic' ? 'base URL (default: api.anthropic.com)' : 'base URL (e.g. http://localhost:11434/v1)'}
-        value={baseURL}
-        onChange={(e) => setBaseURL(e.target.value)}
-      />
-      <input placeholder="API key (optional for local)" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
-      <button type="submit">add provider</button>
-      {error && <span className="error">{error}</span>}
+    <form onSubmit={submit}>
+      <Fields>
+        <Field label="Name" hint="whatever you want to call it here — anthropic, ollama, the box under the desk">
+          <input required value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="Kind" hint="how this server expects to be spoken to">
+          <Select
+            value={type}
+            onChange={setType}
+            aria-label="Kind"
+            options={[
+              { value: 'anthropic', label: 'anthropic' },
+              { value: 'openai-compatible', label: 'openai-compatible' },
+            ]}
+          />
+        </Field>
+        <Field
+          label="Base URL"
+          wide
+          hint={
+            type === 'anthropic'
+              ? 'leave empty for api.anthropic.com'
+              : 'the address of the server, ending in /v1 — for example http://localhost:11434/v1'
+          }
+        >
+          <input value={baseURL} onChange={(e) => setBaseURL(e.target.value)} />
+        </Field>
+        <Field label="API key" hint="a local server on your own machine usually needs none">
+          <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
+        </Field>
+      </Fields>
+      <div className="row form-actions">
+        <button type="submit" className="primary">add provider</button>
+        {error && <span className="error">{error}</span>}
+      </div>
     </form>
   )
 }
@@ -187,7 +210,13 @@ function ProviderCard({ provider, models, onChange }: { provider: Provider; mode
           }
         }}
       >
-        <input placeholder="or add model name manually" value={manualName} onChange={(e) => setManualName(e.target.value)} />
+        <Field label="Add a model by name" hint="for a server that cannot list its own models">
+          <input
+            placeholder="claude-sonnet-4-6"
+            value={manualName}
+            onChange={(e) => setManualName(e.target.value)}
+          />
+        </Field>
         <button type="submit">add</button>
         {error && <span className="error">{error}</span>}
       </form>

@@ -120,6 +120,12 @@ export default function GraphCanvas({
         label: e.label || undefined,
         animated: EDGE_STYLE[e.kind]?.animated ?? false,
         className: EDGE_STYLE[e.kind]?.className ?? '',
+        // Orthogonal, matching the blueprint editor. These are the product's
+        // two graph surfaces and an operator moves between them constantly;
+        // one drawing relationships as curves and the other as right angles
+        // reads as two different pictures of the same install.
+        type: 'smoothstep',
+        pathOptions: { borderRadius: 12 },
       })),
     )
   }, [visible, setNodes, setEdges])

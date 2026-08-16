@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Field, Fields } from './Field'
+import { Select } from './Select'
 import { api, type EnvRecord, type EnvSources } from '../api'
 
 /**
@@ -203,30 +205,47 @@ function SetEnvForm({
           .finally(() => setSaving(false))
       }}
     >
-      <input
-        required
-        placeholder="NAME, e.g. API_KEY"
-        value={name}
-        onChange={(e) => setName(e.target.value.toUpperCase())}
-      />
-      <select value={kind} onChange={(e) => setKind(e.target.value as 'variable' | 'secret')}>
-        <option value="variable">variable — shown here afterwards</option>
-        <option value="secret" disabled={!canStoreSecrets}>
-          secret — shown once, then never
-        </option>
-      </select>
-      <input
-        className="grow"
-        required
-        type={kind === 'secret' ? 'password' : 'text'}
-        placeholder={kind === 'secret' ? 'the secret — you will not see it again' : 'the value'}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-      />
-      <input placeholder="what it is for (optional)" value={description} onChange={(e) => setDescription(e.target.value)} />
-      <button type="submit" disabled={saving}>
-        {saving ? 'saving…' : 'set'}
-      </button>
+      <Fields>
+        <Field label="Name" hint="upper case, the way a shell expects it">
+          <input
+            required
+            placeholder="API_KEY"
+            value={name}
+            onChange={(e) => setName(e.target.value.toUpperCase())}
+          />
+        </Field>
+        <Field label="Kind" hint="a secret is shown once, at the moment you set it, and never again">
+          <Select
+            value={kind}
+            aria-label="Kind"
+            onChange={(v) => setKind(v as 'variable' | 'secret')}
+            options={[
+              { value: 'variable', label: 'variable — shown here afterwards' },
+              { value: 'secret', label: 'secret — shown once, then never', disabled: !canStoreSecrets },
+            ]}
+          />
+        </Field>
+        <Field
+          label="Value"
+          wide
+          hint={kind === 'secret' ? 'copy it somewhere safe before you save — you will not see it again' : undefined}
+        >
+          <input
+            required
+            type={kind === 'secret' ? 'password' : 'text'}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </Field>
+        <Field label="What it is for" wide hint="optional, and read by whoever inherits this install">
+          <input value={description} onChange={(e) => setDescription(e.target.value)} />
+        </Field>
+      </Fields>
+      <div className="row form-actions">
+        <button type="submit" className="primary" disabled={saving}>
+          {saving ? 'saving…' : 'set'}
+        </button>
+      </div>
     </form>
   )
 }

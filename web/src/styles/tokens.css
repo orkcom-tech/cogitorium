@@ -112,7 +112,12 @@ body {
 
 /* The two most consequential buttons in the product — "save" in the editor and
    "Allow once" in the approval dialog — rendered identically to every other
-   button, including the ones that do nothing irreversible. */
+   button, including the ones that do nothing irreversible.
+   
+   This rule weighs (0,1,1) and the blanket rule below weighs (0,8,1), so the
+   blanket MUST exclude .primary explicitly. It did not, once, and the result
+   was worse than the bug it was fixing: white text on a five-percent grey,
+   which is not a quiet button but an invisible one. */
 button.primary {
   background: var(--accent);
   border-color: transparent;
@@ -127,121 +132,42 @@ button.primary:hover:not(:disabled) {
 @media (prefers-reduced-motion: no-preference) {
   /* Exactly two motions in the whole product. A transition on anything
      dragged reads as lag, so seams are deliberately excluded. */
-  .bn-overlay {
+  .dk-overlay {
     transition: transform 140ms ease;
   }
-  .bn-tab {
+  .dk-view-tab {
     transition: opacity 90ms ease;
   }
 }
 
-/* The themed ground.
+/* The ground.
  *
- * The gradient and its grain live on ::before/::after of the shell, not on the
- * body background, so they can never repaint under a scrolling panel. Cards
- * sit ON this ground — which is the whole reason a different arrangement now
- * reads as different rather than as the same flat rectangle rearranged. */
-:root {
-  --theme-a: #1a1a19;
-  --theme-b: #232326;
-  --theme-c: var(--theme-b);
-  --grain: 0.045;
-  --grain-img: none;
-  --surface-tint: 11%;
-}
-
-/* The ground has to follow the mode, not just the palette.
+ * One fixed layer behind everything, painted with whatever the look's
+ * `--ground` says — a flat fill for nine of the ten and a grade for the one
+ * that is about being decorative. It is its own element rather than a body
+ * background so it can never repaint under a scrolling panel.
  *
- * Every palette that ships is authored dark, and the ground used to paint
- * those stops raw whatever the mode was. Switch to light and the text tokens
- * flipped to near-black while the ground stayed near-black underneath them:
- * in Instrument, where the menu is transparent and sits directly on the
- * ground, the entire menu went invisible. It was not subtle and it was not
- * only the menu — the window title went too.
- *
- * In light mode the palette becomes a TINT carried into a light base rather
- * than the base itself. The operator's colours still choose the character of
- * the room; they no longer choose whether it is lit. */
-:root {
-  --ground-a: light-dark(color-mix(in srgb, var(--theme-a) 10%, #fbfbfa), var(--theme-a));
-  --ground-b: light-dark(color-mix(in srgb, var(--theme-b) 14%, #f2f2f0), var(--theme-b));
-  --ground-c: light-dark(color-mix(in srgb, var(--theme-c) 34%, #ffffff), var(--theme-c));
-}
-
+ * What used to be here: three gradient stops written from JavaScript, a grain
+ * texture over them, a radial glow with an x, a y, a strength and an optional
+ * drift animation, and beneath all of it an operator-supplied image or video
+ * with its own dimming scrim. Every one of those was a setting, and a look
+ * that has to be assembled out of nine settings is not a look. */
 .shell-ground {
   position: fixed;
   inset: 0;
   z-index: -2;
-  background: linear-gradient(150deg, var(--ground-a) 0%, var(--ground-b) 55%, var(--ground-a) 100%);
+  background: var(--ground, var(--bg));
 }
 
-/* The glow is its own layer so it can be moved or animated without repainting
-   the gradient underneath it. */
-.shell-glow {
-  position: fixed;
-  inset: 0;
-  z-index: -2;
-  pointer-events: none;
-  /* 0 turns it off outright rather than fading it to something faint: a
-     "none" that still tints the corner is not none. */
-  opacity: var(--glow-strength, 1);
-  background: radial-gradient(1100px 760px at var(--glow-x, 12%) var(--glow-y, 4%), var(--ground-c) 0%, transparent 58%);
-}
-
-/* Drift: the DVD-logo idea, as a keyframe path rather than a rAF loop, so it
-   never keeps a core awake. The corners are deliberately not hit at the same
-   time on both axes — that is what stops the path reading as a diagonal
-   bouncing between two corners forever. */
-@keyframes glow-drift {
-  0%   { background-position: 8% 6%; }
-  17%  { background-position: 82% 22%; }
-  34%  { background-position: 30% 78%; }
-  51%  { background-position: 92% 62%; }
-  68%  { background-position: 14% 38%; }
-  85%  { background-position: 66% 88%; }
-  100% { background-position: 8% 6%; }
-}
-
-:root.drifting .shell-glow {
-  background: radial-gradient(1100px 760px at 50% 50%, var(--ground-c) 0%, transparent 58%);
-  background-repeat: no-repeat;
-  background-size: 180% 180%;
-  animation: glow-drift var(--drift-speed, 90s) linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  :root.drifting .shell-glow {
-    animation: none;
-  }
-}
-
-.shell-grain {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: var(--grain);
-  background-image: var(--grain-img);
-  background-repeat: repeat;
-}
-
-/* Surfaces borrow a little of the palette so a card belongs to its ground.
-   Capped in code well below the point where text contrast stops holding. */
+/* Surfaces are opaque, and there is no second way to fill one.
+ *
+ * There used to be a glass/solid switch here, with a blur radius and a
+ * "lighten" dial feeding a color-mix on every surface token. Three settings
+ * for one question, and the honest answer was always solid: a backdrop-filter
+ * costs a compositing layer per panel whether or not it blurs anything, which
+ * on a laptop is a fan spinning for a effect nobody asked for. The look owns
+ * the fill now, so the dials had nothing left to decide. */
 :root {
-  --surface-base: color-mix(in srgb, var(--theme-b) var(--surface-tint), light-dark(#ffffff, #212120));
-  --surface-2-base: color-mix(in srgb, var(--theme-b) var(--surface-tint), light-dark(#f4f4f2, #2a2a28));
-
-  /* Glass: the fill is translucent and the ground is blurred behind it. */
-  --surface: color-mix(in srgb, var(--surface-base) calc(var(--surface-dim, 0.62) * 100%), transparent);
-  --surface-2: color-mix(in srgb, var(--surface-2-base) calc(var(--surface-dim, 0.62) * 100%), transparent);
-  --bg: transparent;
-  --pane-blur: blur(var(--surface-blur, 14px)) saturate(1.25);
-}
-
-/* Solid: an opaque fill and no compositing at all. Not "glass with the blur
-   at zero" — a backdrop-filter that blurs nothing still costs a layer per
-   panel, which is a fan spinning for nothing. */
-:root.solid-surfaces {
   --surface: var(--surface-base);
   --surface-2: var(--surface-2-base);
   --pane-blur: none;
@@ -250,10 +176,10 @@ button.primary:hover:not(:disabled) {
 /* Every pane in the product takes its fill from one place, so the choice
    applies everywhere at once rather than panel by panel. */
 .pane,
-.bn-panel,
+.dk-slide,
 .card,
 .modal.approval,
-.bn-menu {
+.dk-overlay {
   background: var(--surface);
   -webkit-backdrop-filter: var(--pane-blur);
   backdrop-filter: var(--pane-blur);
@@ -322,40 +248,6 @@ button.primary:hover:not(:disabled) {
  * behind live text is unreadable without one. The scrim is on a dial rather
  * than a fixed value: how much a picture needs depends entirely on the
  * picture. */
-.shell-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: -3;
-  background-image: var(--backdrop-img, none);
-  background-size: cover;
-  background-position: center;
-}
-
-.shell-backdrop video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.shell-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: -3;
-  pointer-events: none;
-  background: light-dark(rgb(255 255 255 / var(--backdrop-dim, 0.55)), rgb(0 0 0 / var(--backdrop-dim, 0.55)));
-}
-
-/* With a backdrop, the palette gradient becomes a tint over it rather than
-   the ground itself — otherwise it would simply cover the picture. */
-:root.has-backdrop .shell-ground {
-  opacity: 0.35;
-}
-
-:root:not(.has-backdrop) .shell-backdrop,
-:root:not(.has-backdrop) .shell-scrim {
-  display: none;
-}
-
 /* Sidebar, in the shape of the reference: a mark, icon-and-label rows, and a
    rounded pill on the row you are on. */
 .brand {
@@ -470,25 +362,20 @@ button.primary:hover:not(:disabled) {
   --r3: 18px;
 }
 
-/* Panels get the reference's generosity: more corner, more air, and a header
-   that is a header rather than a strip of small text. */
-.bn-panel {
+/* A view gets the reference's generosity: more corner and more air. There is
+   no padding-top here any more — a slide had 38px reserved for a tab strip
+   that sat on top of it, and the deck has no strip to reserve for. */
+.dk-slide {
   border-radius: var(--r3);
 }
 
-.bn-chrome {
-  height: 38px;
+.dk-part-head {
+  height: var(--dk-rail, 34px);
   padding: 0 var(--s3);
-  border-radius: var(--r3) var(--r3) 0 0;
 }
 
-.bn-panel {
-  padding-top: 38px;
-}
-
-.bn-tab {
+.dk-view-tab {
   font-size: var(--t-ui);
-  padding: 0 var(--s3);
 }
 
 .card {
@@ -610,751 +497,16 @@ button.primary:hover:not(:disabled) {
   padding-left: 30px;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   INSTRUMENT
+/* ═══ The look ═══════════════════════════════════════════════════════════
+   There is one, and it is Calm.
+
+   There were four — instrument, canvas, sketch and this — and maintaining four
+   meant every component carried four sets of overrides, which is where the
+   duplication in this file came from and where the drift came from with it.
+   One look is one set of rules, and the operator still has the palette, the
+   mode and the ground underneath it.
+   ═══════════════════════════════════════════════════════════════════════ */
 
-   A bench instrument. One dark face with the divisions scored into it:
-   hairlines carry every boundary, nothing is rounded, and the numerals are
-   monospaced so a column of spends lines up down the panel. Density is the
-   feature — what is not spent on padding is spent on the transcript.
-
-   Colour, ground and accent arrive with the look (LOOK_SIGNATURE in theme.ts);
-   this file is its shape, type and chrome.
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-:root[data-look='instrument'] {
-  --r1: 0px;
-  --r2: 0px;
-  --r3: 0px;
-  --s3: 10px;
-  --s4: 13px;
-  --h-tabs: 30px;
-  --t-prose: 14px;
-  --nav-w: 204px;
-  --nav-w-open: 204px;
-  --border: color-mix(in srgb, var(--text) 20%, transparent);
-
-  /* Panels are the face itself, one shade off the ground, rather than cards
-     lifted above it. Everything that separates them is a scored line. */
-  --surface-base: light-dark(#ffffff, color-mix(in srgb, var(--theme-b) 55%, var(--theme-a)));
-  --surface-2-base: light-dark(#f1f1ef, color-mix(in srgb, var(--theme-b) 100%, var(--theme-a)));
-}
-
-:root[data-look='instrument'] .wordmark {
-  font-family: var(--mono);
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.17em;
-  text-transform: uppercase;
-}
-
-:root[data-look='instrument'] .brand {
-  font-size: 1rem;
-  gap: var(--s2);
-}
-
-:root[data-look='instrument'] .brand-mark {
-  width: 24px;
-  height: 24px;
-  border-radius: 0;
-}
-
-:root[data-look='instrument'] .brand-block {
-  border-bottom: 1px solid var(--border);
-}
-
-:root[data-look='instrument'] .by-ork {
-  padding-left: 30px; /* aligned under the wordmark, not under the tile */
-}
-
-/* The menu is a column of the same face, divided by rules — not three boxes
-   stacked with gaps between them. */
-:root[data-look='instrument'] .sidebar {
-  border-right: 1px solid var(--border);
-  padding: 0;
-  gap: 0;
-}
-
-:root[data-look='instrument'] .side-pane {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  padding: var(--s2) 0;
-}
-
-:root[data-look='instrument'] .sidebar nav a,
-:root[data-look='instrument'] .nav-external {
-  border-radius: 0;
-  border-left: 2px solid transparent;
-  padding: 0.35rem 0.6rem 0.35rem 10px;
-}
-
-:root[data-look='instrument'] .sidebar nav a.active {
-  border-left-color: var(--accent);
-  background: var(--surface-2);
-}
-
-:root[data-look='instrument'] .account {
-  border-top: 1px solid var(--border);
-  padding: var(--s3) var(--s2);
-}
-
-/* Every control is square, including the ones that came from the browser. */
-:root[data-look='instrument'] input,
-:root[data-look='instrument'] select,
-:root[data-look='instrument'] button,
-:root[data-look='instrument'] textarea,
-:root[data-look='instrument'] .chip,
-:root[data-look='instrument'] .card,
-:root[data-look='instrument'] .bn-panel,
-:root[data-look='instrument'] .agent-card,
-:root[data-look='instrument'] .canvas,
-:root[data-look='instrument'] .terminal-holder,
-:root[data-look='instrument'] .icon-tile {
-  border-radius: 0;
-}
-
-:root[data-look='instrument'] .bn-panel {
-  box-shadow: none;
-}
-
-:root[data-look='instrument'] .bn-chrome {
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-}
-
-/* Panel names are stencilled, the way a rack unit labels its channels. */
-:root[data-look='instrument'] .bn-tab,
-:root[data-look='instrument'] .menu-head,
-:root[data-look='instrument'] .ws-agents h3 {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-:root[data-look='instrument'] .bn-tab.active::after {
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2px;
-  border-radius: 0;
-}
-
-/* The reason for the monospace: a column of spends that does not line up is a
-   column nobody compares. */
-:root[data-look='instrument'] .agent-spend-big,
-:root[data-look='instrument'] .agent-spend,
-:root[data-look='instrument'] .agent-spend-detail,
-:root[data-look='instrument'] .tree-size {
-  font-family: var(--mono);
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-
-:root[data-look='instrument'] .agent-card {
-  border-left: 2px solid transparent;
-  background: transparent;
-}
-
-:root[data-look='instrument'] .agent-card.selected {
-  border-left-color: var(--accent);
-  background: var(--surface-2);
-}
-
-:root[data-look='instrument'] .share-bar,
-:root[data-look='instrument'] .share-bar > span,
-:root[data-look='instrument'] .dot,
-:root[data-look='instrument'] .avatar {
-  border-radius: 0;
-}
-
-:root[data-look='instrument'] .msg.user .msg-body {
-  border-radius: 0;
-  background: var(--surface-2);
-  border-color: var(--border);
-  border-left: 2px solid var(--accent);
-}
-
-:root[data-look='instrument'] .transcript {
-  gap: var(--s3);
-}
-
-/* Wiring is drawn on the same face: boxes scored into it, not tiles laid on. */
-:root[data-look='instrument'] .react-flow__node.bp-node,
-:root[data-look='instrument'] .react-flow__node[class*='gn-'] {
-  border-radius: 0;
-  background: var(--surface-2);
-}
-
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   CANVAS-FIRST
-
-   The graph is the application. The menu shrinks to a rail of glyphs, the
-   ground becomes a drafting grid, and every panel is a card floating over it
-   rather than a division of it.
-
-   This deliberately contradicts the rule that the orchestrator chat is the way
-   in — which is exactly why it is a choice and never the default.
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-:root[data-look='canvas'] {
-  --r1: 8px;
-  --r2: 11px;
-  --r3: 14px;
-  --nav-w: 58px;
-  --nav-w-open: 58px;
-}
-
-/* The drafting grid, over the palette gradient rather than instead of it, so
-   the operator's own colours still carry the room. */
-:root[data-look='canvas'] .shell-ground {
-  background-image:
-    radial-gradient(color-mix(in srgb, var(--text) 11%, transparent) 1px, transparent 1px),
-    linear-gradient(150deg, var(--ground-a) 0%, var(--ground-b) 55%, var(--ground-a) 100%);
-  background-size: 22px 22px, auto;
-}
-
-/* On a rail there is room for a mark and nothing else. The name is still on
-   the element for anyone hovering or listening. */
-:root[data-look='canvas'] .wordmark,
-:root[data-look='canvas'] .by-word,
-:root[data-look='canvas'] .sidebar nav a span:not(.nav-icon),
-:root[data-look='canvas'] .nav-external span:not(.nav-icon),
-:root[data-look='canvas'] .account-id,
-:root[data-look='canvas'] .account-server,
-:root[data-look='canvas'] .chip-label,
-:root[data-look='canvas'] .out-label,
-:root[data-look='canvas'] .nav-toggle {
-  display: none;
-}
-
-:root[data-look='canvas'] .brand-block {
-  align-items: center;
-  padding: var(--s2) 0 var(--s1);
-  gap: 6px;
-}
-
-:root[data-look='canvas'] .brand-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-}
-
-:root[data-look='canvas'] .by-ork {
-  align-self: center;
-}
-
-/* On a rail there is no room to finish the word, so the logo stands alone —
-   which is the one job a logo is for. */
-:root[data-look='canvas'] .ork-com {
-  display: none;
-}
-
-:root[data-look='canvas'] .ork-mark {
-  width: 26px;
-  height: 13px;
-}
-
-:root[data-look='canvas'] .sidebar {
-  padding: var(--s3) 5px;
-  gap: var(--s2);
-}
-
-:root[data-look='canvas'] .side-pane {
-  border-radius: var(--r3);
-  padding: 5px 4px;
-}
-
-:root[data-look='canvas'] .sidebar nav {
-  gap: 3px;
-  align-items: center;
-}
-
-:root[data-look='canvas'] .sidebar nav a,
-:root[data-look='canvas'] .nav-external {
-  justify-content: center;
-  width: 36px;
-  height: 32px;
-  padding: 0;
-  border-radius: var(--r1);
-}
-
-:root[data-look='canvas'] .sidebar nav a.active {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  color: var(--accent);
-}
-
-:root[data-look='canvas'] .nav-icon {
-  width: auto;
-  font-size: 14px;
-}
-
-:root[data-look='canvas'] .account {
-  align-items: center;
-  gap: var(--s2);
-  padding: var(--s2) 4px;
-}
-
-:root[data-look='canvas'] .account-who,
-:root[data-look='canvas'] .account-out,
-:root[data-look='canvas'] .theme-chip {
-  justify-content: center;
-  padding: 0;
-}
-
-:root[data-look='canvas'] .account-out button {
-  width: 32px;
-  padding: 0;
-}
-
-/* Panels stop dividing the space and start floating over it. */
-:root[data-look='canvas'] .bn-panel:not(.bn-parked) {
-  box-shadow: 0 18px 50px rgb(0 0 0 / 0.45);
-}
-
-/* The graph is the ground here, so its frame comes off. */
-:root[data-look='canvas'] .canvas {
-  border-color: transparent;
-  border-radius: var(--r2);
-}
-
-:root[data-look='canvas'] .bn-panel .canvas {
-  background: transparent;
-}
-
-:root[data-look='canvas'] .ws-head,
-:root[data-look='canvas'] .page-head,
-:root[data-look='canvas'] .page > h2:first-child {
-  padding-left: 0;
-}
-
-/* The composer is the one control the eye returns to between every turn, so it
-   gets the look's own treatment rather than the default input's. */
-:root[data-look='instrument'] .composer {
-  border-top: 1px solid var(--border);
-  padding-top: var(--s2);
-  margin-top: var(--s1);
-}
-
-:root[data-look='canvas'] .composer input {
-  border-radius: var(--r1);
-  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
-}
-
-:root[data-look='canvas'] .composer button {
-  border-radius: var(--r1);
-}
-
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   SKETCH
-
-   Drawn. Paper ground, ink outlines that are not quite straight, handwriting
-   on the chrome — a workspace as something somebody sat down and drew, which
-   is what wiring a graph by hand is before it becomes a running system.
-
-   Two rules keep it a look rather than a joke:
-
-   1. Handwriting goes on the CHROME only — panel names, buttons, nav, headings.
-      Code, logs, figures, schemas, URLs and the transcript stay in the type
-      they were already in. A workbench whose JSON is in a handwriting face is
-      a workbench nobody can read a stack trace in.
-   2. The wobble is geometry, never a filter. An SVG displacement filter over a
-      panel drags the text with it and costs a compositing layer per element;
-      lopsided radii and a doubled outline cost nothing and are what actually
-      reads as "drawn by hand".
-
-   It lands in light mode because paper is light, and it does not pin the mode:
-   every colour below is a light-dark() pair, so switching to dark gives chalk
-   on slate rather than ink on a black sheet.
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-:root[data-look='sketch'] {
-  /* Ink and paper, both ways round. The dark half is a slate, not an inverted
-     page: the same drawing in chalk.
-
-     The paper takes a TINT from the operator's palette and never its lightness
-     — the rule the ground already follows a few hundred lines up, applied to
-     the sheet. Pinned to a fixed cream instead, the look broke the moment
-     anybody picked Sketch and then Graphite: a near-black ground with cream
-     panels floating on it, which is the one arrangement this look cannot
-     survive. The palette still chooses whether the paper is warm or cool; the
-     mode alone decides whether it is paper or slate. */
-  --ink: light-dark(#2a2622, #e8e3d8);
-  --paper: light-dark(color-mix(in srgb, var(--theme-a) 8%, #fdfbf6), color-mix(in srgb, var(--theme-b) 45%, #23262a));
-  --paper-2: light-dark(color-mix(in srgb, var(--theme-b) 12%, #f1ebdd), color-mix(in srgb, var(--theme-b) 70%, #2c3035));
-
-  --text: var(--ink);
-  --surface-base: var(--paper);
-  --surface-2-base: var(--paper-2);
-  --bg: var(--paper);
-
-  /* Drawn lines are dark and definite — a 14% hairline reads as a printed
-     rule, which is the opposite of the point. */
-  --border: color-mix(in srgb, var(--ink) 62%, transparent);
-  --border-strong: var(--ink);
-
-  --r1: 8px;
-  --r2: 10px;
-  --r3: 12px;
-  --t-prose: 15px;
-
-  /* Three wobbles so a column of controls does not look stamped from one die.
-     The pattern is the standard trick: opposite corners share a radius and the
-     horizontal and vertical halves disagree, which is what a pen does. */
-  --wob-box: 14px 5px 16px 6px / 6px 16px 5px 14px;
-  --wob-alt: 6px 16px 5px 14px / 14px 5px 16px 6px;
-  --wob-ctl: 22px 6px 20px 7px / 7px 20px 6px 22px;
-
-  /* The pen going round twice, and a page shadow that is offset rather than
-     blurred — paper on a desk has an edge, not a halo. */
-  --ink-double: 1.5px 2px 0 color-mix(in srgb, var(--ink) 22%, transparent);
-  --shadow: 2px 3px 0 color-mix(in srgb, var(--ink) 26%, transparent);
-
-  /* Bradley Hand is macOS, Segoe Print is Windows, Comic Sans is on both and
-     often on Linux through the core fonts. Nothing is downloaded for this: the
-     interface fetches nothing at runtime, and a webfont would be the first
-     thing it ever did. Where none of these exist the chrome falls back to the
-     UI face and the look is quieter — the drawing carries it either way. */
-  --hand: 'Bradley Hand', 'Segoe Print', 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', ui-rounded, cursive;
-
-  /* The stroke under a heading, as a MASK rather than a coloured drawing: the
-     accent is the operator's, and an SVG with a hex in it would go on being
-     green after they made everything else amber. preserveAspectRatio is off so
-     one stroke stretches to whatever the heading is wide. */
-  --marker: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 8' preserveAspectRatio='none'%3E%3Cpath d='M2 5.4C34 3.1 66 6.2 98 4.3s62-2.1 100 1.4' fill='none' stroke='%23000' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E");
-}
-
-/* Paper, with the tooth already in the grain layer above it. The ruled tint is
-   very low: this is a sheet of drawing paper, not a legal pad. */
-:root[data-look='sketch'] .shell-ground {
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--ink) 4%, transparent) 1px, transparent 1px),
-    linear-gradient(160deg, var(--ground-a) 0%, var(--ground-b) 60%, var(--ground-a) 100%);
-  background-size: 100% 28px, auto;
-}
-
-/* ── The chrome, in the hand ─────────────────────────────────────────────── */
-
-:root[data-look='sketch'] .wordmark,
-:root[data-look='sketch'] .bn-tab,
-:root[data-look='sketch'] .menu-head,
-:root[data-look='sketch'] .sidebar nav a,
-:root[data-look='sketch'] .nav-external,
-:root[data-look='sketch'] button,
-:root[data-look='sketch'] .chip,
-:root[data-look='sketch'] h1,
-:root[data-look='sketch'] h2,
-:root[data-look='sketch'] h3,
-:root[data-look='sketch'] .ws-head strong,
-:root[data-look='sketch'] .page-head {
-  font-family: var(--hand);
-  letter-spacing: 0.01em;
-}
-
-:root[data-look='sketch'] .wordmark {
-  font-size: 19px;
-  font-weight: 700;
-}
-
-/* Headings get the marker stroke under them, the way somebody underlines a
-   title after writing it. A mask rather than a coloured SVG, so the stroke is
-   whatever accent the operator's palette carries. */
-:root[data-look='sketch'] h2,
-:root[data-look='sketch'] .page > h2:first-child {
-  position: relative;
-  padding-bottom: 5px;
-}
-
-:root[data-look='sketch'] h2::after {
-  content: '';
-  position: absolute;
-  left: -2px;
-  right: -6px;
-  bottom: 0;
-  height: 6px;
-  background: var(--accent);
-  -webkit-mask-image: var(--marker);
-  mask-image: var(--marker);
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  opacity: 0.85;
-  pointer-events: none;
-}
-
-/* ── Everything with an edge is drawn ────────────────────────────────────── */
-
-:root[data-look='sketch'] .card,
-:root[data-look='sketch'] .bn-panel,
-:root[data-look='sketch'] .side-pane,
-:root[data-look='sketch'] .agent-card,
-:root[data-look='sketch'] .terminal-holder,
-:root[data-look='sketch'] .canvas {
-  border: 2px solid var(--border);
-  border-radius: var(--wob-box);
-  box-shadow: var(--ink-double);
-}
-
-/* The second box in a row leans the other way, so a stack of cards reads as
-   several drawn boxes rather than one shape repeated. */
-:root[data-look='sketch'] .card:nth-of-type(even),
-:root[data-look='sketch'] .agent-card:nth-of-type(even) {
-  border-radius: var(--wob-alt);
-}
-
-:root[data-look='sketch'] input,
-:root[data-look='sketch'] select,
-:root[data-look='sketch'] textarea,
-:root[data-look='sketch'] button,
-:root[data-look='sketch'] .chip,
-:root[data-look='sketch'] .icon-tile {
-  border: 2px solid var(--border);
-  border-radius: var(--wob-ctl);
-  background: var(--surface);
-}
-
-:root[data-look='sketch'] textarea {
-  border-radius: var(--wob-box);
-}
-
-:root[data-look='sketch'] button:hover:not(:disabled) {
-  box-shadow: var(--ink-double);
-}
-
-/* Pressed is the button moving under the pen, not a colour change. */
-:root[data-look='sketch'] button:active:not(:disabled) {
-  transform: translate(1px, 1px);
-  box-shadow: none;
-}
-
-:root[data-look='sketch'] button.primary {
-  border-color: var(--accent);
-  box-shadow: var(--ink-double);
-}
-
-/* ── Panels ──────────────────────────────────────────────────────────────── */
-
-:root[data-look='sketch'] .bn-chrome {
-  border-bottom: 2px solid var(--border);
-  background: transparent;
-}
-
-:root[data-look='sketch'] .bn-tab {
-  font-size: 13px;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-/* The active panel is ticked, the way you mark the one you are working in. */
-:root[data-look='sketch'] .bn-tab.active::after {
-  background: var(--accent);
-  height: 3px;
-  border-radius: 3px;
-}
-
-:root[data-look='sketch'] .sidebar {
-  border-right: 2px solid var(--border);
-}
-
-:root[data-look='sketch'] .sidebar nav a,
-:root[data-look='sketch'] .nav-external {
-  border: 2px solid transparent;
-  border-radius: var(--wob-ctl);
-}
-
-:root[data-look='sketch'] .sidebar nav a.active {
-  border-color: var(--border);
-  background: var(--surface-2);
-  box-shadow: var(--ink-double);
-}
-
-/* ── The graph, which is the drawing that matters ────────────────────────── */
-
-:root[data-look='sketch'] .react-flow__node.bp-node,
-:root[data-look='sketch'] .react-flow__node[class*='gn-'] {
-  border: 2px solid var(--border);
-  border-radius: var(--wob-box);
-  background: var(--surface);
-  box-shadow: var(--ink-double);
-  font-family: var(--hand);
-}
-
-:root[data-look='sketch'] .react-flow__node.bp-node:nth-child(even) {
-  border-radius: var(--wob-alt);
-}
-
-/* ── What stays legible, deliberately ────────────────────────────────────── */
-
-/* Content is not chrome. A schema, a stack trace, a run's output and a token
-   count have to be read exactly, and a handwriting face is where an l becomes
-   a 1. These override the chrome rule above rather than being missed by it. */
-:root[data-look='sketch'] code,
-:root[data-look='sketch'] pre,
-:root[data-look='sketch'] .prompt-preview,
-:root[data-look='sketch'] .inlet-url,
-:root[data-look='sketch'] .terminal-holder,
-:root[data-look='sketch'] .cm-editor,
-:root[data-look='sketch'] .diff-stack,
-:root[data-look='sketch'] .agent-spend,
-:root[data-look='sketch'] .agent-spend-big,
-:root[data-look='sketch'] .agent-spend-detail,
-:root[data-look='sketch'] .run-live {
-  font-family: var(--mono);
-  letter-spacing: 0;
-}
-
-/* The transcript is reading, not chrome. */
-:root[data-look='sketch'] .msg-body,
-:root[data-look='sketch'] .hint,
-:root[data-look='sketch'] .muted {
-  font-family: inherit;
-}
-
-/* The edges matter more here than anywhere else: this look is a drawing, and
-   what is being drawn is the graph. A 1px machine grey inside a hand-drawn box
-   is the one thing that would give the whole look away. Ink, and thicker —
-   with the ends rounded, because a pen leaves a round end. */
-:root[data-look='sketch'] .react-flow__edge-path {
-  stroke: color-mix(in srgb, var(--ink) 55%, transparent);
-  stroke-width: 2;
-  stroke-linecap: round;
-}
-
-:root[data-look='sketch'] .react-flow__edge.selected .react-flow__edge-path,
-:root[data-look='sketch'] .react-flow__edge:hover .react-flow__edge-path {
-  stroke: var(--accent);
-  stroke-width: 2.5;
-}
-
-/* Paper is ruled, not dotted; the drafting grid belongs to Canvas-first. */
-:root[data-look='sketch'] .react-flow__background {
-  opacity: 0.35;
-}
-
-/* Edge labels are the words written along a line, so they take the hand and
-   sit on the paper rather than in a grey pill. */
-:root[data-look='sketch'] .react-flow__edge-text {
-  font-family: var(--hand);
-}
-
-:root[data-look='sketch'] .react-flow__edge-textbg {
-  fill: var(--paper);
-}
-
-/* The controls are drawn too — otherwise three crisp browser-grey buttons sit
-   in the corner of a pen drawing. */
-:root[data-look='sketch'] .react-flow__controls-button {
-  border: 2px solid var(--border);
-  border-radius: var(--wob-ctl);
-  background: var(--surface);
-  color: var(--ink);
-}
-
-/* ── What the drawing got wrong on its own, fixed ────────────────────────── */
-
-/* The general "everything with an edge is drawn" rule above is more specific
-   than button.primary, so it took the accent fill off the two buttons that
-   most need it — save, and Allow once in the approval dialog — and left their
-   white text on paper. A drawn primary is still a filled one. */
-:root[data-look='sketch'] button.primary {
-  background: var(--accent);
-  color: #fff;
-  border-color: color-mix(in srgb, var(--ink) 45%, var(--accent));
-}
-
-:root[data-look='sketch'] button.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 85%, black);
-}
-
-/* The palette that makes this look is a pair of creams, and the ground takes
-   the palette RAW in dark mode — so switching to dark gave chalk text on a
-   cream sheet. The paper darkens with the mode instead: same drawing, slate
-   instead of cartridge. */
-:root[data-look='sketch'] {
-  --ground-a: light-dark(color-mix(in srgb, var(--theme-a) 14%, #f7f3ea), color-mix(in srgb, var(--theme-a) 45%, #22252a));
-  --ground-b: light-dark(color-mix(in srgb, var(--theme-b) 18%, #efe8da), color-mix(in srgb, var(--theme-b) 45%, #1d2024));
-  --ground-c: light-dark(color-mix(in srgb, var(--theme-c) 22%, #fffdf8), color-mix(in srgb, var(--theme-c) 45%, #262a2f));
-}
-
-/* The grain is grey noise laid OVER its ground, which lightens a dark one and
-   dusts a light one. Multiplied instead, it darkens — which on paper is tooth.
-   The opacity is left alone: --grain is already the operator's slider.
-
-   No light-dark() here, and that is not an oversight. light-dark() takes
-   COLOUR values only; on mix-blend-mode or opacity the declaration is invalid,
-   drops to the initial value, and the grain silently goes to full strength — a
-   dirty grey sheet that builds clean and typechecks clean. */
-:root[data-look='sketch'] .shell-grain {
-  mix-blend-mode: multiply;
-}
-
-/* A focus ring made of box-shadow is erased by every rule here that draws its
-   own — and this look draws one on nearly everything. An outline cannot be
-   clobbered by a shadow, and it follows the wobble. */
-:root[data-look='sketch'] :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  box-shadow: none;
-}
-
-/* The maker's mark is dimmed twice over and lands near the paper's own value. */
-:root[data-look='sketch'] .by-ork {
-  opacity: 0.85;
-}
-
-/* Handles are React Flow's dark navy with a white ring: invisible at both ends
-   of a drawn wire. */
-:root[data-look='sketch'] .react-flow__handle {
-  background: var(--ink);
-  border-color: var(--paper);
-}
-
-/* Wire labels paint with the `Canvas` system colour, which is the OS's page
-   white and not this page's paper. */
-:root[data-look='sketch'] .react-flow__edge-textbg,
-:root[data-look='sketch'] .bp-wire-label {
-  fill: var(--paper);
-  background: var(--paper);
-}
-
-/* Selection, which otherwise falls through to the system blue — a colour from
-   nowhere in the middle of a drawing. */
-:root[data-look='sketch'] ::selection {
-  background: color-mix(in srgb, var(--accent) 28%, transparent);
-}
-
-/* A diff on paper: the add/delete washes were mixed for a dark ground and land
-   at a few percent over cream, which is a diff you have to be told is there. */
-:root[data-look='sketch'] .dl-add {
-  background: color-mix(in srgb, var(--ok) 26%, transparent);
-}
-
-:root[data-look='sketch'] .dl-del {
-  background: color-mix(in srgb, var(--danger) 24%, transparent);
-}
-
-:root[data-look='sketch'] .dl-n {
-  color: color-mix(in srgb, var(--text) 52%, transparent);
-}
-
-/* Initials are white on an accent that is now a mid green on cream. */
-:root[data-look='sketch'] .avatar {
-  color: var(--paper);
-  border: 2px solid color-mix(in srgb, var(--ink) 40%, transparent);
-}
-
-/* The app's own mark is a raster tile with its own dark ground, and it is the
-   identity — it does not get repainted per look. It does get drawn INTO the
-   drawing, so it reads as a sticker on the page rather than a hole in it. */
-:root[data-look='sketch'] .brand-mark {
-  border-radius: 9px 4px 10px 3px / 3px 10px 4px 9px;
-}
 
 /* ── Calm ─────────────────────────────────────────────────────────────────
    The bet opposite to Instrument: most of the time nothing in an install
@@ -1377,91 +529,478 @@ button.primary:hover:not(:disabled) {
 
    No grain, no glow, no drift, no gradient on a panel. Each of those is the
    interface asking to be looked at. */
-:root[data-look='calm'] {
+/* THE TEN LOOKS.
+ *
+ * A look is TOKENS AND NOTHING ELSE. Every component rule below this section
+ * is written once, against the token names, and applies to all ten — so
+ * adding a look cannot drift a component, and fixing a component fixes it
+ * everywhere at once. That is the whole reason this file is shaped this way:
+ * the previous design had four looks with four sets of component overrides,
+ * and every bug lived in the gap between them.
+ *
+ * The contract a look must fill, in full:
+ *   --text --muted --bg --surface-base --surface-2-base
+ *   --border --border-strong --accent
+ *   --r1 --r2 --r3 --t-prose
+ *   --lift --lift-2 --shadow --focus
+ *   --ground (what .shell-ground paints)
+ *
+ * Every one is drawn twice, with light-dark(), because the operator's mode is
+ * theirs. A look that only works dark is half a look.
+ */
+
+/* 1. Calm — most of the time nothing needs attention, so nothing asks for it.
+      Rounded, borderless, one soft shadow, colour held back for state. */
+[data-look='calm'] {
   --text: light-dark(#3b3945, #e6e4ec);
   --muted: light-dark(#6f6c7d, #9d9aab);
   --bg: light-dark(#f5f4f8, #191a1f);
   --surface-base: light-dark(#ffffff, #22242b);
   --surface-2-base: light-dark(#eeedf3, #2a2c34);
+  --border: light-dark(rgba(59,57,69,.10), rgba(230,228,236,.12));
+  --border-strong: light-dark(rgba(59,57,69,.18), rgba(230,228,236,.20));
+  --accent: light-dark(#4f46e5, #8b93ff);
+  --r1: 10px; --r2: 14px; --r3: 18px;
+  --t-prose: 15px;
+  --lift: light-dark(0 1px 2px rgba(59,57,69,.06), inset 0 1px 0 rgba(255,255,255,.045));
+  --lift-2: light-dark(
+    0 1px 3px rgba(59,57,69,.08), 0 10px 24px -8px rgba(59,57,69,.12),
+    inset 0 1px 0 rgba(255,255,255,.06)
+  );
+  --ground: var(--bg);
+}
 
-  /* A border that is nearly nothing: it exists so a text field still reads as
-     something you type into, and for no other purpose. */
-  --border: light-dark(color-mix(in srgb, #3b3945 10%, transparent), color-mix(in srgb, #e6e4ec 12%, transparent));
-  --border-strong: light-dark(color-mix(in srgb, #3b3945 18%, transparent), color-mix(in srgb, #e6e4ec 20%, transparent));
+/* 2. Paper — a light look first and a dark one second. Warm stock, thin rules
+      instead of shadows, ink for the accent. Nothing floats. */
+[data-look='paper'] {
+  --text: light-dark(#26231e, #e8e3d9);
+  --muted: light-dark(#6b6459, #a09889);
+  --bg: light-dark(#f7f4ec, #1c1a17);
+  --surface-base: light-dark(#fffdf7, #23211d);
+  --surface-2-base: light-dark(#f0ece1, #2a2723);
+  --border: light-dark(rgba(38,35,30,.16), rgba(232,227,217,.14));
+  --border-strong: light-dark(rgba(38,35,30,.32), rgba(232,227,217,.28));
+  --accent: light-dark(#8a5a2b, #c99a5b);
+  --r1: 3px; --r2: 4px; --r3: 6px;
+  --t-prose: 16px;
+  --lift: none;
+  --lift-2: none;
+  --ground: var(--bg);
+}
+
+/* 3. Terminal — phosphor on carbon. Square, monospaced chrome, hairlines, and
+      one green that means "this is live". */
+[data-look='terminal'] {
+  --text: light-dark(#14210f, #cfe8c2);
+  --muted: light-dark(#5c6b52, #7d9470);
+  --bg: light-dark(#f2f5ef, #0c0f0b);
+  --surface-base: light-dark(#ffffff, #11150f);
+  --surface-2-base: light-dark(#e7ece2, #171c14);
+  --border: light-dark(rgba(20,33,15,.20), rgba(207,232,194,.18));
+  --border-strong: light-dark(rgba(20,33,15,.42), rgba(207,232,194,.38));
+  --accent: light-dark(#2f7d32, #7bd66a);
+  --r1: 0px; --r2: 0px; --r3: 0px;
+  --t-prose: 14px;
+  --lift: none;
+  --lift-2: none;
+  --ground: var(--bg);
+}
+
+/* 4. Blueprint — drafting table. Deep indigo ground, cyan for anything drawn
+      on it, and a faint grid you notice only when you look for it. */
+[data-look='blueprint'] {
+  --text: light-dark(#16283d, #d6e6f5);
+  --muted: light-dark(#5a748f, #8ba6c2);
+  --bg: light-dark(#eef3f9, #0e1826);
+  --surface-base: light-dark(#ffffff, #14202f);
+  --surface-2-base: light-dark(#e3ebf4, #1a2839);
+  --border: light-dark(rgba(22,40,61,.16), rgba(214,230,245,.16));
+  --border-strong: light-dark(rgba(22,40,61,.30), rgba(214,230,245,.30));
+  --accent: light-dark(#0f6f9e, #5cc4ee);
+  --r1: 2px; --r2: 4px; --r3: 6px;
+  --t-prose: 15px;
+  --lift: none;
+  --lift-2: light-dark(0 1px 0 rgba(22,40,61,.10), 0 1px 0 rgba(0,0,0,.4));
+  --ground: var(--bg);
+}
+
+/* 5. Ember — a warm room. Charcoal that leans red, orange for state, and the
+      generous corners of something you sit in front of all evening. */
+[data-look='ember'] {
+  --text: light-dark(#2c2320, #efe3dc);
+  --muted: light-dark(#77655d, #ab958a);
+  --bg: light-dark(#faf5f2, #1a1615);
+  --surface-base: light-dark(#ffffff, #241e1c);
+  --surface-2-base: light-dark(#f3eae5, #2d2523);
+  --border: light-dark(rgba(44,35,32,.10), rgba(239,227,220,.10));
+  --border-strong: light-dark(rgba(44,35,32,.20), rgba(239,227,220,.22));
+  --accent: light-dark(#b4531c, #ee8b4d);
+  --r1: 12px; --r2: 16px; --r3: 22px;
+  --t-prose: 15px;
+  --lift: light-dark(0 1px 2px rgba(44,35,32,.07), inset 0 1px 0 rgba(255,255,255,.04));
+  --lift-2: light-dark(
+    0 2px 6px rgba(44,35,32,.10), 0 16px 32px -14px rgba(44,35,32,.20),
+    inset 0 1px 0 rgba(255,255,255,.06)
+  );
+  --ground: var(--bg);
+}
+
+/* 6. Mono — no hue anywhere. The accent IS the text colour, so the only thing
+      that can stand out is weight and edge. Square, ruled, unapologetic. */
+[data-look='mono'] {
+  --text: light-dark(#111111, #f2f2f2);
+  --muted: light-dark(#666666, #999999);
+  --bg: light-dark(#ffffff, #0d0d0d);
+  --surface-base: light-dark(#ffffff, #141414);
+  --surface-2-base: light-dark(#f0f0f0, #1e1e1e);
+  --border: light-dark(rgba(17,17,17,.28), rgba(242,242,242,.24));
+  --border-strong: light-dark(#111111, #f2f2f2);
+  --accent: light-dark(#111111, #f2f2f2);
+  --r1: 0px; --r2: 0px; --r3: 0px;
+  --t-prose: 15px;
+  --lift: none;
+  --lift-2: none;
+  --ground: var(--bg);
+}
+
+/* 7. Nord — cool, desaturated, low contrast on purpose. The one to pick for a
+      long session in a dim room. */
+[data-look='nord'] {
+  --text: light-dark(#2e3440, #e0e4ec);
+  --muted: light-dark(#4c566a, #9aa3b4);
+  --bg: light-dark(#eceff4, #232830);
+  --surface-base: light-dark(#f7f9fc, #2b313b);
+  --surface-2-base: light-dark(#e2e7ef, #333a46);
+  --border: light-dark(rgba(46,52,64,.12), rgba(224,228,236,.12));
+  --border-strong: light-dark(rgba(46,52,64,.24), rgba(224,228,236,.24));
+  --accent: light-dark(#3f7a91, #8fbcbb);
+  --r1: 6px; --r2: 9px; --r3: 12px;
+  --t-prose: 15px;
+  --lift: light-dark(0 1px 2px rgba(46,52,64,.06), inset 0 1px 0 rgba(255,255,255,.03));
+  --lift-2: light-dark(0 4px 14px -6px rgba(46,52,64,.18), 0 8px 22px -12px rgba(0,0,0,.5));
+  --ground: var(--bg);
+}
+
+/* 8. Bloom — light, airy, violet. The most decorative of the ten, and the
+      only one where the ground is graded rather than flat. */
+[data-look='bloom'] {
+  --text: light-dark(#2a2438, #ece7f5);
+  --muted: light-dark(#6d6484, #a89fc0);
+  --bg: light-dark(#faf8ff, #1b1726);
+  --surface-base: light-dark(#ffffff, #241f33);
+  --surface-2-base: light-dark(#f2eefc, #2d273e);
+  --border: light-dark(rgba(42,36,56,.08), rgba(236,231,245,.10));
+  --border-strong: light-dark(rgba(42,36,56,.18), rgba(236,231,245,.20));
+  --accent: light-dark(#7c3aed, #b892ff);
+  --r1: 14px; --r2: 18px; --r3: 26px;
+  --t-prose: 15.5px;
+  --lift: light-dark(0 1px 2px rgba(42,36,56,.05), inset 0 1px 0 rgba(255,255,255,.05));
+  --lift-2: light-dark(
+    0 2px 8px rgba(124,58,237,.10), 0 18px 40px -20px rgba(124,58,237,.30),
+    0 18px 40px -22px rgba(0,0,0,.6)
+  );
+  --ground: light-dark(
+    linear-gradient(160deg, #faf8ff 0%, #f3eefd 55%, #fbf7ff 100%),
+    linear-gradient(160deg, #1b1726 0%, #221b33 55%, #191524 100%)
+  );
+}
+
+/* 9. Slate — the neutral one. No character to get tired of, which is the
+      character. Cool grey, one blue, medium everything. */
+[data-look='slate'] {
+  --text: light-dark(#1f2937, #e5e7eb);
+  --muted: light-dark(#6b7280, #9ca3af);
+  --bg: light-dark(#f8fafc, #16181d);
+  --surface-base: light-dark(#ffffff, #1e2126);
+  --surface-2-base: light-dark(#f1f5f9, #262a31);
+  --border: light-dark(rgba(31,41,55,.12), rgba(229,231,235,.12));
+  --border-strong: light-dark(rgba(31,41,55,.24), rgba(229,231,235,.24));
+  --accent: light-dark(#2563eb, #7aa2f7);
+  --r1: 6px; --r2: 8px; --r3: 12px;
+  --t-prose: 15px;
+  --lift: light-dark(0 1px 2px rgba(31,41,55,.06), inset 0 1px 0 rgba(255,255,255,.04));
+  --lift-2: light-dark(0 4px 12px -4px rgba(31,41,55,.14), 0 8px 20px -10px rgba(0,0,0,.55));
+  --ground: var(--bg);
+}
+
+/* 10. Contrast — built for legibility and nothing else. Pure grounds, real
+       borders on everything, no shadow to muddy an edge, and an accent that
+       clears its ratio on both. Pick this one if any of the others fight you. */
+[data-look='contrast'] {
+  --text: light-dark(#000000, #ffffff);
+  --muted: light-dark(#3a3a3a, #c8c8c8);
+  --bg: light-dark(#ffffff, #000000);
+  --surface-base: light-dark(#ffffff, #000000);
+  --surface-2-base: light-dark(#ededed, #1a1a1a);
+  --border: light-dark(#000000, #ffffff);
+  --border-strong: light-dark(#000000, #ffffff);
+  --accent: light-dark(#0000cc, #ffd400);
+  --r1: 2px; --r2: 2px; --r3: 2px;
+  --t-prose: 16px;
+  --lift: none;
+  --lift-2: none;
+  --ground: var(--bg);
+}
+
+
+/* 11. Air — the one this product is being re-cut around.
+ *
+ * Light, floating, and almost colourless. The app is a white sheet resting on
+ * a grey ground; panels float over it rather than sitting in a grid; and the
+ * ONLY colours in the system are a green that means healthy and a red that
+ * means broken. There is no third accent, no brand tint on a surface, no
+ * gradient. Everything else is the ground, the sheet, and ink.
+ *
+ * The palette is taken from the reference sheet exactly:
+ *   #0AAB2A green · #FF3D3D red · #1E1E1E ink · #FFFFFF sheet
+ *
+ * The discipline that makes it work is subtraction: with only two hues
+ * available, colour cannot be used for decoration, so anything coloured on
+ * screen is a state somebody has to act on. A quiet install is grey. */
+[data-look='air'] {
+  --text: light-dark(#1e1e1e, #f2f3f4);
+  --muted: light-dark(#7a7f85, #9aa0a6);
+  /* The ground is a real grey, not an off-white: the white sheet has to read
+     as lifted off it, and a 2% difference is a printing error rather than a
+     design. */
+  --bg: light-dark(#dfe3e6, #141517);
+  --surface-base: light-dark(#ffffff, #1e2022);
+  --surface-2-base: light-dark(#f3f5f6, #26282b);
+
+  /* Borders barely exist. Separation is done with the shadow and the ground,
+     because a light interface with rules on everything reads as a form. */
+  --border: light-dark(rgba(30, 30, 30, 0.07), rgba(242, 243, 244, 0.09));
+  --border-strong: light-dark(rgba(30, 30, 30, 0.16), rgba(242, 243, 244, 0.2));
+
+  --accent: #0aab2a;
+  --ok: #0aab2a;
+  --danger: #ff3d3d;
+  /* There is no amber in the reference and inventing one would break the
+     two-colour rule, so a warning is the red at half weight — it is the same
+     family of "look at this", one step down. */
+  --warn: light-dark(#c9302c, #ff7a6b);
+  --outward: #ff3d3d;
+
+  --memory: light-dark(#6b7280, #9aa0a6);
+  --shared: light-dark(#6b7280, #9aa0a6);
+  --instruction: light-dark(#6b7280, #9aa0a6);
+
+  /* Generous, and generous consistently. The reference's whole character is
+     air, and air is a spacing scale rather than a colour. */
+  --s1: 6px;
+  --s2: 10px;
+  --s3: 14px;
+  --s4: 20px;
+  --s5: 30px;
+  --s6: 44px;
 
   --r1: 10px;
   --r2: 14px;
-  --r3: 18px;
-  --t-prose: 15px;
+  --r3: 20px;
+  /* The sheet itself is rounder than anything on it. */
+  --r-sheet: 26px;
 
-  /* Light drops a shadow; dark lifts with a hairline of light along the top
-     edge. Written as one variable so every surface picks up whichever half is
-     in force without a second rule anywhere. */
+  --t-micro: 11px;
+  --t-chrome: 12.5px;
+  --t-ui: 13.5px;
+  --t-prose: 15px;
+  --h-tabs: 40px;
+
+  /* Two shadows and no more: one for a thing resting on the sheet, one for a
+     thing floating above it. A third would start a hierarchy nobody can
+     read. */
   --lift: light-dark(
-    0 1px 2px rgba(59, 57, 69, .06), 
-    inset 0 1px 0 rgba(255, 255, 255, .045)
+    0 1px 2px rgba(30, 30, 30, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.4)
   );
   --lift-2: light-dark(
-    0 1px 3px rgba(59, 57, 69, .08), 0 10px 24px -8px rgba(59, 57, 69, .12),
-    inset 0 1px 0 rgba(255, 255, 255, .06)
+    0 2px 6px rgba(30, 30, 30, 0.05), 0 14px 34px -14px rgba(30, 30, 30, 0.14),
+    0 2px 6px rgba(0, 0, 0, 0.45), 0 14px 34px -14px rgba(0, 0, 0, 0.7)
   );
-  --shadow: var(--lift-2);
-  --focus: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+  --ground: var(--bg);
 }
 
-/* The ground is flat on purpose. Every other look grades it; a gradient is a
-   thing to look at, and there is nothing here to look at until something
-   happens. */
-:root[data-look='calm'] .shell-ground {
-  background-image: none;
-  background-color: var(--bg);
+/* The typeface.
+ *
+ * The reference specifies Lufga, which is a commercial licence and therefore
+ * not something this repository can carry — a self-hosted binary that embeds a
+ * font is distributing it. So the face is a variable with a geometric-leaning
+ * system stack behind it, and dropping Lufga in is one @font-face and one
+ * value, with nothing else in the product to find and change.
+ *
+ * The stack is ordered by how close each face is to the reference rather than
+ * by ubiquity: Avenir Next and Century Gothic are the geometric sans that ship
+ * with macOS and Windows, and system-ui is the floor. */
+:root {
+  --face: "Avenir Next", "Century Gothic", "URW Gothic", "Questrial", system-ui,
+    -apple-system, "Segoe UI", sans-serif;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--face);
+}
+
+/* The parts of the contract every look shares, written once. */
+:root {
+  --shadow: var(--lift-2);
+  --focus: 0 0 0 3px color-mix(in srgb, var(--accent) 34%, transparent);
 }
 
 /* Surfaces: raised, round, and unoutlined. */
-:root[data-look='calm'] .panel,
-:root[data-look='calm'] .card,
-:root[data-look='calm'] .dock-panel,
-:root[data-look='calm'] .sidebar,
-:root[data-look='calm'] .modal,
-:root[data-look='calm'] .menu {
+.panel,
+.card,
+.dock-panel,
+.sidebar,
+.modal,
+.menu {
   border-color: transparent;
   border-radius: var(--r3);
   box-shadow: var(--lift-2);
   background: var(--surface);
 }
 
-/* Controls. A button is a soft key, not a box: no outline until it is the one
-   in force, and then it is the accent — which is the only place the accent
-   appears that is not a state. */
-:root[data-look='calm'] button,
-:root[data-look='calm'] .chip,
-:root[data-look='calm'] .bn-tab {
+/* Controls.
+   
+   A pill is for a CONTROL — a chip, a tab, a small button you press. It is not
+   for anything that happens to be a <button> element, and that distinction is
+   the whole of this block: `.agent-card` is a button, so a blanket rule on the
+   tag turned every agent in the workspace into a 105px-tall lozenge with its
+   own text falling out of the bottom. Selecting on the tag was the mistake;
+   these select on what a thing IS. */
+.chip,
+.dk-view-tab,
+.pill {
   border-color: transparent;
   border-radius: 999px;
   background: color-mix(in srgb, var(--text) 5%, transparent);
   box-shadow: none;
 }
-:root[data-look='calm'] button:hover,
-:root[data-look='calm'] .chip:hover,
-:root[data-look='calm'] .bn-tab:hover {
+
+/* An ordinary button is a soft key: rounded like everything else, not a
+   capsule.
+
+   THE EXCLUSION LIST IS A LAYERING BUG AND THIS IS THE FIX FOR IT.
+
+   A tag selector carrying N :not() clauses weighs (0, N+1, 2). Every component
+   that states its own shape — a card, a tab, a circular icon, a select — does
+   so with a single class at (0, 1, 0) and loses. Four separate times a control
+   was styled correctly, looked wrong, and turned out to have been overruled
+   here: agent cards became 105px lozenges, the primary button lost its accent,
+   the header's round buttons squared off, and the select lost the border it
+   had asked for.
+
+   So the rule no longer competes. Anything that declares itself a component
+   carries `data-own` and is excluded once, by attribute — one clause that
+   never has to grow again, instead of a list that grows by one every time this
+   bug is rediscovered.
+
+   `.round` is the escape hatch for a control that is a circle by design — the
+   header's theme, help and account buttons. Without it this rule's radius wins
+   on weight alone and quietly squares them off, which is the third separate
+   time a blanket selector on the tag has overruled something that had already
+   said what shape it was.
+
+   `.round` is the escape hatch for a control that is a circle by design — the
+   header's theme, help and account buttons. Without it this rule's radius wins
+   on weight alone and quietly squares them off, which is the third time a
+   blanket selector on the tag has overruled something that had already said
+   what shape it was.
+
+   The exclusions are the whole point of this rule, and they are not
+   decoration. A tag selector with four :not() clauses carries more weight than
+   `.tabs button.active` does, so this rule was silently painting every ACTIVE
+   control the same flat grey as every inactive one: seven of the nine panel
+   buttons in the workspace header were open, all nine looked identical, and
+   there was no way to tell from the interface which panels were on screen.
+   A button that is a card, a tab, or currently on is not an ordinary button —
+   each of those says what it is elsewhere, and this must not outrank it. */
+button:not([data-own]):not(.agent-card):not(.card):not(.look-option):not(.ws-card):not(.dk-view-tab):not(.round) {
+  border-color: transparent;
+  border-radius: var(--r1);
+  box-shadow: none;
+}
+/* The shape above is the same on or off; only the fill says which.
+ *
+ * This rule kept the `[data-look='calm']` prefix when the geometry above lost
+ * it, so under every OTHER look an ordinary button had the geometry and no
+ * fill: transparent background, transparent border, and nothing left to see.
+ * It was found on the one that mattered most — "approve, with these grants",
+ * the decision the gear screen exists to make, rendered as a bare sentence. */
+button:not([data-own]):not(.agent-card):not(.card):not(.look-option):not(.ws-card):not(.dk-view-tab):not(.round):not(.active):not(.primary) {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+button:not([data-own]):not(.agent-card):not(.card):not(.ws-card):not(.round):not(.active):not(.primary):hover,
+.chip:hover,
+.dk-view-tab:not(.active):hover {
   background: color-mix(in srgb, var(--text) 9%, transparent);
 }
-:root[data-look='calm'] .bn-tab.active,
-:root[data-look='calm'] .chip.on,
-:root[data-look='calm'] button.primary {
+
+/* A card is a card whatever element it is made of. */
+.agent-card,
+.ws-card {
+  border-color: transparent;
+  border-radius: var(--r2);
+  background: var(--surface);
+  box-shadow: var(--lift);
+  text-align: left;
+}
+.agent-card:hover,
+.ws-card:hover {
+  box-shadow: var(--lift-2);
+}
+
+/* A card INSIDE a panel steps one tone, and drops its shadow.
+   
+   Both were the same --surface, so four agent cards in a panel were four
+   invisible rectangles on one flat field. Separation here is a tone rather
+   than another shadow: a shadow inside a shadowed panel is a second elevation
+   for something that has not risen, and it reads as grime. */
+.dk-slide .card,
+.dk-slide .agent-card,
+.dk-slide .list-item,
+.dk-overlay .card {
+  background: var(--surface-2);
+  box-shadow: none;
+}
+.dk-slide .agent-card:hover,
+.dk-slide .card:hover {
+  background: color-mix(in srgb, var(--text) 8%, var(--surface-2));
+  box-shadow: none;
+}
+.agent-card.selected {
+  box-shadow: var(--lift-2), inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+/* On is on, wherever it appears: the view you are in, and the overlay you have
+   open.
+
+   `button.primary` was in this group and had to come out. A primary action is
+   not an "on" state — it is the one control on screen that does the
+   irreversible thing, and a 16% tint is what every other toggle looks like. It
+   arrived here when the look-specific prefix was stripped off these rules to
+   make them the product's, and it silently repainted "Allow once" in the
+   approval dialog and "save" in the editor, for every look at once. A tag selector with four :not() clauses outweighs `.tabs button.active`
+   on its own, so before this every active control was painted the same flat
+   grey as every inactive one — and the header could not answer "where am I". */
+.dk-view-tab.active,
+.dk-overlay-buttons button.active,
+.tabs button.active,
+.chip.on {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: color-mix(in srgb, var(--accent) 80%, var(--text));
+  border-color: transparent;
+  box-shadow: none;
 }
-/* The accent bar under a tab goes: the fill already says which one is active,
-   and two signals for one fact is one signal too many. */
-:root[data-look='calm'] .bn-tab.active::after { display: none; }
 
 /* Something you type into keeps its edge — the one place a border earns its
    place, because a field with no boundary is a field nobody clicks. */
-:root[data-look='calm'] input,
-:root[data-look='calm'] textarea,
-:root[data-look='calm'] select,
-:root[data-look='calm'] .composer {
+input,
+textarea,
+select,
+.composer {
   border: 1px solid var(--border);
   border-radius: var(--r2);
   background: var(--surface-2);
@@ -1469,19 +1008,19 @@ button.primary:hover:not(:disabled) {
 }
 
 /* Rows are separated by tint, not by rules. */
-:root[data-look='calm'] .row,
-:root[data-look='calm'] .list-item {
+.row,
+.list-item {
   border-color: transparent;
   border-radius: var(--r1);
 }
-:root[data-look='calm'] .row:hover,
-:root[data-look='calm'] .list-item:hover {
+.row:hover,
+.list-item:hover {
   background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 
 /* Graph nodes are the same surface as everything else, so the canvas stops
    being a different visual world from the panels around it. */
-:root[data-look='calm'] .react-flow__node {
+.react-flow__node {
   border-color: transparent;
   border-radius: var(--r2);
   box-shadow: var(--lift-2);
@@ -1489,20 +1028,20 @@ button.primary:hover:not(:disabled) {
 
 /* The conversation. A speech bubble in the accent is decoration; what a
    message needs is to be readable and to say who is talking. */
-:root[data-look='calm'] .msg.user .msg-body {
+.msg.user .msg-body {
   background: color-mix(in srgb, var(--text) 6%, transparent);
   border-radius: var(--r2);
 }
-:root[data-look='calm'] .msg .msg-body {
+.msg .msg-body {
   border-radius: var(--r2);
 }
 
 /* Code, figures and logs stay in monospace. Calm is about the chrome; a column
    of numbers that does not line up is not calm, it is just harder to read. */
-:root[data-look='calm'] code,
-:root[data-look='calm'] pre,
-:root[data-look='calm'] .mono,
-:root[data-look='calm'] .terminal {
+code,
+pre,
+.mono,
+.terminal {
   font-family: var(--mono);
 }
 
@@ -1510,15 +1049,15 @@ button.primary:hover:not(:disabled) {
    rather than removed — without it a node being dragged has nothing to move
    against — but taken down to where it reads as paper rather than as graph
    paper. */
-:root[data-look='calm'] .react-flow__background {
+.react-flow__background {
   opacity: .3;
 }
 
 /* State is the only colour here, so where a state already has a word for it
    the dot beside it is the whole signal and needs no box around it. */
-:root[data-look='calm'] .status,
-:root[data-look='calm'] .badge,
-:root[data-look='calm'] .tag {
+.status,
+.badge,
+.tag {
   border-color: transparent;
   border-radius: 999px;
 }

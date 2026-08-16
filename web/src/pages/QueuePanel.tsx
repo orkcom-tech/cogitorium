@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, type QueueEntry, type QueueView, type Schedule, type InletTask } from '../api'
+import { Select } from './Select'
+import { Field, Fields } from './Field'
 
 // What this workspace is doing, what is waiting, and what starts on its own.
 //
@@ -127,7 +129,11 @@ export default function QueuePanel({
               <code>{s.spec}</code>
             </div>
             <div className="muted small">
-              next {new Date(s.next_at).toLocaleString()}
+              {/* In the schedule's OWN zone when it has one. This used to render
+                  in the viewer's zone and then append the schedule's — a run at
+                  03:00 Europe/Berlin, read from Tel Aviv, said "4:00:00 AM
+                  (Europe/Berlin)", which is an hour the schedule never fires. */}
+              next {new Date(s.next_at).toLocaleString(undefined, s.tz ? { timeZone: s.tz } : undefined)}
               {s.tz && ` (${s.tz})`} · {s.fires} fired, {s.skips} skipped
               {s.last_outcome && ` · last: ${s.last_outcome}`}
             </div>
@@ -223,31 +229,33 @@ function NewSchedule({
 
   return (
     <div className="card">
-      <div className="row">
-        <select value={taskID} onChange={(e) => setTaskID(Number(e.target.value))}>
-          {tasks.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name} → {t.agent_name}
-            </option>
-          ))}
-        </select>
-        <input placeholder="name" value={name} onChange={(e) => setName(e.target.value)} />
-      </div>
-      <div className="row">
-        <input
-          className="grow"
-          placeholder="every 15m — or 0 7 * * 1-5"
-          value={spec}
-          onChange={(e) => setSpec(e.target.value)}
-        />
-        <input placeholder="Europe/Berlin" value={tz} onChange={(e) => setTZ(e.target.value)} />
-      </div>
-      <textarea
-        rows={3}
-        value={payload}
-        onChange={(e) => setPayload(e.target.value)}
-        placeholder="the body this task is given, as JSON"
-      />
+      <Fields>
+        <Field label="Task" hint="the receiver task this schedule fires, on its agent">
+          <Select
+            value={String(taskID)}
+            aria-label="The inlet task this schedule fires"
+            placeholder={
+              tasks.length === 0
+                ? 'this workspace has no inlet task to schedule'
+                : 'which task this schedule fires…'
+            }
+            options={tasks.map((t) => ({ value: String(t.id), label: `${t.name} → ${t.agent_name}` }))}
+            onChange={(v) => setTaskID(Number(v))}
+          />
+        </Field>
+        <Field label="Name" hint="what this schedule is called in the list below">
+          <input placeholder="morning sweep" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="When" hint="an interval like every 15m, or a cron line like 0 7 * * 1-5">
+          <input placeholder="every 15m" value={spec} onChange={(e) => setSpec(e.target.value)} />
+        </Field>
+        <Field label="Time zone" hint="left empty, a cron line is read in this server's zone">
+          <input placeholder="Europe/Berlin" value={tz} onChange={(e) => setTZ(e.target.value)} />
+        </Field>
+      </Fields>
+      <Field wide label="Payload" hint="the JSON body each run is given; empty sends none">
+        <textarea rows={3} value={payload} onChange={(e) => setPayload(e.target.value)} />
+      </Field>
       <div className="row spread">
         <label>
           <input

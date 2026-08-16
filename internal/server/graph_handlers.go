@@ -171,13 +171,23 @@ func (s *Server) handleWorkspaceGraph(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, g)
 }
 
-// handleAccessMap is the administrator's view one level up: who belongs to
-// which team, and which workspaces each can reach. The same relationships
-// the permission checks use, drawn instead of inferred from three screens.
+// handleAccessMap is the install one level up: who belongs to which team, and
+// which workspaces each can reach. The same relationships the permission
+// checks use, drawn instead of inferred from three screens.
+//
+// SCOPE IS THE WHOLE SECURITY MODEL OF THIS ROUTE, and it is enforced here
+// rather than in the browser. An administrator sees the install. Anybody else
+// sees only what they can already reach: their own teams, the people they
+// share a team with, and the workspaces visible to them.
+//
+// Filtering this in the client would not be a smaller version of the same
+// thing — the payload would still name every workspace on the server, and a
+// member reading one HTTP response would learn the shape of rooms they have no
+// grant on. The test that matters greps the raw JSON for a name, not the
+// rendered graph.
 func (s *Server) handleAccessMap(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireAdmin(w, r); !ok {
-		return
-	}
+	caller := callerFrom(r.Context())
+	admin := caller.Role == "admin"
 	ctx := r.Context()
 
 	users, err := s.identity.ListUsers(ctx)
@@ -190,10 +200,58 @@ func (s *Server) handleAccessMap(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	workspaces, err := s.workspaces.ListWorkspaces(ctx)
+	// The one call that already answers "which of these may this person use",
+	// so the map and the workspace list can never disagree about it.
+	workspaces, err := s.workspaces.ListWorkspacesFor(ctx, caller)
 	if err != nil {
 		fail(w, r, err)
 		return
+	}
+
+	if !admin {
+		// Teams the caller is in, and nothing else. A team they are not in is
+		// not merely uninteresting — its name and size are somebody else's.
+		mine := map[int64]bool{}
+		for _, t := range caller.Teams {
+			mine[t] = true
+		}
+		kept := teams[:0]
+		for _, t := range teams {
+			if mine[t.ID] {
+				kept = append(kept, t)
+			}
+		}
+		teams = kept
+
+		// People are kept when the caller shares a team with them, or owns
+		// nothing in common but is looking at themselves. Everyone else is
+		// dropped: a member has no business enumerating the user table.
+		visible := users[:0]
+		for _, u := range users {
+			keep := u.ID == caller.ID
+			for _, t := range u.Teams {
+				if mine[t] {
+					keep = true
+				}
+			}
+			if keep {
+				visible = append(visible, u)
+			}
+		}
+		users = visible
+	}
+
+	// After filtering, an edge may point at something that is no longer here —
+	// a workspace owned by somebody the caller cannot see, a membership in a
+	// team that was dropped. An edge to a missing node is worse than no edge:
+	// it names the thing it points at.
+	shownUser := map[int64]bool{}
+	for _, u := range users {
+		shownUser[u.ID] = true
+	}
+	shownTeam := map[int64]bool{}
+	for _, t := range teams {
+		shownTeam[t.ID] = true
 	}
 
 	g := graph{Nodes: []graphNode{}, Edges: []graphEdge{}}
@@ -204,6 +262,9 @@ func (s *Server) handleAccessMap(w http.ResponseWriter, r *http.Request) {
 		g.Nodes = append(g.Nodes, graphNode{ID: teamNodeID(t.ID), Kind: "team", Label: t.Name})
 	}
 	for _, ws := range workspaces {
+		// `users` is already the filtered set, so an owner the caller cannot
+		// see simply never matches and the workspace reads as unowned rather
+		// than naming a stranger.
 		owner := "unowned"
 		for _, u := range users {
 			if ws.OwnerID != nil && u.ID == *ws.OwnerID {
@@ -213,17 +274,23 @@ func (s *Server) handleAccessMap(w http.ResponseWriter, r *http.Request) {
 		g.Nodes = append(g.Nodes, graphNode{
 			ID: workspaceNodeID(ws.ID), Kind: "workspace", Label: ws.Name, Detail: owner,
 		})
-		if ws.OwnerID != nil {
+		if ws.OwnerID != nil && shownUser[*ws.OwnerID] {
 			g.Edges = append(g.Edges, graphEdge{From: userNodeID(*ws.OwnerID), To: workspaceNodeID(ws.ID), Kind: "owns"})
 		}
 		// One edge per team, so the map shows every path in rather than only
 		// the first one granted.
 		for _, t := range ws.TeamIDs {
+			if !shownTeam[t] {
+				continue
+			}
 			g.Edges = append(g.Edges, graphEdge{From: teamNodeID(t), To: workspaceNodeID(ws.ID), Kind: "shared"})
 		}
 	}
 	for _, u := range users {
 		for _, teamID := range u.Teams {
+			if !shownTeam[teamID] {
+				continue
+			}
 			g.Edges = append(g.Edges, graphEdge{From: userNodeID(u.ID), To: teamNodeID(teamID), Kind: "member"})
 		}
 	}

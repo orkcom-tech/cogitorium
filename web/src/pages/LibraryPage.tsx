@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Select } from './Select'
+import { Field, Fields } from './Field'
 import { api, type Instruction } from '../api'
 
 // The instruction library: guidance written once and reused, so nobody
@@ -62,14 +64,13 @@ export default function LibraryPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <select value={tag} onChange={(e) => setTag(e.target.value)}>
-          <option value="">all tags</option>
-          {allTags.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={tag}
+          aria-label="Filter by tag"
+          placeholder="all tags"
+          onChange={setTag}
+          options={[{ value: '', label: 'all tags' }, ...allTags.map((t) => ({ value: t, label: t }))]}
+        />
         <button onClick={() => setWriting((v) => !v)}>{writing ? 'cancel' : 'write one'}</button>
       </div>
 
@@ -155,22 +156,22 @@ function WriteInstructionForm({ onDone, onError }: { onDone: () => void; onError
           .catch((err: Error) => onError(err.message))
       }}
     >
-      <div className="row">
-        <input required placeholder="name, e.g. review-checklist" value={name} onChange={(e) => setName(e.target.value)} />
-        <input
-          className="grow"
-          placeholder="what it is for — this is what agents read when choosing it"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <input placeholder="tags, comma separated" value={tags} onChange={(e) => setTags(e.target.value)} />
-      </div>
-      <label className="field">
-        <span className="muted">the instruction, in markdown</span>
+      <Fields>
+        <Field label="Name" hint="lower case with dashes">
+          <input required placeholder="review-checklist" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="What it is for" wide hint="an agent reads this when deciding whether to pin it, so write it for them">
+          <input value={description} onChange={(e) => setDescription(e.target.value)} />
+        </Field>
+        <Field label="Tags" hint="comma separated, and used to filter this list">
+          <input placeholder="review, python" value={tags} onChange={(e) => setTags(e.target.value)} />
+        </Field>
+      </Fields>
+      <Field label="The instruction" wide hint="markdown; this is the text pinned onto an agent verbatim">
         <textarea rows={10} value={text} onChange={(e) => setText(e.target.value)} />
-      </label>
-      <div className="row">
-        <button type="submit" disabled={!name.trim() || !text.trim()}>
+      </Field>
+      <div className="row form-actions">
+        <button type="submit" className="primary" disabled={!name.trim() || !text.trim()}>
           save to the library
         </button>
       </div>

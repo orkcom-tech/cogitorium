@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react'
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getBezierPath,
+  getSmoothStepPath,
   useNodes,
   type EdgeProps,
   type Node,
@@ -49,19 +49,39 @@ function stopFor(index: number, count: number): number {
   return firstStop + (span * index) / (count - 1)
 }
 
-// pointOn evaluates the cubic the path describes, at t.
+// pointOn evaluates the path at t, where t is a fraction of its LENGTH.
 //
-// The path is measured rather than guessed: getBezierPath returns a single
-// "M x,y C …" and reading the four control points back out of it means the
-// label lands on the curve React Flow actually drew, whichever way round the
-// handles ended up. Measuring it through the DOM instead — getPointAtLength on
-// a detached path — would give distance along the curve rather than this
-// parameter, which is closer to what the eye wants; it is also a browser API
-// that has historically wanted the element to be in the document, and this runs
-// while React is still rendering. Not worth it: for these curves the two agree
-// to within a few pixels.
-const cubic =
-  /^M\s*(-?[\d.]+),\s*(-?[\d.]+)\s*C\s*(-?[\d.]+),\s*(-?[\d.]+)\s+(-?[\d.]+),\s*(-?[\d.]+)\s+(-?[\d.]+),\s*(-?[\d.]+)/
+// The wires used to be bezier curves and this used to read the four control
+// points back out of "M x,y C …" and evaluate the cubic. They are orthogonal
+// now — a run of straight segments joined by small corner arcs — so there is no
+// cubic to evaluate, and a regex that fails silently would have dropped every
+// label back onto the midpoint, which is the exact collision the spreading
+// above exists to prevent.
+//
+// A polyline is measured rather than parameterised, and that is an improvement
+// rather than a compromise: distance along the path is what the eye actually
+// wants, and the old comment said as much while settling for the cubic
+// parameter because measuring a curve properly needed the DOM. A polyline needs
+// nothing but arithmetic.
+//
+// The corner arcs are treated as their control points. A corner is a handful of
+// pixels across and a label is never placed on one, so the error is smaller
+// than the rounding on the coordinates it came from.
+const numbers = /-?\d+(?:\.\d+)?/g
+
+function polyline(path: string): [number, number][] {
+  const n = path.match(numbers)
+  if (!n || n.length < 4) return []
+  const pts: [number, number][] = []
+  for (let i = 0; i + 1 < n.length; i += 2) {
+    const p: [number, number] = [Number(n[i]), Number(n[i + 1])]
+    // Consecutive duplicates are common where a segment has zero length, and
+    // they would put a zero-length span in the walk below.
+    const last = pts[pts.length - 1]
+    if (!last || last[0] !== p[0] || last[1] !== p[1]) pts.push(p)
+  }
+  return pts
+}
 
 function pointOn(
   path: string,
@@ -69,21 +89,39 @@ function pointOn(
   fallback: [number, number],
   across = 0,
 ): [number, number] {
-  const m = cubic.exec(path)
-  if (!m) return fallback
-  const [x0, y0, x1, y1, x2, y2, x3, y3] = m.slice(1).map(Number)
-  const u = 1 - t
-  const x = u * u * u * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x3
-  const y = u * u * u * y0 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y3
-  if (!across) return [x, y]
-  // Sideways means perpendicular to the curve here, not simply left: the
-  // wires in a bundle arrive at every angle, and an offset in a fixed
-  // direction would push labels apart on one approach and along the same line
-  // on another.
-  const dx = 3 * u * u * (x1 - x0) + 6 * u * t * (x2 - x1) + 3 * t * t * (x3 - x2)
-  const dy = 3 * u * u * (y1 - y0) + 6 * u * t * (y2 - y1) + 3 * t * t * (y3 - y2)
-  const len = Math.hypot(dx, dy) || 1
-  return [x - (dy / len) * across, y + (dx / len) * across]
+  const pts = polyline(path)
+  if (pts.length < 2) return fallback
+
+  const seg: number[] = []
+  let total = 0
+  for (let i = 1; i < pts.length; i++) {
+    const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])
+    seg.push(d)
+    total += d
+  }
+  if (total <= 0) return fallback
+
+  let want = Math.max(0, Math.min(1, t)) * total
+  for (let i = 0; i < seg.length; i++) {
+    if (want > seg[i] && i < seg.length - 1) {
+      want -= seg[i]
+      continue
+    }
+    const u = seg[i] > 0 ? want / seg[i] : 0
+    const [x0, y0] = pts[i]
+    const [x1, y1] = pts[i + 1]
+    const x = x0 + (x1 - x0) * u
+    const y = y0 + (y1 - y0) * u
+    if (!across) return [x, y]
+    // Sideways means perpendicular to THIS segment: wires in a bundle arrive
+    // on different axes, and an offset in a fixed direction would push labels
+    // apart on one approach and along the same line on another.
+    const dx = x1 - x0
+    const dy = y1 - y0
+    const len = Math.hypot(dx, dy) || 1
+    return [x - (dy / len) * across, y + (dx / len) * across]
+  }
+  return fallback
 }
 
 // clear reports whether a point is far enough from every node's box.
@@ -158,13 +196,21 @@ function WireEdge({
   style,
   data,
 }: EdgeProps) {
-  const [path, midX, midY] = getBezierPath({
+  // Orthogonal, with a corner radius.
+  //
+  // A curve says "these two are related"; a right-angled run says "this goes
+  // there, by this route". In a graph where every wire is a capability
+  // somebody granted, the second is the honest picture — and it is also the
+  // readable one, because parallel runs share a lane instead of fanning into
+  // a bundle of near-identical arcs.
+  const [path, midX, midY] = getSmoothStepPath({
     sourceX,
     sourceY,
     targetX,
     targetY,
     sourcePosition,
     targetPosition,
+    borderRadius: 12,
   })
 
   const label = typeof data?.label === 'string' ? data.label : ''

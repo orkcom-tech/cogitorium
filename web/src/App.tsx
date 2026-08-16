@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { BrowserRouter, Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { auth, Unauthorized, type User } from './api'
 import { session } from './session'
 import LoginPage from './pages/LoginPage'
@@ -12,6 +12,7 @@ import EnvPage from './pages/EnvPage'
 import LibraryPage from './pages/LibraryPage'
 import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
+import InstallMap from './pages/InstallMap'
 import ThemeMenu from './pages/ThemeMenu'
 import { applyTheme, loadTheme } from './styles/theme'
 import { COG_MARK, DOCS_URL, ORKCOM_URL, ORK_MARK } from './styles/brand'
@@ -22,27 +23,10 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [checking, setChecking] = useState(true)
-  // The sidebar is 200px the two most space-starved views cannot spare. It
-  // collapses to a rail of icons and remembers the choice per device.
-  const [navOpen, setNavOpen] = useState(() => localStorage.getItem('cogitorium.nav') !== 'collapsed')
-
-  useEffect(() => {
-    localStorage.setItem('cogitorium.nav', navOpen ? 'open' : 'collapsed')
-  }, [navOpen])
-
-  // The ONLY global key binding in the app. Escape is deliberately absent:
-  // the approval dialog owns it, scoped to itself, so one keypress can never
-  // both dismiss some chrome and silently refuse a pending web search.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
-        e.preventDefault()
-        setNavOpen((v) => !v)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  // ⌘B and the collapse state went with the rail it collapsed. There is no
+  // global key binding left in the app at all: Escape is deliberately absent
+  // because the approval dialog owns it, scoped to itself, so one keypress can
+  // never both dismiss some chrome and silently refuse a pending web search.
 
   // whoami decides the shell: on loopback it succeeds without credentials,
   // which is why a single-operator install never sees a login screen.
@@ -84,132 +68,83 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div className={`layout ${navOpen ? '' : 'nav-collapsed'}`}>
-        <div className="shell-backdrop" aria-hidden>
-          <Backdrop />
-        </div>
-        <div className="shell-scrim" aria-hidden />
+      {/* The shell.
+       *
+       * A white sheet resting on a grey ground, with everything the operator
+       * navigates by in ONE row across its top. What this replaced was a
+       * 200px left rail carrying nine destinations, a collapse toggle, the
+       * brand, the account block and the sign-out button — a column that took
+       * a sixth of every screen to hold things most of which are opened once a
+       * week.
+       *
+       * The split is by frequency, not by kind. What you move between all day
+       * is a pill in the middle. What you configure occasionally lives behind
+       * the account button. Nothing is hidden that was reachable before; it is
+       * one click further away and the canvas is a sixth wider. */}
+      <div className="app-shell">
         <div className="shell-ground" aria-hidden />
-        <div className="shell-glow" aria-hidden />
-        <div className="shell-grain" aria-hidden />
-        <button
-          className="nav-toggle"
-          onClick={() => setNavOpen((v) => !v)}
-          title={navOpen ? 'Hide the menu (⌘B)' : 'Show the menu (⌘B)'}
-          aria-label={navOpen ? 'Hide the menu' : 'Show the menu'}
-          aria-expanded={navOpen}
-        >
-          {navOpen ? '⟨' : '☰'}
-        </button>
-        <aside className="sidebar" aria-hidden={!navOpen}>
-          <div className="brand-block">
-            <h1 className="brand">
-              <img className="brand-mark" src={COG_MARK} alt="" width={26} height={26} />
-              <span className="wordmark">Cogitorium</span>
-            </h1>
-            {/* The maker, stated once and not repeated anywhere else. The mark
-                carries no colour of its own — it is alpha over currentColor —
-                so it belongs to whatever palette the operator has chosen. */}
-            <a
-              className="by-ork"
-              href={ORKCOM_URL}
-              target="_blank"
-              rel="noreferrer"
-              title="ORKCOM"
-            >
-              <span className="by-word">by</span>
-              {/* The mark spells ORK and the company is ORKCOM, so the type
-                  finishes the word the logo starts. Setting both the mark and
-                  the full name side by side would read as a duplicate. */}
-              <span className="ork-lockup" aria-hidden>
-                <span className="ork-mark" style={{ maskImage: `url("${ORK_MARK}")`, WebkitMaskImage: `url("${ORK_MARK}")` }} />
-                <span className="ork-com">com</span>
-              </span>
-              <span className="sr-only">ORKCOM</span>
-            </a>
-          </div>
-          <nav className="pane side-pane">
-            <NavLink to="/workspaces" title="Workspaces">
-              <span className="nav-icon" aria-hidden>▦</span>
-              <span>Workspaces</span>
-            </NavLink>
-            {/* The Context page browses the whole space — every workspace's
-                memory and every agent's private branch — so it follows the
-                Terminal's rule and is admin-only. Members reach context
-                through their own workspace's bindings. */}
-            {user.role === 'admin' && <NavLink to="/context" title="Context">
-              <span className="nav-icon" aria-hidden>◇</span>
-              <span>Context</span>
-            </NavLink>}
-            <NavLink to="/gears" title="Gears">
-              <span className="nav-icon" aria-hidden>⚙</span>
-              <span>Gears</span>
-            </NavLink>
-            <NavLink to="/instructions" title="Instructions">
-              <span className="nav-icon" aria-hidden>❏</span>
-              <span>Instructions</span>
-            </NavLink>
-            {/* One name set here reaches every workspace on the install, which
-                is the same reasoning that makes gear approval an admin's act. A
-                workspace's own overrides are on the workspace, where the people
-                who run its agents can reach them. */}
-            {user.role === 'admin' && <NavLink to="/env" title="Variables & Secrets">
-              <span className="nav-icon" aria-hidden>⚿</span>
-              <span>Variables</span>
-            </NavLink>}
-            <NavLink to="/models" title="Models">
-              <span className="nav-icon" aria-hidden>◈</span>
-              <span>Models</span>
-            </NavLink>
-            {user.role === 'admin' && <NavLink to="/terminal" title="Terminal">
-              <span className="nav-icon" aria-hidden>▤</span>
-              <span>Terminal</span>
-            </NavLink>}
-            {user.role === 'admin' && <NavLink to="/people" title="People">
-              <span className="nav-icon" aria-hidden>◉</span>
-              <span>People</span>
-            </NavLink>}
-            {/* An <a>, not a NavLink: the documentation is a site rather than a
-                route, and it opens beside the workbench instead of replacing
-                it — nobody wants to lose a running turn to read a page. */}
-            <a href={DOCS_URL} target="_blank" rel="noreferrer" title="Documentation" className="nav-external">
-              <span className="nav-icon" aria-hidden>❯</span>
-              <span>Documentation</span>
-            </a>
-          </nav>
-          <footer className="pane side-pane account">
-            <div className="account-who">
-              <span className="avatar" aria-hidden>
-                {user.name.slice(0, 1).toUpperCase()}
-              </span>
-              <div className="account-id">
-                <strong>{user.name}</strong>
-                <span className="muted">{user.role}</span>
-              </div>
+        <div className="sheet">
+          <header className="sheet-head">
+            <div className="brand">
+              <Link to="/workspaces" className="brand-link" title="Cogitorium">
+                <img className="brand-mark" src={COG_MARK} alt="" width={24} height={24} />
+                <span className="wordmark">Cogitorium</span>
+              </Link>
+              {/* The maker, stated once and nowhere else. The mark alone, with
+                  no "com" set after it: the lockup already reads as a word, and
+                  typing the rest of the company name beside a logo that spells
+                  it is the same thing said twice.
+
+                  It carries no colour of its own — alpha over currentColor —
+                  so it belongs to whatever look is in force. */}
+              <a className="by-ork" href={ORKCOM_URL} target="_blank" rel="noreferrer" title="ORKCOM">
+                <span className="by-word">by</span>
+                <span
+                  className="ork-mark"
+                  aria-hidden
+                  style={{ maskImage: `url("${ORK_MARK}")`, WebkitMaskImage: `url("${ORK_MARK}")` }}
+                />
+                <span className="sr-only">ORKCOM</span>
+              </a>
             </div>
 
-            <ThemeMenu />
+            {/* The places you actually work, and only those. An admin's
+                install-wide pages are in the account menu with the rest of the
+                configuration. */}
+            <nav className="pill-nav">
+              <NavLink to="/workspaces">Workspaces</NavLink>
+              <NavLink to="/map">Map</NavLink>
+              <NavLink to="/gears">Gears</NavLink>
+              <NavLink to="/instructions">Instructions</NavLink>
+              <NavLink to="/models">Models</NavLink>
+              {user.role === 'admin' && <NavLink to="/context">Context</NavLink>}
+              {/* People is where the relationship graph and the access map
+                  live. It went into the account menu with the other admin
+                  pages and should not have: a picture of who can reach what is
+                  something you go and look at, not a setting you change. */}
+              {user.role === 'admin' && <NavLink to="/people">People</NavLink>}
+            </nav>
 
-            <div className="account-server">
-              {health ? `${health.version} · ${health.status}` : 'server unreachable'}
+            <div className="head-tools">
+              <ThemeMenu />
+              <a
+                className="tool-btn round"
+                href={DOCS_URL}
+                target="_blank"
+                rel="noreferrer"
+                title="Documentation"
+              >
+                <span aria-hidden>?</span>
+                <span className="sr-only">Documentation</span>
+              </a>
+              <AccountMenu user={user} health={health} onSignOut={signOut} />
             </div>
-
-            {/* Signing out gets its own bordered block: it is the one control
-                here that ends the session, and it read as a footnote. */}
-            <div className="account-out">
-              <button className="danger" onClick={signOut} title="Sign out">
-                <span className="out-icon" aria-hidden>
-                  ⏻
-                </span>
-                <span className="out-label">sign out</span>
-              </button>
-            </div>
-          </footer>
-        </aside>
+          </header>
         <main className="content">
           <Routes>
             <Route path="/" element={<Navigate to="/workspaces" replace />} />
             <Route path="/workspaces" element={<WorkspacesPage me={user} />} />
+            <Route path="/map" element={<InstallMap />} />
             <Route path="/people" element={user.role === 'admin' ? <AdminPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/terminal" element={user.role === 'admin' ? <TerminalPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/workspaces/:id" element={<WorkspacePage />} />
@@ -220,16 +155,86 @@ export default function App() {
             <Route path="/models" element={<ModelsPage />} />
           </Routes>
         </main>
+        </div>
       </div>
     </BrowserRouter>
   )
 }
 
-/** The operator's own clip, when they set one. An image is a CSS background;
- *  a video needs a real element, muted and inline so a browser will autoplay
- *  it at all. */
-function Backdrop() {
-  const t = loadTheme()
-  if (t.bg.kind !== 'video' || !t.bg.data) return null
-  return <video src={t.bg.data} autoPlay loop muted playsInline />
+/**
+ * Everything that is not a destination: who you are, what the server is, the
+ * install-wide pages, and the way out.
+ *
+ * It is a menu rather than a rail because none of it is used more than once a
+ * session — and the one control in it that ends the session is kept apart from
+ * the ones that merely navigate, so "sign out" is never the neighbour of a
+ * page you meant to open.
+ */
+function AccountMenu({
+  user,
+  health,
+  onSignOut,
+}: {
+  user: User
+  health: { version: string; status: string } | null
+  onSignOut: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const away = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    // Deferred, or the click that opened it closes it again on the same tick.
+    const t = setTimeout(() => document.addEventListener('mousedown', away), 0)
+    document.addEventListener('keydown', key)
+    return () => {
+      clearTimeout(t)
+      document.removeEventListener('mousedown', away)
+      document.removeEventListener('keydown', key)
+    }
+  }, [open])
+
+  return (
+    <div className="acct" ref={box}>
+      <button
+        className="acct-btn round"
+        data-own
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        title={user.name}
+      >
+        {user.name.slice(0, 1).toUpperCase()}
+      </button>
+      {open && (
+        <div className="acct-menu" role="menu">
+          <div className="acct-who">
+            <strong>{user.name}</strong>
+            <span className="muted">{user.role}</span>
+          </div>
+          {user.role === 'admin' && (
+            <>
+              <hr />
+              <Link to="/env" onClick={() => setOpen(false)}>Variables &amp; secrets</Link>
+              <Link to="/terminal" onClick={() => setOpen(false)}>Terminal</Link>
+            </>
+          )}
+          <hr />
+          <div className="acct-server">
+            {health ? `${health.version} · ${health.status}` : 'server unreachable'}
+          </div>
+          <button className="acct-out" onClick={onSignOut}>
+            sign out
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
+
+

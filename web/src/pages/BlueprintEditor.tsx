@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Select } from './Select'
 import {
   Background,
   Controls,
@@ -442,29 +443,23 @@ export default function BlueprintEditor({
         <button onClick={() => setAdding((v) => !v)} title="Put a new agent on this canvas">
           {adding ? 'cancel' : '+ agent'}
         </button>
-        <select
-          className="grow"
+        <Select
           value=""
-          disabled={addable.length === 0}
-          onChange={(e) => {
-            if (!e.target.value) return
+          aria-label="Add a gear to this workspace"
+          placeholder={
+            addable.length === 0
+              ? 'every forged gear is already in this workspace'
+              : '+ gear — add one to this workspace (all agents)…'
+          }
+          options={addable.map((g) => ({ value: String(g.id), label: `${g.name} (${g.status})` }))}
+          onChange={(v) => {
+            if (!v) return
             api.gears
-              .bind(wsId, Number(e.target.value), null)
+              .bind(wsId, Number(v), null)
               .then(reloadGraph)
               .catch((err: Error) => onError(err.message))
           }}
-        >
-          <option value="">
-            {addable.length === 0
-              ? 'every forged gear is already in this workspace'
-              : '+ gear — add one to this workspace (all agents)…'}
-          </option>
-          {addable.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name} ({g.status})
-            </option>
-          ))}
-        </select>
+        />
       </div>
 
       {adding && (
@@ -604,21 +599,23 @@ function NewAgentForm({
         <input
           required
           autoFocus
-          placeholder="name, e.g. reviewer"
+          aria-label="Agent name"
+          placeholder="reviewer"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        <select className="grow" required value={modelId} onChange={(e) => setModelId(e.target.value ? Number(e.target.value) : '')}>
-          <option value="">which model does it think with…</option>
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {/* label is optional in the catalog, so it alone renders four
-                  blank rows on an install that never set one. Same shape as
-                  the agent inspector's picker, deliberately. */}
-              {m.provider_name} / {m.label || m.model_name}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={modelId === '' ? '' : String(modelId)}
+          aria-label="Model"
+          placeholder="which model does it think with…"
+          onChange={(v) => setModelId(v ? Number(v) : '')}
+          options={models.map((m) => ({
+            value: String(m.id),
+            // label is optional in the catalog, so it alone renders four blank
+            // rows on an install that never set one.
+            label: `${m.provider_name} / ${m.label || m.model_name}`,
+          }))}
+        />
       </div>
       {clash && <span className="hint danger">this workspace already has an agent called “{name.trim()}”</span>}
       <label className="field">

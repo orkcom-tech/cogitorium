@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Field } from './Field'
 import { api, type FileEntry } from '../api'
 
 // The workspace's file tree.
@@ -156,12 +157,9 @@ function NewFile({ onCreate }: { onCreate: (path: string) => void }) {
         setPath('')
       }}
     >
-      <input
-        className="grow"
-        value={path}
-        placeholder="new file, e.g. docs/notes.md"
-        onChange={(e) => setPath(e.target.value)}
-      />
+      <Field label="New file" wide hint="a path inside this workspace; folders are made as needed">
+        <input value={path} placeholder="docs/notes.md" onChange={(e) => setPath(e.target.value)} />
+      </Field>
       <button type="submit" disabled={!path.trim()}>
         create
       </button>

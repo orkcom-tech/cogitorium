@@ -1,0 +1,398 @@
+/* The deck.
+ *
+ * One track of full-width views, and overlays above it. min-height: 0
+ * everywhere is why there is no calc(100vh - Xrem) left anywhere in the
+ * product.
+ */
+
+.dk-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden; /* scroll is always owned by a view's body, never the deck */
+}
+
+.dk-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 100%;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  transition: transform 320ms cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform;
+}
+
+/* A slide is what a panel used to be: surface, edge, radius. The difference is
+   that it is always exactly one viewport wide and never shares the row. */
+.dk-slide {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  margin: 0 var(--s2) var(--s2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r3);
+  /* Views adapt to THEIR OWN width rather than the window's, which is what
+     stopped a message being three words wide in a narrow panel. */
+  container-type: inline-size;
+  container-name: panel;
+}
+
+/* Somebody who has asked not to be moved is not moved. */
+@media (prefers-reduced-motion: reduce) {
+  .dk-track {
+    transition: none;
+  }
+}
+
+/* The workbench: tree, file, shell. */
+
+.dk-bench {
+  --dk-rail: 34px;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-areas:
+    'files centre'
+    'term  term';
+  grid-template-columns: var(--dk-files) minmax(0, 1fr);
+  grid-template-rows: minmax(120px, 1fr) var(--dk-term);
+}
+
+/* margin and gap are reset explicitly, not inherited away: these are <section>
+   elements, and the global `section` rule carries a 1rem bottom margin and a
+   0.5rem gap. Inside a grid row that margin comes out of the row — a 34px rail
+   became an 18px box with a 34px header hanging out of the bottom of it, which
+   the slide's overflow:hidden then cut in half. */
+.dk-part {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.dk-files {
+  grid-area: files;
+  border-right: 1px solid var(--border);
+}
+
+.dk-centre {
+  grid-area: centre;
+}
+
+.dk-term {
+  grid-area: term;
+  border-top: 1px solid var(--border);
+}
+
+.dk-part-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* The header of a part is the control that rolls it up — the whole strip, not
+   a 16px chevron somewhere in it. */
+.dk-part-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex: 0 0 auto;
+  height: var(--dk-rail);
+  padding: 0 var(--s3);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: var(--t-chrome);
+  text-align: left;
+}
+
+.dk-part-head:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border-color: transparent;
+}
+
+.dk-caret {
+  font-size: 10px;
+  width: 10px;
+}
+
+/* Rolled up, a part is its header and nothing else. */
+.dk-rolled .dk-part-head {
+  color: var(--text-dim);
+}
+
+.dk-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s4);
+  max-width: 34rem;
+}
+
+/* Seams: 1px of ink, 8px of hit area. No transition — a transition on
+   something being dragged reads as lag. */
+.dk-seam {
+  position: absolute;
+  z-index: 4;
+  background: transparent;
+}
+
+.dk-seam:hover,
+.dk-seam:focus-visible {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.dk-seam-x {
+  top: 0;
+  bottom: var(--dk-term);
+  left: calc(var(--dk-files) - 4px);
+  width: 8px;
+  cursor: col-resize;
+}
+
+.dk-seam-y {
+  left: 0;
+  right: 0;
+  bottom: calc(var(--dk-term) - 4px);
+  height: 8px;
+  cursor: row-resize;
+}
+
+/* An overlay is something you consult and dismiss. It is anchored to the
+   header, sized to its contents up to a ceiling, and scrolls inside itself
+   rather than growing past the window. */
+.dk-overlay {
+  position: fixed;
+  /* `top` is written from JavaScript, measured off the workspace header this
+     overlay belongs to. See the note at its call site. */
+  right: var(--s3);
+  z-index: var(--z-menu);
+  /* The inline width and height are the operator's, from the grip. These cap
+     them against the window so a size dragged on a large monitor cannot open
+     off screen on a small one. */
+  max-width: calc(100vw - 2 * var(--s3));
+  max-height: calc(100vh - 9rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r3);
+  box-shadow: var(--shadow);
+}
+
+/* The corner grip, bottom-left: see the comment at its call site. */
+.dk-grip {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nesw-resize;
+  touch-action: none;
+  z-index: 2;
+  background: linear-gradient(
+    45deg,
+    transparent 0 50%,
+    color-mix(in srgb, var(--text) 35%, transparent) 50% 60%,
+    transparent 60% 72%,
+    color-mix(in srgb, var(--text) 35%, transparent) 72% 82%,
+    transparent 82%
+  );
+}
+
+.dk-overlay-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex: 0 0 auto;
+  height: var(--h-tabs);
+  padding: 0 var(--s2) 0 var(--s3);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--t-chrome);
+}
+
+/* An overlay is narrow by design, and everything inside it was written for a
+   panel with a dock's width. Padding, wrapping and a hard ceiling on every
+   child are what stop that content running under its own border — which is
+   what it did: prose touched the right edge and the second field of every
+   two-field row was simply cut off. */
+.dk-overlay-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
+  /* The panels inside size themselves against their container rather than the
+     window, exactly as a view does. */
+  container-type: inline-size;
+  container-name: panel;
+}
+
+.dk-overlay-body > * {
+  max-width: 100%;
+}
+
+.dk-overlay-body .row {
+  flex-wrap: wrap;
+}
+
+.dk-overlay-body input,
+.dk-overlay-body select,
+.dk-overlay-body textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dk-overlay-body .page,
+.dk-overlay-body .panel,
+.dk-overlay-body section {
+  padding: 0;
+  margin: 0;
+  max-width: none;
+}
+
+.dk-overlay-body p,
+.dk-overlay-body .hint {
+  overflow-wrap: anywhere;
+}
+
+.dk-spacer {
+  flex: 1;
+}
+
+.dk-icon {
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 var(--s1);
+  border-radius: var(--r1);
+  line-height: 1;
+  font-size: var(--t-chrome);
+}
+
+.dk-icon:hover {
+  color: var(--text);
+  border-color: transparent;
+}
+
+/* The header's two groups. Views are where you are; overlays are what you are
+   consulting. They are separated because they answer different questions, and
+   putting all nine in one row is what made five of them look like one thing. */
+.dk-views,
+.dk-overlay-buttons {
+  display: flex;
+  gap: var(--s1);
+}
+
+.dk-views button,
+.dk-overlay-buttons button {
+  font-size: var(--t-chrome);
+  padding: 0.28rem 0.7rem;
+}
+
+.dk-views {
+  padding: 2px;
+  border-radius: calc(var(--r1) + 2px);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+/* Prose reads at 15px; the surrounding chrome stays at 12. That asymmetry is
+   most of what separates a client from a control panel. */
+.dk-slide .msg-body {
+  font-size: var(--t-prose);
+  line-height: 1.6;
+}
+
+.dk-slide .transcript {
+  border: 0;
+  padding: 0 var(--s2);
+}
+
+/* Chrome must never be the reason a view scrolls sideways. */
+.dk-slide .hint,
+.dk-slide .row {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.dk-body {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.dk-scroll {
+  overflow: auto;
+}
+
+@container panel (max-width: 560px) {
+  /* Role above the message rather than beside it: below this width the gutter
+     costs more than it explains. */
+  .msg-tool {
+    margin-left: 0;
+  }
+
+  /* The variables table has five columns, and in a 460px overlay only the
+     first three fitted: the note wrapped in a sliver, and DELETE was off the
+     right edge entirely — a control you could not reach rather than one that
+     merely looked cramped. Below this width each row becomes a small block,
+     which loses the header row and keeps every cell.
+
+     The cells are self-describing without it: the name is upper-case mono, the
+     kind is one word, the value is mono or the italic sentence that stands in
+     for a secret, and the note is prose. */
+  .env-panel thead {
+    display: none;
+  }
+
+  .env-panel tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 var(--s2);
+    padding: var(--s2) 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .env-panel tbody td {
+    display: block;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  /* The name takes a line of its own; kind, value and note run underneath it,
+     and delete is pushed to the far end of that second line. */
+  .env-panel tbody td:first-child {
+    flex: 1 1 100%;
+  }
+
+  .env-panel tbody td:last-child {
+    order: 1;
+    margin-left: auto;
+  }
+}
