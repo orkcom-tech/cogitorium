@@ -115,22 +115,30 @@ func Dial(ctx context.Context, spec Spec) (*Conn, error) {
 	// MCP server run through npx is a wrapper that execs the real one.
 	afterStart, release := procgroup.Isolate(cmd)
 
+	// give up releases what has been taken so far. Every failure between here
+	// and a started child leaves a cancel function and a process-group hook
+	// behind otherwise — which go vet catches for the context and nothing
+	// catches for the other one.
+	giveUp := func(err error) (*Conn, error) {
+		release()
+		end()
+		return nil, err
+	}
 	in, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, err
+		return giveUp(err)
 	}
 	out, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, err
+		return giveUp(err)
 	}
 	errPipe, err := cmd.StderrPipe()
 	if err != nil {
-		return nil, err
+		return giveUp(err)
 	}
 	if err := cmd.Start(); err != nil {
-		release()
-		end()
-		return nil, fmt.Errorf("start the MCP server %q: %w — the command is %s", spec.Name, err, spec.Command)
+		return giveUp(fmt.Errorf("start the MCP server %q: %w — the command is %s",
+			spec.Name, err, spec.Command))
 	}
 	afterStart()
 
