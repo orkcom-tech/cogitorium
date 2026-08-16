@@ -201,6 +201,7 @@ func TestFreshSchemaContainsTheTablesTheProductQueries(t *testing.T) {
 		"agent_usage",                    // 0012
 		"agent_egress", "search_queries", // 0013
 		"workspace_teams", // 0014
+		"mcp_servers", "mcp_tools", "mcp_bindings", // 0027
 	} {
 		if !tableExists(t, db, table) {
 			t.Errorf("table %q is missing from a freshly migrated database", table)
