@@ -44,6 +44,9 @@ rebuilt. One Go binary, your own models, no telemetry.
   executes in a container holding none of the server's files, with named
   credentials it never sees the values of and a network allowlist you set beside
   the source.
+- 📐 **A described API** — `docs/openapi.yaml` lists all 85 endpoints, generated
+  from the server's own route table by a test that fails when the two disagree,
+  so a route cannot exist without appearing in it.
 - 🔌 **Speaks MCP** — `cogitorium mcp` serves your approved gears and receiver
   tasks to Claude Desktop, Cursor or anything else that speaks the Model Context
   Protocol. The approval gate holds through it: a gear you have not approved is

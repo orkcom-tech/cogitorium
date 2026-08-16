@@ -1,0 +1,1174 @@
+openapi: 3.1.0
+info:
+  title: Cogitorium
+  version: "1"
+  description: |-
+    The HTTP surface of a Cogitorium install, generated from the server's own
+    route table by a test that fails when the two disagree — so this lists every
+    endpoint that exists, and only those.
+
+    Request and response bodies are not yet described. Every path, method,
+    parameter and credential below is exact; the shape of what travels in the
+    body is documented in the reference at
+    https://orkcom-tech.github.io/cogitorium/ until the handlers carry named
+    types this can be generated from.
+
+    The version above is the API surface — everything here lives under /api/v1 —
+    and deliberately not the build's version: a document that changed with every
+    release would report a new API on a day nothing about it moved, and would
+    fail its own generation test on any build that stamps a version in.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: http://127.0.0.1:8688
+    description: the default listen address
+components:
+  securitySchemes:
+    token:
+      type: http
+      scheme: bearer
+      description: |-
+        A user's token. On a loopback listen address a local request is treated
+        as the admin without one; change the address and it becomes required.
+    inletKey:
+      type: http
+      scheme: bearer
+      description: |-
+        A receiver's own key, which opens that receiver and nothing else. These
+        are the only paths exempt from normal authentication.
+security:
+  - token: []
+paths:
+  "/api/v1/agents/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete agents/{id}"
+      responses:
+        default:
+          description: see the reference
+    patch:
+      summary: "Update agents/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/agents/{id}/memory":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read agents/{id}/memory"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/agents/{id}/prompt":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read agents/{id}/prompt"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/agents/{id}/usage":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read agents/{id}/usage"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/context-bindings/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete context-bindings/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/context/file":
+    get:
+      summary: "Read context/file"
+      responses:
+        default:
+          description: see the reference
+    put:
+      summary: "Replace context/file"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/context/files":
+    get:
+      summary: "Read context/files"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/context/status":
+    get:
+      summary: "Read context/status"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/egress-grants/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete egress-grants/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/egress/approvals/{token}":
+    parameters:
+      - name: "token"
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: "Create egress/approvals/{token}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/egress/off":
+    post:
+      summary: "Create egress/off"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/egress/status":
+    get:
+      summary: "Read egress/status"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/env":
+    get:
+      summary: "Read env"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/env/{name}":
+    parameters:
+      - name: "name"
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      summary: "Delete env/{name}"
+      responses:
+        default:
+          description: see the reference
+    put:
+      summary: "Replace env/{name}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/gear-bindings/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete gear-bindings/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/gears":
+    get:
+      summary: "Read gears"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create gears"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/gears/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete gears/{id}"
+      responses:
+        default:
+          description: see the reference
+    get:
+      summary: "Read gears/{id}"
+      responses:
+        default:
+          description: see the reference
+    patch:
+      summary: "Update gears/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/gears/{id}/connections":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read gears/{id}/connections"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/gears/{id}/invoke":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create gears/{id}/invoke"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/gears/{id}/run":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create gears/{id}/run"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/gears/{id}/runs":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read gears/{id}/runs"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/inlet-runs/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read inlet-runs/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/inlet-tasks/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete inlet-tasks/{id}"
+      responses:
+        default:
+          description: see the reference
+    put:
+      summary: "Replace inlet-tasks/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/inlets/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete inlets/{id}"
+      responses:
+        default:
+          description: see the reference
+    get:
+      summary: "Read inlets/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/inlets/{id}/key":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create inlets/{id}/key"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/inlets/{id}/tasks":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create inlets/{id}/tasks"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/instructions":
+    get:
+      summary: "Read instructions"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create instructions"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/instructions/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete instructions/{id}"
+      responses:
+        default:
+          description: see the reference
+    get:
+      summary: "Read instructions/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/login":
+    post:
+      summary: "Create login"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/logout":
+    post:
+      summary: "Create logout"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/map":
+    get:
+      summary: "Read map"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/messages/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete messages/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/models":
+    get:
+      summary: "Read models"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create models"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/models/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete models/{id}"
+      responses:
+        default:
+          description: see the reference
+    patch:
+      summary: "Update models/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/providers":
+    get:
+      summary: "Read providers"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create providers"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/providers/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete providers/{id}"
+      responses:
+        default:
+          description: see the reference
+    patch:
+      summary: "Update providers/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/providers/{id}/test":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create providers/{id}/test"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/queue/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete queue/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/schedules/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete schedules/{id}"
+      responses:
+        default:
+          description: see the reference
+    patch:
+      summary: "Update schedules/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/schedules/{id}/run":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create schedules/{id}/run"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/teams":
+    get:
+      summary: "Read teams"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create teams"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/teams/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete teams/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/teams/{id}/members":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create teams/{id}/members"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/teams/{id}/members/{userId}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: "userId"
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      summary: "Delete teams/{id}/members/{userId}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/terminal":
+    get:
+      summary: "Read terminal"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/terminal/status":
+    get:
+      summary: "Read terminal/status"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/users":
+    get:
+      summary: "Read users"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create users"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/users/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete users/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/users/{id}/password":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    put:
+      summary: "Replace users/{id}/password"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/whoami":
+    get:
+      summary: "Read whoami"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/wires/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete wires/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces":
+    get:
+      summary: "Read workspaces"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create workspaces"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/import":
+    post:
+      summary: "Create workspaces/import"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete workspaces/{id}"
+      responses:
+        default:
+          description: see the reference
+    get:
+      summary: "Read workspaces/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/agents":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/agents"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create workspaces/{id}/agents"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/attachments":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create workspaces/{id}/attachments"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/chat":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create workspaces/{id}/chat"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/clone":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create workspaces/{id}/clone"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/context":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/context"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create workspaces/{id}/context"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/egress":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/egress"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create workspaces/{id}/egress"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/egress/log":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/egress/log"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/egress/pending":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/egress/pending"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/env":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/env"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/env/{name}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: "name"
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      summary: "Delete workspaces/{id}/env/{name}"
+      responses:
+        default:
+          description: see the reference
+    put:
+      summary: "Replace workspaces/{id}/env/{name}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/export":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/export"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/file":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/file"
+      responses:
+        default:
+          description: see the reference
+    put:
+      summary: "Replace workspaces/{id}/file"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/files":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/files"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/gears":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/gears"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create workspaces/{id}/gears"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/graph":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/graph"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/inlet-runs":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/inlet-runs"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/inlets":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/inlets"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create workspaces/{id}/inlets"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/messages":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/messages"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/queue":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/queue"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/schedules":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/schedules"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create workspaces/{id}/schedules"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/spend":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/spend"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/status":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/status"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/teams":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create workspaces/{id}/teams"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/teams/{teamId}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: "teamId"
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      summary: "Delete workspaces/{id}/teams/{teamId}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/terminal":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/terminal"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/usage":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/usage"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/wires":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/wires"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create workspaces/{id}/wires"
+      responses:
+        default:
+          description: see the reference
+  "/health":
+    get:
+      summary: "Liveness, without authentication"
+      security: []
+      responses:
+        default:
+          description: see the reference
+  "/i/{address}/runs/{id}":
+    parameters:
+      - name: "address"
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Deliver to a receiver, or read a run it produced"
+      security:
+        - inletKey: []
+      responses:
+        default:
+          description: see the reference
+  "/i/{address}/runs/{id}/file":
+    parameters:
+      - name: "address"
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Deliver to a receiver, or read a run it produced"
+      security:
+        - inletKey: []
+      responses:
+        default:
+          description: see the reference
+  "/i/{address}/{task}":
+    parameters:
+      - name: "address"
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: "task"
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: "Deliver to a receiver, or read a run it produced"
+      security:
+        - inletKey: []
+      responses:
+        default:
+          description: see the reference

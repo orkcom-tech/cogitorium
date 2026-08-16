@@ -478,6 +478,41 @@ first turn.
 
 ---
 
+## The API description
+
+[`docs/openapi.yaml`](https://github.com/orkcom-tech/cogitorium/blob/main/docs/openapi.yaml)
+is an OpenAPI 3.1 document listing every endpoint this server has: 85 paths,
+their methods, their path parameters, and which credential opens each — a
+user's token, a receiver's own key, or nothing.
+
+**It is generated from the server's own route table**, by a test that fails when
+the two disagree. Every route registers itself into that table, so a route
+cannot exist without appearing here and a deleted one cannot linger. Adding an
+endpoint without updating the description fails the build, naming the line:
+
+```
+docs/openapi.yaml no longer matches the routes this server registers.
+first difference at line 612:
+  committed:   "/api/v1/users":
+  current:     "/api/v1/undocumented":
+```
+
+After a deliberate change, `go test ./internal/server -run TestOpenAPI -update`
+rewrites it.
+
+**What it does not yet describe: request and response bodies.** The document
+says so about itself rather than leaving a reader to discover that the schemas
+are missing — every path, method, parameter and credential in it is exact, and
+the shape of what travels in the body is on this page. Naming those types is
+the next piece of work; a generator that under-describes silently would be
+worse than one that states its own edge.
+
+The version in it is the API surface — `1`, matching `/api/v1` — and
+deliberately not the build's version, which would report a new API on every
+release.
+
+---
+
 ## MCP — this install as a tool provider
 
 Cogitorium speaks the Model Context Protocol over stdio, so Claude Desktop,

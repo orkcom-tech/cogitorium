@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.8.0
+
+Stage 3, first half: the API has a description that cannot drift from it.
+
+### docs/openapi.yaml
+
+An OpenAPI 3.1 document listing every endpoint this server has — 85 paths,
+their methods, their path parameters, and which credential opens each.
+
+It is **generated from the server's own route table**. Every route now
+registers itself into that table on its way to the mux, so a route cannot exist
+without appearing in the document and a deleted one cannot linger in it. A test
+regenerates and compares; adding a route without updating the description fails
+the build and names the line it noticed:
+
+    docs/openapi.yaml no longer matches the routes this server registers.
+    first difference at line 612:
+      committed:   "/api/v1/users":
+      current:     "/api/v1/undocumented":
+
+That was verified by making exactly that mistake, not by trusting the code.
+
+Two things it deliberately gets right by omission. `/api/` is a catch-all so a
+typo'd API call answers JSON instead of falling through to the single-page app
+— it is a fallback rather than an endpoint, and describing it would invent a
+route that answers nothing but 404. And the version in the document is the API
+surface, `1`, not the build's version: the latter would report a new API on
+every release, and would fail the generation test on any build that stamps a
+version in — checked with `-ldflags` rather than assumed.
+
+**What it does not describe yet is bodies**, and it says so in its own
+description rather than leaving somebody to discover that the schemas are
+missing. Every path, method, parameter and credential in it is exact. Naming
+the request types the handlers currently declare inline is the other half of
+this stage; a document that under-describes silently would be worse than one
+that states its own edge.
+
 ## v0.7.0
 
 Stage 2 of the parity plan: this install can be handed to an MCP client.
