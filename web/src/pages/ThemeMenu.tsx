@@ -65,6 +65,7 @@ export default function ThemeMenu() {
               ['instrument', 'Instrument', 'Dense. Hairlines, no rounding, figures in monospace. The conversation stays in the centre.'],
               ['canvas', 'Canvas-first', 'The wiring graph becomes the application; the conversation floats above it and the menu is a rail.'],
               ['sketch', 'Sketch', 'Drawn. Paper ground, ink outlines that are not quite straight, handwriting on the chrome — and code, figures and logs left alone in monospace, because those have to stay readable.'],
+              ['calm', 'Calm', 'Quiet. Rounded surfaces, one soft shadow, almost no borders — and colour kept back entirely for state, so the one thing that needs you is the only coloured thing on the screen. Drawn in both light and dark.'],
             ] as const).map(([v, name, why]) => (
               <button
                 key={v}

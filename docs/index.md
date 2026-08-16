@@ -1131,6 +1131,14 @@ hunting for a matching layout preset would be two decisions for one intention.
 A plain reload never overwrites an arrangement you built by hand, and neither
 does an upgrade: moving the default moved it for FRESH installs only.
 
+**Calm** is the fourth, and the opposite bet to Instrument: most of the time
+nothing in an install needs attention, so nothing in the interface asks for it.
+Rounded surfaces, one soft shadow, no borders except around something you type
+into — and colour held back entirely for state, so the one row that needs you is
+the only coloured thing on the screen. Both halves are drawn: the dark side
+lifts surfaces with light rather than dropping a shadow that a near-black ground
+would swallow.
+
 ### Palette
 
 Independent of the look, so either one can wear any of it.

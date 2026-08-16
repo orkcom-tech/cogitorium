@@ -1355,3 +1355,170 @@ button.primary:hover:not(:disabled) {
 :root[data-look='sketch'] .brand-mark {
   border-radius: 9px 4px 10px 3px / 3px 10px 4px 9px;
 }
+
+/* ── Calm ─────────────────────────────────────────────────────────────────
+   The bet opposite to Instrument: most of the time nothing in an install
+   needs attention, so nothing in the interface asks for it.
+
+   Three rules, and everything below is one of them.
+
+   1. NOTHING IS OUTLINED. Instrument separates with hairlines and Sketch with
+      drawn ink; this separates with a raised surface and a soft shadow, so a
+      screen of eight panels has no lines in it at all. A border here is
+      reserved for a control the operator is meant to type into.
+   2. COLOUR IS STATE, AND NOTHING ELSE. The accent stays on the one selected
+      thing; every other coloured pixel means something is running, waiting,
+      or wrong. On a quiet install the screen is grey — which is the point,
+      because the one red row then cannot be missed.
+   3. BOTH HALVES ARE DRAWN. The dark side is not the light side inverted: it
+      lifts surfaces with light rather than dropping shadow, because a shadow
+      under a card on a near-black ground is invisible and the card floats
+      with nothing holding it.
+
+   No grain, no glow, no drift, no gradient on a panel. Each of those is the
+   interface asking to be looked at. */
+:root[data-look='calm'] {
+  --text: light-dark(#3b3945, #e6e4ec);
+  --muted: light-dark(#6f6c7d, #9d9aab);
+  --bg: light-dark(#f5f4f8, #191a1f);
+  --surface-base: light-dark(#ffffff, #22242b);
+  --surface-2-base: light-dark(#eeedf3, #2a2c34);
+
+  /* A border that is nearly nothing: it exists so a text field still reads as
+     something you type into, and for no other purpose. */
+  --border: light-dark(color-mix(in srgb, #3b3945 10%, transparent), color-mix(in srgb, #e6e4ec 12%, transparent));
+  --border-strong: light-dark(color-mix(in srgb, #3b3945 18%, transparent), color-mix(in srgb, #e6e4ec 20%, transparent));
+
+  --r1: 10px;
+  --r2: 14px;
+  --r3: 18px;
+  --t-prose: 15px;
+
+  /* Light drops a shadow; dark lifts with a hairline of light along the top
+     edge. Written as one variable so every surface picks up whichever half is
+     in force without a second rule anywhere. */
+  --lift: light-dark(
+    0 1px 2px rgba(59, 57, 69, .06), 
+    inset 0 1px 0 rgba(255, 255, 255, .045)
+  );
+  --lift-2: light-dark(
+    0 1px 3px rgba(59, 57, 69, .08), 0 10px 24px -8px rgba(59, 57, 69, .12),
+    inset 0 1px 0 rgba(255, 255, 255, .06)
+  );
+  --shadow: var(--lift-2);
+  --focus: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+/* The ground is flat on purpose. Every other look grades it; a gradient is a
+   thing to look at, and there is nothing here to look at until something
+   happens. */
+:root[data-look='calm'] .shell-ground {
+  background-image: none;
+  background-color: var(--bg);
+}
+
+/* Surfaces: raised, round, and unoutlined. */
+:root[data-look='calm'] .panel,
+:root[data-look='calm'] .card,
+:root[data-look='calm'] .dock-panel,
+:root[data-look='calm'] .sidebar,
+:root[data-look='calm'] .modal,
+:root[data-look='calm'] .menu {
+  border-color: transparent;
+  border-radius: var(--r3);
+  box-shadow: var(--lift-2);
+  background: var(--surface);
+}
+
+/* Controls. A button is a soft key, not a box: no outline until it is the one
+   in force, and then it is the accent — which is the only place the accent
+   appears that is not a state. */
+:root[data-look='calm'] button,
+:root[data-look='calm'] .chip,
+:root[data-look='calm'] .bn-tab {
+  border-color: transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  box-shadow: none;
+}
+:root[data-look='calm'] button:hover,
+:root[data-look='calm'] .chip:hover,
+:root[data-look='calm'] .bn-tab:hover {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+:root[data-look='calm'] .bn-tab.active,
+:root[data-look='calm'] .chip.on,
+:root[data-look='calm'] button.primary {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: color-mix(in srgb, var(--accent) 80%, var(--text));
+}
+/* The accent bar under a tab goes: the fill already says which one is active,
+   and two signals for one fact is one signal too many. */
+:root[data-look='calm'] .bn-tab.active::after { display: none; }
+
+/* Something you type into keeps its edge — the one place a border earns its
+   place, because a field with no boundary is a field nobody clicks. */
+:root[data-look='calm'] input,
+:root[data-look='calm'] textarea,
+:root[data-look='calm'] select,
+:root[data-look='calm'] .composer {
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+/* Rows are separated by tint, not by rules. */
+:root[data-look='calm'] .row,
+:root[data-look='calm'] .list-item {
+  border-color: transparent;
+  border-radius: var(--r1);
+}
+:root[data-look='calm'] .row:hover,
+:root[data-look='calm'] .list-item:hover {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+/* Graph nodes are the same surface as everything else, so the canvas stops
+   being a different visual world from the panels around it. */
+:root[data-look='calm'] .react-flow__node {
+  border-color: transparent;
+  border-radius: var(--r2);
+  box-shadow: var(--lift-2);
+}
+
+/* The conversation. A speech bubble in the accent is decoration; what a
+   message needs is to be readable and to say who is talking. */
+:root[data-look='calm'] .msg.user .msg-body {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border-radius: var(--r2);
+}
+:root[data-look='calm'] .msg .msg-body {
+  border-radius: var(--r2);
+}
+
+/* Code, figures and logs stay in monospace. Calm is about the chrome; a column
+   of numbers that does not line up is not calm, it is just harder to read. */
+:root[data-look='calm'] code,
+:root[data-look='calm'] pre,
+:root[data-look='calm'] .mono,
+:root[data-look='calm'] .terminal {
+  font-family: var(--mono);
+}
+
+/* The canvas grid is a texture, and a texture is a thing to look at. Kept
+   rather than removed — without it a node being dragged has nothing to move
+   against — but taken down to where it reads as paper rather than as graph
+   paper. */
+:root[data-look='calm'] .react-flow__background {
+  opacity: .3;
+}
+
+/* State is the only colour here, so where a state already has a word for it
+   the dot beside it is the whole signal and needs no box around it. */
+:root[data-look='calm'] .status,
+:root[data-look='calm'] .badge,
+:root[data-look='calm'] .tag {
+  border-color: transparent;
+  border-radius: 999px;
+}

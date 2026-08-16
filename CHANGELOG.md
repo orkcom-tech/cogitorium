@@ -1,5 +1,56 @@
 # Changelog
 
+## v0.15.0
+
+A fourth look, and the blueprint arranges itself.
+
+### Calm
+
+The bet opposite to Instrument: most of the time nothing in an install needs
+attention, so nothing in the interface asks for it.
+
+Three rules, and everything in it is one of them. **Nothing is outlined** —
+Instrument separates with hairlines and Sketch with drawn ink; this separates
+with a raised surface and one soft shadow, so a screen of eight panels has no
+lines in it at all. A border is kept for something you type into, because a
+field with no boundary is a field nobody clicks. **Colour is state and nothing
+else** — the accent marks the one selected thing and every other coloured pixel
+means running, waiting or wrong, so on a quiet install the screen is grey and
+the one red row cannot be missed. **Both halves are drawn** — the dark side is
+not the light side inverted: it lifts surfaces with a hairline of light rather
+than dropping a shadow, which a near-black ground swallows.
+
+No grain, no glow, no drift, no gradient on a panel. Each of those is the
+interface asking to be looked at.
+
+Code, figures and logs stay in monospace: the look is about the chrome, and a
+column of numbers that does not line up is not calm, it is harder to read.
+
+Measured rather than eyeballed, in both modes — body text 10.3:1 on light and
+13.8:1 on dark, muted 4.7 and 6.3, the active tab 13.2:1 once its translucent
+fill is composited over the ground.
+
+### The blueprint arranges itself
+
+An agent with no stored position went into a single row under the orchestrator.
+Fine for two; for eight it was a straight line that said nothing about which of
+them delegates to which — in a product whose whole claim is that the graph IS
+the program.
+
+It is now a layered layout: rank by distance from a root, ordered within each
+rank by barycentre so wires cross as little as possible. The standard shape
+minus the parts that need a solver, and deterministic, so a mental map survives
+a reload.
+
+**⤢ tidy** re-lays out every agent and stores it, which is the difference
+between this and a view mode. A dragged position still wins — the two hands on
+the same controls, in one function.
+
+Checked by driving the real canvas on a graph four ranks deep: with nothing
+stored it drew the hierarchy, tidy persisted it with workers 1–2 under lead-a
+and 3–4 under lead-b (the ordering pass doing its work), a node moved to
+(-900,900) survived a reload, and tidy took it back.
+
 ## v0.14.0
 
 The half of stage 2 that was never built: an agent can be granted somebody

@@ -48,10 +48,16 @@ export type Theme = {
    * somebody sat down and drew, which is what wiring a graph by hand actually
    * is before it becomes a running system.
    *
+   * `calm` is the opposite bet to `instrument`: most of the time nothing in an
+   * install needs attention, so nothing in the interface asks for it. Rounded
+   * surfaces, one soft shadow, no borders to speak of, and colour kept back
+   * entirely for state — which means the one red row on the screen is the only
+   * red thing on the screen.
+   *
    * This is one setting rather than two because the pair is a decision about
    * how you work, not two sliders to reconcile.
    */
-  look: 'instrument' | 'canvas' | 'sketch'
+  look: 'instrument' | 'canvas' | 'sketch' | 'calm'
   /** the operator's own backdrop: a picture or a looping clip */
   bg: { kind: 'none' | 'image' | 'video'; data: string; dim: number }
 }
@@ -141,6 +147,28 @@ export const LOOK_SIGNATURE: Record<
     drift: false,
     mode: 'light',
   },
+  // Quiet. The bet opposite to Instrument: most of the time nothing needs
+  // attention, so the interface says nothing until something does.
+  //
+  // No grain, no glow, no drift — every one of those is an interface asking to
+  // be looked at, and this look is about not asking. The two colours are barely
+  // apart because the ground is meant to recede; what carries the design is
+  // rounded surfaces and one soft shadow, not contrast.
+  //
+  // It carries no mode. Calm is not a light look with a dark variant bolted on
+  // — both halves are drawn, and the operator's own setting decides which one
+  // they get.
+  calm: {
+    colors: ['#f3f1f6', '#e9e6ef', ACCENT],
+    grain: 0,
+    tint: 0.35,
+    surface: 'solid',
+    dim: 1,
+    blur: 0,
+    glow: { x: 50, y: 0 },
+    glowStrength: 0,
+    drift: false,
+  },
 }
 
 /** Switching look replaces the whole visual world, not one attribute. */
@@ -226,7 +254,7 @@ export function loadTheme(): Theme {
       surface: t.surface === 'solid' ? 'solid' : 'glass',
       blur: typeof t.blur === 'number' && t.blur >= 0 && t.blur <= 40 ? t.blur : STORED_FALLBACK.blur,
       dim: clamp01(typeof t.dim === 'number' ? t.dim : STORED_FALLBACK.dim),
-      look: t.look === 'canvas' || t.look === 'sketch' ? t.look : 'instrument',
+      look: t.look === 'canvas' || t.look === 'sketch' || t.look === 'calm' ? t.look : 'instrument',
       bg: {
         kind: t.bg?.kind === 'image' || t.bg?.kind === 'video' ? t.bg.kind : 'none',
         // Only a data: URL is ever accepted. A remote address here would make
