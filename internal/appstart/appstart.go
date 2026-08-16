@@ -125,6 +125,19 @@ func SelectSandbox(ctx context.Context, cfg config.Config) (sandbox.Runner, erro
 	}
 }
 
+// CloseSandbox releases whatever the backend is holding on the way out.
+//
+// It exists for the warm container pool: containers the server started are the
+// server's to stop, and a process that exits leaving them running has handed a
+// machine's memory to nobody. Every other backend has nothing to release, which
+// is why this is a type assertion rather than a method on Runner — adding Close
+// to the interface would make every implementation carry an empty one.
+func CloseSandbox(sb sandbox.Runner) {
+	if c, ok := sb.(interface{ Close() }); ok && sb != nil {
+		c.Close()
+	}
+}
+
 // BuildSearcher constructs the internet gate, or refuses to start.
 //
 // Enabling a capability that cannot work is a crash, not a warning. The

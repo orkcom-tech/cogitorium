@@ -96,6 +96,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	defer appstart.CloseSandbox(sb)
 	searcher, err := appstart.BuildSearcher(cfg, sb)
 	if err != nil {
 		return err
