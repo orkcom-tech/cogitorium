@@ -111,7 +111,7 @@ func SelectSandbox(ctx context.Context, cfg config.Config) (sandbox.Runner, erro
 		slog.Warn("docker did not answer; gears will run unsandboxed with this server's file access")
 		return nil, nil
 	default:
-		return nil, fmt.Errorf("sandbox must be auto, docker or subprocess (got %q)", mode)
+		return nil, fmt.Errorf("sandbox must be auto, docker, kubernetes or subprocess (got %q)", mode)
 	}
 }
 
@@ -166,7 +166,7 @@ func BuildGearNet(cfg config.Config, db *sql.DB, sb sandbox.Runner) (*gearnet.Ga
 	// Where to bind depends on the sandbox: a container reaches this machine at
 	// an address that is not the loopback on Linux, and a gate the gear cannot
 	// dial makes the grant useless.
-	gate, err := gearnet.New(db, gearnet.ListenFor(context.Background(), cfg.GearProxyListen, sb))
+	gate, err := gearnet.New(db, gearnet.ListenFor(context.Background(), cfg.GearProxyListen, sb), cfg.DataDir)
 	if err != nil {
 		return nil, err
 	}

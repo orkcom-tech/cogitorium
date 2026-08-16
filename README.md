@@ -42,8 +42,8 @@ rebuilt. One Go binary, your own models, no telemetry.
 - ⚙️ **Gears: tools that outlive the conversation** — an agent forges a script,
   it lands in a versioned catalog, and nothing runs until you approve it. It
   executes in a container holding none of the server's files, with named
-  credentials it never sees the values of and a network allowlist you set beside
-  the source.
+  credentials **it is never given the values of** — the gate substitutes them at
+  the edge — and a network allowlist you set beside the source.
 - 📐 **A described API** — `docs/openapi.yaml` lists all 85 endpoints, generated
   from the server's own route table by a test that fails when the two disagree,
   so a route cannot exist without appearing in it. Request schemas come from the

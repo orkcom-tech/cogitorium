@@ -1,5 +1,83 @@
 # Changelog
 
+## v0.11.0
+
+Stage 6 of the parity plan: a gear is not given its secrets.
+
+### The credential is put in at the edge, not into the process
+
+Until now a gear's secrets were decrypted and written into its environment. The
+process this whole design treats as untrusted — agent-authored code, running
+because an operator approved a source listing — held the real credential in
+memory, and everything after that was a matter of it behaving. The redactor
+covered what the software printed; nothing could cover what the code chose to do
+with a string it had.
+
+Now the environment carries a **stand-in**, and the `gearnet` gate — which
+already sits on every outbound request with a per-run credential — substitutes
+the real value on the way out. A real container, printing what it was handed:
+
+```
+HELD=cogitorium-secret-jMDrxMgeHate9cewY3k73-vfWcfPIJIF
+STATUS=200 BODY=the-origin-answered
+```
+
+and the origin's own record of that same request:
+
+```
+Authorization: Bearer sk-live-the-actual-credential-value
+```
+
+A stand-in is random, minted per run, known only to this install's gate, and
+void the moment the run ends. A gear that exfiltrates its environment has
+exfiltrated a string that opens nothing, from anywhere, ever again.
+
+The cryptography did not move: the same AES-256-GCM, the same per-value nonce,
+the same HKDF-SHA256. What moved is the injection point.
+
+### What it costs, said out loud
+
+The gate cannot substitute into bytes it cannot read, and a CONNECT tunnel is
+opaque by design. So for a run holding stand-ins — **and only that kind of run**
+— the gate terminates TLS with its own certificate, rewrites, and opens its own
+properly verified connection onward. A granted gear with no secrets is tunnelled
+exactly as it was, and the gate still sees only hosts and byte counts.
+
+For those runs the gate reads the request bodies. It is the operator's own proxy
+on the operator's own machine, and it is the same boundary that already decides
+which hosts may be reached at all — but a proxy that reads bodies is a different
+thing from one that counts bytes, and nobody should discover that from a
+release. The signing key is per-install, kept beside the database, never handed
+to a gear; the certificate is written into the payload with the environment
+variables curl, Go, Python and Node actually read, because setting one of them
+and calling it done works only in whichever language the author tested in.
+
+**A gear that was not granted the network gets the real value.** There is no
+edge to substitute at, so a stand-in would only be a credential that cannot
+work. That rule is checked in a real container rather than trusted.
+
+### A stand-in split across two reads
+
+Bodies larger than a megabyte are rewritten as they stream, and the first
+implementation held back a fixed number of trailing bytes to catch a stand-in
+straddling a chunk. That is wrong in a way that only shows at particular
+payload sizes: a stand-in starting *before* the cut and ending after it was
+emitted in halves, neither of which matched.
+
+Found by a test that put one exactly one byte over a 32 KiB boundary. Each chunk
+is now emitted only up to the last position from which its remainder could still
+become a stand-in.
+
+### How this was checked
+
+Both halves, against real components. `internal/gearnet` drives a real HTTPS
+origin with a real certificate through a real TLS handshake in both directions,
+and asserts what the destination received. `internal/gear` runs a real gear in a
+real container and asserts what the container held. Then the guards were broken
+one at a time — the substitution removed, the interception switched off, the
+stand-in table shared between tickets instead of per run, the certificate
+withheld from the payload — and each test named the exact failure.
+
 ## v0.10.0
 
 Stage 5 of the parity plan, and the largest: in a cluster, a gear runs as a

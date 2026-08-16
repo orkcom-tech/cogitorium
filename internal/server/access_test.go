@@ -135,7 +135,7 @@ func newInstallWithSandbox(t *testing.T, listen string, searcher *websearch.Sear
 	// A real gate on a real loopback port, for the same reason as the resolver
 	// above: every route this fixture exercises must be served by the server
 	// that ships, and Bootstrap reconciles the gate's own table.
-	gate, err := gearnet.New(db, "127.0.0.1:0")
+	gate, err := gearnet.New(db, "127.0.0.1:0", t.TempDir())
 	if err != nil {
 		t.Fatalf("open the gear network gate: %v", err)
 	}

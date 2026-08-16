@@ -89,6 +89,7 @@ type Gate struct {
 	ln    net.Listener
 	srv   *http.Server
 	tr    *http.Transport
+	ca    *authority
 
 	mu      sync.Mutex
 	tickets map[string]*Ticket
@@ -98,7 +99,7 @@ type Gate struct {
 // first granted gear because a gate that cannot bind is a configuration fault,
 // and the operator should learn about it at startup rather than at the moment a
 // pipeline needed it.
-func New(db *sql.DB, listen string) (*Gate, error) {
+func New(db *sql.DB, listen, dir string) (*Gate, error) {
 	if listen == "" {
 		listen = DefaultListen
 	}
@@ -107,6 +108,22 @@ func New(db *sql.DB, listen string) (*Gate, error) {
 		return nil, fmt.Errorf("the gear network gate could not listen on %s: %w — set gear_proxy_listen to an address this machine holds", listen, err)
 	}
 	g := &Gate{store: NewStore(db), ln: ln, tickets: map[string]*Ticket{}}
+	// The signing identity for the one case that needs it: a run holding secret
+	// stand-ins, whose TLS this gate has to read inside to put the real value
+	// back. Built at startup rather than at first use so a directory it cannot
+	// write is a startup failure, not a gear failing later for a reason that
+	// has nothing to do with the gear.
+	//
+	// Not fatal when dir is empty: that is a test or an embedding with no data
+	// directory, and it means references are simply never minted.
+	if dir != "" {
+		ca, err := loadAuthority(dir)
+		if err != nil {
+			ln.Close()
+			return nil, err
+		}
+		g.ca = ca
+	}
 	g.tr = &http.Transport{
 		DialContext: g.dialContext,
 		// This server's own environment is never consulted for a proxy: a gear's
@@ -131,6 +148,16 @@ func New(db *sql.DB, listen string) (*Gate, error) {
 	return g, nil
 }
 
+// CACert is the certificate a run must trust when this gate reads inside its
+// TLS. The signing key is never exposed — this is the half that lets a gear
+// verify the gate, and nothing else.
+func (g *Gate) CACert() []byte {
+	if g == nil || g.ca == nil {
+		return nil
+	}
+	return g.ca.pem
+}
+
 // Store exposes the log, so a caller holding the gate does not also have to be
 // handed the store and keep the two in step.
 func (g *Gate) Store() *Store { return g.store }
@@ -149,6 +176,12 @@ type Ticket struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	closed atomic.Bool
+
+	// refs maps a stand-in to the real value it will become on the way out.
+	// It lives for exactly as long as the ticket: when the run ends, every
+	// stand-in it minted stops meaning anything.
+	mu   sync.Mutex
+	refs map[string]string
 }
 
 // Open registers a run. The returned ticket must be closed when the run ends —
@@ -357,6 +390,14 @@ func (g *Gate) connect(w http.ResponseWriter, r *http.Request, t *Ticket) {
 		return
 	}
 
+	// A run holding stand-ins cannot be tunnelled: the whole point is to put the
+	// real value into the request, and a tunnel is bytes this gate must not be
+	// able to read. Only that run, and only while it holds them.
+	if t.holdsReferences() && g.ca != nil {
+		g.intercept(w, r, t, a)
+		return
+	}
+
 	upstream, err := g.dial(t.ctx, a.host, a.port)
 	if err != nil {
 		if errors.Is(err, errLocal) {
@@ -421,6 +462,9 @@ func (g *Gate) forward(w http.ResponseWriter, r *http.Request, t *Ticket) {
 	out.RequestURI = ""
 	out.Body = io.NopCloser(body)
 	stripHopByHop(out.Header)
+	// Plain HTTP needs no interception to be readable, so a stand-in is put
+	// back here exactly as it is inside a terminated connection.
+	t.substitute(out)
 
 	resp, err := g.tr.RoundTrip(out)
 	if err != nil {

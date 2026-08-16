@@ -344,6 +344,35 @@ A name nothing supplies **stops the run and names it**, rather than handing the
 gear an empty string that fails somewhere far away with a message about nothing.
 The approval screen says so in advance, per name.
 
+### And the gear does not get the secret
+
+A gear granted the network is not handed its secrets at all. What it finds in
+its environment is a stand-in, and the gate puts the real value in on the way
+out. This is a real run, and the gear is printing what it was given:
+
+```
+HELD=cogitorium-secret-jMDrxMgeHate9cewY3k73-vfWcfPIJIF
+STATUS=200 BODY=the-origin-answered
+```
+
+The destination received `Bearer sk-live-…`, the real credential. The container
+never had it. A stand-in is random, minted for that one run, known only to this
+install's gate, and worthless the moment the run ends — so a gear that sends its
+environment somewhere has sent a string that opens nothing.
+
+Two consequences worth knowing before you rely on it.
+
+**The gate reads inside those runs' TLS.** It cannot substitute into bytes it
+cannot see, so for a run holding stand-ins — and only that kind of run — it
+terminates TLS with its own certificate, which the run is given, and opens its
+own verified connection onward. A granted gear with no secrets is tunnelled as
+before, and the gate sees nothing but hosts and byte counts.
+
+**A gear that was not granted the network gets the real value.** There is no
+edge to substitute at, so a stand-in would simply be a credential that cannot
+work. If your gear uses a key locally rather than in a request, that is the case
+you are in, and nothing changes for you.
+
 ### Letting a gear reach out
 
 A gear has no network. You grant it one when you approve it, on the same screen

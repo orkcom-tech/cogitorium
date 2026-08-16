@@ -129,7 +129,7 @@ func newSandboxed(t *testing.T) *sandboxed {
 	// that kept it would pass on the machine this was written on and fail on
 	// the machine it runs on, which is exactly what happened.
 	s.gate.Close()
-	gate, err := gearnet.New(s.db, gearnet.ListenFor(context.Background(), "", s.exec.sandbox))
+	gate, err := gearnet.New(s.db, gearnet.ListenFor(context.Background(), "", s.exec.sandbox), t.TempDir())
 	if err != nil {
 		t.Fatalf("open a gate a container can reach: %v", err)
 	}

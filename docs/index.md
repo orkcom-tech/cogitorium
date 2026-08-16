@@ -383,17 +383,34 @@ Values are resolved from three places, in this order, with a later one winning:
 The second is how this works on Kubernetes. The chart mounts a ConfigMap and a
 Secret as directories and the server reads files out of them, so rotation is
 whatever the cluster already does. It deliberately does **not** call the cluster
-API: that would need a service account token in the pod where agent-authored
-code runs, and the chart mounts none.
+API for them: the server pod does hold a token now — it creates a Job per gear
+run — and reaching for Secrets with it would widen a Role that currently names
+Jobs and pods and nothing else. Agent-authored code holds no token either way;
+a gear's own pod mounts none.
 
 Redaction happens at one boundary rather than at each caller, so nothing can
 forget it — the tool result, the stored run, the live output an operator is
 watching, the log, the error, and the names of any files the gear itself wrote.
 
+**A secret does not enter a granted gear at all.** What goes into its
+environment is a stand-in — random, minted for that run, meaningless anywhere
+else — and the gate puts the real value in place on the way out. So the process
+this design treats as untrusted never holds the credential, and a gear that
+exfiltrates what it was given has exfiltrated a string that stops opening
+anything the moment the run ends.
+
+That has a cost, and it is not hidden: to substitute inside an HTTPS request the
+gate has to be able to read it. For those runs — and only those — it terminates
+TLS with its own certificate, which the run is handed, and opens its own
+verified connection onward. A granted gear with no secrets is tunnelled exactly
+as before, opaque to the gate. And a gear that was **not** granted the network
+gets the real value, because there is no edge to substitute at and a stand-in it
+could never exchange would just be a broken credential.
+
 Two things it does not do, stated plainly. A value a gear **sends** somewhere is
-not redacted and cannot be: granting a key and a network is granting the ability
-to carry it out, and the approval screen is the whole of the control. And a **dry
-run gets the names with empty values** — a dry run executes code nobody has
+still not redacted and cannot be: granting a key and a network is granting the
+ability to carry it out, and the approval screen is the whole of the control.
+And a **dry run gets the names with empty values** — a dry run executes code nobody has
 approved yet, so handing it this install's credentials would make the button that
 exists for looking safely the easiest way to take them.
 
@@ -1155,9 +1172,16 @@ What is actually true, without softening:
 - **A gear's credentials and its network are granted together, at approval,
   beside the source.** Neither is reachable by an agent, and a new version keeps
   neither. The values never enter a prompt, and they are redacted at one
-  boundary in everything the software shows or stores. What a granted gear
-  chooses to send is not redacted and cannot be — that is what granting both
-  means, and the approval screen is the whole of the control.
+  boundary in everything the software shows or stores.
+- **A granted gear is not given its secrets at all** — it gets a stand-in, and
+  the gate substitutes the real value at the edge. So the untrusted process
+  never holds the credential, and what it could exfiltrate stops working when
+  the run ends. To substitute inside HTTPS the gate terminates TLS for those
+  runs with its own certificate, which means it reads their request bodies:
+  that is the trade, and it is the operator's own proxy making it. What a
+  granted gear chooses to *send* through the gate is still not redacted and
+  cannot be — that is what granting a key and a network means together, and the
+  approval screen is the whole of the control.
 - **The terminal** is off by default, requires a sandbox, and is never reachable
   by an agent.
 - **Egress** is off by default and needs two human decisions plus a per-query

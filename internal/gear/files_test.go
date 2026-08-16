@@ -125,7 +125,7 @@ func testResolver(t *testing.T, db *sql.DB) *secrets.Resolver {
 // difference is exactly the branch that refuses a granted gear.
 func testGate(t *testing.T, db *sql.DB) *gearnet.Gate {
 	t.Helper()
-	g, err := gearnet.New(db, "127.0.0.1:0")
+	g, err := gearnet.New(db, "127.0.0.1:0", t.TempDir())
 	if err != nil {
 		t.Fatalf("open the gear network gate: %v", err)
 	}

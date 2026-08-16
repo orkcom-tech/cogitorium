@@ -209,28 +209,31 @@ func (e *Executor) run(ctx context.Context, g Gear, argsJSON string, files []str
 		}
 	}
 
-	// Resolved before anything is materialised, for the same reason the
-	// interpreter is checked there: a gear that cannot be given what it
-	// declared has not run, and must not appear in the audit trail as a run
-	// that happened.
-	env, red, err := e.resolveEnv(ctx, g, caller)
-	if err != nil {
-		return Result{}, err
-	}
-
-	// The network is the other half of the same approval, opened here for the
-	// same reason and before the same line: a run that cannot be given what it
-	// was granted has not run, and must not appear in the audit trail as one
-	// that did. Closing the ticket cuts every connection still open — a gear
-	// whose process has been killed must not leave a tunnel carrying bytes.
+	// The network is opened first, and the order is load-bearing rather than
+	// tidy: a granted run's secrets become stand-ins minted ON the ticket, so
+	// the ticket has to exist before the environment is resolved. Both are
+	// before anything is materialised, for the same reason the interpreter is
+	// checked there — a run that cannot be given what it was granted has not
+	// run, and must not appear in the audit trail as one that did. Closing the
+	// ticket cuts every connection still open, and voids every stand-in it
+	// minted.
 	ticket, err := e.openNetwork(g, caller)
 	if err != nil {
 		return Result{}, err
 	}
 	defer ticket.Close()
 
+	env, red, err := e.resolveEnv(ctx, g, caller, ticket)
+	if err != nil {
+		return Result{}, err
+	}
+
 	dir, fc, cleanup, err := e.prepare(ctx, g, files, caller)
 	if err != nil {
+		return Result{}, err
+	}
+	if err := e.trustGate(dir, ticket, env); err != nil {
+		cleanup()
 		return Result{}, err
 	}
 	defer cleanup()
@@ -336,7 +339,7 @@ func (e *Executor) run(ctx context.Context, g Gear, argsJSON string, files []str
 // A name that does not resolve stops the run, naming it. The alternative, an
 // empty string, fails later and elsewhere: inside somebody's HTTP client, with
 // a 401 and no hint that the credential was never there.
-func (e *Executor) resolveEnv(ctx context.Context, g Gear, caller Caller) (map[string]string, *secrets.Redactor, error) {
+func (e *Executor) resolveEnv(ctx context.Context, g Gear, caller Caller, ticket *gearnet.Ticket) (map[string]string, *secrets.Redactor, error) {
 	if len(g.EnvNames) == 0 {
 		return nil, nil, nil
 	}
@@ -374,18 +377,80 @@ func (e *Executor) resolveEnv(ctx context.Context, g Gear, caller Caller) (map[s
 	env := make(map[string]string, len(values))
 	var toRedact []string
 	sources := make([]string, 0, len(values))
+	var referenced int
 	for _, v := range values {
 		env[v.Name] = v.Value
 		if v.IsSecret() {
+			// The real value is still redacted from everything this software
+			// shows, whether or not a stand-in was minted: a gear given the
+			// real value must not print it, and a gear given a stand-in may
+			// still be handed the real one by a destination that echoes it.
 			toRedact = append(toRedact, v.Value)
+			// A secret becomes a stand-in when there is an edge to substitute
+			// it at. That edge is the gate, and a run without the network has
+			// none — so a gear that was not granted the network gets the real
+			// value, exactly as before, because a stand-in it could never
+			// exchange for anything would just be a broken credential.
+			if ticket != nil {
+				if ref := ticket.Reference(v.Value); ref != v.Value {
+					env[v.Name] = ref
+					referenced++
+				}
+			}
 		}
 		sources = append(sources, v.Name+" from "+v.Source)
 	}
 	// Which names, from which source, for whom — and no values. This is the
 	// operator's record of a credential having been handed to running code.
 	slog.Info("gear given named values", "gear", g.Name, "version", g.Version,
-		"names", g.EnvNames, "resolved", sources, "secrets", len(toRedact))
+		"names", g.EnvNames, "resolved", sources, "secrets", len(toRedact),
+		"as_references", referenced)
 	return env, secrets.NewRedactor(toRedact...), nil
+}
+
+// gateCAFile is where a run finds the certificate it must trust when the gate
+// reads inside its TLS. Hidden, and inside the payload, because that is the one
+// directory a gear can certainly read in every backend.
+const gateCAFile = ".gearnet-ca.crt"
+
+// trustGate hands the run the gate's certificate, when and only when the gate
+// will be terminating its TLS.
+//
+// Without this the substitution would be perfect and useless: the gear's own
+// client would see a certificate it does not trust and refuse the connection —
+// which is the client behaving correctly, and a failure that reads as the
+// destination's problem rather than as this install's design.
+//
+// The variables are the ones the ecosystem actually reads, and there is no one
+// of them: curl and Go take SSL_CERT_FILE, requests takes REQUESTS_CA_BUNDLE,
+// node takes NODE_EXTRA_CA_CERTS. Setting one and calling it done would work in
+// whichever language the author of the test happened to use.
+func (e *Executor) trustGate(dir string, ticket *gearnet.Ticket, env map[string]string) error {
+	if !ticket.Intercepts() || env == nil {
+		return nil
+	}
+	pem := e.gate.CACert()
+	if len(pem) == 0 {
+		return fmt.Errorf("this run holds secret references, so the gate has to read inside its TLS, and this " +
+			"server has no certificate to be trusted with — a build or configuration fault rather than " +
+			"something the gear did")
+	}
+	if err := os.WriteFile(filepath.Join(dir, gateCAFile), pem, 0o644); err != nil {
+		return fmt.Errorf("hand the run the gate's certificate: %w", err)
+	}
+	// Where the file is from INSIDE the run: a sandbox sees the payload at
+	// /work, a subprocess sees it where it is on this machine.
+	at := filepath.Join(dir, gateCAFile)
+	if e.sandbox != nil {
+		at = "/work/" + gateCAFile
+	}
+	for _, name := range []string{
+		"SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE",
+		"NODE_EXTRA_CA_CERTS", "GIT_SSL_CAINFO",
+	} {
+		env[name] = at
+	}
+	return nil
 }
 
 // openNetwork turns the operator's grant into a ticket for this run, or into a

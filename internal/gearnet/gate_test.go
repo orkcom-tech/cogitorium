@@ -49,7 +49,7 @@ func testDB(t *testing.T) *sql.DB {
 
 func testGate(t *testing.T, db *sql.DB) *Gate {
 	t.Helper()
-	g, err := New(db, "127.0.0.1:0")
+	g, err := New(db, "127.0.0.1:0", t.TempDir())
 	if err != nil {
 		t.Fatalf("open the gate: %v", err)
 	}

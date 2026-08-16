@@ -50,7 +50,7 @@ func envResolver(t *testing.T, db *sql.DB) *secrets.Resolver {
 // the one that ships, not one missing a branch.
 func netGate(t *testing.T, db *sql.DB) *gearnet.Gate {
 	t.Helper()
-	g, err := gearnet.New(db, "127.0.0.1:0")
+	g, err := gearnet.New(db, "127.0.0.1:0", t.TempDir())
 	if err != nil {
 		t.Fatalf("open the gear network gate: %v", err)
 	}
