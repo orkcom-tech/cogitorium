@@ -19,6 +19,7 @@ import (
 
 	"github.com/orkcom-tech/cogitorium/internal/config"
 	"github.com/orkcom-tech/cogitorium/internal/gearnet"
+	"github.com/orkcom-tech/cogitorium/internal/procgroup"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/workdir"
@@ -676,7 +677,7 @@ func (e *Executor) execSubprocess(ctx context.Context, g Gear, dir, argsJSON str
 	// afterStart exists for Windows, where a process can only be put into its
 	// job object once it exists — see procgroup_windows.go. On Unix the group
 	// is established at fork and both hooks are empty.
-	afterStart, releaseGroup := isolateProcess(cmd)
+	afterStart, releaseGroup := procgroup.Isolate(cmd)
 	defer releaseGroup()
 	cmd.WaitDelay = 3 * time.Second
 	// Keep the environment minimal: a forged tool has no business reading

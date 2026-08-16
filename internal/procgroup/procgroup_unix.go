@@ -1,13 +1,22 @@
 //go:build !windows
 
-package gear
+package procgroup
 
 import (
 	"os/exec"
 	"syscall"
 )
 
-// A gear runs in its own process group, and the timeout kills the group.
+// Package procgroup runs a child in its own process group so a timeout kills
+// everything it started, not just the process that was started.
+//
+// It lives here rather than in internal/gear because there are two callers now:
+// a gear with no sandbox, and an external MCP server, which is a host process
+// by construction. An MCP server launched through npx or uvx is a wrapper that
+// execs the real thing, so killing the wrapper alone leaves the server running
+// and holding the pipes.
+
+// Isolate puts a child in its own process group, and the timeout kills the group.
 //
 // Without this, a gear that backgrounds anything is not stopped by its timeout
 // and the call never returns at all. Measured: a bash gear that runs
@@ -23,7 +32,7 @@ import (
 //
 // The returned function is called once the process has started; on Unix the
 // group is established by the kernel at fork, so there is nothing left to do.
-func isolateProcess(cmd *exec.Cmd) (afterStart func(), release func()) {
+func Isolate(cmd *exec.Cmd) (afterStart func(), release func()) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {

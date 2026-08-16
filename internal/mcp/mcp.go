@@ -32,6 +32,8 @@ import (
 	"fmt"
 	"io"
 	"sync"
+
+	"github.com/orkcom-tech/cogitorium/internal/mcp/mcpwire"
 )
 
 // The protocol version this speaks. MCP negotiates: the client states one, the
@@ -42,11 +44,11 @@ const protocolVersion = "2024-11-05"
 // the implementation-defined range, used for a tool that failed on its own
 // terms rather than a malformed request.
 const (
-	codeParse          = -32700
-	codeInvalidRequest = -32600
-	codeMethodNotFound = -32601
-	codeInvalidParams  = -32602
-	codeInternal       = -32603
+	codeParse          = mcpwire.CodeParse
+	codeInvalidRequest = mcpwire.CodeInvalidRequest
+	codeMethodNotFound = mcpwire.CodeMethodNotFound
+	codeInvalidParams  = mcpwire.CodeInvalidParams
+	codeInternal       = mcpwire.CodeInternal
 )
 
 type request struct {
@@ -59,21 +61,16 @@ type request struct {
 type response struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
-	Result  any             `json:"result,omitempty"`
+	Result  json.RawMessage `json:"result,omitempty"`
 	Error   *rpcError       `json:"error,omitempty"`
 }
 
-type rpcError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
+type rpcError = mcpwire.RPCError
 
-// Tool is one thing this server offers, in the shape MCP asks for.
-type Tool struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"inputSchema"`
-}
+// Tool is one thing this server offers, in the shape MCP asks for. The type
+// lives in mcpwire because the client half reads the same shape from somebody
+// else's server, and one definition is the point of putting it there.
+type Tool = mcpwire.Tool
 
 // Backend is what the protocol needs from the rest of the product. An interface
 // rather than the client itself so the protocol can be tested by driving it,
@@ -189,11 +186,22 @@ func (s *Server) dispatch(ctx context.Context, req request) {
 	}
 }
 
+// reply encodes the result before it goes into the envelope.
+//
+// The envelope now carries json.RawMessage so the client half can DECODE one,
+// and encoding here rather than there keeps every caller writing ordinary Go
+// values. A result that cannot be encoded is this server's own fault, so it
+// becomes an internal error rather than a line that is not JSON.
 func (s *Server) reply(id json.RawMessage, result any) {
 	if len(id) == 0 {
 		return
 	}
-	s.write(response{JSONRPC: "2.0", ID: id, Result: result})
+	raw, err := json.Marshal(result)
+	if err != nil {
+		s.fail(id, codeInternal, "this server could not encode its own answer: "+err.Error())
+		return
+	}
+	s.write(response{JSONRPC: "2.0", ID: id, Result: raw})
 }
 
 func (s *Server) fail(id json.RawMessage, code int, msg string) {

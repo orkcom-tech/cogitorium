@@ -1,6 +1,6 @@
 //go:build !windows
 
-package gear
+package procgroup
 
 import (
 	"bytes"
@@ -48,7 +48,7 @@ func TestTimeoutStopsTheWholeProcessGroup(t *testing.T) {
 	var out, errOut bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errOut
-	isolateProcess(cmd)
+	Isolate(cmd)
 	cmd.WaitDelay = 2 * time.Second
 
 	done := make(chan struct{})

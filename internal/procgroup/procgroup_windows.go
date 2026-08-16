@@ -1,6 +1,6 @@
 //go:build windows
 
-package gear
+package procgroup
 
 import (
 	"log/slog"
@@ -41,7 +41,7 @@ import (
 // contract, but it has not been run on a Windows machine. Everything else in
 // this file's Unix twin was measured; this was not, and saying so is worth
 // more than implying otherwise.
-func isolateProcess(cmd *exec.Cmd) (afterStart func(), release func()) {
+func Isolate(cmd *exec.Cmd) (afterStart func(), release func()) {
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
 		// Without a job the old behaviour is the fallback: the direct child is
