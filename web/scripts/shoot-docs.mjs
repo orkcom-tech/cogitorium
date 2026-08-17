@@ -4,7 +4,8 @@
 // software that had been deleted — a left rail, floating windows, a fourteen-
 // control appearance dialog, two looks that no longer have names. Nobody
 // noticed for one reason: re-shooting was a manual afternoon, so it was never
-// done. It is one command now.
+// done. It is one command now, and a test fails when a picture is older than
+// the interface it claims to show.
 //
 //   cd web && node scripts/shoot-docs.mjs http://127.0.0.1:8894
 //
@@ -12,7 +13,7 @@
 // what they expect: workspace 1 is the one with a blueprint worth drawing,
 // workspace 4 has a receiver with two tasks, workspace 5 has a schedule and
 // three variables. Point this at an empty install and it will happily produce
-// nineteen pictures of empty boxes.
+// twenty pictures of empty boxes.
 //
 // It must also run with COGITORIUM_SECRET_KEY set, or the variables shot has
 // no secret in it to show being withheld.
@@ -38,50 +39,69 @@ const shoot = (name, note, fn) => shots.push({ name, note, fn })
 /** Wait for the network to settle AND for the app to have painted something. */
 async function ready(page) {
   await page.waitForLoadState('networkidle')
-  await page.waitForSelector('.sheet', { timeout: 10_000 })
-  // The deck slides and the map animates; give one frame past the transition.
-  await page.waitForTimeout(700)
+  // The cavity is the hole in the frame — it exists as soon as the shell has
+  // painted, on every screen, which is what makes it the thing to wait for.
+  await page.waitForSelector('.cavity', { timeout: 10_000 })
+  // Stages slide, drawers crawl out and the map animates; one frame past the
+  // longest transition in the product.
+  await page.waitForTimeout(800)
 }
 
-/** Put the interface in a known state before every shot. */
-async function look(page, id, mode) {
+/**
+ * Park the pointer somewhere harmless before the shutter.
+ *
+ * Playwright leaves the mouse wherever it last clicked, and this interface
+ * answers a hover: a rail button raises its name in a tooltip, a row takes a
+ * tint. Half the old set had a tooltip hanging over the thing it was meant to
+ * show, which reads as a rendering bug rather than as a hover state.
+ */
+async function settle(page) {
+  await page.mouse.move(W - 8, H - 8)
+  await page.waitForTimeout(250)
+}
+
+/** Put the interface in a known appearance. Two choices now, not eleven. */
+async function theme(page, mode) {
   await page.evaluate(
-    ([l, m]) => localStorage.setItem('cogitorium.theme', JSON.stringify({ look: l, mode: m })),
-    [id, mode],
+    (m) => localStorage.setItem('cogitorium.theme', JSON.stringify({ mode: m, accent: '#0a8624' })),
+    mode,
   )
 }
+
+/** A rail button, by the name its tooltip and its screen-reader label carry. */
+const rail = (page, name) => page.getByRole('button', { name, exact: true })
 
 shoot('01-workspaces', 'the workspaces list, coloured, one shared with two teams', async (page) => {
   await page.goto(`${base}/workspaces`)
   await ready(page)
 })
 
-shoot('02-workspace-deck', 'the three views and the four overlays, with the roster open', async (page) => {
-  await page.goto(`${base}/workspaces/1?layout=reset`)
+shoot('02-workspace-chat', 'the frame: rail on the bezel, chat in the cavity, agents crawled out', async (page) => {
+  await page.goto(`${base}/workspaces/1`)
   await ready(page)
-  await page.getByRole('button', { name: 'Agents' }).click()
-  await page.waitForTimeout(400)
+  await rail(page, 'Agents').click()
+  await page.waitForTimeout(700)
 })
 
-shoot('03-blueprint', 'the blueprint: every wire is a capability', async (page) => {
-  await page.goto(`${base}/workspaces/1?layout=reset`)
+shoot('03-blueprint', 'the blueprint: every wire is a capability, and the controls float on it', async (page) => {
+  await page.goto(`${base}/workspaces/1`)
   await ready(page)
-  await page.getByRole('tab', { name: 'Blueprint' }).click()
-  await page.waitForTimeout(900)
+  await rail(page, 'Blueprint').click()
+  await page.waitForTimeout(1400)
 })
 
-shoot('04-appearance', 'appearance: a look and a mode, and nothing else', async (page) => {
+shoot('04-appearance', 'appearance: light or dark, and a colour that is yours', async (page) => {
   await page.goto(`${base}/workspaces`)
   await ready(page)
-  await page.locator('.theme-chip').click()
-  await page.waitForTimeout(400)
+  await rail(page, 'Appearance').click()
+  await page.waitForTimeout(500)
 })
 
-shoot('05-editor', 'the Editor view: the tree, the file and a shell you start yourself', async (page) => {
-  await page.goto(`${base}/workspaces/1?layout=reset`)
+shoot('05-editor', 'the Editor stage: the tree flush to the frame, the file filling the rest', async (page) => {
+  await page.goto(`${base}/workspaces/1`)
   await ready(page)
-  await page.getByRole('tab', { name: 'Editor' }).click()
-  await page.waitForTimeout(900)
+  await rail(page, 'Editor').click()
+  await page.waitForTimeout(1200)
 })
 
 shoot('06-people', 'People, and the access map of who can reach what', async (page) => {
@@ -99,7 +119,7 @@ shoot('08-gear-review', 'what approving a gear grants, stated before you approve
   await page.goto(`${base}/gears`)
   await ready(page)
   await page.getByRole('button', { name: 'review & approve' }).first().click()
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(600)
 })
 
 shoot('09-map', 'the install map: people at the centre, workspaces on the outside', async (page) => {
@@ -129,41 +149,36 @@ shoot('12-models', 'the model catalogue: providers, and what each one offers', a
   await ready(page)
 })
 
-shoot('13-account', 'the account menu: the install-wide pages, and the way out', async (page) => {
+shoot('13-rail-menu', 'the rail: the install-wide pages, and the way out', async (page) => {
   await page.goto(`${base}/workspaces`)
   await ready(page)
-  await page.locator('.acct-btn').click()
-  await page.waitForTimeout(300)
+  await rail(page, 'More').click()
+  await page.waitForTimeout(400)
 })
 
-// The three remaining overlays and the two admin pages. The guide has a
-// section per screen, so a screen with no picture is a section with none.
-//
-// Each is shot on the workspace that actually has the thing in it. The first
-// cut pointed all three at workspace 1, which has no receivers, no schedule
-// and no variables — three pictures of an empty box, illustrating nothing.
-// ?layout=reset because the deck remembers which view you were on, and these
-// run in one browser after the Editor shot: without it the roster, the
-// receivers and the variables were all photographed over a file tree.
-const overlay = (name, ws, button, note, scroll = 0) =>
+// The drawers. Each is shot on the workspace that actually has the thing in
+// it: the first cut pointed all of them at workspace 1, which has no
+// receivers, no schedule and no variables — three pictures of an empty box,
+// illustrating nothing.
+const drawer = (name, ws, button, note, scroll = 0) =>
   shoot(name, note, async (page) => {
-    await page.goto(`${base}/workspaces/${ws}?layout=reset`)
+    await page.goto(`${base}/workspaces/${ws}`)
     await ready(page)
-    await page.getByRole('button', { name: button }).click()
-    await page.waitForTimeout(400)
-    // Some overlays put an explanation and a form above the list they are
+    await rail(page, button).click()
+    await page.waitForTimeout(700)
+    // Some drawers put an explanation and a form above the list they are
     // about. Scroll to the part worth photographing.
     if (scroll) {
-      await page.locator('.dk-overlay-body').evaluate((el, y) => el.scrollBy(0, y), scroll)
+      await page.locator('.drawer-body').evaluate((el, y) => el.scrollBy(0, y), scroll)
       await page.waitForTimeout(300)
     }
   })
 
-overlay('15-receivers', 4, 'Receivers', 'a receiver with its two tasks, on support triage', 320)
-overlay('16-queue', 5, 'Queue', 'the queue, and the schedule that fills it at 03:00')
-overlay('17-variables', 5, 'Variables', "the workspace's own variables, and a secret that is not shown", 460)
+drawer('15-receivers', 4, 'Receivers', 'a receiver with its two tasks, on support triage', 320)
+drawer('16-queue', 5, 'Queue', 'the queue, and the schedule that fills it at 03:00')
+drawer('17-variables', 5, 'Variables', "the workspace's own variables, and a secret that is not shown", 460)
 
-shoot('18-context', 'the context browser: every version Contextverse kept', async (page) => {
+shoot('18-context', 'the context browser: search inside the files, and every version kept', async (page) => {
   await page.goto(`${base}/context`)
   await ready(page)
   await page.waitForTimeout(500)
@@ -175,9 +190,30 @@ shoot('19-terminal', 'the terminal: a shell on the host, admin only, started by 
   await page.waitForTimeout(500)
 })
 
-shoot('14-dark', 'every look is drawn in both — the same install, after dark', async (page) => {
+shoot('20-gear-approvals', 'who let this code run, when, to which version, and with what', async (page) => {
+  await page.goto(`${base}/gears`)
+  await ready(page)
+  // The trail lives beside the source and the grants, inside the open card —
+  // the same rule that keeps approval itself out of a collapsed one.
+  await page.getByRole('button', { name: 'review & run' }).first().click()
+  await page.waitForTimeout(700)
+  await page.getByRole('button', { name: 'who approved it' }).first().click()
+  await page.waitForTimeout(700)
+  await page.locator('.drawer-body, .page').first().evaluate((el) => el.scrollBy(0, 400))
+  await page.waitForTimeout(300)
+})
+
+shoot('21-context-search', 'finding a memory without already knowing its path', async (page) => {
+  await page.goto(`${base}/context`)
+  await ready(page)
+  await page.getByPlaceholder('search inside the files…').fill('context')
+  await page.getByRole('button', { name: 'search', exact: true }).click()
+  await page.waitForTimeout(900)
+})
+
+shoot('14-dark', 'the same install after dark — both modes, one geometry', async (page) => {
   await page.goto(`${base}/map`)
-  await look(page, 'air', 'dark')
+  await theme(page, 'dark')
   await page.reload()
   await ready(page)
   await page.waitForTimeout(1600)
@@ -197,20 +233,21 @@ await mkdir(out, { recursive: true })
 
 // Every shot starts from the same appearance, or the set is a patchwork.
 await page.goto(base)
-await look(page, 'air', 'light')
+await theme(page, 'light')
 
 let done = 0
 for (const s of shots) {
   if (only && !s.name.includes(only)) continue
   try {
-    if (!s.name.startsWith('14')) await look(page, 'air', 'light')
+    if (!s.name.startsWith('14')) await theme(page, 'light')
     await s.fn(page)
+    await settle(page)
     await page.screenshot({ path: `${out}${s.name}.png` })
     console.log(`  ${s.name}.png — ${s.note}`)
     done++
   } catch (err) {
     // A failed shot is reported and skipped rather than aborting the run: one
-    // missing picture is a fixable gap, and losing the other thirteen to it is
+    // missing picture is a fixable gap, and losing the other nineteen to it is
     // not a trade worth making.
     console.error(`  FAILED ${s.name}: ${err.message.split('\n')[0]}`)
   }

@@ -1,5 +1,119 @@
 # Changelog
 
+## v1.5.0
+
+A new shell, and the record telling more of the truth.
+
+### The interface is a frame with a hole in it
+
+**Every control lives on the frame; the hole holds only the work.** That one
+rule replaced a header row across the top of the work carrying the brand, seven
+destinations, the theme, a documentation link and the account — chrome above,
+content below, which is a web page. The instrument surrounds the window now.
+
+The **rail** stands on the left of the bezel as four floating capsules
+answering four questions: where am I, what is the cavity showing, what can
+crawl out over it, and the rest. Three **stages** — Chat, Blueprint, Editor —
+on a track that slides vertically, because the control that moves it is a
+vertical column. Eight **drawers** — Agents, Gears, Instructions, Memory,
+Receivers, Queue, Variables, Terminal — and a drawer is the frame growing
+inward rather than a window over the work: it comes out of an edge, the cavity
+shrinks to make room, and it is rounded only on the side facing the cavity.
+Dock any drawer to any of the four edges and resize it from the edge facing the
+work; both are remembered per drawer.
+
+**Appearance is a mode and a colour.** What went was eleven finished "looks" —
+twenty-two visual worlds counting both modes. The interface has one geometry
+now, and eleven palettes hung on one geometry are one design in eleven paint
+jobs. The colour is not just the accent: every neutral is mixed towards it.
+
+**Drag a gear or an instruction onto the blueprint** and where it lands is the
+sentence — on an agent, that agent gets it; on empty canvas, every agent does.
+An unapproved gear still binds and says plainly that nobody has approved it, and
+offers the way to the review. Refusing the drop would enforce a rule the action
+does not own.
+
+### What the sweep found, measured rather than looked at
+
+**Nothing in this product had cast a shadow.** `--lift` and `--lift-2` were
+referenced eighteen times across three stylesheets and defined nowhere — they
+went out with the looks, and every rule naming them had been dropping its whole
+`box-shadow` declaration in silence ever since. `--shadow` was dead too, for a
+sillier reason: `light-dark()` is a colour function and it was wrapping two
+entire shadow values.
+
+**Twenty-five pieces of text were below their WCAG minimum**, in both modes,
+under every accent. `--text-dim` at 58% measured between 3.6:1 and 4.2:1 — most
+of the secondary text in the product. Four more places faded with `opacity`
+instead, the worst being a switched-off layer toggle at 2.35:1, which is the
+control you click to switch the layer back on. Two of the eight accents could
+not carry white text as a filled button, one of them the default. Now: zero
+failures across 96 screen loads.
+
+**Every drawer printed its title twice** — the drawer head names the panel and
+the panel printed its own heading forty pixels below it, which a screen reader
+read twice. And the blueprint never fit its own view: five agents in a
+workspace, two of them below the bottom edge with no scrollbar, because
+`fitView` fits at mount when the canvas is empty, measures nothing that has not
+been laid out, and the layout moves again when the wires arrive.
+
+### The record
+
+**Each tool call carries the arguments it was made with**, abridged — every key
+survives, values are cut at 200 bytes and the object at 2000, and a cut value
+says so. "gear_deploy succeeded" and "gear_deploy succeeded against production"
+were the same line otherwise.
+
+**And which documents fed the run, at which versions.** Context is the input
+most likely to have changed between a run that worked and one that did not, and
+the record was silent about it.
+
+**One read per document per run.** A document is fetched once and every agent in
+the delegation tree gets the same bytes and the same version — it was one
+`contextd file get` per document per agent per iteration, and a document that
+changed mid-run could feed the orchestrator one version and its worker another.
+
+**The record can be asked questions.** Which runs called this gear, read this
+document, produced this file, or did not land — on the listing route, and as
+filters in the Receivers drawer. A run with no record matches nothing, on
+purpose: no record kept is not the same as a record showing nothing happened.
+
+### Gears
+
+**Deleting a gear no longer deletes the evidence that it ran.** Its history used
+to cascade away with it, which is exactly backwards.
+
+**Every approval, disable and reset is now a row**: who decided, when, to which
+version, and what was granted at that moment. Append-only. A gear approved at v3
+and edited to v7 keeps its status, and the trail is where that shows.
+
+### Memory
+
+**Search inside the space**, not only by path — on the Context screen, and as
+`context_search` for the orchestrator. It is withheld on an unattended run: it
+returns the text of files from the whole space, and on a run started through a
+receiver that answer goes back to whoever holds the key.
+
+**A save that would overwrite somebody is refused**, naming both versions. This
+is a read-to-write guard and not a compare-and-swap: `contextd file put` takes
+no expected-version argument, so the instant between the check and the write is
+still open. Stated rather than papered over.
+
+**Forgetting is still clearing, and here is exactly why.** `contextd` offers
+`file destroy` for one historical version and `file undelete` to restore a
+soft-deleted file, and nothing that deletes or soft-deletes one — its storage
+layer knows the operation ("cannot destroy current live version — soft-delete
+first") and no command reaches it. A Cogitorium-side "delete" that only hid the
+file would be a lie told about somebody else's storage.
+
+### Documentation
+
+The reference and the guide are rewritten against the shell that shipped, and
+all twenty-one screenshots re-shot from a running install. `scripts/shots.mjs`
+is gone; `web/scripts/shoot-docs.mjs` is the one shooter, and the test that
+fails when a picture is older than `web/src` is what caught the drift.
+
+
 ## v1.0.1
 
 The published API description told the truth about every route but three, and

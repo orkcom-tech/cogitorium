@@ -269,7 +269,7 @@ any error. You can delete an entry, and deleting it is genuinely forgetting:
 the timeline is replayed into the model on every turn, so removing a line
 removes it from what the agent knows.
 
-![A workspace: the three views on the track, the four overlay buttons beside them, and the roster open](assets/02-workspace-deck.png)
+![A workspace: the stages down the rail, the drawers below them, and the roster crawled out](assets/02-workspace-chat.png)
 
 ---
 
@@ -293,7 +293,7 @@ toggles, not a selector — any combination is a legal picture, including none:
 
 Drag between two agents to create a wire. Drag a gear onto an agent to grant it.
 Select an edge and press Delete to revoke it. Click an agent to open its
-inspector, which arrives as an overlay over the canvas.
+inspector, which arrives as an drawer over the canvas.
 
 Nodes are coloured and captioned by kind, and the legend names every colour it
 uses — a canvas where everything looks alike is a picture of connectivity, not
@@ -373,6 +373,32 @@ caused it. The recorded run is identical either way: whether anyone was watching
 never changes what is stored.
 
 ![The gear catalogue: approved gears, and pending ones carrying the way in](assets/07-gears.png)
+
+### Who approved it, and to which version
+
+Approving a gear is the most consequential act in this product — a human saying
+that code an agent wrote may run on this machine, with these credentials,
+reaching these hosts. It used to leave exactly one trace: a status column
+reading `approved`. That answers "is it approved" and none of the questions
+asked afterwards.
+
+Every approval, disable and reset is now a row: **who** decided, **when**, to
+**which version**, and **what was granted** at that moment. It is append-only —
+nothing updates or deletes a row — and the gear's status stays the answer to
+"what is it now" while the trail answers "how did it get that way". Open a gear
+and press **who approved it**.
+
+The version matters more than it looks. A gear can be edited after approval and
+keeps its status, so `approved` on a v7 gear may mean somebody read v3. The
+trail names the version each decision covered, and the review screen marks a
+gear whose approval is older than the code it is running.
+
+![Who let this code run, when, to which version, and with what](assets/20-gear-approvals.png)
+
+**Deleting a gear no longer deletes what it did.** Its run history used to
+cascade away with it, which is exactly backwards: the moment you most need to
+know what a gear did is after deciding it should not exist. The runs outlive the
+gear and still say which gear they were.
 
 ---
 
@@ -895,6 +921,66 @@ a gear once answered *"The … file was aligned and formatted using gear_format"
 having made no tool calls at all, and the delivery said 200. With the record
 that run reads `"tools": [], "files": []`, and an empty tool list is the answer.
 
+**Each tool call carries the arguments it was made with.** "gear_deploy
+succeeded" and "gear_deploy succeeded against production" were the same line
+otherwise, and the difference is the whole reason anybody opens a record. They
+are abridged, not stored whole: writing a file puts the entire body in the
+argument, and a run that writes four files would put four documents in a column
+carried on every run row forever. Each value is cut at 200 bytes and the object
+at 2000, every key survives, and a cut value ends in `… (N bytes)` so nobody
+mistakes an abridgement for the value. Nothing needs redacting — arguments are
+what a MODEL sent, and a model never holds a variable's value.
+
+**And which documents fed the run, at which versions.** Context is the input
+most likely to have changed between a run that worked and one that did not, and
+the record was silent about it: you could see which agent ran, which tools it
+called and what it cost, and had no way to learn that somebody rewrote the
+house-style document that morning. A version that could not be determined is
+empty rather than guessed — "we read this and cannot say which version" is a
+different fact from "we read v4".
+
+```json
+{
+  "tools": [{"name": "gear_deploy", "agent": "releaser", "depth": 1, "ok": true,
+             "ms": 812, "args": {"target": "production"}}],
+  "files": [{"path": "out/release.txt", "bytes": 64}],
+  "context": [{"path": "team/release-policy.md", "version": "v9"}],
+  "model_calls": 6,
+  "tokens": {"in": 18442, "out": 2211}
+}
+```
+
+**One read per document per run.** A document is fetched once and every agent in
+the delegation tree, however deep, gets the same bytes and the same version. It
+was one `contextd file get` per document per agent per iteration before, and a
+document that changed halfway through a run could feed the orchestrator one
+version and its worker another with nothing saying so. A run is one piece of
+work; it sees one context.
+
+### Asking the record questions
+
+`GET /api/v1/workspaces/{id}/inlet-runs` is the plain listing, and the same
+route answers what the record exists for:
+
+| Parameter | Finds runs that |
+|---|---|
+| `tool` | called this tool — a gear appears under its tool name, e.g. `gear_deploy` |
+| `agent` | this agent did work in, anywhere in the delegation tree |
+| `context` | read this document, by path |
+| `file` | produced this file, by workspace-relative path |
+| `state` | ended in this state |
+| `failed=true` | did not land: failed, interrupted, or either refusal |
+
+The Receivers drawer has the same filters as a row of fields. Matching is
+against the record's lists rather than its text: a search for `deploy` over the
+raw JSON would also match a file called `deploy.md`, an agent named `deploy`,
+or the word inside a recorded argument.
+
+**A run with no record matches nothing, on purpose.** An empty record means no
+record was kept — it ran before records existed, or it is still in flight —
+which is not the same as a record showing nothing happened. We cannot say it
+called that gear, and we must not say it did not.
+
 ### `expect` — what the operator says success is
 
 Optional, per task. `runs_gear` requires a named gear to have run and succeeded;
@@ -1166,91 +1252,173 @@ anything is written, so a rejected save leaves nothing behind.
 
 ![The instruction library: what each text is for, and who is already bound to it](assets/11-instructions.png)
 
+### Finding a memory
+
+The space can be searched by what is INSIDE its files, not only by their names.
+Before this the only way in was a path — list the space, open a file — so
+nobody could ask which of two hundred documents mentions the retry policy.
+Neither could an agent, since reading a memory takes a path and an agent that
+was never handed the right one cannot reach a fact sitting in a space it is
+entitled to read.
+
+The Context screen has a search box whose hits open the file at the line. The
+orchestrator has `context_search`, offered under exactly the two conditions it
+is accepted under — the orchestrator's, and not on an unattended run. That
+second condition is not tidiness: it returns the TEXT of files from the whole
+space, line by line, and on a run started through a receiver that answer goes
+back to whoever holds the key. Not a door into one workspace; a grep of the
+company's memory.
+
+![Searching the context space, and opening a hit at its line](assets/21-context-search.png)
+
+### A save that would overwrite somebody is refused
+
+Two people open the same document, the first saves, the second saves, and the
+first person's work is gone with nothing anywhere saying so. The editor carries
+the version it opened and hands it back; a save whose version has moved is
+refused, naming both versions, so you can reopen and reapply.
+
+**What this is not:** a compare-and-swap. `contextd file put` takes no
+expected-version argument, so the check and the write are two calls and a third
+party writing between them still wins. Closing that needs an upstream flag.
+Until it exists this is what is honestly available, and it turns the common
+case — where the other edit happened minutes or hours ago — from silent loss
+into a refusal somebody can act on.
+
+### Forgetting
+
+**Contextverse has no delete, and this is why forgetting is clearing.** The
+`contextd` CLI offers `file destroy` for one historical version and `file
+undelete` to restore a soft-deleted file, and nothing at all that deletes or
+soft-deletes one. Its own storage layer knows the operation — try to destroy a
+live version and it answers *"cannot destroy current live version — soft-delete
+first"* — but no command reaches it.
+
+So clearing a document is how a memory is dropped, and it is a real operation
+rather than a workaround dressed up as one: an emptied document is skipped when
+a prompt is assembled, so the agent genuinely stops being told it. What stays
+is the file and its history, in Contextverse, which is where versioning belongs.
+When `contextd` grows a delete, this becomes one.
+
 ---
 
 ## The interface
 
-### The shell
+### A frame, and a hole in it
 
-A white sheet resting on a grey ground, with everything you navigate by in one
-row across its top:
+**Every control lives on the frame. The hole holds only the work.**
 
-- the **brand** on the left, and the maker's mark beside it;
-- a centred **pill nav** — Workspaces, Map, Gears, Instructions, Models, and
-  Context and People for an administrator;
-- on the right, the **theme** button, a link to this documentation, and the
-  **account** button.
+That one rule is the whole layout, and breaking it is what made every earlier
+attempt read as a web page with rounded corners. Not stage tabs, not drawer
+buttons, not the workspace name, not counts, not a status pill, not the
+account. If it is a control, or a label about the work rather than part of it,
+it belongs on the frame. What may be inside the hole is the transcript, the
+canvas, the file, the terminal, the map — and nothing else.
 
-The account menu holds what you configure rather than what you navigate:
-Variables & secrets, the server-wide Terminal, the version the server reports,
-and sign out. Both of the first two are an administrator's.
+Three pieces:
 
-There is **no sidebar**. What replaced it was a 200px column carrying nine
-destinations, a collapse toggle, the brand and the account block — a sixth of
-every screen, holding things most of which are opened once a week. The split is
-by frequency, not by kind: what you move between all day is a pill in the
-middle, what you configure occasionally is one click further away behind the
-account button, and nothing that was reachable before is unreachable now.
+- the **bezel**, ground showing around everything;
+- the **cavity**, the hole in it, with a 26px corner;
+- the **rail**, standing on the bezel's left as four floating capsules with
+  gaps between them, so the eye reads them as separate answers to separate
+  questions.
 
-There are **no global keybindings** at all — no `⌘B`, no `⌘J`, nothing to
-collapse. `Escape` is deliberately left to whichever dialog is open, because
-the egress approval owns it, scoped to itself: one keypress must never both
-dismiss some chrome and silently refuse a pending web search. The only keys
-bound anywhere are the editor's own, inside the editor.
+What this replaced was a header row across the top of the work carrying the
+brand, seven destinations, the theme, a documentation link and the account. It
+read as a web page because it was one: chrome above, content below. The
+instrument surrounds the window now instead of sitting on top of it.
 
-![The account menu: variables and secrets, the terminal, the server's version, and the way out](assets/13-account.png)
+The four capsules, in order down the rail:
 
-### A workspace: three views and four overlays
+| Capsule | What it answers |
+|---|---|
+| **Where am I** | the brand, and — inside a workspace — the way back out |
+| **What is the cavity showing** | the stages: Chat, Blueprint, Editor |
+| **What can crawl out over it** | the drawers: Agents, Gears, Instructions, Memory, Receivers, Queue, Variables, Terminal |
+| **The rest** | More, Appearance, and the account |
 
-Inside a workspace, two rules decide where everything goes.
+Nothing is written on the rail. Each button is an icon that raises its name on
+hover, and the on-state is a tint plus a bar in the bezel's margin, so the
+column stays a column of controls rather than a list of words.
 
-**A VIEW is a place you go.** Three of them — **Chat**, **Blueprint**,
-**Editor** — sitting side by side on a track that slides, one on screen at a
-time. Nothing overlaps, nothing stacks, and the header always names exactly
-where you are.
+![A workspace: the stages down the rail, the drawers below them, and the roster crawled out](assets/02-workspace-chat.png)
 
-Every view stays mounted at full size for its whole life, including the ones
+**More** holds what you configure rather than what you navigate: Models,
+People, Context, this documentation, and sign out. The split is by frequency,
+not by kind — what you move between all day is a button on the rail, what you
+configure occasionally is one click further away, and nothing that was
+reachable before is unreachable now.
+
+![The rail’s More menu: the install-wide pages, the documentation, and the way out](assets/13-rail-menu.png)
+
+There are **no global keybindings** at all. `Escape` is deliberately left to
+whichever dialog is open, because the egress approval owns it, scoped to
+itself: one keypress must never both dismiss some chrome and silently refuse a
+pending web search. The only keys bound anywhere are the editor's own, inside
+the editor.
+
+### Stages, and drawers
+
+**A STAGE is a place you go.** Three of them — **Chat**, **Blueprint**,
+**Editor** — sitting on a track that slides vertically, one on screen at a
+time. Vertically because the control that moves it is a vertical rail: going
+down the capsule sends the work down and brings the next stage up from below. A
+horizontal slide driven by a vertical column reads as two unrelated motions.
+
+Every stage stays mounted at full size for its whole life, including the ones
 off screen. That is a correctness requirement rather than an animation trick: a
 hidden terminal measures zero and loses its scrollback structure permanently, a
-hidden canvas fits to `NaN`. So switching views never destroys a shell session
+hidden canvas fits to `NaN`. So changing stage never destroys a shell session
 or a graph you had positioned — the track moves, and nothing is added, removed
 or reparented.
 
-**An OVERLAY is a thing you consult.** Four buttons in the same header —
-**Agents**, **Receivers**, **Queue**, **Variables** — each opening a box under
-the header, one at a time, dismissed by clicking away from it. Picking an agent
-from the roster opens that agent's inspector in the same place, because opening
-an inspector *is* selecting an agent. Each box is resizable from a grip at its
-**bottom-left**: it is anchored top-right, so a bottom-right grip would be
-pinned against the edge it grows from and could only ever make it smaller. One
-size is remembered for all four, since they are read in the same corner and
-four sizes would be four settings for one habit.
+**A DRAWER is a thing you consult** — and it is the frame growing inward, not a
+card flying in over the work. That distinction is most of why this reads as one
+object: a drawer is made of the same material as the bezel, touches the window
+edge exactly as the bezel does, and is rounded only on the side facing the
+cavity. The cavity shrinks to make room rather than being covered, so nothing
+you were working on ends up half underneath something.
 
-An overlay that is shut does not load and does not poll. Receivers cost two
+Eight of them: **Agents**, **Gears**, **Instructions**, **Memory**,
+**Receivers**, **Queue**, **Variables**, **Terminal**. One at a time. Each can
+be docked to any of the four edges from the buttons in its own head — the
+control beside the thing it moves, rather than in a settings screen — and
+resized from the grip on the edge facing the work, which is the only edge that
+can grow. Both are remembered per drawer, so the terminal can live along the
+bottom while the roster lives on the right.
+
+A drawer that is shut does not load and does not poll. Receivers cost two
 queries and the queue runs a timer; a workspace using neither pays for neither.
 
-### The Editor view
+The drawer's head names it, and the panel inside does not: the same word twice
+within forty pixels is not emphasis, and a screen reader read it twice.
 
-The one view with parts, because editing genuinely is three things at once: the
-**Files** tree, the **file**, and a **shell** in the same directory. The tree
-and the shell each roll up to their own header rather than closing, so there is
-no "where did it go" state to recover from and no arrangement worth naming or
-saving.
+### The Editor stage
 
-**Clicking a file moves the deck to the Editor view.** The chat does not stay
+The one stage with parts, because editing genuinely is two things at once: the
+**Files** tree and the **file**. The shell used to be its third part and is a
+drawer now — something pulled out over whatever you are doing and pushed back —
+because keeping both would be two terminals with one session between them.
+
+The tree is flush to the cavity's edge, which means its left corners ARE the
+cavity's, and it is rounded on the one side that faces the file. It is always
+its width; the seam between them resizes it, and leaving the stage is how you
+close it.
+
+**Clicking a file moves the track to the Editor stage.** The chat does not stay
 beside it — it slides off screen and stays alive, mounted and streaming, so a
 turn you started is still running and still there when you slide back.
 
 **The shell never starts by itself.** It is behind a button that says why: a
-fresh shell is started per connection with no resume, so a view that opened one
-on mount would spawn a container on every page load and then show a shell with
-none of the scrollback, working directory or running process the operator
+fresh shell is started per connection with no resume, so a stage that opened
+one on mount would spawn a container on every page load and then show a shell
+with none of the scrollback, working directory or running process the operator
 expects. Four reloads, four containers — measured, not theorised. This is the
-per-workspace shell, scoped to that workspace's directory and open to anyone who
-can reach it; the server-wide Terminal in the account menu is a different thing
-and is an administrator's alone.
+per-workspace shell, scoped to that workspace's directory and open to anyone
+who can reach it; the server-wide Terminal under More is a different thing and
+is an administrator's alone.
 
-![The Editor view: the tree, the file, and a shell you start yourself](assets/05-editor.png)
+![The Editor stage: the tree flush to the frame, the file filling the rest](assets/05-editor.png)
 
 **Diffs.** With unsaved edits open, **changes** shows them against what is on
 disk — two line-number columns, a sign column, and long runs of unchanged lines
@@ -1266,63 +1434,71 @@ indents rather than leaving the field, and long lines wrap on request. Like
 everything else here it is written in the product rather than installed — there
 is no highlighter library and no editor component behind it.
 
-### Looks
+### Giving an agent a tool by dropping one on it
 
-Appearance is two choices and nothing else: a **look**, and a **mode**. What
-this replaced was fourteen dials over the ground, the texture, the tint, the
-transparency of a surface and where the light on it came from. Every one of
-them could be set to a combination that made the interface worse, several could
-put unreadable text on a surface an operator had just tinted, and none of them
-was a decision anybody wanted to make twice.
+On the blueprint, drag a gear or an instruction out of its drawer and let go.
+**Where it lands is the sentence.** On an agent: that agent gets it. On empty
+canvas: every agent in the workspace does, which is a real target rather than
+the absence of one — and the same thing the `+ gear` control does, which is
+still there because a drag is not reachable from a keyboard.
 
-A look is not a set of dials. It is a finished visual world — its ground, its
-accent, its corners, its idea of whether a surface has an edge or a shadow —
-authored once in tokens and drawn in **both** light and dark. Picking one is
-the whole interaction; there is nothing left to tune afterwards.
+Three states are visible while you carry something: the canvas takes an accent
+ring, the agent under the pointer takes a ring and a wash, and a pill at the
+top says what dropping would do. Then a note says what happened, because a node
+quietly appearing in a graph of twenty is not feedback.
 
-Eleven of them, in the order they are offered:
+**An unapproved gear still binds, and says so.** Binding is not what decides
+whether code may run — an agent is only ever handed approved gears — so
+refusing the drop would be enforcing a rule this action does not own. The link
+is drawn, the note states plainly that nobody has approved it and no agent can
+call it, and offers the way to finish: a button that opens that gear's source.
+It opens the review; it approves nothing.
 
-| Look | What it is for |
-|---|---|
-| **Air** | A white sheet on a grey ground. Two colours only: green means running, red means broken. |
-| **Calm** | Rounded and quiet. Nothing asks for attention until something needs it. |
-| **Slate** | The neutral one. No character to get tired of, which is the character. |
-| **Paper** | Warm stock and thin rules. Nothing hovers; everything is printed. |
-| **Terminal** | Phosphor on carbon. Square, hairlined, and green when it is live. |
-| **Blueprint** | A drafting table. Indigo ground, cyan for anything drawn on it. |
-| **Ember** | A warm room. Deep charcoal, orange for state, generous corners. |
-| **Mono** | No hue anywhere. Only weight and edge can stand out. |
-| **Nord** | Cool and low contrast on purpose. For a long session in a dim room. |
-| **Bloom** | Light, airy, violet. The decorative one, and the only graded ground. |
-| **Contrast** | Built for legibility. Real borders, pure grounds, no shadow to muddy an edge. |
+An instruction switches the memory layer on for itself, because landing
+something on a layer that is switched off is a drop with no visible result.
 
-**Air is the default**, and a fresh install opens in **light** rather than
-following the system — Air is a white sheet, and the first thing a new operator
-sees should be the thing the product is cut around rather than whichever half
-of it their laptop happened to pick at 6pm.
+### Appearance
 
-The mode is **system**, **light** or **dark**, and it stays the operator's in
-all eleven looks: every one is drawn in both, because a look that only works
-dark is half a look. `system` follows the operating system and changes with it.
+Two choices, and nothing else: **light or dark**, and **a colour**.
 
-Every screenshot in this document is Air.
+What this replaced was eleven finished "looks" — each with its own ground,
+accent, corner radii and shadow recipe, drawn in both modes. Twenty-two visual
+worlds to keep working, and every screen had to be checked against all of them.
+They went for two reasons. They were legacy: this interface has ONE geometry
+now — a bezel, a rail, a cavity, a drawer — and eleven palettes hung on one
+geometry are not eleven designs, they are one design in eleven paint jobs. And
+they answered the wrong question. Nobody wants to choose between Nord and
+Bloom; they want it dark at night, in a colour they like.
 
-![Appearance: a look, and a mode](assets/04-appearance.png)
+The colour is not decoration. **Every neutral in the palette is mixed towards
+it** — the ground, the surfaces, the borders, the hover washes — which is what
+stops a chosen accent looking pasted onto somebody else's design.
 
-![The same install in dark](assets/14-dark.png)
+Eight colours are offered as a starting point and any hex can be typed. The
+eight are not arbitrary: each has to survive two constraints at once, dark
+enough to carry white text as a filled button on the light ground and light
+enough to read as text on the dark one. Two of them were moved for this
+release, because measured against white they came in at 4.23:1 where ordinary
+text needs 4.5.
 
-Each swatch in the dialog is painted from the look's own tokens, in the mode
-currently in force, rather than from a copy of them — so a swatch cannot
-promise a colour the look does not have.
+The mode is **system**, **light** or **dark**. `system` follows the operating
+system and changes with it.
 
-The choice is stored on the device, under `cogitorium.theme` in
-`localStorage`, and **nothing is fetched**: a look is `data-look` and
-`data-theme` on the root element and a table of custom properties in the
-stylesheet. A stored theme carrying fields nothing reads any more is fine, and
-a stored look that no longer exists lands on the default rather than on an
-attribute nothing styles. If the browser refuses to store the choice, the
-dialog says so instead of losing it quietly. Nothing about your appearance
-settings leaves the machine.
+![Appearance: light or dark, and a colour that is yours](assets/04-appearance.png)
+
+![The same install after dark](assets/14-dark.png)
+
+Every screen in both modes, under all eight colours — 96 screen loads — is
+measured rather than looked at: at the time of writing, no text on any of them
+falls below its WCAG minimum.
+
+The choice is stored on the device, under `cogitorium.theme` in `localStorage`,
+and **nothing is fetched**: the mode is `data-theme` on the root element and
+the colour is one custom property, with everything else derived from it in the
+stylesheet with `color-mix`. A stored theme carrying fields nothing reads any
+more is fine, and a missing one lands on the default rather than on an unpainted
+page. If the browser refuses to store the choice, the dialog says so instead of
+losing it quietly. Nothing about your appearance settings leaves the machine.
 
 ---
 
@@ -1617,6 +1793,15 @@ directory. This is deliberate rather than broken, and it is why the shell is
 behind a button that says so: starting one automatically would spawn a
 container on every page load and then show an empty session as though it were
 the one you left.
+
+**A memory cannot be deleted, only cleared.** `contextd` exposes no command
+that deletes or soft-deletes a file — its storage layer has the operation and
+its CLI offers only `destroy` for a historical version and `undelete` to come
+back from a soft-delete nothing can enter. Clearing a document removes it from
+every prompt, which is the effect that matters, and the file and its history
+stay in Contextverse. Blocked on upstream, not worked around: a Cogitorium-side
+"delete" that only hid the file would be a lie told by this product about
+somebody else's storage.
 
 **The shell works on a copy, and nothing is carried back.** A workspace's files
 are streamed into the container when the session opens; the shell can read and

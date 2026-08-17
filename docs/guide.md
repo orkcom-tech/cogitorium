@@ -30,21 +30,29 @@ anywhere else.
 
 ## Where everything is
 
-A white sheet on a grey ground, and one row across the top of it.
+A frame, and a hole in it. **Every control lives on the frame; the hole holds
+only the work.**
 
-On the left, the brand. In the middle, a pill of the places you work:
-**Workspaces**, **Map**, **Gears**, **Instructions**, **Models**, plus
-**Context** and **People** if you are an administrator. On the right, three
-controls: the theme button, a link to this documentation, and your account
-button.
+The frame's left edge is the **rail**, and it is four groups of buttons with
+gaps between them, answering four questions:
 
-The account menu holds what you configure rather than what you navigate:
-**Variables & secrets**, **Terminal**, the server's version, and sign out.
+1. **where am I** — the brand, and inside a workspace the way back out;
+2. **what is the hole showing** — the stages: Chat, Blueprint, Editor;
+3. **what can crawl out over it** — the drawers: Agents, Gears, Instructions,
+   Memory, Receivers, Queue, Variables, Terminal;
+4. **the rest** — More, Appearance, and your account.
 
-There is no sidebar. There is no keyboard shortcut for any of this chrome, and
-that is deliberate: Escape belongs to the search approval dialog and to nothing
-else, so one keypress can never both dismiss something and silently refuse a
-pending search.
+Nothing is written on the rail. Each button is an icon that raises its name
+when you hover it, and the one you are on takes a tint and a bar in the margin.
+
+**More** holds what you configure rather than what you navigate: **Models**,
+**People**, **Context**, this guide, and sign out. Variables and the
+server-wide Terminal are drawers inside a workspace.
+
+There is no keyboard shortcut for any of this chrome, and that is deliberate:
+Escape belongs to the search approval dialog and to nothing else, so one
+keypress can never both dismiss something and silently refuse a pending
+search.
 
 ---
 
@@ -161,8 +169,9 @@ Three things worth knowing:
   that neighbours never read as the same shade — and that derived value is never
   written back. "Nobody chose" and "somebody chose exactly this" stay different
   states.
-- **Saturation and lightness are not yours to pick.** They move with the look and
-  the mode, so a colour chosen in one never becomes unreadable in another.
+- **Saturation and lightness are not yours to pick.** They move with the mode
+  and your accent, so a colour chosen in one never becomes unreadable in
+  another.
 
 ### Share it, clone it, delete it
 
@@ -278,22 +287,24 @@ had. Add the model under **Models**, or point each agent at a local one.
 
 ## A workspace
 
-![A workspace: the three view tabs on the left of the header, the four overlay
-buttons beside them, and the Agents overlay open over the chat with one card per
-agent.](assets/02-workspace-deck.png)
+![A workspace: the stages down the rail, the drawers below them, and the Agents
+drawer crawled out over the right of the chat.](assets/02-workspace-chat.png)
 
-Three **views** on a sliding track — **Chat**, **Blueprint**, **Editor** — one
-on screen at a time. The other two are not unmounted: they stay off-screen at
-full size, which is why a running shell and a laid-out canvas survive you
-switching away and back.
+Three **stages** on a track that slides vertically — **Chat**, **Blueprint**,
+**Editor** — one on screen at a time, chosen from the rail's second group. The
+other two are not unmounted: they stay off-screen at full size, which is why a
+running shell and a laid-out canvas survive you moving away and back.
 
-Four **overlays** open from the same header — **Agents**, **Receivers**,
-**Queue**, **Variables**. One at a time; a click anywhere outside dismisses it,
-and the grip at its bottom-left corner resizes it. An overlay is something you
-consult, so none of them is restored when you come back to the workspace.
+Eight **drawers** open from the third group — **Agents**, **Gears**,
+**Instructions**, **Memory**, **Receivers**, **Queue**, **Variables**,
+**Terminal**. One at a time. A drawer is the frame growing inward rather than a
+window over the work: it comes out of an edge, the hole shrinks to make room,
+and nothing you were doing ends up underneath it. Dock it to any of the four
+edges from the buttons in its head, and drag the edge facing the work to resize
+it; both are remembered per drawer, so the terminal can live along the bottom
+while the roster lives on the right.
 
-The header also carries the way out (the arrow, back to the list) and
-**export**.
+The rail also carries the way out (back to the list) and **export**.
 
 ### Chat
 
@@ -350,7 +361,7 @@ What chat will not do:
 - **A delivery through a receiver writes nothing here.** Otherwise request two
   hundred would carry the previous hundred and ninety-nine.
 - **One run at a time per workspace.** Anything arriving while a turn is running
-  waits in the Queue overlay rather than being turned away.
+  waits in the Queue drawer rather than being turned away.
 - **Two people in one workspace share its conversation.** There is no private
   thread; separate workspaces are how two people stay out of each other's way.
 
@@ -523,10 +534,32 @@ Nothing is silently substituted. The timing gear is not in the file: gears
 travel only when you ask for them, and this arrangement is more useful with one
 you wrote for your own language and your own definition of fast.
 
+#### Dropping a gear or an instruction on an agent
+
+Open the **Gears** or **Instructions** drawer, pick up a card and drop it on the
+canvas. **Where it lands is the sentence.** On an agent: that agent gets it. On
+empty canvas: every agent in this workspace does — a real target rather than the
+absence of one, and the same thing the `+ gear` control does, which is still
+there because a drag is not reachable from a keyboard.
+
+While you are carrying something the canvas takes a ring, the agent under the
+pointer takes a brighter one, and a pill at the top says what dropping would do.
+Then a note says what happened.
+
+An **unapproved gear still binds, and says so**. Binding is not what decides
+whether code may run — an agent is only ever handed approved gears — so the link
+is drawn, the note tells you nobody has approved it and no agent can call it,
+and offers a button that opens that gear's source. It opens the review; it
+approves nothing.
+
+An instruction switches the memory layer on for itself, because landing
+something on a layer that is switched off is a drop with no visible result.
+
 #### What the blueprint will not do
 
-- **Memory is not draggable.** A document reaches an agent by being bound in the
-  inspector, so those links are drawn and not editable here.
+- **Memory is not draggable between nodes.** A document reaches an agent by
+  being bound — in the inspector, or by dropping an instruction on it — so
+  those links are drawn and not editable by dragging their ends.
 - **Every connection must end at an agent.** Wires grant delegation, gear links
   grant a tool; nothing else is a legal edge.
 - **A workspace-wide gear draws no per-agent edges.** It would draw one to every
@@ -535,15 +568,15 @@ you wrote for your own language and your own definition of fast.
 
 ### Editor
 
-![The Editor view: the file tree on the left, the file in the middle, and the
-shell rolled up to its header along the bottom until you start
-one.](assets/05-editor.png)
+![The Editor stage: the file tree flush to the frame on the left, and the file
+filling everything else.](assets/05-editor.png)
 
-Three parts in one view: the **Files** tree, the file itself, and a **shell**.
-The tree and the shell roll up to their own header rather than closing, and the
-seams between them drag.
+Two parts: the **Files** tree, flush to the frame's edge, and the file. The
+seam between them drags. The **shell** used to be a third part along the bottom
+and is a drawer now — pull it out over whatever you are doing and push it back
+— because keeping both would be two terminals with one session between them.
 
-Clicking a file in the tree moves the whole deck to this view. The chat does not
+Clicking a file in the tree moves the track to this stage. The chat does not
 sit beside it — it slides off-screen and stays alive, exactly as it was.
 
 **The tree.** Each workspace has its own directory. Directories load a level at
@@ -572,18 +605,18 @@ scrollback, working directory or running process of the one before. Four
 reloads, four containers — measured, not theorised.
 
 This shell is **open to anyone who can reach the workspace**, and it is not the
-server-wide [Terminal](#terminal) in the account menu. It runs in the same
+server-wide [Terminal](#terminal) drawer. It runs in the same
 sandbox gears run in: no network, nothing of the server's mounted, and **a copy
 of this workspace's files that is not carried back**. A file written here is
 gone when the session ends.
 
-### The Agents overlay
+### The Agents drawer
 
 Every agent in the workspace as a card: a state dot, its running spend, its
 model, and a bar showing its share of what this workspace has spent in total. A
 share tells you where the money went; a number nobody can act on is decoration.
 
-Clicking a card opens the inspector — the overlay retitles itself with the
+Clicking a card opens the inspector — the drawer retitles itself with the
 agent's name, because opening the inspector *is* selecting an agent.
 
 **What an agent carries into a turn** is listed in the inspector in the order it
@@ -651,13 +684,13 @@ them alone, so editing a role cannot wipe a rule by accident.
 What the inspector will not do: there is no way to duplicate an agent, and the
 orchestrator cannot be deleted.
 
-### The Receivers overlay
+### The Receivers drawer
 
 A **receiver** takes an HTTP POST from outside and hands it to one agent. It has
 an address, its own key, and a list of **tasks**; a task says what it accepts,
 which agent gets it, what to tell that agent, and what counts as success.
 
-![The Receivers overlay on support triage: the `tickets` receiver with its two
+![The Receivers drawer on support triage: the `tickets` receiver with its two
 tasks, `classify` and `draft_reply`, each naming the agent that runs
 it.](assets/15-receivers.png)
 
@@ -980,18 +1013,18 @@ any older one comes back by its number. Open one to see what it did.
 - **No streaming, and no fan-out** of one delivery to several agents.
 - **One run at a time per workspace.** A delivery that arrives while one is
   running **waits** — it is `queued`, which is a state in the ledger and a row
-  in the Queue overlay, not a failure. What is refused is a queue that has
+  in the Queue drawer, not a failure. What is refused is a queue that has
   stopped being one: past `queue_max_per_workspace` waiting deliveries the next
   gets 429 and says how many are ahead of it.
 
-### The Queue overlay
+### The Queue drawer
 
 What this workspace is doing, what is waiting, and what starts on its own. The
 two live together because they answer one question — "why is nothing happening,
 or why is everything happening" — and a queue that can be seen but not stopped
 is worse than one that cannot be seen at all.
 
-![The Queue overlay: nothing running, and below it the schedule that fires
+![The Queue drawer: nothing running, and below it the schedule that fires
 `audit_batch` at 03:00 Europe/Berlin. Pause, Run now and Delete are on the
 schedule itself.](assets/16-queue.png)
 
@@ -1024,14 +1057,14 @@ What it will not do:
 - **A scheduled run never gets web search.** Every search waits for a person to
   approve that exact query, and on a schedule there is nobody to ask.
 
-### The Variables overlay
+### The Variables drawer
 
 The same mechanism as [Variables & secrets](#variables--secrets), scoped to this
 workspace: a name set here wins over the same name set install-wide, which is
 how one gear serves staging and production without being edited. A secret's
 value is shown once, when you set it, and never again.
 
-![The Variables overlay: two variables with their values in full, and a secret
+![The Variables drawer: two variables with their values in full, and a secret
 whose value reads *set, and never shown again* — the server does not send it
 back.](assets/17-variables.png)
 
@@ -1188,6 +1221,9 @@ Inside, in this order:
   pointing back at the machine the server runs on, which is refused whatever you
   granted (`127.0.0.1` is this server's own API, where a local request is trusted
   as the administrator).
+- **who approved it** — every approval, disable and reset: who decided, when, to
+  which version, and what was granted at that moment. Append-only; nothing here
+  is ever rewritten.
 
 Call an unapproved gear without `dry=1` and it is refused — an unapproved gear
 does not execute, whoever asks.
@@ -1198,6 +1234,18 @@ Saving new code makes a new version and returns the gear to `pending`,
 **taking the network grant with it**. Approval covers exact content, never a
 moving target. There is no per-version approval and no rollback: `status` is one
 column on the gear.
+
+![Who let this code run, when, to which version, and with
+what.](assets/20-gear-approvals.png)
+
+The trail is where "approved" stops being one word. It names the version each
+decision covered, so a gear whose status says approved at v7 while the last
+approval names v3 is visibly running code nobody read — and the review screen
+marks it.
+
+**Deleting a gear does not delete what it did.** Its runs outlive it and still
+say which gear they were. The moment you most need to know what a gear did is
+after deciding it should not exist.
 
 ### What the sandbox does, and does not
 
@@ -1260,7 +1308,7 @@ caution for its own sake: an agent's answer leaves the building, in the chat and
 in a receiver's response, so a secret in a prompt is a secret published.
 
 Set what a name means under [Variables & secrets](#variables--secrets)
-install-wide, or in a workspace's own Variables overlay. Three sources, later
+install-wide, or in a workspace's own Variables drawer. Three sources, later
 winning:
 
 1. this install's own store, encrypted with `COGITORIUM_SECRET_KEY` from the
@@ -1392,7 +1440,7 @@ markdown — pinned onto an agent verbatim.
 Contextverse, which is where they live.
 
 Binding one to a workspace or a single agent happens in the [agent
-inspector](#the-agents-overlay), not here — this is the catalogue that makes
+inspector](#the-agents-drawer), not here — this is the catalogue that makes
 them findable.
 
 Agents save what they work out here too, with `save_instruction`. The card says
@@ -1459,6 +1507,27 @@ Pick a file on the left, edit it on the right, **save new version** — the noti
 that comes back says *"contextd created a new version"*, because the versioning
 is Contextverse's and not this product's.
 
+**Search inside the files.** The box above the list looks at the text, not just
+the names, and a hit opens the file at its line. Before this the only way to
+find a memory was to already know its path.
+
+![Searching the space, and opening a hit at its line](assets/21-context-search.png)
+
+**A save that would overwrite somebody is refused.** The editor remembers the
+version it opened; if the file has moved on since, the save comes back naming
+both versions so you can reopen and reapply rather than discovering the loss
+later. This is a read-to-write guard and not a compare-and-swap — `contextd file
+put` takes no expected-version argument, so a third party writing in the
+instant between the check and the write still wins.
+
+**Forgetting is clearing, because Contextverse has no delete.** `contextd`
+offers `file destroy` for one historical version and `file undelete` to restore
+a soft-deleted file, and nothing that deletes or soft-deletes one; its storage
+layer knows the operation and no command reaches it. Clearing a document is a
+real forgetting rather than a workaround: an empty document is skipped when a
+prompt is assembled, so the agent stops being told it. The file and its history
+stay where versioning belongs.
+
 Without `contextd` the server starts, says so at `GET /api/v1/context/status`,
 and memory does nothing:
 
@@ -1478,7 +1547,7 @@ memory unavailable and says why in the log.
 Each workspace gets its own branch plus a shared one, and each agent its own
 under that, so one workspace's memory does not leak into another's. Putting a
 document in front of a model is done by binding it in the [agent
-inspector](#the-agents-overlay); this screen is the space itself.
+inspector](#the-agents-drawer); this screen is the space itself.
 
 ---
 
@@ -1517,11 +1586,11 @@ workspace with a team, and the internet gate.
 ## Variables & secrets
 
 ![The account menu: Variables & secrets and Terminal, the server's version, and
-the way out.](assets/13-account.png)
+the way out.](assets/13-rail-menu.png)
 
 In the account button's menu, and administrators only. The install-wide half of
 the mechanism a gear's credentials come from — the per-workspace half is the
-Variables overlay inside a workspace.
+Variables drawer inside a workspace.
 
 The rule this screen exists to make visible: **a gear is given names, and reads
 the values from its own environment**. A model never sees a value.
@@ -1578,25 +1647,27 @@ server's mounted, and neither survives being closed.
 
 ## Appearance
 
-![Appearance: eleven looks and a mode. Picking one is the whole
-interaction.](assets/04-appearance.png)
+![Appearance: light or dark, and a colour that is
+yours.](assets/04-appearance.png)
 
-The theme button in the header opens two choices and nothing else.
+The swatch near the bottom of the rail opens two choices and nothing else.
 
-**A look** — a finished visual world: its ground, its accent, its corners, its
-idea of whether a surface has an edge or a shadow, authored in tokens and drawn in
-both light and dark. Eleven of them, in this order: **Air**, Calm, Slate, Paper,
-Terminal, Blueprint, Ember, Mono, Nord, Bloom, Contrast. Each swatch is painted
-from that look's own tokens, so what the button shows and what the interface
-becomes cannot disagree.
+**A mode** — system, light or dark. `system` follows the operating system and
+changes with it.
 
-**A mode** — system, light or dark. Every look is drawn in both; `system`
-follows the operating system and changes with it.
+**A colour** — eight offered, or any hex you type. It is not just the accent:
+**every neutral in the palette is mixed towards it**, so the ground, the
+surfaces, the borders and the hover washes all carry a little of it. That is
+what stops a chosen colour looking pasted onto somebody else's design.
 
-A fresh install opens on **Air**, in **light**. The choice is stored on the
-device, in `localStorage` under `cogitorium.theme`, and nothing about it is
-fetched or sent anywhere. If the browser refuses to store it the dialog says so
-rather than losing it quietly.
+The eight are not arbitrary. Each has to survive two constraints at once: dark
+enough to carry white text as a filled button on the light ground, and light
+enough to read as text on the dark one. Type your own and that is your risk and
+your business.
+
+The choice is stored on the device, in `localStorage` under
+`cogitorium.theme`, and nothing about it is fetched or sent anywhere. If the
+browser refuses to store it the dialog says so rather than losing it quietly.
 
 Changing either one repaints everything that draws itself rather than being
 styled: an open shell re-reads its colours, and so does the map, so neither is
@@ -1604,9 +1675,12 @@ left painting near-black ink on a near-black ground.
 
 ![The same install, dark.](assets/14-dark.png)
 
-There is nothing else to tune. What this replaced was fourteen dials, most
-combinations of which made the interface worse and several of which could make
-text unreadable on a surface that had just been tinted.
+There is nothing else to tune. What this replaced was eleven finished "looks" —
+twenty-two visual worlds once you count both modes — and before those, fourteen
+dials most combinations of which made the interface worse. The interface has
+one geometry now; eleven palettes hung on one geometry are one design in eleven
+paint jobs, and nobody wants to choose between Nord and Bloom. They want it
+dark at night, in a colour they like.
 
 ---
 
@@ -1832,7 +1906,7 @@ UNIT  STATE    KIND      RUN  SINCE
 2     claimed  delivery  2    2026-08-16T02:28:47Z
 ```
 
-`cancel` stops the work, not just the row — the same route the Queue overlay's
+`cancel` stops the work, not just the row — the same route the Queue drawer's
 Stop button uses, and it takes a unit that is already running as readily as one
 that is still waiting. Unit 2 moved up on its own once the workspace was free
 again. The ledger keeps what happened rather than losing the run:
