@@ -293,6 +293,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.routeIn(mux, "POST /api/v1/gears/{id}/invoke", s.handleInvokeGear, InvokeGearBody{})
 	s.route(mux, "GET /api/v1/gears/{id}/runs", s.handleListGearRuns)
 	s.route(mux, "GET /api/v1/gears/{id}/connections", s.handleListGearConnections)
+	s.route(mux, "GET /api/v1/gears/{id}/approvals", s.handleListGearApprovals)
 	s.routeIn(mux, "PATCH /api/v1/gears/{id}", s.handleSetGearStatus, SetGearStatusBody{})
 	s.route(mux, "DELETE /api/v1/gears/{id}", s.handleDeleteGear)
 	s.route(mux, "GET /api/v1/workspaces/{id}/gears", s.handleListGearBindings)

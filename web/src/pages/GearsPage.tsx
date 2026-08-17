@@ -8,6 +8,7 @@ import {
   type GearConnection,
   type GearFile,
   type GearRun,
+  type GearApproval,
   type GearRunResult,
   type User,
   gearRunStream,
@@ -190,6 +191,7 @@ function GearCard({
   const abort = useRef<AbortController | null>(null)
   const [runs, setRuns] = useState<GearRun[] | null>(null)
   const [conns, setConns] = useState<GearConnection[] | null>(null)
+  const [trail, setTrail] = useState<GearApproval[] | null>(null)
   // The grant as this screen currently states it. It starts as what the gear
   // holds and becomes what the operator is about to decide — the dry run below
   // uses it too, so what they judge is what they are about to allow.
@@ -598,7 +600,59 @@ function GearCard({
             >
               {conns === null ? 'connections' : 'hide connections'}
             </button>
+            {/* And who let it. A status column answers "is it approved"; it
+                cannot answer who, when, to which version, or with what — and
+                those are the questions asked after something goes wrong. */}
+            <button
+              onClick={() =>
+                trail === null
+                  ? api.gears.approvals(g.id).then(setTrail).catch((e: Error) => onError(e.message))
+                  : setTrail(null)
+              }
+            >
+              {trail === null ? 'who approved it' : 'hide approvals'}
+            </button>
           </div>
+
+          {trail !== null &&
+            (trail.length === 0 ? (
+              <p className="hint">
+                No decision has been recorded for this gear. Every approval, disable and reset from now on is written
+                down here — including which version it covered.
+              </p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>when</th>
+                    <th>who</th>
+                    <th>decided</th>
+                    <th>version</th>
+                    <th>credentials</th>
+                    <th>network</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trail.map((a) => (
+                    <tr key={a.id}>
+                      <td className="muted">{a.created_at}</td>
+                      <td>{a.user_name || 'unattributed'}</td>
+                      <td>
+                        <span className={`status ${a.status}`}>{a.status}</span>
+                      </td>
+                      {/* A gear approved at v3 and edited to v7 is not an
+                          approved gear, and this column is where that shows. */}
+                      <td className={a.version === g.version ? '' : 'warn'}>
+                        v{a.version}
+                        {a.version !== g.version && a.status === 'approved' ? ` — now v${g.version}` : ''}
+                      </td>
+                      <td className="muted">{envList(a.env_names)}</td>
+                      <td className="muted">{a.network}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ))}
 
           {conns !== null &&
             (conns.length === 0 ? (
@@ -898,4 +952,16 @@ function GearFileDiff({ before, after }: { before: string; after: string }) {
       </pre>
     </>
   )
+}
+
+// envList reads the stored credential names, which are JSON on the row so that
+// the row is readable on its own after the gear is gone.
+function envList(raw: string): string {
+  if (!raw) return 'none'
+  try {
+    const names = JSON.parse(raw) as string[]
+    return names.length > 0 ? names.join(', ') : 'none'
+  } catch {
+    return raw
+  }
 }

@@ -130,7 +130,7 @@ func (i *install) forgeApproved(name, description, content string, wsID int64) g
 	if err != nil {
 		i.t.Fatalf("forge gear %q: %v", name, err)
 	}
-	g, err = i.stores.Gears.SetStatus(ctx, g.ID, gear.StatusApproved)
+	g, err = i.stores.Gears.SetStatus(ctx, g.ID, gear.StatusApproved, gear.Actor{Name: "test-operator"})
 	if err != nil {
 		i.t.Fatalf("approve gear %q: %v", name, err)
 	}

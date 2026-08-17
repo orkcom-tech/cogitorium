@@ -133,7 +133,7 @@ func (s *sandboxed) approveScript(t *testing.T, name, script string) Gear {
 	if err != nil {
 		t.Fatalf("forge %q: %v", name, err)
 	}
-	if g, err = s.gears.SetStatus(ctx, g.ID, StatusApproved); err != nil {
+	if g, err = s.gears.SetStatus(ctx, g.ID, StatusApproved, Actor{Name: "test-operator"}); err != nil {
 		t.Fatalf("approve %q: %v", name, err)
 	}
 	return g

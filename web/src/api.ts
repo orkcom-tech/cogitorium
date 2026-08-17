@@ -552,6 +552,7 @@ export const api = {
       req<GearRunResult>(`/api/v1/gears/${id}/run`, { method: 'POST', body: JSON.stringify({ args, network }) }),
     runs: (id: number) => req<GearRun[]>(`/api/v1/gears/${id}/runs`),
     connections: (id: number) => req<GearConnection[]>(`/api/v1/gears/${id}/connections`),
+    approvals: (id: number) => req<GearApproval[]>(`/api/v1/gears/${id}/approvals`),
     remove: (id: number) => req<void>(`/api/v1/gears/${id}`, { method: 'DELETE' }),
     bindings: (wsId: number) => req<GearBinding[]>(`/api/v1/workspaces/${wsId}/gears`),
     bind: (wsId: number, gearId: number, agentId: number | null) =>
@@ -880,6 +881,22 @@ export type ContextStatus = {
 }
 
 export type ContextBinding = { id: number; workspace_id: number; path: string; agent_id: number | null }
+
+// One decision about one gear: who said this code may run, when, to which
+// version, and what they granted it in the same breath. The status column says
+// what a gear IS; this says how it got that way.
+export type GearApproval = {
+  id: number
+  gear_id: number
+  gear_name: string
+  version: number
+  status: 'approved' | 'disabled' | 'pending'
+  user_id: number | null
+  user_name: string
+  env_names: string
+  network: string
+  created_at: string
+}
 
 export type Gear = {
   id: number

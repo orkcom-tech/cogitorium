@@ -115,7 +115,7 @@ func TestEveryAttachedFileReachesAGearByItsPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("forge the gear: %v", err)
 	}
-	if _, err := f.gears.SetStatus(ctx, g.ID, gear.StatusApproved); err != nil {
+	if _, err := f.gears.SetStatus(ctx, g.ID, gear.StatusApproved, gear.Actor{Name: "test-operator"}); err != nil {
 		t.Fatalf("approve the gear: %v", err)
 	}
 
