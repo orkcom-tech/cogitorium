@@ -1,82 +1,59 @@
-// Appearance: a look, and a mode. That is the whole of it.
+// Appearance: light or dark, and a colour that is yours.
 //
-// What was here before: three gradient stops the operator picked by hand, a
-// grain dial, a tint dial, a glass/solid switch, a blur radius, a "lighten"
-// dial, a glow with an x, a y and a strength, a drift toggle with a speed, and
-// a backdrop image or video. Fourteen settings, every one of which could be
-// set to a combination that made the interface worse, and several of which
-// could make text unreadable on a surface the operator had just tinted.
+// What was here before this: eleven finished "looks" — Air, Calm, Slate,
+// Paper, Terminal, Blueprint, Ember, Mono, Nord, Bloom, Contrast — each with
+// its own ground, accent, corner radii and shadow recipe, drawn in both modes.
+// Twenty-two visual worlds to keep working, and every screen in the product
+// had to be checked against all of them.
 //
-// A look is not a set of dials. It is a finished visual world — its ground,
-// its accent, its corners, its idea of whether a panel has an edge or a
-// shadow — authored once, in tokens, and drawn in both light and dark. Picking
-// one is the whole interaction. There is nothing to tune afterwards because
-// there is nothing left that an operator would improve by tuning.
-
-export type Look =
-  | 'shell'
-  | 'calm'
-  | 'paper'
-  | 'terminal'
-  | 'blueprint'
-  | 'ember'
-  | 'mono'
-  | 'nord'
-  | 'bloom'
-  | 'slate'
-  | 'contrast'
-  | 'air'
+// They went for two reasons. They were legacy: this interface has ONE geometry
+// now — a bezel, a rail, a cavity, a drawer — and eleven palettes hung on one
+// geometry are not eleven designs, they are one design in eleven paint jobs.
+// And they answered the wrong question. An operator does not want to choose
+// between Nord and Bloom; they want it dark at night, and they want it to
+// carry a colour they like.
+//
+// So: a mode, and an accent. The mode decides the ground. The accent is the
+// operator's own, and the neutrals are mixed towards it rather than being pure
+// grey — which is what stops a chosen colour looking pasted onto somebody
+// else's design.
 
 export type Theme = {
-  look: Look
   mode: 'dark' | 'light' | 'system'
+  /** The primary role, as a hex. Everything else is derived from it in CSS. */
+  accent: string
 }
 
 /**
- * The catalogue, in the order it is offered.
- *
- * The blurb is what the operator reads, so it says what the look is FOR
- * rather than what colours it uses — they can see the colours. Every one of
- * these is drawn in both modes: a look that only works dark is half a look,
- * and `mode` stays the operator's in all twelve.
+ * Colours offered as a starting point. Not a fixed set — the operator can type
+ * any hex — but eight that are known to work, because each has to survive two
+ * constraints at once: dark enough to carry white text as a filled button on
+ * the light ground, and light enough to read as text on the dark one. An
+ * arbitrary colour usually fails one of those, and the picker says which.
  */
-export const LOOKS: { id: Look; name: string; blurb: string }[] = [
-  {
-    id: 'shell',
-    name: 'Shell',
-    blurb:
-      'The default. A warm ground with a measured surface ladder on it, so a drawer floating over the work reads as a plane above it. Green means running, red means refused.',
-  },
-  { id: 'air', name: 'Air', blurb: 'A white sheet on a grey ground. Two colours only: green means running, red means broken.' },
-  { id: 'calm', name: 'Calm', blurb: 'Rounded and quiet. Nothing asks for attention until something needs it.' },
-  { id: 'slate', name: 'Slate', blurb: 'The neutral one. No character to get tired of, which is the character.' },
-  { id: 'paper', name: 'Paper', blurb: 'Warm stock and thin rules. Nothing floats; everything is printed.' },
-  { id: 'terminal', name: 'Terminal', blurb: 'Phosphor on carbon. Square, hairlined, and green when it is live.' },
-  { id: 'blueprint', name: 'Blueprint', blurb: 'A drafting table. Indigo ground, cyan for anything drawn on it.' },
-  { id: 'ember', name: 'Ember', blurb: 'A warm room. Deep charcoal, orange for state, generous corners.' },
-  { id: 'mono', name: 'Mono', blurb: 'No hue anywhere. Only weight and edge can stand out.' },
-  { id: 'nord', name: 'Nord', blurb: 'Cool and low contrast on purpose. For a long session in a dim room.' },
-  { id: 'bloom', name: 'Bloom', blurb: 'Light, airy, violet. The decorative one, and the only graded ground.' },
-  { id: 'contrast', name: 'Contrast', blurb: 'Built for legibility. Real borders, pure grounds, no shadow to muddy an edge.' },
+export const ACCENTS: { name: string; hex: string }[] = [
+  { name: 'Green', hex: '#0a8f24' },
+  { name: 'Teal', hex: '#0f766e' },
+  { name: 'Blue', hex: '#2563c9' },
+  { name: 'Indigo', hex: '#4f46e5' },
+  { name: 'Violet', hex: '#7c3aed' },
+  { name: 'Rose', hex: '#be3455' },
+  { name: 'Amber', hex: '#a4650a' },
+  { name: 'Slate', hex: '#4a5568' },
 ]
 
-const IDS = new Set<string>(LOOKS.map((l) => l.id))
-
-// Shell is the look the interface is designed around — the frame, the rail and
-// the drawers were drawn against its surface ladder — so it is what a fresh
-// install opens in. Anyone with a stored theme keeps theirs: loadTheme reads
-// what is there and only falls back per field.
-export const DEFAULT_THEME: Theme = { look: 'shell', mode: 'light' }
+export const DEFAULT_THEME: Theme = { mode: 'system', accent: '#0a8f24' }
 
 const KEY = 'cogitorium.theme'
+const HEX = /^#[0-9a-f]{6}$/i
 
 /**
  * loadTheme falls back per field and never throws.
  *
- * A stored theme from before this change carries a dozen fields nothing reads
- * any more, and possibly a `look` that no longer exists. Both are fine: the
- * extras are ignored and an unknown look lands on the default rather than on
- * an attribute nothing styles, which would render an unthemed page.
+ * A theme stored before this change carries a `look` nothing reads any more
+ * and no accent at all. Both are fine: the extra field is ignored and the
+ * missing one lands on the default, so nobody opens the app to an unpainted
+ * page because of a choice they made last year.
  */
 export function loadTheme(): Theme {
   try {
@@ -84,8 +61,8 @@ export function loadTheme(): Theme {
     if (!raw) return DEFAULT_THEME
     const t = JSON.parse(raw) as Partial<Theme>
     return {
-      look: typeof t.look === 'string' && IDS.has(t.look) ? (t.look as Look) : DEFAULT_THEME.look,
       mode: t.mode === 'dark' || t.mode === 'light' ? t.mode : 'system',
+      accent: typeof t.accent === 'string' && HEX.test(t.accent) ? t.accent : DEFAULT_THEME.accent,
     }
   } catch {
     return DEFAULT_THEME
@@ -102,17 +79,22 @@ export function saveTheme(t: Theme): boolean {
 }
 
 /**
- * Apply the theme to the document — two attributes, and nothing else.
+ * Apply it: one attribute, and one custom property.
  *
- * Every colour, corner and shadow is a token in tokens.css under
- * `:root[data-look=…]`, so this function has no palette knowledge at all.
- * That is deliberate: the previous version wrote eighteen custom properties
- * from JavaScript, which meant the stylesheet could not be read on its own to
- * know what anything would look like.
+ * The mode is an attribute because `light-dark()` in the stylesheet resolves
+ * against the element's used color-scheme, so setting the scheme is what
+ * repaints the whole palette. Writing colours from here instead would mean the
+ * stylesheet could no longer be read on its own to know what anything looks
+ * like.
+ *
+ * The accent is the one value this function does write, because it is the
+ * operator's and cannot be known at build time. Everything derived from it —
+ * the tinted neutrals, the hover washes, the selection — is derived in CSS
+ * with color-mix, not here.
  */
 export function applyTheme(t: Theme) {
   const root = document.documentElement
-  root.setAttribute('data-look', t.look)
   if (t.mode === 'system') root.removeAttribute('data-theme')
   else root.setAttribute('data-theme', t.mode)
+  root.style.setProperty('--accent-chosen', t.accent)
 }

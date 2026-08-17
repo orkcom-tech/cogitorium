@@ -617,3 +617,85 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* ── Appearance ─────────────────────────────────────────────────────────────
+   Two rows of controls where there used to be a grid of eleven paint jobs. */
+
+.mode-row {
+  display: flex;
+  gap: var(--s1);
+  padding: var(--s1);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  margin: var(--s2) 0 var(--s3);
+}
+
+.mode-option {
+  flex: 1;
+  border: 0;
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: var(--t-ui);
+  cursor: pointer;
+}
+
+.mode-option.on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--lift, none);
+}
+
+.accent-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin: var(--s2) 0 var(--s3);
+}
+
+.accent-option {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  /* The ring is outside the colour rather than over it, so a dark accent and a
+     light one are marked the same way. */
+  box-shadow: 0 0 0 2px var(--surface);
+  transition:
+    box-shadow var(--ef-fast-d) var(--ef-fast),
+    transform var(--sp-fast-d) var(--sp-fast);
+}
+
+.accent-option:hover {
+  transform: scale(1.08);
+}
+
+.accent-option.on {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--text);
+}
+
+.accent-own {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--border-strong);
+  background:
+    conic-gradient(from 0deg, #e04b4b, #e0c34b, #4be070, #4bc8e0, #7c4be0, #e04b9e, #e04b4b);
+}
+
+.accent-own input {
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  border: 0;
+  padding: 0;
+}

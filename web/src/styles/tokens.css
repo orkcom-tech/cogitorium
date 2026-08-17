@@ -16,16 +16,34 @@
 :root {
   color-scheme: light dark;
 
-  --bg: light-dark(#fbfbfa, #191918);
-  --surface: light-dark(#ffffff, #212120); /* panel bodies, cards, floats */
-  --surface-2: light-dark(#f4f4f2, #2a2a28); /* tab strips, rails, hover */
-  --text: light-dark(#1a1a19, #ededeb);
+  /* The operator's colour, written from JavaScript and nothing else. Every
+     neutral below is mixed TOWARDS it rather than being pure grey, which is
+     what keeps a chosen accent from looking pasted onto somebody else's
+     design: the ground, the surfaces and the borders all carry a little of it. */
+  --accent-chosen: #0a8f24;
+  --accent: var(--accent-chosen);
+
+  --bg: light-dark(
+    color-mix(in srgb, var(--accent-chosen) 7%, #e6e3d9),
+    color-mix(in srgb, var(--accent-chosen) 7%, #0d0f0c)
+  );
+  --surface: light-dark(
+    color-mix(in srgb, var(--accent-chosen) 3%, #fdfcf8),
+    color-mix(in srgb, var(--accent-chosen) 5%, #171a16)
+  );
+  --surface-2: light-dark(
+    color-mix(in srgb, var(--accent-chosen) 5%, #f3f1ea),
+    color-mix(in srgb, var(--accent-chosen) 6%, #1f231e)
+  );
+  --text: light-dark(
+    color-mix(in srgb, var(--accent-chosen) 8%, #1a1c17),
+    color-mix(in srgb, var(--accent-chosen) 8%, #eaece6)
+  );
   --text-dim: color-mix(in srgb, var(--text) 58%, transparent);
 
   --border: color-mix(in srgb, var(--text) 14%, transparent);
   --border-strong: color-mix(in srgb, var(--text) 30%, transparent);
 
-  --accent: #6c8cff;
   /* Every one of these was a single hex chosen against a near-black ground,
      which is fine until the ground is not near-black. Measured on the light
      side they land between 2:1 and 3.2:1 — the amber worst of all, and it is
@@ -636,309 +654,6 @@ button.primary:hover:not(:disabled) {
  * theirs. A look that only works dark is half a look.
  */
 
-/* 0. Shell — the default, and the one the whole interface is designed around.
-      A warm cream ground with a Material 3 surface ladder on it, so a drawer
-      floating over the cavity reads as a plane above it rather than as a patch
-      the same colour. That is not a preference: the first cut had a drawer at
-      a contrast ratio of 1.025 against what it sat on, which is invisible, and
-      every step in this ladder was measured rather than eyeballed.
-
-      Cogitorium's green is the primary role, the neutrals are biased towards it
-      rather than being pure greys, and red is reserved for refusal — a pending
-      gear, a run the runtime would not allow — so it never appears as
-      decoration. Corners are large, in the reference's own ladder, because a
-      26px cavity and a 999px capsule are most of what separates a shell from a
-      page with rounded boxes. */
-[data-look='shell'] {
-  --text: light-dark(#1a1e16, #e9ece3);
-  --muted: light-dark(#5f6858, #a8b0a0);
-  --bg: light-dark(#e3e0d3, #0e110d);
-  --surface-base: light-dark(#fdfcf7, #191d17);
-  --surface-2-base: light-dark(#f2efe3, #222720);
-  --border: light-dark(rgba(26,30,22,.09), rgba(233,236,227,.10));
-  --border-strong: light-dark(rgba(26,30,22,.20), rgba(233,236,227,.20));
-  --accent: light-dark(#0a8f24, #4ade6a);
-  --danger: light-dark(#c2321f, #ff7a68);
-  --r1: 10px; --r2: 16px; --r3: 22px;
-  --t-prose: 15px;
-  --lift: light-dark(0 1px 2px rgba(40,44,26,.05), inset 0 1px 0 rgba(255,255,255,.03));
-  --lift-2: light-dark(
-    0 22px 46px -18px rgba(52,44,26,.26), 0 0 0 1px rgba(26,30,22,.07),
-    0 22px 46px -18px rgba(0,0,0,.55)
-  );
-  --ground: var(--bg);
-}
-
-/* 1. Calm — most of the time nothing needs attention, so nothing asks for it.
-      Rounded, borderless, one soft shadow, colour held back for state. */
-[data-look='calm'] {
-  --text: light-dark(#3b3945, #e6e4ec);
-  --muted: light-dark(#6f6c7d, #9d9aab);
-  --bg: light-dark(#f5f4f8, #191a1f);
-  --surface-base: light-dark(#ffffff, #22242b);
-  --surface-2-base: light-dark(#eeedf3, #2a2c34);
-  --border: light-dark(rgba(59,57,69,.10), rgba(230,228,236,.12));
-  --border-strong: light-dark(rgba(59,57,69,.18), rgba(230,228,236,.20));
-  --accent: light-dark(#4f46e5, #8b93ff);
-  --r1: 10px; --r2: 14px; --r3: 18px;
-  --t-prose: 15px;
-  --lift: light-dark(0 1px 2px rgba(59,57,69,.06), inset 0 1px 0 rgba(255,255,255,.045));
-  --lift-2: light-dark(
-    0 1px 3px rgba(59,57,69,.08), 0 10px 24px -8px rgba(59,57,69,.12),
-    inset 0 1px 0 rgba(255,255,255,.06)
-  );
-  --ground: var(--bg);
-}
-
-/* 2. Paper — a light look first and a dark one second. Warm stock, thin rules
-      instead of shadows, ink for the accent. Nothing floats. */
-[data-look='paper'] {
-  --text: light-dark(#26231e, #e8e3d9);
-  --muted: light-dark(#6b6459, #a09889);
-  --bg: light-dark(#f7f4ec, #1c1a17);
-  --surface-base: light-dark(#fffdf7, #23211d);
-  --surface-2-base: light-dark(#f0ece1, #2a2723);
-  --border: light-dark(rgba(38,35,30,.16), rgba(232,227,217,.14));
-  --border-strong: light-dark(rgba(38,35,30,.32), rgba(232,227,217,.28));
-  --accent: light-dark(#8a5a2b, #c99a5b);
-  --r1: 3px; --r2: 4px; --r3: 6px;
-  --t-prose: 16px;
-  --lift: none;
-  --lift-2: none;
-  --ground: var(--bg);
-}
-
-/* 3. Terminal — phosphor on carbon. Square, monospaced chrome, hairlines, and
-      one green that means "this is live". */
-[data-look='terminal'] {
-  --text: light-dark(#14210f, #cfe8c2);
-  --muted: light-dark(#5c6b52, #7d9470);
-  --bg: light-dark(#f2f5ef, #0c0f0b);
-  --surface-base: light-dark(#ffffff, #11150f);
-  --surface-2-base: light-dark(#e7ece2, #171c14);
-  --border: light-dark(rgba(20,33,15,.20), rgba(207,232,194,.18));
-  --border-strong: light-dark(rgba(20,33,15,.42), rgba(207,232,194,.38));
-  --accent: light-dark(#2f7d32, #7bd66a);
-  --r1: 0px; --r2: 0px; --r3: 0px;
-  --t-prose: 14px;
-  --lift: none;
-  --lift-2: none;
-  --ground: var(--bg);
-}
-
-/* 4. Blueprint — drafting table. Deep indigo ground, cyan for anything drawn
-      on it, and a faint grid you notice only when you look for it. */
-[data-look='blueprint'] {
-  --text: light-dark(#16283d, #d6e6f5);
-  --muted: light-dark(#5a748f, #8ba6c2);
-  --bg: light-dark(#eef3f9, #0e1826);
-  --surface-base: light-dark(#ffffff, #14202f);
-  --surface-2-base: light-dark(#e3ebf4, #1a2839);
-  --border: light-dark(rgba(22,40,61,.16), rgba(214,230,245,.16));
-  --border-strong: light-dark(rgba(22,40,61,.30), rgba(214,230,245,.30));
-  --accent: light-dark(#0f6f9e, #5cc4ee);
-  --r1: 2px; --r2: 4px; --r3: 6px;
-  --t-prose: 15px;
-  --lift: none;
-  --lift-2: light-dark(0 1px 0 rgba(22,40,61,.10), 0 1px 0 rgba(0,0,0,.4));
-  --ground: var(--bg);
-}
-
-/* 5. Ember — a warm room. Charcoal that leans red, orange for state, and the
-      generous corners of something you sit in front of all evening. */
-[data-look='ember'] {
-  --text: light-dark(#2c2320, #efe3dc);
-  --muted: light-dark(#77655d, #ab958a);
-  --bg: light-dark(#faf5f2, #1a1615);
-  --surface-base: light-dark(#ffffff, #241e1c);
-  --surface-2-base: light-dark(#f3eae5, #2d2523);
-  --border: light-dark(rgba(44,35,32,.10), rgba(239,227,220,.10));
-  --border-strong: light-dark(rgba(44,35,32,.20), rgba(239,227,220,.22));
-  --accent: light-dark(#b4531c, #ee8b4d);
-  --r1: 12px; --r2: 16px; --r3: 22px;
-  --t-prose: 15px;
-  --lift: light-dark(0 1px 2px rgba(44,35,32,.07), inset 0 1px 0 rgba(255,255,255,.04));
-  --lift-2: light-dark(
-    0 2px 6px rgba(44,35,32,.10), 0 16px 32px -14px rgba(44,35,32,.20),
-    inset 0 1px 0 rgba(255,255,255,.06)
-  );
-  --ground: var(--bg);
-}
-
-/* 6. Mono — no hue anywhere. The accent IS the text colour, so the only thing
-      that can stand out is weight and edge. Square, ruled, unapologetic. */
-[data-look='mono'] {
-  --text: light-dark(#111111, #f2f2f2);
-  --muted: light-dark(#666666, #999999);
-  --bg: light-dark(#ffffff, #0d0d0d);
-  --surface-base: light-dark(#ffffff, #141414);
-  --surface-2-base: light-dark(#f0f0f0, #1e1e1e);
-  --border: light-dark(rgba(17,17,17,.28), rgba(242,242,242,.24));
-  --border-strong: light-dark(#111111, #f2f2f2);
-  --accent: light-dark(#111111, #f2f2f2);
-  --r1: 0px; --r2: 0px; --r3: 0px;
-  --t-prose: 15px;
-  --lift: none;
-  --lift-2: none;
-  --ground: var(--bg);
-}
-
-/* 7. Nord — cool, desaturated, low contrast on purpose. The one to pick for a
-      long session in a dim room. */
-[data-look='nord'] {
-  --text: light-dark(#2e3440, #e0e4ec);
-  --muted: light-dark(#4c566a, #9aa3b4);
-  --bg: light-dark(#eceff4, #232830);
-  --surface-base: light-dark(#f7f9fc, #2b313b);
-  --surface-2-base: light-dark(#e2e7ef, #333a46);
-  --border: light-dark(rgba(46,52,64,.12), rgba(224,228,236,.12));
-  --border-strong: light-dark(rgba(46,52,64,.24), rgba(224,228,236,.24));
-  --accent: light-dark(#3f7a91, #8fbcbb);
-  --r1: 6px; --r2: 9px; --r3: 12px;
-  --t-prose: 15px;
-  --lift: light-dark(0 1px 2px rgba(46,52,64,.06), inset 0 1px 0 rgba(255,255,255,.03));
-  --lift-2: light-dark(0 4px 14px -6px rgba(46,52,64,.18), 0 8px 22px -12px rgba(0,0,0,.5));
-  --ground: var(--bg);
-}
-
-/* 8. Bloom — light, airy, violet. The most decorative of the ten, and the
-      only one where the ground is graded rather than flat. */
-[data-look='bloom'] {
-  --text: light-dark(#2a2438, #ece7f5);
-  --muted: light-dark(#6d6484, #a89fc0);
-  --bg: light-dark(#faf8ff, #1b1726);
-  --surface-base: light-dark(#ffffff, #241f33);
-  --surface-2-base: light-dark(#f2eefc, #2d273e);
-  --border: light-dark(rgba(42,36,56,.08), rgba(236,231,245,.10));
-  --border-strong: light-dark(rgba(42,36,56,.18), rgba(236,231,245,.20));
-  --accent: light-dark(#7c3aed, #b892ff);
-  --r1: 14px; --r2: 18px; --r3: 26px;
-  --t-prose: 15.5px;
-  --lift: light-dark(0 1px 2px rgba(42,36,56,.05), inset 0 1px 0 rgba(255,255,255,.05));
-  --lift-2: light-dark(
-    0 2px 8px rgba(124,58,237,.10), 0 18px 40px -20px rgba(124,58,237,.30),
-    0 18px 40px -22px rgba(0,0,0,.6)
-  );
-  --ground: light-dark(
-    linear-gradient(160deg, #faf8ff 0%, #f3eefd 55%, #fbf7ff 100%),
-    linear-gradient(160deg, #1b1726 0%, #221b33 55%, #191524 100%)
-  );
-}
-
-/* 9. Slate — the neutral one. No character to get tired of, which is the
-      character. Cool grey, one blue, medium everything. */
-[data-look='slate'] {
-  --text: light-dark(#1f2937, #e5e7eb);
-  --muted: light-dark(#6b7280, #9ca3af);
-  --bg: light-dark(#f8fafc, #16181d);
-  --surface-base: light-dark(#ffffff, #1e2126);
-  --surface-2-base: light-dark(#f1f5f9, #262a31);
-  --border: light-dark(rgba(31,41,55,.12), rgba(229,231,235,.12));
-  --border-strong: light-dark(rgba(31,41,55,.24), rgba(229,231,235,.24));
-  --accent: light-dark(#2563eb, #7aa2f7);
-  --r1: 6px; --r2: 8px; --r3: 12px;
-  --t-prose: 15px;
-  --lift: light-dark(0 1px 2px rgba(31,41,55,.06), inset 0 1px 0 rgba(255,255,255,.04));
-  --lift-2: light-dark(0 4px 12px -4px rgba(31,41,55,.14), 0 8px 20px -10px rgba(0,0,0,.55));
-  --ground: var(--bg);
-}
-
-/* 10. Contrast — built for legibility and nothing else. Pure grounds, real
-       borders on everything, no shadow to muddy an edge, and an accent that
-       clears its ratio on both. Pick this one if any of the others fight you. */
-[data-look='contrast'] {
-  --text: light-dark(#000000, #ffffff);
-  --muted: light-dark(#3a3a3a, #c8c8c8);
-  --bg: light-dark(#ffffff, #000000);
-  --surface-base: light-dark(#ffffff, #000000);
-  --surface-2-base: light-dark(#ededed, #1a1a1a);
-  --border: light-dark(#000000, #ffffff);
-  --border-strong: light-dark(#000000, #ffffff);
-  --accent: light-dark(#0000cc, #ffd400);
-  --r1: 2px; --r2: 2px; --r3: 2px;
-  --t-prose: 16px;
-  --lift: none;
-  --lift-2: none;
-  --ground: var(--bg);
-}
-
-
-/* 11. Air — the one this product is being re-cut around.
- *
- * Light, floating, and almost colourless. The app is a white sheet resting on
- * a grey ground; panels float over it rather than sitting in a grid; and the
- * ONLY colours in the system are a green that means healthy and a red that
- * means broken. There is no third accent, no brand tint on a surface, no
- * gradient. Everything else is the ground, the sheet, and ink.
- *
- * The palette is taken from the reference sheet exactly:
- *   #0AAB2A green · #FF3D3D red · #1E1E1E ink · #FFFFFF sheet
- *
- * The discipline that makes it work is subtraction: with only two hues
- * available, colour cannot be used for decoration, so anything coloured on
- * screen is a state somebody has to act on. A quiet install is grey. */
-[data-look='air'] {
-  --text: light-dark(#1e1e1e, #f2f3f4);
-  --muted: light-dark(#7a7f85, #9aa0a6);
-  /* The ground is a real grey, not an off-white: the white sheet has to read
-     as lifted off it, and a 2% difference is a printing error rather than a
-     design. */
-  --bg: light-dark(#dfe3e6, #141517);
-  --surface-base: light-dark(#ffffff, #1e2022);
-  --surface-2-base: light-dark(#f3f5f6, #26282b);
-
-  /* Borders barely exist. Separation is done with the shadow and the ground,
-     because a light interface with rules on everything reads as a form. */
-  --border: light-dark(rgba(30, 30, 30, 0.07), rgba(242, 243, 244, 0.09));
-  --border-strong: light-dark(rgba(30, 30, 30, 0.16), rgba(242, 243, 244, 0.2));
-
-  --accent: #0aab2a;
-  --ok: #0aab2a;
-  --danger: #ff3d3d;
-  /* There is no amber in the reference and inventing one would break the
-     two-colour rule, so a warning is the red at half weight — it is the same
-     family of "look at this", one step down. */
-  --warn: light-dark(#c9302c, #ff7a6b);
-  --outward: #ff3d3d;
-
-  --memory: light-dark(#6b7280, #9aa0a6);
-  --shared: light-dark(#6b7280, #9aa0a6);
-  --instruction: light-dark(#6b7280, #9aa0a6);
-
-  /* Generous, and generous consistently. The reference's whole character is
-     air, and air is a spacing scale rather than a colour. */
-  --s1: 6px;
-  --s2: 10px;
-  --s3: 14px;
-  --s4: 20px;
-  --s5: 30px;
-  --s6: 44px;
-
-  --r1: 10px;
-  --r2: 14px;
-  --r3: 20px;
-  /* The sheet itself is rounder than anything on it. */
-  --r-sheet: 26px;
-
-  --t-micro: 11px;
-  --t-chrome: 12.5px;
-  --t-ui: 13.5px;
-  --t-prose: 15px;
-  --h-tabs: 40px;
-
-  /* Two shadows and no more: one for a thing resting on the sheet, one for a
-     thing floating above it. A third would start a hierarchy nobody can
-     read. */
-  --lift: light-dark(
-    0 1px 2px rgba(30, 30, 30, 0.04),
-    0 1px 2px rgba(0, 0, 0, 0.4)
-  );
-  --lift-2: light-dark(
-    0 2px 6px rgba(30, 30, 30, 0.05), 0 14px 34px -14px rgba(30, 30, 30, 0.14),
-    0 2px 6px rgba(0, 0, 0, 0.45), 0 14px 34px -14px rgba(0, 0, 0, 0.7)
-  );
-  --ground: var(--bg);
-}
 
 /* The typeface.
  *

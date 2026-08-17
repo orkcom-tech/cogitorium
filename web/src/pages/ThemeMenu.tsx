@@ -1,96 +1,83 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { LOOKS, applyTheme, loadTheme, saveTheme, type Look, type Theme } from '../styles/theme'
+import { ACCENTS, applyTheme, loadTheme, saveTheme, type Theme } from '../styles/theme'
 
 /**
- * Appearance: pick a look, pick a mode, close it.
+ * Appearance: light or dark, and a colour.
  *
- * What this replaced was fourteen controls — three colour wells, a grain dial,
- * a tint dial, a glass/solid switch, a blur radius, a lightness dial, a pad
- * for dragging a glow around with a strength and a drift speed, and a file
- * picker for a backdrop image or video. Every one of them could be set to a
- * combination that made the interface worse, several could put unreadable text
- * on a surface the operator had just tinted, and none of them was a decision
- * anybody wanted to make twice.
+ * What this replaced was a grid of eleven finished looks. Two things were
+ * wrong with it. The interface has one geometry now, so eleven palettes hung
+ * on it were one design in eleven paint jobs rather than eleven designs. And
+ * it asked the wrong question — nobody wants to decide between Nord and Bloom;
+ * they want it dark at night, in a colour they like.
  *
- * Ten finished looks is the same expressiveness with none of the rope. Each
- * swatch is painted from the look's own tokens rather than from a copy of
- * them, so what the button shows and what the interface becomes cannot drift
- * apart — the failure this whole file was rebuilt to remove.
+ * The colour is not decoration here: every neutral in the palette is mixed
+ * towards it, so the ground and the surfaces carry a little of it too. That is
+ * what stops a chosen accent looking pasted onto somebody else's design.
  */
 export default function ThemeMenu() {
-  const [theme, setTheme] = useState<Theme>(() => loadTheme())
+  const [theme, setTheme] = useState<Theme>(loadTheme)
   const [open, setOpen] = useState(false)
-  const [warning, setWarning] = useState<string | null>(null)
+  const [warning, setWarning] = useState('')
 
   useEffect(() => {
     applyTheme(theme)
     if (!saveTheme(theme)) setWarning('this browser refused to store the choice — it will be gone after a reload')
-    else setWarning(null)
   }, [theme])
 
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => {
+    const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    document.addEventListener('keydown', key)
+    return () => document.removeEventListener('keydown', key)
   }, [open])
-
-  const current = LOOKS.find((l) => l.id === theme.look) ?? LOOKS[0]
 
   return (
     <>
-      {/* A rail button like every other one on the frame. It used to be a wide
-          chip carrying the word "theme", which on a 56px rail stuck out of the
-          capsule it sits in and broke the column's shape. The bead is the label
-          now: it is painted from the current look's own tokens, so the control
-          shows what it does rather than saying it. */}
       <button
         className="rail-btn"
-        // the bead paints itself, so it says so — see tokens.css
+        // the bead paints itself from the current accent, so the control shows
+        // what it does rather than saying it
         data-own
         onClick={() => setOpen((v) => !v)}
         title="Appearance"
       >
-        <span className="swatch" data-look={theme.look} />
+        <span className="swatch" style={{ background: theme.accent }} />
         <span className="sr-only">Appearance</span>
       </button>
+
       {open &&
         createPortal(
           <div className="modal-backdrop" onClick={() => setOpen(false)}>
-            <div className="modal theme-dialog" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div
+              className="modal theme-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Appearance"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="row theme-head">
                 <h3>Appearance</h3>
                 <span className="spacer" />
-                <button onClick={() => setOpen(false)} title="Close">
+                <button data-own className="drawer-x" onClick={() => setOpen(false)} title="Close">
                   ×
                 </button>
               </div>
 
-              <div className="look-grid">
-                {LOOKS.map((l) => (
-                  <button
-                    key={l.id}
-                    className={`look-option ${theme.look === l.id ? 'on' : ''}`}
-                    aria-pressed={theme.look === l.id}
-                    onClick={() => setTheme((t) => ({ ...t, look: l.id }))}
-                  >
-                    <LookSwatch look={l.id} />
-                    <span className="look-name">{l.name}</span>
-                  </button>
-                ))}
-              </div>
+              <p className="hint">
+                Two choices. The mode decides the ground; the colour is yours, and everything else —
+                the surfaces, the borders, the hover washes — is mixed towards it.
+              </p>
 
-              <p className="hint look-blurb">{current.blurb}</p>
-
-              <p className="menu-head">LIGHT OR DARK</p>
-              <div className="row mode-row">
+              <span className="field-label">Light or dark</span>
+              <div className="mode-row">
                 {(['system', 'light', 'dark'] as const).map((m) => (
                   <button
                     key={m}
-                    className={theme.mode === m ? 'on' : ''}
+                    data-own
+                    className={`mode-option ${theme.mode === m ? 'on' : ''}`}
                     aria-pressed={theme.mode === m}
                     onClick={() => setTheme((t) => ({ ...t, mode: m }))}
                   >
@@ -99,8 +86,37 @@ export default function ThemeMenu() {
                 ))}
               </div>
               <p className="hint">
-                Every look is drawn in both. <strong>system</strong> follows the operating system, and changes with it.
+                <strong>system</strong> follows the operating system and changes with it.
               </p>
+
+              <span className="field-label">Colour</span>
+              <div className="accent-row">
+                {ACCENTS.map((a) => (
+                  <button
+                    key={a.hex}
+                    data-own
+                    className={`accent-option ${theme.accent.toLowerCase() === a.hex ? 'on' : ''}`}
+                    style={{ background: a.hex }}
+                    aria-pressed={theme.accent.toLowerCase() === a.hex}
+                    title={a.name}
+                    onClick={() => setTheme((t) => ({ ...t, accent: a.hex }))}
+                  >
+                    <span className="sr-only">{a.name}</span>
+                  </button>
+                ))}
+                {/* Any colour, not only the eight. The eight are the ones known
+                    to carry white text on the light ground and to read as text
+                    on the dark one; a hand-picked hex is the operator's risk
+                    and their business. */}
+                <label className="accent-own" title="Any colour">
+                  <input
+                    type="color"
+                    value={theme.accent}
+                    onChange={(e) => setTheme((t) => ({ ...t, accent: e.target.value }))}
+                  />
+                  <span className="sr-only">Pick any colour</span>
+                </label>
+              </div>
 
               {warning && <p className="error">{warning}</p>}
               <p className="hint">the choice is saved on this device</p>
@@ -109,23 +125,5 @@ export default function ThemeMenu() {
           document.body,
         )}
     </>
-  )
-}
-
-/**
- * A miniature of the look, drawn from the look's own tokens.
- *
- * `data-look` on the swatch means the CSS resolves the same variables it will
- * resolve on the real interface, in the mode currently in force — so a swatch
- * cannot promise a colour the look does not have, and the light and dark
- * halves are both correct without a second table of preview colours.
- */
-function LookSwatch({ look }: { look: Look }) {
-  return (
-    <span className="look-swatch" data-look={look} aria-hidden>
-      <span className="look-swatch-ground" />
-      <span className="look-swatch-card" />
-      <span className="look-swatch-accent" />
-    </span>
   )
 }
