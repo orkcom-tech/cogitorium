@@ -31,7 +31,11 @@ export function Deck({ view, views }: { view: ViewId; views: { id: ViewId; node:
   const at = VIEW_ORDER.indexOf(view)
   return (
     <div className="dk-viewport">
-      <div className="dk-track" style={{ transform: `translateX(${-Math.max(0, at) * 100}%)` }}>
+      {/* VERTICALLY, because the control that moves it is a vertical rail.
+          Going down the rail sends the work down and brings the next view up
+          from below; going back up reverses it. A horizontal slide driven by a
+          vertical column reads as two unrelated motions. */}
+      <div className="dk-track" style={{ transform: `translateY(${-Math.max(0, at) * 100}%)` }}>
         {VIEW_ORDER.map((id) => {
           const v = views.find((x) => x.id === id)
           return (

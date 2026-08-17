@@ -125,6 +125,26 @@ export function Drawer({
     return () => cancelAnimationFrame(r)
   }, [open])
 
+  // The frame grew inward, so the hole must give up the room. Without this the
+  // drawer simply covers the work — the composer ended up half under it — which
+  // is the behaviour of a thing that floats above, and the whole point is that
+  // this one does not. Written as custom properties rather than as a class so
+  // the size can follow the grip while it is being dragged.
+  useEffect(() => {
+    const root = document.documentElement
+    if (!open) {
+      root.style.removeProperty('--drawer-edge')
+      root.style.removeProperty('--drawer-size')
+      return
+    }
+    root.style.setProperty('--drawer-edge', edge)
+    root.style.setProperty('--drawer-size', `${size}px`)
+    return () => {
+      root.style.removeProperty('--drawer-edge')
+      root.style.removeProperty('--drawer-size')
+    }
+  }, [open, edge, size])
+
   useEffect(() => {
     if (!open) return
     const away = (e: MouseEvent) => {
@@ -212,6 +232,9 @@ export function Drawer({
           const el = e.currentTarget.parentElement as HTMLElement
           if (vertical) el.style.height = `${next}px`
           else el.style.width = `${next}px`
+          // The cavity follows the grip too, or the work jumps at the end of
+          // the drag instead of moving with it.
+          document.documentElement.style.setProperty('--drawer-size', `${next}px`)
         }}
         onPointerUp={(e) => {
           e.currentTarget.releasePointerCapture(e.pointerId)

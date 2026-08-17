@@ -22,6 +22,29 @@
   padding: var(--bezel);
   padding-left: calc(var(--bezel) + var(--rail-w) + var(--rail-gap));
   background: var(--bg);
+  /* An open drawer takes its room OUT OF THE HOLE rather than covering it.
+     The drawer is the frame growing inward; a frame that grew inward and left
+     the work where it was would simply be sitting on top of it, which is what
+     it did — the composer ended up half underneath. The padding moves on a
+     spatial curve so the cavity travels with the drawer instead of snapping
+     once it has arrived. */
+  transition: padding var(--sp-default-d) var(--sp-default);
+}
+
+:root[style*='--drawer-edge: right'] .frame {
+  padding-right: calc(var(--drawer-size) + var(--s2));
+}
+
+:root[style*='--drawer-edge: left'] .frame {
+  padding-left: calc(var(--rail-w) + var(--bezel) + var(--drawer-size) + var(--s2));
+}
+
+:root[style*='--drawer-edge: top'] .frame {
+  padding-top: calc(var(--drawer-size) + var(--s2));
+}
+
+:root[style*='--drawer-edge: bottom'] .frame {
+  padding-bottom: calc(var(--drawer-size) + var(--s2));
 }
 
 /* ── The rail ───────────────────────────────────────────────────────────────
