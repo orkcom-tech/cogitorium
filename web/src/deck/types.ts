@@ -22,7 +22,7 @@
 // collapse to a header rather than closing, so the arrangement has no state
 // worth naming or saving.
 
-export type ViewId = 'chat' | 'blueprint' | 'workbench' | 'map'
+export type ViewId = 'chat' | 'blueprint' | 'workbench'
 export type OverlayId =
   | 'agents'
   | 'agent'
@@ -37,7 +37,7 @@ export type OverlayId =
 // The order is the rail's order, and the track slides in it: going down the
 // capsule sends the work down. Changing one without the other makes a
 // button in the middle of the column jump the content past two views.
-export const VIEW_ORDER: ViewId[] = ['chat', 'blueprint', 'workbench', 'map']
+export const VIEW_ORDER: ViewId[] = ['chat', 'blueprint', 'workbench']
 export const OVERLAY_ORDER: OverlayId[] = [
   'agents',
   'gears',

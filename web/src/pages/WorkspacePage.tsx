@@ -305,7 +305,6 @@ export default function WorkspacePage({ me }: { me: User }) {
                 { id: 'chat', title: 'Chat', icon: STAGE_ICON.chat },
                 { id: 'blueprint', title: 'Blueprint', icon: STAGE_ICON.blueprint },
                 { id: 'workbench', title: 'Editor', icon: STAGE_ICON.workbench },
-                { id: 'map', title: 'Map', icon: STAGE_ICON.map },
               ],
               current: deck.deck.view,
               go: (id: string) => deck.go(id as ViewId),

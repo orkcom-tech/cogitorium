@@ -820,3 +820,21 @@
   font-size: var(--t-ui);
   font-family: var(--mono);
 }
+
+/* A workspace card is a door. It says so with the cursor and answers a
+   keyboard the same way, and the controls inside it keep their own cursor
+   because they are not the door. */
+.ws-card[role='link'] {
+  cursor: pointer;
+}
+
+.ws-card[role='link'] button,
+.ws-card[role='link'] .sel,
+.ws-card[role='link'] input,
+.ws-card[role='link'] label {
+  cursor: auto;
+}
+
+.ws-card[role='link']:hover {
+  background: color-mix(in srgb, var(--text) 3%, var(--surface));
+}

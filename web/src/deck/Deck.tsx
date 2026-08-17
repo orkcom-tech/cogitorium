@@ -91,7 +91,12 @@ export function Workbench({
       ref={ref}
       style={
         {
-          '--dk-files': d.files ? px(d.filesW, 240) : 'var(--dk-rail)',
+          /* Always its width. It used to collapse to a 34px rail when
+             d.files was false, and the control that set that flag was the
+             header I removed — so the tree could shrink to a sliver with
+             'FILES' broken across two characters and nothing able to open it
+             again. The seam resizes it; leaving the stage closes it. */
+          '--dk-files': px(d.filesW, 240),
         } as React.CSSProperties
       }
     >
@@ -385,5 +390,4 @@ export const VIEW_TITLE: Record<ViewId, string> = {
   chat: 'Chat',
   blueprint: 'Blueprint',
   workbench: 'Editor',
-  map: 'Map',
 }
