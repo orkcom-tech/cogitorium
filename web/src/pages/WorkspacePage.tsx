@@ -688,7 +688,10 @@ function compact(n: number) {
 }
 
 function spendLabel(u?: AgentUsage) {
-  if (!u || u.turns === 0) return '—'
+  // Nothing, not an em dash. Set at the size of a number, a dash reads as a
+  // broken element — five of them down a fresh roster looked like five failed
+  // fields — and the line under it already says "no spend yet".
+  if (!u || u.turns === 0) return ''
   const total = u.input_tokens + u.output_tokens
   // A provider that reports nothing would otherwise show a confident 0.
   if (total === 0 && u.unreported_turns === u.turns) return 'n/a'

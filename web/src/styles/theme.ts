@@ -32,17 +32,23 @@ export type Theme = {
  * arbitrary colour usually fails one of those, and the picker says which.
  */
 export const ACCENTS: { name: string; hex: string }[] = [
-  { name: 'Green', hex: '#0a8f24' },
+  // #0a8f24 carried white text at 4.23:1 as a filled button — the default
+  // accent, and the only one besides amber that missed the line. Nine points
+  // of green take it to 4.7 and nothing about the hue changes.
+  { name: 'Green', hex: '#0a8624' },
   { name: 'Teal', hex: '#0f766e' },
   { name: 'Blue', hex: '#2563c9' },
   { name: 'Indigo', hex: '#4f46e5' },
   { name: 'Violet', hex: '#7c3aed' },
   { name: 'Rose', hex: '#be3455' },
-  { name: 'Amber', hex: '#a4650a' },
+  // #a4650a carried white text at 4.23:1 as a filled button — the only one of
+  // the eight that missed 4.5, and it missed it in both modes because a filled
+  // primary is the accent in both. Two steps darker clears it.
+  { name: 'Amber', hex: '#8a5406' },
   { name: 'Slate', hex: '#4a5568' },
 ]
 
-export const DEFAULT_THEME: Theme = { mode: 'system', accent: '#0a8f24' }
+export const DEFAULT_THEME: Theme = { mode: 'system', accent: '#0a8624' }
 
 const KEY = 'cogitorium.theme'
 const HEX = /^#[0-9a-f]{6}$/i
