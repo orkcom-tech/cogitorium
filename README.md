@@ -26,12 +26,101 @@ spent it.
 
 ![The workspace: three views and four overlays](docs/assets/02-workspace-deck.png)
 
-## Three ways people run it
+## Features
 
-The same binary, at three sizes. Nothing is bolted on for the larger ones —
-they are the same workspaces, gears and receivers, addressed differently.
+- 🕸 **Graph engineering** — agents are nodes, and every edge is a permission the
+  runtime checks on the call rather than a convention written down: a **wire**
+  grants delegation, a **gear binding** grants a tool, a **context binding** is
+  what an agent is told, an **outward grant** lets an agent ask to search.
+  Delete one and the agent is refused. The orchestrator can redraw a wire, a
+  context binding or a gear grant on its next turn; the outward grant is yours
+  alone.
+- 🎛 **Two hands on the same controls** — build it by telling the orchestrator, or
+  by drawing it yourself. Both write the same objects, so there is no conversion
+  between them and no "advanced mode" holding the real controls. Two things stay
+  one-handed on purpose: only you grant the outward gate, and context is bound in
+  the agent panel rather than on the canvas.
+- 🧠 **A model per agent** — an expensive frontier model reasons while free local
+  ones write docs and run checks, in one topology, with what each agent spent
+  recorded against it. Two provider kinds: Anthropic, and anything
+  OpenAI-compatible — which is how Ollama, LM Studio, vLLM and llama.cpp are
+  reached.
+- ⚙️ **Gears: tools that outlive the conversation** — an agent forges a script, it
+  lands in a versioned catalogue, and nothing runs until you approve that exact
+  version; a new version drops back to pending. The network allowlist is set
+  beside the source, in the same act as the approval. Gears run in a container
+  holding none of the server's files **when a sandbox backend is present** — with
+  the default `sandbox: auto` and no Docker answering, they run as subprocesses
+  with this server's own file access, and the log says so at startup.
+  [→](https://orkcom-tech.github.io/cogitorium/#what-a-gear-may-hold-and-where-it-may-reach)
+- 🔑 **Stand-in credentials, for a gear that also has the network** — name a
+  secret and a granted gear receives a per-run stand-in, which the gate swaps for
+  the real value at the edge; the gear never holds it. A gear **without** a
+  network grant is handed the real value, because there is no edge to substitute
+  at — which is the argument for granting the network to anything that carries a
+  credential.
+  [→](https://orkcom-tech.github.io/cogitorium/#named-values)
+- 📐 **A described API** — `docs/openapi.yaml` is generated from the server's own
+  route table by a test that fails when the two disagree — **92 paths, 124
+  operations** — so a route cannot exist without appearing in it.
+  [→](https://orkcom-tech.github.io/cogitorium/#the-api-description)
+- 🔌 **Speaks MCP** — `cogitorium mcp` serves your approved gears and receiver
+  tasks to Claude Desktop, Cursor or anything else that speaks the Model Context
+  Protocol. The approval gate holds through it: a gear you have not approved is
+  not listed and will not run.
+  [→](https://orkcom-tech.github.io/cogitorium/#mcp--this-install-as-a-tool-provider)
+- 🔗 **And consumes it, when you say so** — an agent can be granted an external
+  MCP server's tools the way it is granted a gear: install, probe, approve the
+  server *and each tool*, then grant. Off by default, admin-only, driven through
+  the HTTP API for now, and the documentation says plainly what it costs — the
+  child runs on the host, outside the sandbox.
+  [→](https://orkcom-tech.github.io/cogitorium/#consuming-mcp--somebody-elses-tools-granted-to-an-agent)
+- 🌐 **A browser, when you grant one** — a gear can be given an environment with a
+  real browser in it, through the API: `PATCH /api/v1/gears/{id}` with
+  `{"environment": "browser"}`. Screenshots and page text come back as ordinary
+  run artifacts; there is no separate browser pipeline to learn, and no screen
+  for it yet.
+  [→](https://orkcom-tech.github.io/cogitorium/#the-environment)
+- ☸️ **Gears run as Kubernetes Jobs in-cluster** — one Job per run, mounting the
+  data claim at that run's own subPath, so the gear sees its payload and nothing
+  else on the volume. No token in the gear's pod, every capability dropped, the
+  timeout enforced by the cluster as well as by the server.
+  [→](https://orkcom-tech.github.io/cogitorium/#install)
+- ⌨️ **A command line over the same API** — `cogitorium gears run`,
+  `receivers deliver`, `queue cancel`, `workspaces export | import`. It exits
+  with the gear's own code, so a shell script branches on what the gear said.
+  [→](https://orkcom-tech.github.io/cogitorium/#the-command-line)
+- 🚪 **Receivers: a door for your own systems** — an address and a key; data
+  arrives by HTTP, an agent works on it, the result comes back. The payload is
+  checked against a JSON Schema **before any model is called**, so a malformed
+  request costs nothing.
+  [→](https://orkcom-tech.github.io/cogitorium/#receivers--a-door-from-the-rest-of-your-system)
+- 📋 **Judged by the record, not the sentence** — every delivery carries what
+  actually ran: which tools, which files appeared, what it cost. A task states
+  its own success conditions and they are checked against that record, so a
+  confident answer over an empty record fails.
+- ⏱ **It can be left alone** — work queues instead of being dropped, starts on a
+  cron line or an interval, can be handed off with `Prefer: respond-async` and
+  called back when it finishes, and can be stopped mid-run — the work, not just
+  the row.
+  [→](https://orkcom-tech.github.io/cogitorium/#the-queue-and-work-that-waits)
+- 🔒 **Prohibitions and an internet gate** — rules an agent must never break go
+  last in its prompt and are inherited by agents it creates; reaching the web is
+  a per-agent grant, and every search still stops for a human to approve that
+  exact query.
+  [→](https://orkcom-tech.github.io/cogitorium/#letting-agents-reach-the-web)
+- 📦 **Portable and local-first** — a workspace exports as one JSON document you
+  can hand to another install, from the interface or the command line. Everything
+  runs on your machine.
+  [→](#no-telemetry)
 
-### 1. As your own companion, in front of a model you already pay for
+## You can use it like…
+
+One binary, and nothing is bolted on for the larger uses — they are the same
+workspaces, gears and receivers, addressed differently. Three that people
+actually run, to show the range; they are examples, not a menu.
+
+### …your own companion, in front of a model you already pay for
 
 Run it on your laptop, point it at Anthropic or a model on your own machine, and
 it becomes the thing that *remembers* between sessions. Context lives in
@@ -52,7 +141,7 @@ cogitorium mcp --server http://127.0.0.1:8688 --token $COGITORIUM_TOKEN
 
 ![The gear catalogue](docs/assets/07-gears.png)
 
-### 2. As the engine under a service, in a cluster
+### …the engine under a service, in a cluster
 
 A **receiver** is an HTTP door into one workspace: a caller posts a task with a
 key, one agent runs it, and the answer comes back on the same response. Add a
@@ -70,7 +159,7 @@ helm install cogitorium ./deploy/helm/cogitorium \
   --set auth.adminToken="$(openssl rand -hex 24)"
 ```
 
-### 3. As one install per department, talking to each other
+### …one install per department, talking to each other
 
 Every install is a server. A receiver on one is an address another can post to,
 and a completion callback tells the caller when the work finished — to hosts you
@@ -81,24 +170,18 @@ is a task and an answer.
 
 ![The install map](docs/assets/09-map.png)
 
-## What is in it
+## A look at it
 
-**Agents on a canvas.** Drag between two of them to draw a wire, and the wire IS
-the permission — not a picture of one. Delete it and the delegation stops.
+**The blueprint.** Drag between two agents to draw a wire; the wire IS the
+permission, not a picture of one.
 
 ![The blueprint](docs/assets/03-blueprint.png)
 
-**Gears: code, in a box, that you approved.** An agent can write one; nobody can
-run it until you have read the source and said so. Approving names exactly what
-it grants — which credentials, which addresses — and a new version returns to
-pending and hands both back.
+**Approving a gear**, with what it grants stated before you agree to it.
 
 ![What approving a gear grants](docs/assets/08-gear-review.png)
 
-**A map of the whole install.** People and teams at the centre, workspaces
-around them, and — when you open one — its agents and their memory. Everyone
-gets the map; what is in it is filtered on the server, so an administrator sees
-the install and everybody else sees only what they could already reach.
+**One workspace opened on the map** — its agents, and their memory.
 
 ![One workspace opened on the map](docs/assets/10-map-open.png)
 
@@ -106,7 +189,7 @@ the install and everybody else sees only what they could already reach.
 
 ![The Editor view](docs/assets/05-editor.png)
 
-**Who can reach what, drawn rather than inferred** from three settings screens.
+**Who can reach what**, drawn rather than inferred from three settings screens.
 
 ![People and the access map](docs/assets/06-people.png)
 
@@ -145,10 +228,25 @@ single-operator install never sees a sign-in screen.
 
 ## No telemetry
 
-Nothing is sent anywhere. There is no analytics endpoint, no crash reporter and
-no update ping; the interface fetches no fonts and no scripts from the network.
-The only outbound requests are to the model providers you configured, and to
-addresses you granted a gear or an agent by name.
+Nothing is reported about you or about this install. There is no analytics
+endpoint, no crash reporter and no update ping, and the interface fetches no
+fonts and no scripts from the network.
+
+Everything this binary does reach, in full:
+
+- the **model providers you configured**, and nothing else in that class;
+- the hosts you listed in **`callback_hosts`**, when a task is told to report
+  that it finished;
+- addresses you **granted a gear by name**, through the gate that enforces the
+  allowlist;
+- with egress switched on, the **two search services compiled into the binary** —
+  `echo-page.com`, then `api.duckduckgo.com` as a fallback. They are constants
+  fixed at build time rather than settings, so no agent can name where its words
+  go and nobody can be talked into repointing them;
+- the **cluster API**, in Kubernetes mode, to create the Job a gear runs as.
+
+Context and memory go to a `contextd` process on the same machine, not to a
+network service.
 
 ## Where to go next
 
