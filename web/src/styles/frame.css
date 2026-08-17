@@ -31,6 +31,10 @@
 
 .rail {
   position: fixed;
+  /* On a short window the capsules win and the column scrolls, rather than the
+     bottom group being pushed out of the viewport where it cannot be reached. */
+  overflow-y: auto;
+  scrollbar-width: none;
   left: var(--bezel);
   top: var(--bezel);
   bottom: var(--bezel);
@@ -59,7 +63,13 @@
 /* The gap that pushes the bottom capsule to the floor, and carries the
    workspace's name as rotated text on its way past. */
 .rail-spacer {
-  flex: 1;
+  /* A guaranteed floor, not just whatever is left over. With a workspace open
+     the rail is nearly full, the leftover was about thirty pixels, and the
+     workspace's name — the one thing on the rail that says WHERE YOU ARE —
+     clipped to a single illegible mark. It gets its room first; the rail
+     scrolls before this shrinks. */
+  flex: 1 1 auto;
+  min-height: 116px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -70,13 +80,17 @@
 .rail-here {
   writing-mode: vertical-rl;
   font-size: var(--t-micro);
+  /* The label states its own height rather than inheriting whatever the flex
+     column had left over — which was 52px, and clipped "code court" to one
+     unreadable mark. */
+  height: 118px;
+  flex: 0 0 auto;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-dim);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-height: 100%;
   background: none;
   border: 0;
   padding: var(--s2) 0;

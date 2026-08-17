@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import type { User } from './api'
 import { COG_MARK, DOCS_URL, ORKCOM_URL, ORK_MARK } from './styles/brand'
 import ThemeMenu from './pages/ThemeMenu'
+import { useShell } from './shell'
 
 /**
  * The rail: everything the operator commands, standing on the frame.
@@ -82,6 +83,17 @@ const I = {
       <path d="M16 5.6a3.2 3.2 0 0 1 0 5.8M17.5 14.9c2 .6 3.3 2.3 3.3 4.6" />
     </svg>
   ),
+  back: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M15 5.5 8.5 12l6.5 6.5" />
+    </svg>
+  ),
+  action: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M12 3.8v10.4M8.2 10.6 12 14.4l3.8-3.8" />
+      <path d="M4.6 15.6v2.6a2 2 0 0 0 2 2h10.8a2 2 0 0 0 2-2v-2.6" />
+    </svg>
+  ),
   more: (
     <svg viewBox="0 0 24 24" aria-hidden>
       <circle cx="12" cy="5.5" r="1.4" fill="currentColor" stroke="none" />
@@ -94,21 +106,18 @@ const I = {
 export default function Rail({
   user,
   health,
-  here,
   onSignOut,
 }: {
   user: User
   health: { version: string; status: string } | null
-  /** What the cavity is showing, said in the operator's words. Rotated onto
-   *  the rail because it is a label about the work, not part of it. */
-  here?: { label: string; state?: string }
   onSignOut: () => void
 }) {
-  const [menu, setMenu] = useState<null | 'more' | 'account'>(null)
+  const [menu, setMenu] = useState<null | 'more' | 'account' | 'dests'>(null)
   const [menuTop, setMenuTop] = useState(0)
   const box = useRef<HTMLElement>(null)
   const loc = useLocation()
   const nav = useNavigate()
+  const shell = useShell()
 
   // A menu closes on an outside press and on Escape. Deferred by a tick, or
   // the press that opened it closes it again on the same one.
@@ -143,7 +152,12 @@ export default function Rail({
     { to: '/people', label: 'People', icon: I.people, admin: true },
   ]
 
-  const open = (which: 'more' | 'account', e: React.MouseEvent<HTMLElement>) => {
+  // A screen with its own stages owns the rail; the install's list steps back.
+  const working = Boolean(shell?.stages)
+  const visible = dests.filter((d) => !d.admin || user.role === 'admin')
+  const hereDest = visible.find((d) => loc.pathname.startsWith(d.to))
+
+  const open = (which: 'more' | 'account' | 'dests', e: React.MouseEvent<HTMLElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
     // Vertically centred on its button, clamped so a menu opened near the floor
     // does not hang off it.
@@ -165,10 +179,29 @@ export default function Rail({
         </span>
       </Link>
 
-      <div className="rail-group">
-        {dests
-          .filter((d) => !d.admin || user.role === 'admin')
-          .map((d) => {
+      {/* The install's destinations.
+          Laid out one per button while you are choosing where to go, and
+          collapsed to a single button the moment a screen publishes stages of
+          its own. Inside a workspace the rail otherwise carries nineteen
+          buttons, which overflows an 900px window: the rotated name and the
+          account capsule were pushed off the bottom entirely. Collapsing is
+          also the honest reading — inside a workspace you are working, and
+          moving to another destination is the rare act. */}
+      {working ? (
+        <div className="rail-group">
+          <button
+            data-own
+            className={`rail-btn ${menu === 'dests' ? 'on' : ''}`}
+            title="Go to"
+            onClick={(e) => open('dests', e)}
+          >
+            {hereDest?.icon ?? I.workspaces}
+            <span className="sr-only">Go to</span>
+          </button>
+        </div>
+      ) : (
+        <div className="rail-group">
+          {visible.map((d) => {
             const on = loc.pathname === d.to || loc.pathname.startsWith(d.to + '/')
             return (
               <button
@@ -185,16 +218,87 @@ export default function Rail({
               </button>
             )
           })}
-      </div>
+        </div>
+      )}
+
+      {/* What the screen in the cavity asked the frame to offer. The rail knows
+          nothing about workspaces: it renders whatever was published, so a new
+          screen with stages and drawers gets them without touching this file.
+          See shell.tsx for which way the wire points. */}
+      {shell?.stages && (
+        <div className="rail-group">
+          {shell.stages.items.map((s) => {
+            const on = shell.stages!.current === s.id
+            return (
+              <button
+                key={s.id}
+                data-own
+                className={`rail-btn ${on ? 'on' : ''}`}
+                aria-current={on ? 'true' : undefined}
+                title={s.title}
+                onClick={() => shell.stages!.go(s.id)}
+              >
+                {s.icon}
+                <span className="sr-only">{s.title}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {shell?.drawers && (
+        <div className="rail-group">
+          {shell.drawers.items.map((d) => {
+            const on = shell.drawers!.open === d.id
+            return (
+              <button
+                key={d.id}
+                data-own
+                className={`rail-btn ${on ? 'on' : ''}`}
+                aria-expanded={on}
+                title={d.title}
+                onClick={() => shell.drawers!.toggle(on ? null : d.id)}
+              >
+                {d.icon}
+                <span className="sr-only">{d.title}</span>
+                {d.badge ? <span className="rail-badge quiet">{d.badge}</span> : null}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       <div className="rail-spacer">
-        {here && (
-          <span className="rail-here" title={here.label}>
-            {here.label}
-            {here.state ? ` · ${here.state}` : ''}
+        {shell?.here && (
+          <span className="rail-here" title={shell.here.label}>
+            {shell.here.label}
+            {shell.here.state ? ` · ${shell.here.state}` : ''}
           </span>
         )}
       </div>
+
+      {/* The way out of the screen, and its one action, both on the frame. */}
+      {(shell?.back || shell?.action) && (
+        <div className="rail-group">
+          {shell.back && (
+            <button data-own className="rail-btn" title="Back" onClick={() => nav(shell.back!)}>
+              {I.back}
+              <span className="sr-only">Back</span>
+            </button>
+          )}
+          {shell.action && (
+            <button
+              data-own
+              className="rail-btn"
+              title={shell.action.title ?? shell.action.label}
+              onClick={shell.action.run}
+            >
+              {I.action}
+              <span className="sr-only">{shell.action.label}</span>
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="rail-group">
         <button data-own className="rail-btn" title="More" onClick={(e) => open('more', e)}>
@@ -211,6 +315,17 @@ export default function Rail({
           <span style={{ font: '650 13px/1 var(--mono)' }}>{user.name.slice(0, 1).toUpperCase()}</span>
         </button>
       </div>
+
+      {menu === 'dests' && (
+        <div className="rail-menu" style={{ top: menuTop }} role="menu">
+          <span className="rail-menu-label">go to</span>
+          {visible.map((d) => (
+            <button key={d.to} onClick={() => nav(d.to)}>
+              {d.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {menu === 'more' && (
         <div className="rail-menu" style={{ top: menuTop }} role="menu">

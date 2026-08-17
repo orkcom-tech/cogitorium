@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import BlueprintEditor from './BlueprintEditor'
 import TerminalPage from './TerminalPage'
 import AgentMemory from './AgentMemory'
@@ -10,9 +10,11 @@ import InletsPanel from './InletsPanel'
 import QueuePanel from './QueuePanel'
 import EnvPanel from './EnvPanel'
 import { Select } from './Select'
-import { Deck, DeckBar, OverlayHost, ShellGate, Workbench } from '../deck/Deck'
+import { Deck, OverlayHost, ShellGate, Workbench } from '../deck/Deck'
 import { useDeck } from '../deck/store'
-import type { OverlayId } from '../deck/types'
+import type { OverlayId, ViewId } from '../deck/types'
+import { usePublishShell } from '../shell'
+import { STAGE_ICON, DRAWER_ICON } from '../shell-icons'
 import {
   api,
   wsChatStream,
@@ -243,6 +245,55 @@ export default function WorkspacePage() {
   // keypress can never both dismiss chrome and silently refuse a pending web
   // search. An overlay closes by clicking away from it, or on its own button.
 
+
+  // What the frame should offer while this workspace is in the cavity: the
+  // three views become stages on the rail, the four overlays become drawers,
+  // the name becomes the rotated text, and export becomes the one action.
+  //
+  // It sits ABOVE the early return for a workspace that has not loaded, because
+  // a hook after a conditional return is called on some renders and not others
+  // — React notices, and the rail ended up with nothing on it. Publishing null
+  // until there is something to publish is the same statement without the bug.
+  const OVERLAY_ITEMS: { id: OverlayId; title: string }[] = [
+    { id: 'agents', title: 'Agents' },
+    { id: 'inlets', title: 'Receivers' },
+    { id: 'queue', title: 'Queue' },
+    { id: 'env', title: 'Variables' },
+  ]
+  usePublishShell(
+    () =>
+      workspace
+        ? {
+            here: {
+              label: workspace.name,
+              note: workspace.description,
+              state: busy ? 'running' : undefined,
+            },
+            back: '/workspaces',
+            stages: {
+              items: [
+                { id: 'chat', title: 'Chat', icon: STAGE_ICON.chat },
+                { id: 'blueprint', title: 'Blueprint', icon: STAGE_ICON.blueprint },
+                { id: 'workbench', title: 'Editor', icon: STAGE_ICON.workbench },
+              ],
+              current: deck.deck.view,
+              go: (id: string) => deck.go(id as ViewId),
+            },
+            drawers: {
+              items: OVERLAY_ITEMS.map((o) => ({ id: o.id, title: o.title, icon: DRAWER_ICON[o.id] })),
+              open: overlay,
+              toggle: (id: string | null) => setOverlay(id as OverlayId | null),
+            },
+            action: {
+              label: 'export',
+              title: 'Download this workspace as a bundle another install can rebuild it from',
+              run: () => setExporting(true),
+            },
+          }
+        : null,
+    [workspace?.name, workspace?.description, busy, deck.deck.view, overlay],
+  )
+
   if (!workspace) {
     return (
       <div className="page">
@@ -306,46 +357,21 @@ export default function WorkspacePage() {
   // An overlay that is shut does not load and does not poll. The receivers
   // cost two queries, the queue runs a timer, and a workspace using neither
   // should pay for neither.
-  const OVERLAYS: { id: OverlayId; title: string }[] = [
-    { id: 'agents', title: 'Agents' },
-    { id: 'inlets', title: 'Receivers' },
-    { id: 'queue', title: 'Queue' },
-    { id: 'env', title: 'Variables' },
-  ]
+  const OVERLAYS = OVERLAY_ITEMS
   const overlayTitle =
     overlay === 'agent'
       ? (selectedAgent?.name ?? 'Agent')
       : (OVERLAYS.find((o) => o.id === overlay)?.title ?? '')
 
+
   return (
     <div className="ws-shell">
       {approval && <ApprovalDialog request={approval} onAnswer={answerApproval} busy={answering} />}
       {exporting && <ExportDialog wsId={wsId} name={workspace.name} onClose={() => setExporting(false)} />}
-      <div className="ws-head">
-        {/* The way out of a workspace is a real control, not a glyph.
-            It was a bare arrow in muted grey, hard against the left edge and
-            the same size as body text — the operator had to hunt for the
-            button that leaves the screen they are on. */}
-        <Link to="/workspaces" className="ws-back round" title="Back to all workspaces" aria-label="Back to all workspaces">
-          <span aria-hidden>←</span>
-        </Link>
-        <h2>{workspace.name}</h2>
-        <span className="muted">{workspace.description}</span>
-        <span className="spacer" />
-        <DeckBar
-          view={deck.deck.view}
-          onGo={deck.go}
-          overlay={overlay}
-          onOverlay={setOverlay}
-          overlays={OVERLAYS}
-        />
-        <button
-          onClick={() => setExporting(true)}
-          title="Download this workspace as a bundle another install can rebuild it from"
-        >
-          export
-        </button>
-      </div>
+      {/* No header. The three views, the four drawers, the name, the way out
+          and export all live on the rail now — published from here, drawn
+          there. See shell.tsx: the cavity holds content and nothing else, and
+          a workspace's own toolbar was the last thing breaking that. */}
       {error && (
         <p className="error" onClick={() => setError(null)} title="dismiss">
           {error}

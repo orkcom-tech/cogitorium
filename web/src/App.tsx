@@ -15,6 +15,7 @@ import TerminalPage from './pages/TerminalPage'
 import InstallMap from './pages/InstallMap'
 import { applyTheme, loadTheme } from './styles/theme'
 import Rail from './Rail'
+import { ShellProvider } from './shell'
 
 type Health = { status: string; version: string }
 
@@ -80,8 +81,9 @@ export default function App() {
        * content below. The instrument now surrounds the window instead of
        * sitting on top of it, which is what the reference shell does and what
        * the whole look depends on. */}
-      <Rail user={user} health={health} onSignOut={signOut} />
-      <div className="frame">
+      <ShellProvider>
+        <Rail user={user} health={health} onSignOut={signOut} />
+        <div className="frame">
         <main className="cavity">
           <Routes>
             <Route path="/" element={<Navigate to="/workspaces" replace />} />
@@ -96,8 +98,9 @@ export default function App() {
             <Route path="/instructions" element={<LibraryPage />} />
             <Route path="/models" element={<ModelsPage />} />
           </Routes>
-        </main>
-      </div>
+          </main>
+        </div>
+      </ShellProvider>
     </BrowserRouter>
   )
 }
