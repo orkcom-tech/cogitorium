@@ -45,7 +45,7 @@ command; an archive brings nothing and says as much.
 | winget | `winget install OrkcomTech.Cogitorium` | declared, not resolved |
 | Desktop app | attached to each release | no — install contextd separately |
 | Archive | download and unpack | no |
-| Kubernetes | `helm install` from `deploy/helm/cogitorium`, with `--set image.repository` | yes, in the image |
+| Kubernetes | `helm install` from `deploy/helm/cogitorium`; the image is public on ghcr.io | yes, in the image |
 | Source | `make build`, or `make desktop` for the window | no |
 
 **Start here if you have never run it:** the [Guide](guide/) is a walkthrough
@@ -78,10 +78,18 @@ SmartScreen on Windows. Saying so is better than a signature that is not one:
   under `~/.local`, or `./install.sh --system` for everyone. The window needs
   WebKitGTK (`libwebkit2gtk-4.1-0` on Debian and Ubuntu).
 
-**Kubernetes.** A Helm chart is in `deploy/helm/cogitorium`. No container image
-is published yet — the chart's default `image.repository` points at a registry
-path nothing pushes to, so build the image and point the chart at wherever you
-pushed it:
+**Kubernetes.** A Helm chart is in `deploy/helm/cogitorium`, and the image it
+defaults to is published: `ghcr.io/orkcom-tech/cogitorium`, built for amd64 and
+arm64 on every release, public and pullable without credentials. The chart's
+`appVersion` tracks the release, so nothing needs pointing anywhere:
+
+```sh
+helm install cogitorium ./deploy/helm/cogitorium \
+  --namespace cogitorium --create-namespace \
+  --set auth.adminToken="$(openssl rand -hex 24)"
+```
+
+To run your own build instead, push it and name it:
 
 ```sh
 docker build -t <your-registry>/cogitorium:1.0.1 .
