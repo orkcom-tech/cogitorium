@@ -435,7 +435,7 @@ func (e *Engine) execToolAs(ctx context.Context, wsID int64, agent workspace.Age
 	// whose record shows no tools made no tool calls, full stop. A refusal
 	// counts as a call: the model asked for it, and "it tried and was refused"
 	// is a different thing to read at 3am than "it never tried".
-	e.noteTool(wsID, call.Name, agent.Name, len(chain), err == nil, time.Since(started))
+	e.noteTool(wsID, call.Name, agent.Name, len(chain), err == nil, time.Since(started), call.InputJSON)
 	if err != nil {
 		slog.Warn("tool call failed", "workspace_id", wsID, "agent", agent.Name, "tool", call.Name, "err", err)
 		return err.Error(), true

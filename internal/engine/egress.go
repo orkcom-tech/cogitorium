@@ -66,6 +66,12 @@ type turnState struct {
 	did     Record
 	gearOut string
 
+	// context is this run's frozen view of the context space: one read per
+	// document for the whole delegation tree, and the version each came from.
+	// Same reason as everything else in this struct — one run, one context.
+	// See contextcache.go.
+	context *contextSnapshot
+
 	// workID is the queued unit this turn belongs to, or 0 for a turn that has
 	// none. It is carried here for the same reason everything else in this
 	// struct is: the whole delegation tree is one turn, so a gear a worker four

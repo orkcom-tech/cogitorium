@@ -524,7 +524,12 @@ func (e *Engine) systemPrompt(ctx context.Context, wsID int64, agent workspace.A
 				continue
 			}
 			seen[p] = true
-			content, err := e.ctx.Get(ctx, p)
+			// Through the run's snapshot, not straight to contextd: one read
+			// per document per run, shared by every agent in the delegation
+			// tree, and the version is recorded as it goes. See
+			// contextcache.go for what this was costing and why reading the
+			// same document twice in one run was also a correctness bug.
+			content, _, err := e.contextDoc(ctx, wsID, p)
 			if err != nil {
 				return "", fmt.Errorf("context doc %q bound to agent %q cannot be read: %w — restore the file in Contextverse or unbind it from the agent", p, agent.Name, err)
 			}
@@ -593,7 +598,9 @@ func (e *Engine) branchDocs(ctx context.Context, wsID int64, agent workspace.Age
 	if err != nil {
 		return nil, err
 	}
-	files, err := e.ctx.List(ctx)
+	// Through the run's snapshot: this is called before every model call of
+	// every agent, and it was listing the whole space each time.
+	files, err := e.contextList(ctx, wsID)
 	if err != nil {
 		slog.Warn("context branch unavailable; agent runs without it", "workspace_id", wsID, "agent", agent.Name, "err", err)
 		return nil, nil
