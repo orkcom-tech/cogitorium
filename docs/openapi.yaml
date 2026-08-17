@@ -302,6 +302,19 @@ paths:
       responses:
         default:
           description: see the reference
+  "/api/v1/gears/{id}/approvals":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read gears/{id}/approvals"
+      responses:
+        default:
+          description: see the reference
   "/api/v1/gears/{id}/connections":
     parameters:
       - name: "id"

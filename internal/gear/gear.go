@@ -78,8 +78,8 @@ type Run struct {
 	ID int64 `json:"id"`
 	// GearID is 0 once the gear has been deleted. GearName is what is left,
 	// and it is why the run is still readable: see migration 0029.
-	GearID   int64  `json:"gear_id"`
-	GearName string `json:"gear_name"`
+	GearID      int64  `json:"gear_id"`
+	GearName    string `json:"gear_name"`
 	Version     int    `json:"version"`
 	AgentID     *int64 `json:"agent_id"` // nil = the operator (dry run)
 	AgentName   string `json:"agent_name"`
