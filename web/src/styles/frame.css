@@ -326,3 +326,238 @@
     animation-duration: 1ms;
   }
 }
+
+/* ── Drawers ────────────────────────────────────────────────────────────────
+   Something that crawls out of an edge and floats over the cavity, not a box
+   that appears on top of it. Closed, it is translated fully off its edge, so
+   opening is a journey the eye can follow and closing puts it back where it
+   came from. */
+
+.drawer {
+  position: fixed;
+  z-index: var(--z-float);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-2);
+  border-radius: var(--r-panel);
+  box-shadow:
+    0 22px 46px -18px rgb(0 0 0 / 30%),
+    0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent);
+  /* Movement takes a spatial curve; nothing else in here moves, so nothing
+     else is listed. */
+  transition: transform var(--sp-default-d) var(--sp-default);
+  will-change: transform;
+}
+
+/* Inset from the cavity's edges by the bezel again, so the drawer sits inside
+   the hole rather than on the frame — the frame is the instrument, and a
+   drawer is content-side furniture. */
+.drawer-left,
+.drawer-right {
+  top: calc(var(--bezel) + var(--s2));
+  bottom: calc(var(--bezel) + var(--s2));
+}
+
+.drawer-top,
+.drawer-bottom {
+  left: calc(var(--bezel) + var(--rail-w) + var(--rail-gap) + var(--s2));
+  right: calc(var(--bezel) + var(--s2));
+}
+
+.drawer-right {
+  right: calc(var(--bezel) + var(--s2));
+  transform: translateX(calc(100% + var(--bezel) + var(--s4)));
+}
+
+.drawer-left {
+  left: calc(var(--bezel) + var(--rail-w) + var(--rail-gap) + var(--s2));
+  transform: translateX(calc(-100% - var(--rail-w) - var(--s6)));
+}
+
+.drawer-top {
+  top: calc(var(--bezel) + var(--s2));
+  transform: translateY(calc(-100% - var(--bezel) - var(--s4)));
+}
+
+.drawer-bottom {
+  bottom: calc(var(--bezel) + var(--s2));
+  transform: translateY(calc(100% + var(--bezel) + var(--s4)));
+}
+
+/* Declared AFTER the edges on purpose: they set the hidden transform at equal
+   specificity, and a rule written earlier loses the cascade. That exact
+   mistake made a drawer open invisibly once already. */
+.drawer.open {
+  transform: none;
+}
+
+/* A drawer following the pointer must not also be easing towards where the
+   pointer was. */
+.drawer.dragging {
+  transition: none;
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex: 0 0 auto;
+  padding: var(--s3) var(--s3) var(--s2) var(--s4);
+  font-size: var(--t-ui);
+}
+
+.drawer-head strong {
+  font-size: var(--t-prose);
+  letter-spacing: -0.01em;
+}
+
+.drawer-spacer {
+  flex: 1;
+}
+
+.drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 var(--s4) var(--s4);
+  /* Panels inside size themselves against this box rather than the window, so
+     a two-field row in a 300px drawer wraps instead of being cut in half. */
+  container-type: inline-size;
+  container-name: panel;
+}
+
+.drawer-body > * {
+  max-width: 100%;
+}
+
+.drawer-body .row {
+  flex-wrap: wrap;
+}
+
+/* The four little edge marks. Each is a square with one thick side, which is
+   the side the drawer would come out of — a picture of the answer rather than
+   the word for it. */
+.drawer-edges {
+  display: flex;
+  gap: 2px;
+}
+
+.drawer-edge {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--ef-fast-d) var(--ef-fast);
+}
+
+.drawer-edge:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.drawer-edge.on {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.edge-mark {
+  width: 12px;
+  height: 12px;
+  border: 1px solid color-mix(in srgb, var(--text) 40%, transparent);
+  border-radius: 2px;
+}
+
+.edge-left {
+  border-left-width: 4px;
+  border-left-color: currentColor;
+}
+
+.edge-right {
+  border-right-width: 4px;
+  border-right-color: currentColor;
+}
+
+.edge-top {
+  border-top-width: 4px;
+  border-top-color: currentColor;
+}
+
+.edge-bottom {
+  border-bottom-width: 4px;
+  border-bottom-color: currentColor;
+}
+
+.drawer-x {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--ef-fast-d) var(--ef-fast);
+}
+
+.drawer-x:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+/* 1px of ink is impossible to grab; 10px of hit area is not. */
+.drawer-grip {
+  position: absolute;
+  background: transparent;
+  transition: background var(--ef-fast-d) var(--ef-fast);
+}
+
+.drawer-grip:hover {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.drawer-left .drawer-grip,
+.drawer-right .drawer-grip {
+  top: var(--s5);
+  bottom: var(--s5);
+  width: 10px;
+  cursor: col-resize;
+}
+
+.drawer-right .drawer-grip {
+  left: -5px;
+  border-radius: var(--r-pill);
+}
+
+.drawer-left .drawer-grip {
+  right: -5px;
+  border-radius: var(--r-pill);
+}
+
+.drawer-top .drawer-grip,
+.drawer-bottom .drawer-grip {
+  left: var(--s5);
+  right: var(--s5);
+  height: 10px;
+  cursor: row-resize;
+}
+
+.drawer-bottom .drawer-grip {
+  top: -5px;
+  border-radius: var(--r-pill);
+}
+
+.drawer-top .drawer-grip {
+  bottom: -5px;
+  border-radius: var(--r-pill);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer {
+    transition-duration: 1ms;
+  }
+}

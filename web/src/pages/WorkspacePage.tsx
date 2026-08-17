@@ -10,7 +10,8 @@ import InletsPanel from './InletsPanel'
 import QueuePanel from './QueuePanel'
 import EnvPanel from './EnvPanel'
 import { Select } from './Select'
-import { Deck, OverlayHost, ShellGate, Workbench } from '../deck/Deck'
+import { Deck, ShellGate, Workbench } from '../deck/Deck'
+import { Drawer, type Edge } from '../deck/Drawer'
 import { useDeck } from '../deck/store'
 import type { OverlayId, ViewId } from '../deck/types'
 import { usePublishShell } from '../shell'
@@ -254,6 +255,16 @@ export default function WorkspacePage() {
   // a hook after a conditional return is called on some renders and not others
   // — React notices, and the rail ended up with nothing on it. Publishing null
   // until there is something to publish is the same statement without the bug.
+  // Which edge each drawer comes out of unless the operator has moved it.
+  // One sentence explains the whole table: you take FROM the right, and what
+  // happens over TIME arrives at the bottom.
+  const DRAWER_EDGE: Record<string, Edge> = {
+    agents: 'right',
+    env: 'right',
+    agent: 'right',
+    inlets: 'bottom',
+    queue: 'bottom',
+  }
   const OVERLAY_ITEMS: { id: OverlayId; title: string }[] = [
     { id: 'agents', title: 'Agents' },
     { id: 'inlets', title: 'Receivers' },
@@ -452,7 +463,16 @@ export default function WorkspacePage() {
         ]}
       />
 
-      <OverlayHost open={overlay} title={overlayTitle} deck={deck} onClose={() => setOverlay(null)}>
+      {/* Right for the things you take from, bottom for the things that happen
+          over time — and any of the four by choice, remembered per drawer. */}
+      <Drawer
+        id={overlay ?? 'none'}
+        open={overlay !== null}
+        title={overlayTitle}
+        defaultEdge={DRAWER_EDGE[overlay ?? 'agents'] ?? 'right'}
+        defaultSize={overlay === 'queue' ? 320 : 400}
+        onClose={() => setOverlay(null)}
+      >
         {overlay === 'agents' && roster}
         {overlay === 'inlets' && <InletsPanel wsId={wsId} agents={agents} shown onError={setError} />}
         {overlay === 'queue' && <QueuePanel wsId={wsId} shown onError={setError} />}
@@ -474,7 +494,7 @@ export default function WorkspacePage() {
           ) : (
             <p className="hint">Pick an agent from the roster to inspect it.</p>
           ))}
-      </OverlayHost>
+      </Drawer>
     </div>
   )
 }
