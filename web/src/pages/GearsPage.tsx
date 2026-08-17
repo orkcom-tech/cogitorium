@@ -13,8 +13,9 @@ import {
   gearRunStream,
 } from '../api'
 import { collapse, diff, stat, tooBig } from './diff'
+import { dragging } from '../dnd'
 
-export default function GearsPage({ me }: { me: User }) {
+export default function GearsPage({ me, review }: { me: User; review?: number | null }) {
   const [gears, setGears] = useState<Gear[]>([])
   const [query, setQuery] = useState('')
   const [tag, setTag] = useState('')
@@ -43,6 +44,23 @@ export default function GearsPage({ me }: { me: User }) {
   }, [query, tag])
 
   useEffect(reload, [reload])
+
+  // Opened from somewhere else — a gear dropped on the blueprint before anyone
+  // approved it, and the note on the canvas offered to bring the operator
+  // here. It opens the card rather than approving anything: approval still
+  // happens beside the source and the grants, which is the whole point of this
+  // screen.
+  useEffect(() => {
+    if (!review) return
+    setOpenId(review)
+    api.gears
+      .get(review)
+      .then((r) => {
+        setSource(r.files)
+        setEnv(r.env)
+      })
+      .catch((e: Error) => setError(e.message))
+  }, [review])
 
   // Whether this server can actually isolate a gear. The terminal endpoint
   // already reports the backend, and it is the same backend gears run in.
@@ -273,7 +291,15 @@ function GearCard({
   useEffect(() => () => abort.current?.abort(), [])
 
   return (
-    <div className="card">
+    <div
+      className="card gear-card-drag"
+      // Draggable only while collapsed. Open, this card contains a textarea of
+      // source and a JSON field for the dry run, and a draggable ancestor
+      // turns selecting text in them into dragging the card.
+      draggable={!open}
+      onDragStart={dragging({ kind: 'gear', id: g.id, name: g.name, status: g.status })}
+      title={open ? undefined : 'Drag onto the blueprint to give this gear to an agent'}
+    >
       <div className="card-head">
         <strong>{g.name}</strong>
         <span className={`status ${g.status}`}>{g.status}</span>

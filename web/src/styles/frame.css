@@ -903,3 +903,107 @@
   border-radius: 0 var(--r2) var(--r2) 0;
   overflow: hidden;
 }
+
+/* ── Dragging a gear or an instruction onto the blueprint ────────────────────
+   The drawer lists the thing; the canvas is where it is given to an agent.
+   Three states have to be visible, in this order of loudness: something is
+   being carried (the canvas), it will land HERE (the agent), and it landed. */
+
+.gear-card-drag[draggable='true'] {
+  cursor: grab;
+}
+
+.gear-card-drag[draggable='true']:active {
+  cursor: grabbing;
+}
+
+.canvas {
+  position: relative;
+}
+
+/* The whole canvas is a target — dropping on empty space means every agent —
+   so it is the canvas that lights up, not a rectangle drawn inside it. */
+.canvas.bp-catching {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+  transition: box-shadow var(--ef-default-d) var(--ef-default);
+}
+
+/* The one agent under the pointer. React Flow owns the node's transform, so
+   this may not touch transform — a scale here fights the pane's own matrix and
+   the node drifts away from the cursor. Ring and wash only. */
+.react-flow__node.bp-catch {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 8px color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  transition:
+    box-shadow var(--ef-fast-d) var(--ef-fast),
+    background var(--ef-fast-d) var(--ef-fast);
+}
+
+.bp-catch-hint {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  top: var(--s3);
+  transform: translateX(-50%);
+  margin: 0;
+  padding: var(--s1) var(--s3);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--accent) 90%, var(--surface));
+  color: var(--on-accent, #fff);
+  font-size: var(--t-chrome);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: bp-catch-in var(--sp-fast-d) var(--sp-fast);
+}
+
+@keyframes bp-catch-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+}
+
+/* What just happened, said as a sentence, where it happened. */
+.bp-landed {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  top: var(--s3);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  max-width: min(30rem, calc(100% - var(--s6)));
+  padding: var(--s3) var(--s4);
+  border-radius: var(--r2);
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent),
+    var(--lift-2);
+  font-size: var(--t-ui);
+  animation: bp-catch-in var(--sp-fast-d) var(--sp-fast);
+}
+
+.bp-landed.warned {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--warn, var(--danger)) 45%, transparent),
+    var(--lift-2);
+}
+
+.bp-landed span {
+  color: var(--text-dim);
+}
+
+.bp-landed-acts {
+  gap: var(--s2);
+  justify-content: flex-end;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bp-catch-hint,
+  .bp-landed {
+    animation: none;
+  }
+}

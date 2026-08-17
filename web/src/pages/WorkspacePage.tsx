@@ -220,6 +220,10 @@ export default function WorkspacePage({ me }: { me: User }) {
   // workspace is arranged, and restoring one on load would put a panel over
   // the operator's work for a question they already had answered.
   const [overlay, setOverlay] = useState<OverlayId | null>(null)
+  // A gear the operator asked to see the source of, from somewhere that is not
+  // the gear list — today, the note a blueprint drop leaves when the gear that
+  // landed has never been approved. It opens the card; it approves nothing.
+  const [reviewGear, setReviewGear] = useState<number | null>(null)
   // Whether the operator has asked for a shell IN THIS SESSION. Never
   // persisted: see ShellGate.
   const [shell, setShell] = useState(false)
@@ -439,6 +443,10 @@ export default function WorkspacePage({ me }: { me: User }) {
                     setSelectedAgent(a)
                     setOverlay('agent')
                   }}
+                  onReviewGear={(id) => {
+                    setReviewGear(id)
+                    setOverlay('gears')
+                  }}
                   onError={setError}
                 />
               </div>
@@ -486,7 +494,10 @@ export default function WorkspacePage({ me }: { me: User }) {
         title={overlayTitle}
         defaultEdge={DRAWER_EDGE[overlay ?? 'agents'] ?? 'right'}
         defaultSize={overlay === 'queue' ? 320 : 400}
-        onClose={() => setOverlay(null)}
+        onClose={() => {
+          setOverlay(null)
+          setReviewGear(null)
+        }}
       >
         {overlay === 'agents' && roster}
         {overlay === 'inlets' && <InletsPanel wsId={wsId} agents={agents} shown onError={setError} />}
@@ -499,7 +510,7 @@ export default function WorkspacePage({ me }: { me: User }) {
             </div>
           </ShellGate>
         )}
-        {overlay === 'gears' && <GearsPage me={me} />}
+        {overlay === 'gears' && <GearsPage me={me} review={reviewGear} />}
         {overlay === 'instructions' && <LibraryPage />}
         {overlay === 'memory' &&
           (selectedAgent ? (
