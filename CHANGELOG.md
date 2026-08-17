@@ -33,6 +33,15 @@ be the type the handler decodes into, following one hop through a decode helper
 and resolving aliases. Reintroducing the old copy makes it fail, which was
 checked by reintroducing it.
 
+**An external MCP server that dies now says why.** The reason a child gives up
+arrives on stderr; the EOF that reveals it died arrives on stdout. Those are
+two pipes with two readers and nothing between them, so a caller could be
+handed `the MCP server "x" stopped: EOF` while the sentence explaining it was
+still in flight. On an idle machine the stderr reader almost always won, which
+is why this looked like a flaky test rather than a lost error message. The
+death path now waits for stderr to reach EOF — bounded at two seconds, in case
+something else inherited the write end — before waking any waiter.
+
 ## v1.0.0
 
 The interface is rebuilt. The server is broadly the one it was — the same

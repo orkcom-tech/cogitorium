@@ -53,6 +53,12 @@ const protocolVersion = "2024-11-05"
 // this the operator gets "exit status 1", which is true and useless.
 const stderrKept = 4096
 
+// stderrGrace is how long the death path waits for the child's stderr to reach
+// EOF before giving up on quoting it. The child has already exited by then, so
+// its pipe closes at once; this only bounds the case where something else
+// inherited the write end and holds it open.
+const stderrGrace = 2 * time.Second
+
 // Spec is what to run, and under what bounds.
 type Spec struct {
 	Name    string
@@ -83,13 +89,17 @@ type Conn struct {
 	// dead is closed when the reader stops, whatever the reason. Every waiter
 	// selects on it, so a child that dies fails its calls instead of leaving
 	// them to time out one by one.
-	dead     chan struct{}
-	deadErr  error
-	closed   bool
-	stderr   *tailBuffer
-	release  func()
-	end      context.CancelFunc
-	serverIn string // what the server called itself, for the log
+	dead    chan struct{}
+	deadErr error
+	closed  bool
+	stderr  *tailBuffer
+	// stderrDone closes when the child's stderr has been drained to EOF. The
+	// death path waits on it, because the reason a child died arrives on a
+	// DIFFERENT pipe from the EOF that reveals it died.
+	stderrDone chan struct{}
+	release    func()
+	end        context.CancelFunc
+	serverIn   string // what the server called itself, for the log
 }
 
 // Dial spawns the server and completes the handshake.
@@ -144,13 +154,17 @@ func Dial(ctx context.Context, spec Spec) (*Conn, error) {
 
 	c := &Conn{
 		spec: spec, cmd: cmd, in: in, out: bufio.NewReader(out),
-		pending: map[string]chan mcpwire.Message{},
-		dead:    make(chan struct{}),
-		stderr:  &tailBuffer{limit: stderrKept},
-		release: release,
-		end:     end,
+		pending:    map[string]chan mcpwire.Message{},
+		dead:       make(chan struct{}),
+		stderr:     &tailBuffer{limit: stderrKept},
+		stderrDone: make(chan struct{}),
+		release:    release,
+		end:        end,
 	}
-	go io.Copy(c.stderr, errPipe)
+	go func() {
+		io.Copy(c.stderr, errPipe)
+		close(c.stderrDone)
+	}()
 	go c.read()
 
 	if err := c.handshake(ctx); err != nil {
@@ -351,6 +365,21 @@ func (c *Conn) read() {
 			c.handle(line)
 		}
 		if err != nil {
+			// Drain stderr BEFORE releasing anybody. A child that gives up
+			// writes the reason on stderr and then exits; the exit is what
+			// closes stdout and lands us here. Those are two independent
+			// pipes with two independent readers, so without this wait the
+			// waiters are woken by close(c.dead) below and build their error
+			// from a tail buffer the copier has not filled in yet — the
+			// caller is told "stopped: EOF" and the sentence explaining why
+			// arrives microseconds later, into nothing. It read as flaky
+			// because on an idle machine the copier usually won.
+			select {
+			case <-c.stderrDone:
+			case <-time.After(stderrGrace):
+				// A grandchild holding the pipe open would otherwise wedge
+				// every waiter here. Losing the quote beats not answering.
+			}
 			c.mu.Lock()
 			c.deadErr = err
 			c.pending = map[string]chan mcpwire.Message{}
