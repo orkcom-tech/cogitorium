@@ -14,6 +14,7 @@
 // there is nothing left that an operator would improve by tuning.
 
 export type Look =
+  | 'shell'
   | 'calm'
   | 'paper'
   | 'terminal'
@@ -37,9 +38,15 @@ export type Theme = {
  * The blurb is what the operator reads, so it says what the look is FOR
  * rather than what colours it uses — they can see the colours. Every one of
  * these is drawn in both modes: a look that only works dark is half a look,
- * and `mode` stays the operator's in all eleven.
+ * and `mode` stays the operator's in all twelve.
  */
 export const LOOKS: { id: Look; name: string; blurb: string }[] = [
+  {
+    id: 'shell',
+    name: 'Shell',
+    blurb:
+      'The default. A warm ground with a measured surface ladder on it, so a drawer floating over the work reads as a plane above it. Green means running, red means refused.',
+  },
   { id: 'air', name: 'Air', blurb: 'A white sheet on a grey ground. Two colours only: green means running, red means broken.' },
   { id: 'calm', name: 'Calm', blurb: 'Rounded and quiet. Nothing asks for attention until something needs it.' },
   { id: 'slate', name: 'Slate', blurb: 'The neutral one. No character to get tired of, which is the character.' },
@@ -55,10 +62,11 @@ export const LOOKS: { id: Look; name: string; blurb: string }[] = [
 
 const IDS = new Set<string>(LOOKS.map((l) => l.id))
 
-// Air is what the product is being re-cut around, so it is what a fresh
-// install opens in. Anyone with a stored theme keeps theirs — loadTheme reads
+// Shell is the look the interface is designed around — the frame, the rail and
+// the drawers were drawn against its surface ladder — so it is what a fresh
+// install opens in. Anyone with a stored theme keeps theirs: loadTheme reads
 // what is there and only falls back per field.
-export const DEFAULT_THEME: Theme = { look: 'air', mode: 'light' }
+export const DEFAULT_THEME: Theme = { look: 'shell', mode: 'light' }
 
 const KEY = 'cogitorium.theme'
 

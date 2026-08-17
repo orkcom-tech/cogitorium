@@ -166,14 +166,61 @@ button.primary:hover:not(:disabled) {
   border-color: transparent;
 }
 
+/* Motion, across the product rather than at two call sites.
+ *
+ * What stood here was a comment reading "exactly two motions in the whole
+ * product" and two rules to match — a 140ms ease on the overlay and a 90ms
+ * opacity on a tab. That is why the interface read as static no matter what
+ * was moved around in it: nothing else in the app animated at all.
+ *
+ * The rules below are deliberately broad and deliberately CHEAP. Only
+ * properties the compositor can handle without laying the page out again are
+ * listed — background, colour, border colour, box-shadow, opacity, transform —
+ * so this is not a licence for anything to animate its width.
+ *
+ * The split is the one the tokens describe: things that MOVE take a spatial
+ * curve and overshoot; things that only change COLOUR take an effects curve
+ * and do not. Anything being dragged opts out by carrying `.dragging`, because
+ * a transition on something following the pointer reads as lag. */
 @media (prefers-reduced-motion: no-preference) {
-  /* Exactly two motions in the whole product. A transition on anything
-     dragged reads as lag, so seams are deliberately excluded. */
-  .dk-overlay {
-    transition: transform 140ms ease;
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  summary,
+  [role='tab'],
+  [role='option'],
+  [role='button'],
+  .card,
+  .chip,
+  .pill,
+  .ws-card,
+  .agent-card,
+  .gear-card,
+  .look-option {
+    transition:
+      background-color var(--ef-fast-d) var(--ef-fast),
+      border-color var(--ef-fast-d) var(--ef-fast),
+      color var(--ef-fast-d) var(--ef-fast),
+      box-shadow var(--ef-default-d) var(--ef-default),
+      opacity var(--ef-fast-d) var(--ef-fast),
+      transform var(--sp-fast-d) var(--sp-fast);
   }
-  .dk-view-tab {
-    transition: opacity 90ms ease;
+
+  /* A press is felt, not just seen. 1.5% is enough to register and small
+     enough that a row of them does not look like it is breathing. */
+  button:active:not(:disabled),
+  .card:active,
+  .ws-card:active,
+  .agent-card:active {
+    transform: scale(0.985);
+    transition-duration: var(--ef-fast-d);
+  }
+
+  .dragging,
+  .dragging * {
+    transition: none !important;
   }
 }
 
@@ -585,6 +632,39 @@ button.primary:hover:not(:disabled) {
  * Every one is drawn twice, with light-dark(), because the operator's mode is
  * theirs. A look that only works dark is half a look.
  */
+
+/* 0. Shell — the default, and the one the whole interface is designed around.
+      A warm cream ground with a Material 3 surface ladder on it, so a drawer
+      floating over the cavity reads as a plane above it rather than as a patch
+      the same colour. That is not a preference: the first cut had a drawer at
+      a contrast ratio of 1.025 against what it sat on, which is invisible, and
+      every step in this ladder was measured rather than eyeballed.
+
+      Cogitorium's green is the primary role, the neutrals are biased towards it
+      rather than being pure greys, and red is reserved for refusal — a pending
+      gear, a run the runtime would not allow — so it never appears as
+      decoration. Corners are large, in the reference's own ladder, because a
+      26px cavity and a 999px capsule are most of what separates a shell from a
+      page with rounded boxes. */
+[data-look='shell'] {
+  --text: light-dark(#1a1e16, #e9ece3);
+  --muted: light-dark(#5f6858, #a8b0a0);
+  --bg: light-dark(#e3e0d3, #0e110d);
+  --surface-base: light-dark(#fdfcf7, #191d17);
+  --surface-2-base: light-dark(#f2efe3, #222720);
+  --border: light-dark(rgba(26,30,22,.09), rgba(233,236,227,.10));
+  --border-strong: light-dark(rgba(26,30,22,.20), rgba(233,236,227,.20));
+  --accent: light-dark(#0a8f24, #4ade6a);
+  --danger: light-dark(#c2321f, #ff7a68);
+  --r1: 10px; --r2: 16px; --r3: 22px;
+  --t-prose: 15px;
+  --lift: light-dark(0 1px 2px rgba(40,44,26,.05), inset 0 1px 0 rgba(255,255,255,.03));
+  --lift-2: light-dark(
+    0 22px 46px -18px rgba(52,44,26,.26), 0 0 0 1px rgba(26,30,22,.07),
+    0 22px 46px -18px rgba(0,0,0,.55)
+  );
+  --ground: var(--bg);
+}
 
 /* 1. Calm — most of the time nothing needs attention, so nothing asks for it.
       Rounded, borderless, one soft shadow, colour held back for state. */
