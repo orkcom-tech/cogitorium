@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Field } from './Field'
 import { api, type FileEntry } from '../api'
 
 // The workspace's file tree.
@@ -30,6 +29,7 @@ export default function FilesPage({
   onOpen: (path: string) => void
   onError: (m: string) => void
 }) {
+  const [adding, setAdding] = useState(false)
   const [nodes, setNodes] = useState<Map<string, Node>>(new Map())
   const [roots, setRoots] = useState<FileEntry[]>([])
 
@@ -111,58 +111,77 @@ export default function FilesPage({
     )
   }
 
+  const create = (path: string) =>
+    api.files
+      .write(wsId, path, '')
+      .then(() => {
+        loadRoot()
+        refreshDirOf(path)
+        onOpen(path)
+      })
+      .catch((err: Error) => onError(err.message))
+
   return (
+    /* A file tree the way an editor draws one: a thin strip of label, actions
+       as icons on it, and then rows. What was here read as a settings form —
+       a bold title, a text button, two sentences of prose explaining what a
+       directory is, and a labelled field with a hint under it — which took
+       more than half the panel before the first filename. */
     <div className="file-tree">
-      <div className="row tree-head">
-        <strong>Workspace files</strong>
+      <div className="tree-bar">
+        <span className="tree-title">Files</span>
         <span className="spacer" />
-        <button onClick={loadRoot} title="Reload the tree">
-          refresh
+        <button className="tree-act" data-own onClick={() => setAdding((v) => !v)} title="New file">
+          +
+        </button>
+        <button className="tree-act" data-own onClick={loadRoot} title="Reload">
+          ⟳
         </button>
       </div>
-      {roots.length === 0 ? (
-        <p className="hint">
-          This workspace's directory is empty. Files created here — by you, by a gear, or from the terminal — show up
-          in this tree.
-        </p>
-      ) : (
-        roots.map((e) => row(e, 0))
+
+      {adding && (
+        <NewFile
+          onCancel={() => setAdding(false)}
+          onCreate={(path) => {
+            setAdding(false)
+            void create(path)
+          }}
+        />
       )}
-      <NewFile
-        onCreate={(path) => {
-          api.files
-            .write(wsId, path, '')
-            .then(() => {
-              loadRoot()
-              refreshDirOf(path)
-              onOpen(path)
-            })
-            .catch((err: Error) => onError(err.message))
-        }}
-      />
+
+      {roots.length === 0 ? (
+        <p className="tree-empty">No files yet</p>
+      ) : (
+        <div className="tree-rows">{roots.map((e) => row(e, 0))}</div>
+      )}
     </div>
   )
 }
 
-function NewFile({ onCreate }: { onCreate: (path: string) => void }) {
+/* One row, appearing where the file will: type a path and press Enter. The
+   label and the hint that used to sit around it said what a path is, which the
+   placeholder shows and the operator already knows. Escape backs out. */
+function NewFile({ onCreate, onCancel }: { onCreate: (path: string) => void; onCancel: () => void }) {
   const [path, setPath] = useState('')
   return (
     <form
-      className="row new-file"
+      className="tree-new"
       onSubmit={(e) => {
         e.preventDefault()
         const p = path.trim()
-        if (!p) return
-        onCreate(p)
-        setPath('')
+        if (p) onCreate(p)
       }}
     >
-      <Field label="New file" wide hint="a path inside this workspace; folders are made as needed">
-        <input value={path} placeholder="docs/notes.md" onChange={(e) => setPath(e.target.value)} />
-      </Field>
-      <button type="submit" disabled={!path.trim()}>
-        create
-      </button>
+      <input
+        autoFocus
+        value={path}
+        placeholder="docs/notes.md"
+        onChange={(e) => setPath(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onCancel()
+        }}
+        onBlur={() => !path.trim() && onCancel()}
+      />
     </form>
   )
 }

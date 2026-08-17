@@ -88,9 +88,17 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --t-mono: 12.5px;
 
-  --r1: 6px;
-  --r2: 10px;
-  --r3: 14px;
+  /* ONE ladder, and everything uses it.
+     There were nine different hardcoded radii across the stylesheets — 2, 3, 4,
+     6, 8, 9, 10, 11 — so a chip inside a card inside a drawer could be rounder
+     than the thing containing it, which is what makes an interface look
+     assembled rather than designed. The rule is that a child is never rounder
+     than its parent: 4 → 10 → 16 → 22 → 26 for the cavity, and a pill for
+     anything that is a lozenge on purpose. */
+  --r0: 4px;
+  --r1: 10px;
+  --r2: 16px;
+  --r3: 22px;
 
   /* The shape ladder the frame shell uses. Material 3's, which is where the
      reference shell takes its geometry from, and deliberately larger at the

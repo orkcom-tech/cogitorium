@@ -172,7 +172,7 @@
 .rail-btn .swatch {
   width: 17px;
   height: 17px;
-  border-radius: 6px;
+  border-radius: var(--r1);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent);
 }
 
@@ -231,7 +231,7 @@
   width: 30px;
   height: 30px;
   display: block;
-  border-radius: 9px;
+  border-radius: var(--r1);
 }
 
 .rail-brand .by {
@@ -331,7 +331,7 @@
   text-align: left;
   padding: var(--s2) var(--s3);
   border: 0;
-  border-radius: 11px;
+  border-radius: var(--r2);
   background: transparent;
   color: var(--text);
   font-size: var(--t-ui);
@@ -510,7 +510,7 @@
   width: 12px;
   height: 12px;
   border: 1px solid color-mix(in srgb, var(--text) 40%, transparent);
-  border-radius: 2px;
+  border-radius: var(--r0);
 }
 
 .edge-left { border-left-width: 4px; border-left-color: currentColor; }
@@ -698,4 +698,125 @@
   cursor: pointer;
   border: 0;
   padding: 0;
+}
+
+/* ── The Editor ─────────────────────────────────────────────────────────────
+   Drawn the way a code editor draws itself: a thin bar of label and icons, a
+   dense tree, and the file filling everything else. What was here read as a
+   settings page that happened to contain filenames. */
+
+.file-tree {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--surface-2);
+}
+
+.tree-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 var(--s1) 0 var(--s3);
+}
+
+.tree-title {
+  font-size: var(--t-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-weight: 650;
+}
+
+.tree-act {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  padding: 0;
+  border-radius: var(--r0);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tree-act:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+.tree-rows {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: var(--s3);
+}
+
+/* A row is 24px, the way every editor sets one: dense enough that a directory
+   of forty files is one screen rather than three. */
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--t-ui);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tree-row:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.tree-row.selected {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+}
+
+.tree-icon {
+  width: 12px;
+  flex: 0 0 12px;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-size {
+  margin-left: auto;
+  padding-left: var(--s2);
+  font-size: var(--t-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.tree-empty {
+  margin: 0;
+  padding: var(--s3);
+  color: var(--text-dim);
+  font-size: var(--t-ui);
+}
+
+.tree-new {
+  padding: 0 var(--s2) var(--s1);
+}
+
+.tree-new input {
+  width: 100%;
+  height: 26px;
+  padding: 0 var(--s2);
+  border-radius: var(--r0);
+  font-size: var(--t-ui);
+  font-family: var(--mono);
 }

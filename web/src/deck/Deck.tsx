@@ -95,9 +95,11 @@ export function Workbench({
         } as React.CSSProperties
       }
     >
-      <section className={`dk-part dk-files ${d.files ? '' : 'dk-rolled'}`}>
-        <PartHead title="Files" open={d.files} onToggle={deck.toggleFiles} />
-        {d.files && <div className="dk-part-body">{files}</div>}
+      {/* No PartHead: the tree draws its own bar with its own name and its own
+          actions, so this one printed "Files" a second time directly above it.
+          Rolling the tree up is what the Editor stage is for — you leave it. */}
+      <section className="dk-part dk-files">
+        <div className="dk-part-body">{files}</div>
       </section>
       {d.files && (
         <Seam
@@ -115,17 +117,6 @@ export function Workbench({
       <section className="dk-part dk-centre">{editor}</section>
 
     </div>
-  )
-}
-
-function PartHead({ title, open, onToggle }: { title: string; open: boolean; onToggle: () => void }) {
-  return (
-    <button className="dk-part-head" onClick={onToggle} aria-expanded={open} title={open ? 'Roll up' : 'Open'}>
-      <span className="dk-caret" aria-hidden>
-        {open ? '▾' : '▸'}
-      </span>
-      {title}
-    </button>
   )
 }
 
