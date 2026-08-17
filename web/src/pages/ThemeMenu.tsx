@@ -42,17 +42,20 @@ export default function ThemeMenu() {
 
   return (
     <>
+      {/* A rail button like every other one on the frame. It used to be a wide
+          chip carrying the word "theme", which on a 56px rail stuck out of the
+          capsule it sits in and broke the column's shape. The bead is the label
+          now: it is painted from the current look's own tokens, so the control
+          shows what it does rather than saying it. */}
       <button
-        className="layout-chip theme-chip round"
+        className="rail-btn"
         // the bead paints itself, so it says so — see tokens.css
         data-own
         onClick={() => setOpen((v) => !v)}
         title="Appearance"
       >
         <span className="swatch" data-look={theme.look} />
-        {/* A label, not a bare text node: a bare one cannot be hidden when the
-            sidebar collapses, so it kept forcing the chip wider than the rail. */}
-        <span className="chip-label">theme</span>
+        <span className="sr-only">Appearance</span>
       </button>
       {open &&
         createPortal(

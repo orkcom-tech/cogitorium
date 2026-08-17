@@ -74,6 +74,43 @@
   --r2: 10px;
   --r3: 14px;
 
+  /* The shape ladder the frame shell uses. Material 3's, which is where the
+     reference shell takes its geometry from, and deliberately larger at the
+     top end than --r1..--r3: a 26px cavity and a 999px capsule are what make
+     this read as a shell rather than as a page with rounded boxes. */
+  --r-cavity: 26px;
+  --r-panel: 26px;
+  --r-pill: 999px;
+
+  /* The frame itself. The bezel is ground showing around everything; the rail
+     stands on it, and the cavity is the hole it surrounds. */
+  --bezel: 14px;
+  --rail-w: 56px;
+  --rail-gap: 10px;
+
+  /* Motion.
+   *
+   * Read out of the reference shell's own token definitions. The SPATIAL
+   * curves overshoot — the second control point sits above 1, so a thing
+   * sails past its target and settles back — and that springiness is most of
+   * why the reference feels alive rather than merely animated.
+   *
+   * The split is not decorative: anything that MOVES or RESIZES takes a
+   * spatial curve, and anything that only changes COLOUR or OPACITY takes an
+   * effects curve. Mixing them is what makes motion read as noise. */
+  --sp-fast: cubic-bezier(0.42, 1.67, 0.21, 0.9);
+  --sp-fast-d: 350ms;
+  --sp-default: cubic-bezier(0.38, 1.21, 0.22, 1);
+  --sp-default-d: 500ms;
+  --sp-slow: cubic-bezier(0.39, 1.29, 0.35, 0.98);
+  --sp-slow-d: 650ms;
+  --ef-fast: cubic-bezier(0.31, 0.94, 0.34, 1);
+  --ef-fast-d: 150ms;
+  --ef-default: cubic-bezier(0.34, 0.8, 0.34, 1);
+  --ef-default-d: 200ms;
+  --ef-slow: cubic-bezier(0.34, 0.88, 0.34, 1);
+  --ef-slow-d: 300ms;
+
   --h-topbar: 32px;
   --h-tabs: 38px;
   --rail: 32px;

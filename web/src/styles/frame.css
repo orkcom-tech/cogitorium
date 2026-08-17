@@ -1,0 +1,314 @@
+/* The frame shell.
+ *
+ * One rule holds this file together, and breaking it is what made every
+ * earlier attempt read as an ordinary web page with rounded corners:
+ *
+ *   EVERY CONTROL LIVES ON THE FRAME. THE CAVITY HOLDS ONLY CONTENT.
+ *
+ * Not stage tabs, not drawer buttons, not the workspace name, not counts, not
+ * a status pill, not the account button. If it is a control, or a label about
+ * the workspace rather than part of the work, it belongs on the rail. What may
+ * be inside the cavity is the transcript, the canvas, the file, the terminal,
+ * the map — and nothing else.
+ *
+ * The geometry, taken from the reference shell's own config: a bezel of ground
+ * around everything, a cavity with a 26px radius, and a rail of floating
+ * capsule groups standing on the bezel's left.
+ */
+
+.frame {
+  position: fixed;
+  inset: 0;
+  padding: var(--bezel);
+  padding-left: calc(var(--bezel) + var(--rail-w) + var(--rail-gap));
+  background: var(--bg);
+}
+
+/* ── The rail ───────────────────────────────────────────────────────────────
+   Not a strip: several floating capsules with gaps between them, so the eye
+   reads them as separate answers to separate questions — where am I, what is
+   the cavity showing, what can crawl out, and the install-wide rest. */
+
+.rail {
+  position: fixed;
+  left: var(--bezel);
+  top: var(--bezel);
+  bottom: var(--bezel);
+  width: var(--rail-w);
+  z-index: var(--z-menu);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s3);
+  /* The column itself catches nothing; only the capsules do, so the bezel
+     around them stays dead space rather than an invisible click target. */
+  pointer-events: none;
+}
+
+.rail-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s1);
+  padding: var(--s2) var(--s1);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  pointer-events: auto;
+}
+
+/* The gap that pushes the bottom capsule to the floor, and carries the
+   workspace's name as rotated text on its way past. */
+.rail-spacer {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  pointer-events: auto;
+}
+
+.rail-here {
+  writing-mode: vertical-rl;
+  font-size: var(--t-micro);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: 100%;
+  background: none;
+  border: 0;
+  padding: var(--s2) 0;
+  cursor: pointer;
+  transition: color var(--ef-fast-d) var(--ef-fast);
+}
+
+.rail-here:hover {
+  color: var(--text);
+}
+
+/* A rail button. The radius morph from pill to rounded square on selection is
+   part of the language, not decoration: it is how the reference marks "this
+   one is current" without a second colour. */
+.rail-btn {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition:
+    background var(--ef-fast-d) var(--ef-fast),
+    color var(--ef-fast-d) var(--ef-fast),
+    border-radius var(--sp-fast-d) var(--sp-fast);
+}
+
+.rail-btn:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+
+.rail-btn.on {
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+  border-radius: 13px;
+}
+
+.rail-btn .swatch {
+  width: 17px;
+  height: 17px;
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+.rail-btn svg {
+  width: 19px;
+  height: 19px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Counts ride the button, the way a tray icon carries a dot — never as a
+   header strip over the work. */
+.rail-badge {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--r-pill);
+  background: var(--danger, #ff3d3d);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--surface-2);
+}
+
+.rail-badge.quiet {
+  background: color-mix(in srgb, var(--text) 45%, transparent);
+}
+
+/* The brand: the app's mark, and beneath it the maker's.
+   It is the one thing on the rail that is not a control, so it has its own
+   capsule and no hover state.
+
+   The two marks are given room rather than stacked tight. Crammed into a 38px
+   button the medallion became a dark square and "BY ORK" collapsed into an
+   illegible smudge — at this size the lockup needs the height more than the
+   rail needs the pixels. */
+.rail-brand {
+  display: grid;
+  place-items: center;
+  gap: var(--s2);
+  padding: var(--s3) var(--s2);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  pointer-events: auto;
+  text-decoration: none;
+}
+
+.rail-brand img {
+  width: 30px;
+  height: 30px;
+  display: block;
+  border-radius: 9px;
+}
+
+.rail-brand .by {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-dim);
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+/* The maker's mark carries no colour of its own — alpha over currentColor — so
+   it belongs to whichever look is in force. */
+.rail-brand .ork {
+  width: 32px;
+  height: 16px;
+  background: currentColor;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+
+/* ── The cavity ─────────────────────────────────────────────────────────────
+   The hole the frame surrounds. Content only. */
+
+.cavity {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface);
+  border-radius: var(--r-cavity);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 7%, transparent);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── A menu that springs from the rail button that opened it ────────────────
+   Anchored beside its button rather than dropped in a corner, so the thing you
+   pressed and the thing that appeared are visibly the same gesture. */
+
+.rail-menu {
+  position: fixed;
+  left: calc(var(--bezel) + var(--rail-w) + var(--s2));
+  z-index: calc(var(--z-menu) + 1);
+  min-width: 232px;
+  max-width: 320px;
+  padding: var(--s2);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow:
+    0 22px 46px -18px rgb(0 0 0 / 32%),
+    0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent);
+  transform-origin: left center;
+  animation: rail-menu-in var(--sp-fast-d) var(--sp-fast);
+}
+
+@keyframes rail-menu-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px) scale(0.96);
+  }
+}
+
+.rail-menu-label {
+  display: block;
+  padding: var(--s2) var(--s3) var(--s1);
+  font-size: var(--t-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.rail-menu a,
+.rail-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--s2) var(--s3);
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--t-ui);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--ef-fast-d) var(--ef-fast);
+}
+
+.rail-menu a:hover,
+.rail-menu button:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.rail-menu .sub {
+  display: block;
+  color: var(--text-dim);
+  font-size: var(--t-micro);
+  margin-top: 1px;
+}
+
+.rail-menu hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: var(--s2) var(--s2);
+}
+
+/* Somebody who asked not to be moved is not moved. The mockups carried a
+   switch that overrode this, because their whole subject was the motion; the
+   product has no such excuse. */
+@media (prefers-reduced-motion: reduce) {
+  .rail-btn,
+  .rail-here,
+  .rail-menu,
+  .rail-menu a,
+  .rail-menu button {
+    transition-duration: 1ms;
+    animation-duration: 1ms;
+  }
+}

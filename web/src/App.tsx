@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { BrowserRouter, Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { auth, Unauthorized, type User } from './api'
 import { session } from './session'
 import LoginPage from './pages/LoginPage'
@@ -13,9 +13,8 @@ import LibraryPage from './pages/LibraryPage'
 import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
 import InstallMap from './pages/InstallMap'
-import ThemeMenu from './pages/ThemeMenu'
 import { applyTheme, loadTheme } from './styles/theme'
-import { COG_MARK, DOCS_URL, ORKCOM_URL, ORK_MARK } from './styles/brand'
+import Rail from './Rail'
 
 type Health = { status: string; version: string }
 
@@ -68,79 +67,22 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {/* The shell.
+      {/* The shell: a frame, and a hole in it.
        *
-       * A white sheet resting on a grey ground, with everything the operator
-       * navigates by in ONE row across its top. What this replaced was a
-       * 200px left rail carrying nine destinations, a collapse toggle, the
-       * brand, the account block and the sign-out button — a column that took
-       * a sixth of every screen to hold things most of which are opened once a
-       * week.
+       * The bezel is ground showing around everything. The rail stands on its
+       * left as floating capsules. The cavity is the hole they surround, and
+       * it holds CONTENT ONLY — no tabs, no counts, no title, no account.
+       * Every control is on the frame.
        *
-       * The split is by frequency, not by kind. What you move between all day
-       * is a pill in the middle. What you configure occasionally lives behind
-       * the account button. Nothing is hidden that was reachable before; it is
-       * one click further away and the canvas is a sixth wider. */}
-      <div className="app-shell">
-        <div className="shell-ground" aria-hidden />
-        <div className="sheet">
-          <header className="sheet-head">
-            <div className="brand">
-              <Link to="/workspaces" className="brand-link" title="Cogitorium">
-                <img className="brand-mark" src={COG_MARK} alt="" width={24} height={24} />
-                <span className="wordmark">Cogitorium</span>
-              </Link>
-              {/* The maker, stated once and nowhere else. The mark alone, with
-                  no "com" set after it: the lockup already reads as a word, and
-                  typing the rest of the company name beside a logo that spells
-                  it is the same thing said twice.
-
-                  It carries no colour of its own — alpha over currentColor —
-                  so it belongs to whatever look is in force. */}
-              <a className="by-ork" href={ORKCOM_URL} target="_blank" rel="noreferrer" title="ORKCOM">
-                <span className="by-word">by</span>
-                <span
-                  className="ork-mark"
-                  aria-hidden
-                  style={{ maskImage: `url("${ORK_MARK}")`, WebkitMaskImage: `url("${ORK_MARK}")` }}
-                />
-                <span className="sr-only">ORKCOM</span>
-              </a>
-            </div>
-
-            {/* The places you actually work, and only those. An admin's
-                install-wide pages are in the account menu with the rest of the
-                configuration. */}
-            <nav className="pill-nav">
-              <NavLink to="/workspaces">Workspaces</NavLink>
-              <NavLink to="/map">Map</NavLink>
-              <NavLink to="/gears">Gears</NavLink>
-              <NavLink to="/instructions">Instructions</NavLink>
-              <NavLink to="/models">Models</NavLink>
-              {user.role === 'admin' && <NavLink to="/context">Context</NavLink>}
-              {/* People is where the relationship graph and the access map
-                  live. It went into the account menu with the other admin
-                  pages and should not have: a picture of who can reach what is
-                  something you go and look at, not a setting you change. */}
-              {user.role === 'admin' && <NavLink to="/people">People</NavLink>}
-            </nav>
-
-            <div className="head-tools">
-              <ThemeMenu />
-              <a
-                className="tool-btn round"
-                href={DOCS_URL}
-                target="_blank"
-                rel="noreferrer"
-                title="Documentation"
-              >
-                <span aria-hidden>?</span>
-                <span className="sr-only">Documentation</span>
-              </a>
-              <AccountMenu user={user} health={health} onSignOut={signOut} />
-            </div>
-          </header>
-        <main className="content">
+       * What this replaced was a header row across the top of the work
+       * carrying the brand, seven destinations, the theme, the docs link and
+       * the account. It read as a web page because it was one: chrome above,
+       * content below. The instrument now surrounds the window instead of
+       * sitting on top of it, which is what the reference shell does and what
+       * the whole look depends on. */}
+      <Rail user={user} health={health} onSignOut={signOut} />
+      <div className="frame">
+        <main className="cavity">
           <Routes>
             <Route path="/" element={<Navigate to="/workspaces" replace />} />
             <Route path="/workspaces" element={<WorkspacesPage me={user} />} />
@@ -155,86 +97,7 @@ export default function App() {
             <Route path="/models" element={<ModelsPage />} />
           </Routes>
         </main>
-        </div>
       </div>
     </BrowserRouter>
   )
 }
-
-/**
- * Everything that is not a destination: who you are, what the server is, the
- * install-wide pages, and the way out.
- *
- * It is a menu rather than a rail because none of it is used more than once a
- * session — and the one control in it that ends the session is kept apart from
- * the ones that merely navigate, so "sign out" is never the neighbour of a
- * page you meant to open.
- */
-function AccountMenu({
-  user,
-  health,
-  onSignOut,
-}: {
-  user: User
-  health: { version: string; status: string } | null
-  onSignOut: () => void
-}) {
-  const [open, setOpen] = useState(false)
-  const box = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const away = (e: MouseEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false)
-    }
-    const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    // Deferred, or the click that opened it closes it again on the same tick.
-    const t = setTimeout(() => document.addEventListener('mousedown', away), 0)
-    document.addEventListener('keydown', key)
-    return () => {
-      clearTimeout(t)
-      document.removeEventListener('mousedown', away)
-      document.removeEventListener('keydown', key)
-    }
-  }, [open])
-
-  return (
-    <div className="acct" ref={box}>
-      <button
-        className="acct-btn round"
-        data-own
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        title={user.name}
-      >
-        {user.name.slice(0, 1).toUpperCase()}
-      </button>
-      {open && (
-        <div className="acct-menu" role="menu">
-          <div className="acct-who">
-            <strong>{user.name}</strong>
-            <span className="muted">{user.role}</span>
-          </div>
-          {user.role === 'admin' && (
-            <>
-              <hr />
-              <Link to="/env" onClick={() => setOpen(false)}>Variables &amp; secrets</Link>
-              <Link to="/terminal" onClick={() => setOpen(false)}>Terminal</Link>
-            </>
-          )}
-          <hr />
-          <div className="acct-server">
-            {health ? `${health.version} · ${health.status}` : 'server unreachable'}
-          </div>
-          <button className="acct-out" onClick={onSignOut}>
-            sign out
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-
