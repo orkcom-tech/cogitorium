@@ -224,7 +224,7 @@ paths:
               type: object
               properties:
                 "args_schema":
-                  description: any JSON value
+                  type: string
                 "code":
                   type: string
                 "description":
@@ -236,7 +236,16 @@ paths:
                   items:
                     type: string
                 "files":
-                  description: any JSON value
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      "content":
+                        type: string
+                      "encoding":
+                        type: string
+                      "path":
+                        type: string
                 "name":
                   type: string
                 "runtime":

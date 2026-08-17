@@ -20,12 +20,17 @@ func (s *Server) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ws)
 }
 
+// createWorkspaceInput is what POST /api/v1/workspaces accepts. Named,
+// because docs/openapi.yaml is generated from this type rather than from a
+// second description of it.
+type createWorkspaceInput struct {
+	Name                string `json:"name"`
+	Description         string `json:"description"`
+	OrchestratorModelID int64  `json:"orchestrator_model_id"`
+}
+
 func (s *Server) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		Name                string `json:"name"`
-		Description         string `json:"description"`
-		OrchestratorModelID int64  `json:"orchestrator_model_id"`
-	}
+	var in createWorkspaceInput
 	if !decodeJSON(w, r, &in) {
 		return
 	}

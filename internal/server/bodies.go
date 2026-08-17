@@ -27,24 +27,20 @@ type CreateInletBody struct {
 type InletTaskBody = inletTaskBody
 
 // CreateGearBody forges a gear.
-type CreateGearBody struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Tags        []string        `json:"tags"`
-	Runtime     string          `json:"runtime"`
-	Code        string          `json:"code"`
-	Entrypoint  string          `json:"entrypoint"`
-	Files       json.RawMessage `json:"files"`
-	ArgsSchema  json.RawMessage `json:"args_schema"`
-	EnvNames    []string        `json:"env_names"`
-}
+//
+// An ALIAS, not a copy. It was a copy, and the copy drifted: it declared
+// args_schema and files as json.RawMessage — "any JSON value" in the published
+// document — while the handler had always wanted a string and an array of
+// {path, content, encoding}. Anyone generating a client from the document sent
+// args_schema as the JSON object its name invites and got 400. The test that
+// exists to stop the document and the code disagreeing compared the document
+// against this copy, so it stayed green the whole time.
+type CreateGearBody = createGearInput
 
 // RunGearBody is the dry run: arguments, and the network grant the operator is
-// considering rather than one that has been made.
-type RunGearBody struct {
-	Args    json.RawMessage `json:"args"`
-	Network *networkInput   `json:"network"`
-}
+// considering rather than one that has been made. An alias, for the reason
+// given on CreateGearBody.
+type RunGearBody = runGearInput
 
 // InvokeGearBody runs an approved gear. No network field: the grant is the
 // one the operator already made, and offering to override it here would make
@@ -64,12 +60,9 @@ type SetGearStatusBody struct {
 	Environment *string `json:"environment"`
 }
 
-// CreateWorkspaceBody makes a workspace and its orchestrator.
-type CreateWorkspaceBody struct {
-	Name                string `json:"name"`
-	Description         string `json:"description"`
-	OrchestratorModelID int64  `json:"orchestrator_model_id"`
-}
+// CreateWorkspaceBody makes a workspace and its orchestrator. An alias, for
+// the reason given on CreateGearBody.
+type CreateWorkspaceBody = createWorkspaceInput
 
 // CreateAgentBody hires one.
 type CreateAgentBody struct {

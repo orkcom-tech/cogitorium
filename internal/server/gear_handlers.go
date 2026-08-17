@@ -85,25 +85,40 @@ func (s *Server) handleGetGear(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"gear": g, "files": files, "version": version, "env": env})
 }
 
+// createGearInput is what POST /api/v1/gears accepts. It is a named type
+// rather than a struct literal inside the handler because the same value is
+// what docs/openapi.yaml is generated from: routeIn is handed this type, and
+// an integrator reads the schema reflected out of it.
+//
+// args_schema is a STRING holding a JSON Schema, not a JSON object. That is
+// the shape the interface has always sent and the shape stored on the gear;
+// the awkwardness is real and changing it would break every existing caller,
+// so it is documented rather than quietly re-cut.
+type createGearInput struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Tags        []string        `json:"tags"`
+	Runtime     string          `json:"runtime"`
+	Code        string          `json:"code"`
+	Entrypoint  string          `json:"entrypoint"`
+	ArgsSchema  string          `json:"args_schema"`
+	EnvNames    []string        `json:"env_names"`
+	Files       []gearFileInput `json:"files"`
+}
+
+// gearFileInput is one uploaded file. Encoding is "utf8" or "base64" and
+// defaults to utf8 when empty.
+type gearFileInput struct {
+	Path     string `json:"path"`
+	Content  string `json:"content"`
+	Encoding string `json:"encoding"`
+}
+
 // handleCreateGear lets the operator author or correct a gear directly.
 // Without it a fumbled forge is unrecoverable and a nearly-right gear
 // cannot be fixed — only an agent could ever produce one.
 func (s *Server) handleCreateGear(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		Name        string   `json:"name"`
-		Description string   `json:"description"`
-		Tags        []string `json:"tags"`
-		Runtime     string   `json:"runtime"`
-		Code        string   `json:"code"`
-		Entrypoint  string   `json:"entrypoint"`
-		ArgsSchema  string   `json:"args_schema"`
-		EnvNames    []string `json:"env_names"`
-		Files       []struct {
-			Path     string `json:"path"`
-			Content  string `json:"content"`
-			Encoding string `json:"encoding"`
-		} `json:"files"`
-	}
+	var in createGearInput
 	if !decodeJSON(w, r, &in) {
 		return
 	}
@@ -149,6 +164,18 @@ func (s *Server) handleCreateGear(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, g)
 }
 
+// runGearInput is the dry run's body, named for the same reason
+// createGearInput is: the document is generated from this type.
+type runGearInput struct {
+	Args json.RawMessage `json:"args"`
+	// The grant the operator is CONSIDERING, so that "try it before approving
+	// it" still works for a gear whose whole job is to fetch something.
+	// Without this the dry run is the one thing a network gear cannot be
+	// judged by: the grant does not exist until approval, and approval is the
+	// decision the dry run exists to inform.
+	Network *networkInput `json:"network"`
+}
+
 // handleRunGear is the dry run: execute a gear — including a pending one —
 // to see what it actually does before approving it.
 //
@@ -169,15 +196,7 @@ func (s *Server) handleRunGear(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var in struct {
-		Args json.RawMessage `json:"args"`
-		// The grant the operator is CONSIDERING, so that "try it before
-		// approving it" still works for a gear whose whole job is to fetch
-		// something. Without this the dry run is the one thing a network gear
-		// cannot be judged by: the grant does not exist until approval, and
-		// approval is the decision the dry run exists to inform.
-		Network *networkInput `json:"network"`
-	}
+	var in runGearInput
 	if !decodeJSON(w, r, &in) {
 		return
 	}

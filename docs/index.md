@@ -84,13 +84,13 @@ path nothing pushes to, so build the image and point the chart at wherever you
 pushed it:
 
 ```sh
-docker build -t <your-registry>/cogitorium:1.0.0 .
-docker push <your-registry>/cogitorium:1.0.0
+docker build -t <your-registry>/cogitorium:1.0.1 .
+docker push <your-registry>/cogitorium:1.0.1
 
 helm install cogitorium ./deploy/helm/cogitorium \
   --namespace cogitorium --create-namespace \
   --set image.repository=<your-registry>/cogitorium \
-  --set image.tag=1.0.0 \
+  --set image.tag=1.0.1 \
   --set auth.adminToken="$(openssl rand -hex 24)"
 ```
 
