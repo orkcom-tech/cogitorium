@@ -838,3 +838,68 @@
 .ws-card[role='link']:hover {
   background: color-mix(in srgb, var(--text) 3%, var(--surface));
 }
+
+/* ── The composer ───────────────────────────────────────────────────────────
+   One boundary, not two.
+
+   The form was a field and the text input inside it was another field, so
+   every message was typed into a box drawn six pixels inside an identical box.
+   The composer is the field now — it carries the edge, the ground and the
+   focus ring — and what sits in it is text, an attach button and send, with
+   nothing of their own to draw. */
+
+.composer {
+  padding: var(--s1);
+  border-radius: var(--r2);
+}
+
+.composer > .row {
+  gap: var(--s1);
+}
+
+.composer .grow {
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  height: 30px;
+  padding: 0 var(--s2);
+}
+
+.composer .grow:focus,
+.composer .grow:focus-visible {
+  outline: 0;
+}
+
+/* The whole control answers the caret, because the whole control is the
+   field. */
+.composer:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.composer > .row > button {
+  height: 30px;
+  border-radius: var(--r1);
+}
+
+/* ── The file list ──────────────────────────────────────────────────────────
+   Flush on the left, rounded on the right.
+
+   It was a square box floating eight pixels inside a cavity whose own corner
+   is rounded — two edges, one inside the other, in the corner where it shows
+   most. It reaches the cavity's edge now, so the left corners ARE the
+   cavity's, and it is rounded on the one side that faces the file. */
+
+.dk-files {
+  border-right: 0;
+}
+
+.dk-files > .dk-part-body {
+  padding: 0;
+}
+
+.dk-files .file-tree {
+  margin: 0;
+  gap: 0;
+  border-radius: 0 var(--r2) var(--r2) 0;
+  overflow: hidden;
+}

@@ -449,16 +449,19 @@ export default function WorkspacePage({ me }: { me: User }) {
             node: (
               <Workbench
                 deck={deck}
+                /* No padded, scrolling wrapper. It inset the tree eight pixels
+                   from the cavity's own rounded corner — two edges in the one
+                   corner where a doubled edge is impossible to miss — and its
+                   scrollbar was a second one beside the tree's own. The tree
+                   reaches the edge and scrolls its rows itself. */
                 files={
-                  <div className="dk-body dk-scroll">
-                    <FilesPage
-                      wsId={wsId}
-                      openPath={openPath}
-                      savedTick={savedTick}
-                      onOpen={openFile}
-                      onError={setError}
-                    />
-                  </div>
+                  <FilesPage
+                    wsId={wsId}
+                    openPath={openPath}
+                    savedTick={savedTick}
+                    onOpen={openFile}
+                    onError={setError}
+                  />
                 }
                 editor={
                   <CodeEditor
