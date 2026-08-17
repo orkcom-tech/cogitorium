@@ -182,6 +182,10 @@ export default function Rail({
           buttons that each replaced the whole cavity, which threw the operator
           out of their work to look something up. They are drawers and menu
           items now: the cavity holds the work and nothing takes it away. */}
+      {/* Only while a workspace is open. On the list itself the question "where
+          am I" is already answered by the screen, and the button repeated the
+          word Workspaces one row above the stage of the same name. */}
+      {shell?.back && (
       <div className="rail-group">
         <button
           data-own
@@ -194,6 +198,7 @@ export default function Rail({
           <span className="sr-only">Workspaces</span>
         </button>
       </div>
+      )}
 
       {/* What the screen in the cavity asked the frame to offer. The rail knows
           nothing about workspaces: it renders whatever was published, so a new

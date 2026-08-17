@@ -270,8 +270,14 @@ button.primary:hover:not(:disabled) {
  * on a laptop is a fan spinning for a effect nobody asked for. The look owns
  * the fill now, so the dials had nothing left to decide. */
 :root {
-  --surface: var(--surface-base);
-  --surface-2: var(--surface-2-base);
+  /* --surface and --surface-2 are defined at the top of this file and NOT
+     redefined here. They used to be aliased to --surface-base and
+     --surface-2-base, which every look set; the looks are gone, the bases went
+     with them, and this rule went on overriding both with an invalid value.
+     Two symptoms, one cause: every surface fell back to the ground so the whole
+     interface became one flat colour, and the Appearance dialog — whose fill is
+     --surface — became transparent, with the cards behind it reading through
+     its own text. */
   --pane-blur: none;
 }
 

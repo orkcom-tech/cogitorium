@@ -156,10 +156,17 @@ body {
 }
 
 .page {
-  max-width: 900px;
+  /* A measure, CENTRED, with room off the cavity's edges. It was max-width
+     alone, which pins the content to the left edge of a 1300px hole and leaves
+     four hundred pixels of nothing beside it — the list looked glued to the
+     frame rather than placed in the window. */
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--s6) var(--s6) var(--s5);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--s4);
 }
 
 h2,
@@ -289,9 +296,11 @@ th {
 .transcript {
   flex: 1;
   overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.75rem;
+  /* No border and no radius. The cavity is already a rounded window; a bordered
+     box inside it drew a second frame around the conversation, one hairline in
+     from the first. */
+  border: 0;
+  padding: var(--s5) var(--s6);
   display: flex;
   flex-direction: column;
   gap: 0.6rem;

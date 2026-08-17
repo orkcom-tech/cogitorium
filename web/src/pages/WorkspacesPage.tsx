@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { usePublishShell } from '../shell'
+import { STAGE_ICON } from '../shell-icons'
 import { PALETTE, hueOf, isChosen } from './hue'
 import { Select } from './Select'
 import {
@@ -14,6 +16,27 @@ import {
 } from '../api'
 
 export default function WorkspacesPage({ me }: { me: User }) {
+  // The map belongs HERE, beside the list of everything, because that is what
+  // it is for: seeing the whole install at once. Inside a single workspace it
+  // was one stage among five, answering a question that screen does not ask.
+  const nav = useNavigate()
+  usePublishShell(
+    () => ({
+      here: { label: 'Workspaces' },
+      stages: {
+        items: [
+          { id: 'list', title: 'Workspaces', icon: STAGE_ICON.workspaces },
+          { id: 'map', title: 'Map', icon: STAGE_ICON.map },
+        ],
+        current: 'list',
+        go: (id: string) => {
+          if (id === 'map') nav('/map')
+        },
+      },
+    }),
+    [],
+  )
+
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [models, setModels] = useState<Model[]>([])
   const [teams, setTeams] = useState<Team[]>([])

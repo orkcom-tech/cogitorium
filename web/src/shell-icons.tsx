@@ -21,6 +21,14 @@ const svg = (d: ReactNode) => (
 
 /** Capsule 2 — what the cavity is showing. */
 export const STAGE_ICON: Record<string, ReactNode> = {
+  workspaces: svg(
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="2" />
+      <rect x="14" y="3" width="7" height="7" rx="2" />
+      <rect x="3" y="14" width="7" height="7" rx="2" />
+      <rect x="14" y="14" width="7" height="7" rx="2" />
+    </>,
+  ),
   chat: svg(
     <path d="M20 12.5c0 3.6-3.6 6.5-8 6.5a9.7 9.7 0 0 1-2.6-.35L4.5 20.5l1.1-3.3A6.7 6.7 0 0 1 4 12.5C4 8.9 7.6 6 12 6s8 2.9 8 6.5Z" />,
   ),
