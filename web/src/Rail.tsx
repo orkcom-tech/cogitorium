@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import type { User } from './api'
+import { api, type User, type Workspace } from './api'
 import { COG_MARK, DOCS_URL, ORKCOM_URL, ORK_MARK } from './styles/brand'
 import ThemeMenu from './pages/ThemeMenu'
 import { useShell } from './shell'
@@ -24,14 +24,6 @@ import { useShell } from './shell'
  * Counts ride on the buttons as badges rather than as a strip over the work,
  * the way a tray icon carries a dot.
  */
-
-type Dest = {
-  to: string
-  label: string
-  icon: ReactNode
-  admin?: boolean
-  badge?: number
-}
 
 /* Icons are drawn here rather than imported: the product fetches nothing at
    runtime, and an icon font would be a network request or a 60KB payload for
@@ -122,6 +114,17 @@ export default function Rail({
   // element for all of them, moved to whichever button the pointer is over —
   // cheaper than a node per button, and it cannot leave two on screen at once.
   const [tip, setTip] = useState<{ text: string; top: number } | null>(null)
+  // The rail owns this list because "which workspace am I in, and what are the
+  // others" is a question about the frame rather than about any screen. Fetched
+  // once; the menu that shows it is opened rarely and a stale name is a smaller
+  // problem than a request on every render.
+  const [WORKSPACES, setWorkspaces] = useState<Workspace[]>([])
+  useEffect(() => {
+    api.workspaces
+      .list()
+      .then(setWorkspaces)
+      .catch(() => setWorkspaces([]))
+  }, [])
   const hover = (text: string) => (e: React.MouseEvent<HTMLElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
     setTip({ text, top: Math.round(r.top + r.height / 2) })
@@ -151,21 +154,6 @@ export default function Rail({
   // it was opened from.
   useEffect(() => setMenu(null), [loc.pathname])
 
-  const dests: Dest[] = [
-    { to: '/workspaces', label: 'Workspaces', icon: I.workspaces },
-    { to: '/map', label: 'Map', icon: I.map },
-    { to: '/gears', label: 'Gears', icon: I.gears },
-    { to: '/instructions', label: 'Instructions', icon: I.instructions },
-    { to: '/models', label: 'Models', icon: I.models },
-    { to: '/context', label: 'Context', icon: I.context, admin: true },
-    { to: '/people', label: 'People', icon: I.people, admin: true },
-  ]
-
-  // A screen with its own stages owns the rail; the install's list steps back.
-  const working = Boolean(shell?.stages)
-  const visible = dests.filter((d) => !d.admin || user.role === 'admin')
-  const hereDest = visible.find((d) => loc.pathname.startsWith(d.to))
-
   const open = (which: 'more' | 'account' | 'dests', e: React.MouseEvent<HTMLElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
     // Vertically centred on its button, clamped so a menu opened near the floor
@@ -175,7 +163,7 @@ export default function Rail({
   }
 
   return (
-    <nav className="rail" ref={box} aria-label="Cogitorium">
+    <nav className={`rail ${menu ? 'joined' : ''}`} ref={box} aria-label="Cogitorium">
       <Link className="rail-brand" to="/workspaces" title="Cogitorium">
         <img src={COG_MARK} alt="Cogitorium" width={26} height={26} />
         <span className="by">
@@ -188,49 +176,24 @@ export default function Rail({
         </span>
       </Link>
 
-      {/* The install's destinations.
-          Laid out one per button while you are choosing where to go, and
-          collapsed to a single button the moment a screen publishes stages of
-          its own. Inside a workspace the rail otherwise carries nineteen
-          buttons, which overflows an 900px window: the rotated name and the
-          account capsule were pushed off the bottom entirely. Collapsing is
-          also the honest reading — inside a workspace you are working, and
-          moving to another destination is the rare act. */}
-      {working ? (
-        <div className="rail-group">
-          <button
-            data-own
-            className={`rail-btn ${menu === 'dests' ? 'on' : ''}`}
-            onMouseEnter={hover(hereDest?.label ?? 'Go to')}
-            onMouseLeave={unhover}
-            onClick={(e) => open('dests', e)}
-          >
-            {hereDest?.icon ?? I.workspaces}
-            <span className="sr-only">Go to</span>
-          </button>
-        </div>
-      ) : (
-        <div className="rail-group">
-          {visible.map((d) => {
-            const on = loc.pathname === d.to || loc.pathname.startsWith(d.to + '/')
-            return (
-              <button
-                key={d.to}
-                data-own
-                className={`rail-btn ${on ? 'on' : ''}`}
-                aria-current={on ? 'page' : undefined}
-                onMouseEnter={hover(d.label)}
-                onMouseLeave={unhover}
-                onClick={() => nav(d.to)}
-              >
-                {d.icon}
-                <span className="sr-only">{d.label}</span>
-                {d.badge ? <span className="rail-badge">{d.badge}</span> : null}
-              </button>
-            )
-          })}
-        </div>
-      )}
+      {/* CAPSULE 1 — WHERE AM I.
+          The workspace you are in, and a press opens the list of the others
+          beside it. The seven install-wide destinations used to sit here as
+          buttons that each replaced the whole cavity, which threw the operator
+          out of their work to look something up. They are drawers and menu
+          items now: the cavity holds the work and nothing takes it away. */}
+      <div className="rail-group">
+        <button
+          data-own
+          className={`rail-btn ${menu === 'dests' ? 'on' : ''}`}
+          onMouseEnter={hover(shell?.here?.label ?? 'Workspaces')}
+          onMouseLeave={unhover}
+          onClick={(e) => open('dests', e)}
+        >
+          {I.workspaces}
+          <span className="sr-only">Workspaces</span>
+        </button>
+      </div>
 
       {/* What the screen in the cavity asked the frame to offer. The rail knows
           nothing about workspaces: it renders whatever was published, so a new
@@ -281,14 +244,13 @@ export default function Rail({
         </div>
       )}
 
-      <div className="rail-spacer">
-        {shell?.here && (
-          <span className="rail-here" title={shell.here.label}>
-            {shell.here.label}
-            {shell.here.state ? ` · ${shell.here.state}` : ''}
-          </span>
-        )}
-      </div>
+      {/* The gap that pushes the last capsule to the floor.
+          It used to carry the workspace's name as rotated text. With eighteen
+          buttons on the rail that label cost 118px the column does not have —
+          it overlapped four of them — and it was saying a second time what
+          capsule 1 already says: that button IS the workspace, its name is its
+          tooltip, and pressing it lists the others. */}
+      <div className="rail-spacer" />
 
       {/* The way out of the screen, and its one action, both on the frame. */}
       {(shell?.back || shell?.action) && (
@@ -347,7 +309,7 @@ export default function Rail({
         <span
           className="rail-tip"
           role="tooltip"
-          style={{ top: tip.top, left: `calc(var(--bezel) + var(--rail-w) + 2px)`, transform: 'translateY(-50%)' }}
+          style={{ top: tip.top, left: `calc(var(--rail-w) + var(--bezel))`, transform: 'translateY(-50%)' }}
         >
           {tip.text}
         </span>
@@ -355,20 +317,25 @@ export default function Rail({
 
       {menu === 'dests' && (
         <div className="rail-menu" style={{ top: menuTop }} role="menu">
-          <span className="rail-menu-label">go to</span>
-          {visible.map((d) => (
-            <button key={d.to} onClick={() => nav(d.to)}>
-              {d.label}
+          <span className="rail-menu-label">workspaces</span>
+          {WORKSPACES.map((w) => (
+            <button key={w.id} onClick={() => nav(`/workspaces/${w.id}`)}>
+              {w.name}
+              <span className="sub">{w.description}</span>
             </button>
           ))}
+          <hr />
+          <button onClick={() => nav('/workspaces')}>All workspaces…</button>
         </div>
       )}
 
       {menu === 'more' && (
         <div className="rail-menu" style={{ top: menuTop }} role="menu">
           <span className="rail-menu-label">the install</span>
-          {user.role === 'admin' && <Link to="/env">Variables &amp; secrets</Link>}
-          {user.role === 'admin' && <Link to="/terminal">Terminal</Link>}
+          <Link to="/models">Models</Link>
+          {user.role === 'admin' && <Link to="/people">People</Link>}
+          {user.role === 'admin' && <Link to="/context">Context</Link>}
+          <hr />
           <a href={DOCS_URL} target="_blank" rel="noreferrer">
             Documentation
           </a>

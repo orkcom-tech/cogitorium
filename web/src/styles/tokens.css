@@ -449,8 +449,11 @@ button.primary:hover:not(:disabled) {
 /* A view gets the reference's generosity: more corner and more air. There is
    no padding-top here any more — a slide had 38px reserved for a tab strip
    that sat on top of it, and the deck has no strip to reserve for. */
+/* No radius: the cavity is the rounded window and a slide is what is behind
+   it. Rounding both drew two frames, one inside the other, with a hairline
+   between them. */
 .dk-slide {
-  border-radius: var(--r3);
+  border-radius: 0;
 }
 
 .dk-part-head {

@@ -260,16 +260,32 @@ export default function WorkspacePage() {
   // happens over TIME arrives at the bottom.
   const DRAWER_EDGE: Record<string, Edge> = {
     agents: 'right',
+    gears: 'right',
+    instructions: 'right',
+    memory: 'right',
     env: 'right',
     agent: 'right',
     inlets: 'bottom',
     queue: 'bottom',
+    terminal: 'bottom',
   }
+  // Capsule 3, in the agreed order: the roster, the two catalogues an agent
+  // draws on, what it remembers, the door in, the work waiting, and the names
+  // a gear is given. Gears and Instructions used to be destinations that
+  // replaced the whole screen; they are things you consult while working, so
+  // they crawl out over the work instead of taking it away.
   const OVERLAY_ITEMS: { id: OverlayId; title: string }[] = [
     { id: 'agents', title: 'Agents' },
+    { id: 'gears', title: 'Gears' },
+    { id: 'instructions', title: 'Instructions' },
+    { id: 'memory', title: 'Memory' },
     { id: 'inlets', title: 'Receivers' },
     { id: 'queue', title: 'Queue' },
     { id: 'env', title: 'Variables' },
+    // A terminal is pulled out and pushed back, not lived in — so it crawls
+    // out of the bottom edge like the other things that happen over time,
+    // rather than taking the cavity from the work it is being run against.
+    { id: 'terminal', title: 'Terminal' },
   ]
   usePublishShell(
     () =>
@@ -286,6 +302,7 @@ export default function WorkspacePage() {
                 { id: 'chat', title: 'Chat', icon: STAGE_ICON.chat },
                 { id: 'blueprint', title: 'Blueprint', icon: STAGE_ICON.blueprint },
                 { id: 'workbench', title: 'Editor', icon: STAGE_ICON.workbench },
+                { id: 'map', title: 'Map', icon: STAGE_ICON.map },
               ],
               current: deck.deck.view,
               go: (id: string) => deck.go(id as ViewId),

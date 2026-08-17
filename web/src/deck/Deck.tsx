@@ -409,4 +409,5 @@ export const VIEW_TITLE: Record<ViewId, string> = {
   chat: 'Chat',
   blueprint: 'Blueprint',
   workbench: 'Editor',
+  map: 'Map',
 }

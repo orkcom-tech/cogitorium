@@ -20,7 +20,7 @@
   position: fixed;
   inset: 0;
   padding: var(--bezel);
-  padding-left: calc(var(--bezel) + var(--rail-w) + var(--rail-gap));
+  padding-left: calc(var(--rail-w) + var(--bezel) + var(--rail-gap));
   background: var(--bg);
   /* An open drawer takes its room OUT OF THE HOLE rather than covering it.
      The drawer is the frame growing inward; a frame that grew inward and left
@@ -54,14 +54,28 @@
 
 .rail {
   position: fixed;
-  /* On a short window the capsules win and the column scrolls, rather than the
-     bottom group being pushed out of the viewport where it cannot be reached. */
+  /* On a short window the column scrolls rather than the bottom group being
+     pushed out of the viewport where it cannot be reached. */
   overflow-y: auto;
   scrollbar-width: none;
-  left: var(--bezel);
+  /* THE RAIL IS A CONTINUOUS STRIP OF THE FRAME'S MATERIAL, flush to the left
+     edge of the window, and it is what a menu or a drawer joins onto.
+     It was icons floating on the bezel with no surface of their own, which is
+     why a menu could not merge with it: there were two different materials
+     meeting at the seam, and the join read as a card parked next to a column.
+     Nothing can grow out of a thing that is not there.
+
+     Its material is --bg, the bezel's own, because the frame is ONE substance.
+     It was a step lighter for a while and the result read as a light strip
+     glued to a darker border — two materials meeting, which is exactly what
+     this whole model exists to avoid. */
+  left: 0;
   top: var(--bezel);
   bottom: var(--bezel);
-  width: var(--rail-w);
+  width: calc(var(--rail-w) + var(--bezel));
+  padding-left: var(--bezel);
+  background: var(--bg);
+  border-radius: 0 var(--r-panel) var(--r-panel) 0;
   z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
@@ -99,44 +113,10 @@
 /* The gap that pushes the bottom capsule to the floor, and carries the
    workspace's name as rotated text on its way past. */
 .rail-spacer {
-  /* A guaranteed floor, not just whatever is left over. With a workspace open
-     the rail is nearly full, the leftover was about thirty pixels, and the
-     workspace's name — the one thing on the rail that says WHERE YOU ARE —
-     clipped to a single illegible mark. It gets its room first; the rail
-     scrolls before this shrinks. */
   flex: 1 1 auto;
-  min-height: 116px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-  pointer-events: auto;
+  min-height: var(--s3);
 }
 
-.rail-here {
-  writing-mode: vertical-rl;
-  font-size: var(--t-micro);
-  /* The label states its own height rather than inheriting whatever the flex
-     column had left over — which was 52px, and clipped "code court" to one
-     unreadable mark. */
-  height: 118px;
-  flex: 0 0 auto;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: none;
-  border: 0;
-  padding: var(--s2) 0;
-  cursor: pointer;
-  transition: color var(--ef-fast-d) var(--ef-fast);
-}
-
-.rail-here:hover {
-  color: var(--text);
-}
 
 /* A rail button. The radius morph from pill to rounded square on selection is
    part of the language, not decoration: it is how the reference marks "this
@@ -243,7 +223,6 @@
   gap: var(--s2);
   padding: var(--s3) var(--s2);
   border-radius: var(--r-pill);
-  background: var(--surface-2);
   pointer-events: auto;
   text-decoration: none;
 }
@@ -304,24 +283,30 @@
 
 .rail-menu {
   position: fixed;
-  left: calc(var(--bezel) + var(--rail-w) + var(--s2));
+  /* FLUSH TO THE RAIL, not floating beside it. A menu with a gap and a drop
+     shadow is a card that happens to be near the frame; this one grows out of
+     it — same material, joined edge, and rounded only on the three sides
+     facing away. Third time this correction has been needed: the drawer, the
+     rail buttons, and now this. */
+  left: calc(var(--rail-w) + var(--bezel));
   z-index: calc(var(--z-menu) + 1);
-  min-width: 232px;
-  max-width: 320px;
+  min-width: 248px;
+  max-width: 340px;
   padding: var(--s2);
-  border-radius: 18px;
-  background: var(--surface);
-  box-shadow:
-    0 22px 46px -18px rgb(0 0 0 / 32%),
-    0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent);
+  border-radius: 0 var(--r-panel) var(--r-panel) 0;
+  background: var(--bg);
   transform-origin: left center;
+  padding-left: var(--s2);
   animation: rail-menu-in var(--sp-fast-d) var(--sp-fast);
 }
 
+/* It comes OUT of the rail: from zero width at the rail's edge, not from a
+   point in space. scaleX with the origin at the joined edge is the frame
+   extending, which is the same gesture a drawer makes. */
 @keyframes rail-menu-in {
   from {
     opacity: 0;
-    transform: translateX(-8px) scale(0.96);
+    transform: scaleX(0.86) translateX(-10px);
   }
 }
 
@@ -399,8 +384,8 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  /* The rail's material, because the rail is the frame and so is this. */
-  background: var(--surface-2);
+  /* The frame's one material, because that is what this is. */
+  background: var(--bg);
   transition: transform var(--sp-default-d) var(--sp-default);
   will-change: transform;
 }
@@ -593,22 +578,37 @@
 .rail-tip {
   position: fixed;
   z-index: calc(var(--z-menu) + 2);
-  padding: 6px 11px;
-  border-radius: var(--r1);
-  background: var(--surface-2);
+  padding: 7px 12px;
+  /* Joined to the rail like everything else that comes off it. */
+  border-radius: 0 var(--r1) var(--r1) 0;
+  background: var(--bg);
   color: var(--text);
   font-size: var(--t-chrome);
   white-space: nowrap;
   pointer-events: none;
-  box-shadow:
-    0 10px 24px -12px rgb(0 0 0 / 35%),
-    0 0 0 1px var(--border);
   animation: rail-tip-in var(--ef-fast-d) var(--ef-fast);
 }
 
 @keyframes rail-tip-in {
   from {
     opacity: 0;
-    transform: translateX(-4px);
+    transform: translateY(-50%) scaleX(0.8);
   }
+}
+
+/* The drawer's header already names it. A panel written for a full page keeps
+   its own <h3> at the top, so the operator read "Queue" twice, one line apart,
+   in two different sizes. The first heading inside a drawer is redundant by
+   construction — the frame put the name there. */
+.drawer-body > *:first-child > h3:first-child,
+.drawer-body > h3:first-child,
+.drawer-body > *:first-child > header:first-child > h3:first-child {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
