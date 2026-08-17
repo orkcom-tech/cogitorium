@@ -297,6 +297,11 @@
   background: var(--bg);
   transform-origin: left center;
   padding-left: var(--s2);
+  /* The rail sets pointer-events: none so the bezel around its buttons is not
+     an invisible click target, and only the capsules take it back. A menu is a
+     child of the rail and inherited that none: it was drawn, it looked right,
+     and every click went straight through it into the chat behind. */
+  pointer-events: auto;
   animation: rail-menu-in var(--sp-fast-d) var(--sp-fast);
 }
 

@@ -65,11 +65,10 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-areas:
-    'files centre'
-    'term  term';
+  /* Two areas, not three: the shell is a drawer now. */
+  grid-template-areas: 'files centre';
   grid-template-columns: var(--dk-files) minmax(0, 1fr);
-  grid-template-rows: minmax(120px, 1fr) var(--dk-term);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 /* margin and gap are reset explicitly, not inherited away: these are <section>
@@ -166,7 +165,7 @@
 
 .dk-seam-x {
   top: 0;
-  bottom: var(--dk-term);
+  bottom: 0;
   left: calc(var(--dk-files) - 4px);
   width: 8px;
   cursor: col-resize;

@@ -91,7 +91,7 @@ export default function App() {
             <Route path="/map" element={<InstallMap />} />
             <Route path="/people" element={user.role === 'admin' ? <AdminPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/terminal" element={user.role === 'admin' ? <TerminalPage /> : <Navigate to="/workspaces" replace />} />
-            <Route path="/workspaces/:id" element={<WorkspacePage />} />
+            <Route path="/workspaces/:id" element={<WorkspacePage me={user} />} />
             <Route path="/context" element={user.role === 'admin' ? <ContextPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/gears" element={<GearsPage me={user} />} />
             <Route path="/env" element={user.role === 'admin' ? <EnvPage /> : <Navigate to="/workspaces" replace />} />

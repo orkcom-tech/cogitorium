@@ -11,6 +11,8 @@ import QueuePanel from './QueuePanel'
 import EnvPanel from './EnvPanel'
 import { Select } from './Select'
 import { Deck, ShellGate, Workbench } from '../deck/Deck'
+import GearsPage from './GearsPage'
+import LibraryPage from './LibraryPage'
 import { Drawer, type Edge } from '../deck/Drawer'
 import { useDeck } from '../deck/store'
 import type { OverlayId, ViewId } from '../deck/types'
@@ -29,11 +31,12 @@ import {
   type Gear,
   type GearBinding,
   type Model,
+  type User,
   type WSMessage,
   type Workspace,
 } from '../api'
 
-export default function WorkspacePage() {
+export default function WorkspacePage({ me }: { me: User }) {
   const { id } = useParams()
   const wsId = Number(id)
 
@@ -467,13 +470,6 @@ export default function WorkspacePage() {
                     onError={setError}
                   />
                 }
-                terminal={
-                  <ShellGate started={shell} onStart={() => setShell(true)}>
-                    <div className="dk-body">
-                      <TerminalPage workspaceId={wsId} />
-                    </div>
-                  </ShellGate>
-                }
               />
             ),
           },
@@ -494,6 +490,23 @@ export default function WorkspacePage() {
         {overlay === 'inlets' && <InletsPanel wsId={wsId} agents={agents} shown onError={setError} />}
         {overlay === 'queue' && <QueuePanel wsId={wsId} shown onError={setError} />}
         {overlay === 'env' && <EnvPanel wsId={wsId} shown onError={setError} />}
+        {overlay === 'terminal' && (
+          <ShellGate started={shell} onStart={() => setShell(true)}>
+            <div className="dk-body">
+              <TerminalPage workspaceId={wsId} />
+            </div>
+          </ShellGate>
+        )}
+        {overlay === 'gears' && <GearsPage me={me} />}
+        {overlay === 'instructions' && <LibraryPage />}
+        {overlay === 'memory' &&
+          (selectedAgent ? (
+            <AgentMemory agent={selectedAgent} onChanged={() => void reloadAgents()} onError={setError} />
+          ) : (
+            <p className="hint">
+              Memory belongs to one agent. Pick one in Agents, and it opens here.
+            </p>
+          ))}
         {overlay === 'agent' &&
           (selectedAgent ? (
             <AgentPanel

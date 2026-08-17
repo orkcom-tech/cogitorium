@@ -5,7 +5,6 @@ import {
   MIN_FILES,
   MIN_OVERLAY_H,
   MIN_OVERLAY_W,
-  MIN_TERMINAL,
   VIEW_ORDER,
   px,
   type OverlayId,
@@ -64,7 +63,11 @@ function Slide({ live, children }: { live: boolean; children: ReactNode }) {
 }
 
 /**
- * The workbench: a tree, a file, and a shell in the same directory.
+ * The workbench: a tree and the file it opens.
+ *
+ * The shell used to be its third part, along the bottom. It is a drawer now —
+ * something pulled out over whatever you are doing and pushed back — and
+ * keeping both would be two terminals with one session between them.
  *
  * The tree and the shell roll up to their own header rather than closing.
  * There is no "where did it go" state to recover from, and therefore no
@@ -75,12 +78,10 @@ export function Workbench({
   deck,
   files,
   editor,
-  terminal,
 }: {
   deck: DeckApi
   files: ReactNode
   editor: ReactNode
-  terminal: ReactNode
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const d = deck.deck
@@ -91,7 +92,6 @@ export function Workbench({
       style={
         {
           '--dk-files': d.files ? px(d.filesW, 240) : 'var(--dk-rail)',
-          '--dk-term': d.terminal ? px(d.terminalH, 240) : 'var(--dk-rail)',
         } as React.CSSProperties
       }
     >
@@ -114,21 +114,6 @@ export function Workbench({
 
       <section className="dk-part dk-centre">{editor}</section>
 
-      <section className={`dk-part dk-term ${d.terminal ? '' : 'dk-rolled'}`}>
-        <PartHead title="Terminal" open={d.terminal} onToggle={deck.toggleTerminal} />
-        {d.terminal && <div className="dk-part-body">{terminal}</div>}
-      </section>
-      {d.terminal && (
-        <Seam
-          axis="y"
-          cssVar="--dk-term"
-          size={d.terminalH}
-          min={MIN_TERMINAL}
-          max={() => Math.max(MIN_TERMINAL, (ref.current?.clientHeight ?? 0) - 160)}
-          hostRef={ref}
-          onCommit={deck.sizeTerminal}
-        />
-      )}
     </div>
   )
 }
