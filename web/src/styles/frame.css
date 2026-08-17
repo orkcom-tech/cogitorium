@@ -1118,3 +1118,35 @@
 .blueprint .react-flow {
   --xy-fit-padding-top: 96px;
 }
+
+/* A search hit: where it is, and the line it is on. */
+.context-hit {
+  display: flex;
+  gap: var(--s3);
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: var(--s1) var(--s2);
+  border-radius: var(--r0);
+  cursor: pointer;
+  font-size: var(--t-chrome);
+}
+
+.context-hit:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.context-hit .path {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+}
+
+.context-hit .hit-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+}

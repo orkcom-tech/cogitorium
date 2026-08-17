@@ -710,9 +710,25 @@ export const api = {
   context: {
     status: () => req<ContextStatus>('/api/v1/context/status'),
     files: () => req<ContextFile[]>('/api/v1/context/files'),
-    get: (path: string) => req<{ path: string; content: string }>(`/api/v1/context/file?path=${encodeURIComponent(path)}`),
-    put: (path: string, content: string) =>
-      fetch(session.url(`/api/v1/context/file?path=${encodeURIComponent(path)}`), {
+    // version travels with the body: the editor hands it back on save, which
+    // is what lets a save be refused instead of quietly overwriting somebody
+    // else's work. Empty means the version could not be determined, and an
+    // empty version saves unguarded rather than pretending to be guarded.
+    get: (path: string) =>
+      req<{ path: string; content: string; version: string }>(
+        `/api/v1/context/file?path=${encodeURIComponent(path)}`,
+      ),
+    search: (q: string, pathGlob = '', limit = 100) => {
+      const p = new URLSearchParams({ q })
+      if (pathGlob) p.set('path', pathGlob)
+      p.set('limit', String(limit))
+      return req<ContextSearch>(`/api/v1/context/search?${p.toString()}`)
+    },
+    put: (path: string, content: string, version = '') =>
+      fetch(session.url(
+        `/api/v1/context/file?path=${encodeURIComponent(path)}` +
+          (version ? `&version=${encodeURIComponent(version)}` : ''),
+      ), {
         method: 'PUT',
         headers: session.headers({ 'Content-Type': 'text/plain' }),
         body: content,
@@ -881,6 +897,17 @@ export type ContextStatus = {
 }
 
 export type ContextBinding = { id: number; workspace_id: number; path: string; agent_id: number | null }
+
+// What a search found. `truncated` matters: a cut answer that does not say it
+// was cut reads as "there is nothing else", which is the one wrong answer a
+// search can give.
+export type ContextSearch = {
+  query: string
+  matches: { path: string; line: number; text: string }[]
+  files_matched: number
+  files_scanned: number
+  truncated: boolean
+}
 
 // One decision about one gear: who said this code may run, when, to which
 // version, and what they granted it in the same breath. The status column says

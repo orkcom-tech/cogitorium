@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -177,4 +178,131 @@ func (s *Store) Put(ctx context.Context, path, content string) error {
 		slog.Info("context file written via contextd", "path", path, "bytes", len(content))
 	}
 	return err
+}
+
+// Match is one line in the space that contains what was searched for.
+type Match struct {
+	Path string `json:"path"`
+	Line int    `json:"line"`
+	Text string `json:"text"`
+}
+
+// SearchResult is what a search found, and whether it stopped early.
+type SearchResult struct {
+	Query string  `json:"query"`
+	Files int     `json:"files_matched"`
+	Total int     `json:"files_scanned"`
+	Cut   bool    `json:"truncated"`
+	Hits  []Match `json:"matches"`
+}
+
+// Search looks inside the space's files, not only at their names.
+//
+// WHAT THIS FIXES. The only way to find a memory was to know its path. An
+// operator could list the space and read a file; they could not ask "which of
+// these two hundred documents mentions the retry policy". Nor could an agent —
+// the read_memory tool takes a path, so an agent that has not been handed the
+// right path cannot reach a fact that is sitting in the space it is entitled
+// to read. In a product whose whole claim is that agents share a durable
+// memory, "you must already know where it is" is most of that claim missing.
+//
+// contextd's own `search` does the looking, for the same reason the rest of
+// this package shells out rather than reading files: the space's layout,
+// versioning and access rules belong to contextd, and a second implementation
+// that walked the directory would be a second set of rules that drift.
+//
+// The limit is passed through rather than applied afterwards so that contextd
+// can stop early, and Cut says whether it did — a truncated answer that does
+// not say it is truncated reads as "there is nothing else", which is the one
+// wrong answer a search can give.
+func (s *Store) Search(ctx context.Context, query, pathGlob string, limit int) (SearchResult, error) {
+	if strings.TrimSpace(query) == "" {
+		return SearchResult{}, errors.New("a search needs something to look for")
+	}
+	// A query starting with a dash would be read as a flag by any CLI. The
+	// same guard validPath applies to paths, for the same reason.
+	if strings.HasPrefix(query, "-") {
+		return SearchResult{}, fmt.Errorf("a search cannot start with %q — it would be read as an option", "-")
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	args := []string{"search", query, "--json", "--limit", strconv.Itoa(limit)}
+	if pathGlob != "" {
+		if strings.HasPrefix(pathGlob, "-") {
+			return SearchResult{}, errors.New("a path filter cannot start with a dash")
+		}
+		args = append(args, "--path", pathGlob)
+	}
+	out, err := s.run(ctx, nil, args...)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	var res SearchResult
+	if err := json.Unmarshal(out, &res); err != nil {
+		return SearchResult{}, fmt.Errorf("parse contextd search: %w", err)
+	}
+	if res.Hits == nil {
+		res.Hits = []Match{}
+	}
+	return res, nil
+}
+
+// Version returns the version contextd currently holds for a path, and whether
+// it holds one at all.
+//
+// It is what makes the save guard possible. See PutIfUnchanged.
+func (s *Store) Version(ctx context.Context, path string) (string, bool, error) {
+	files, err := s.List(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	for _, f := range files {
+		if f.Path == path {
+			return f.Version, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+// ErrStale is a save refused because the file changed since it was read.
+var ErrStale = errors.New("this file changed since you opened it")
+
+// PutIfUnchanged writes only if the file is still at the version the editor
+// read.
+//
+// WHAT THIS FIXES. Two people open the same context document, the first saves,
+// the second saves, and the first person's work is gone with no message
+// anywhere. Nothing about the interface suggested that could happen — the
+// editor showed a file and a save button.
+//
+// AND WHAT IT DOES NOT FIX, said plainly rather than left to be discovered:
+// this is a read-to-write guard, not a compare-and-swap. contextd's CLI takes
+// no expected-version argument (`contextd file put --help` offers only
+// --from), so the check and the write are two calls, and a third party writing
+// in the microseconds between them still wins. Closing that needs an upstream
+// flag — `--if-version` or equivalent — and until it exists this is what is
+// honestly available: it turns the COMMON case, where the other edit happened
+// minutes or hours ago, from silent loss into a refusal the operator can act
+// on. The race it cannot close is stated in the refusal's own wording nowhere,
+// because a person who hit a one-microsecond race does not need a lecture; it
+// is stated here, for whoever maintains this.
+func (s *Store) PutIfUnchanged(ctx context.Context, path, content, expected string) error {
+	if err := validPath(path); err != nil {
+		return err
+	}
+	// An empty expectation means the caller never read a version — a new file,
+	// or a client that predates this. Refusing those would break writing a
+	// file that does not exist yet, which is most of what Put is for.
+	if expected != "" {
+		current, exists, err := s.Version(ctx, path)
+		if err != nil {
+			return err
+		}
+		if exists && current != expected {
+			return fmt.Errorf("%w: it is at %s and you opened %s — reopen it and reapply your change",
+				ErrStale, current, expected)
+		}
+	}
+	return s.Put(ctx, path, content)
 }

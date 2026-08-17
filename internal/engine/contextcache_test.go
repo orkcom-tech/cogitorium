@@ -230,3 +230,33 @@ func TestTheFunnelRecordsTheArgumentsItWasCalledWith(t *testing.T) {
 		t.Fatalf("the arguments did not travel from the call to the record: %s", got.Args)
 	}
 }
+
+// context_search is offered under exactly the conditions dispatchTool accepts
+// it under. A tool that is offered and always refused costs a paid round-trip
+// on every iteration of every run.
+func TestSearchIsOfferedOnlyWhereItWillBeAccepted(t *testing.T) {
+	f := newCacheFixture(t, map[string]string{}, "worker")
+	orch, err := f.engine.ws.GetAgentByName(context.Background(), f.wsID, "orchestrator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	worker := f.agents[0]
+
+	offered := func(a workspace.Agent, unattended bool) bool {
+		for _, tl := range f.engine.toolsFor(a, nil, nil, nil, false, unattended) {
+			if tl.Name == "context_search" {
+				return true
+			}
+		}
+		return false
+	}
+	if !offered(orch, false) {
+		t.Error("the orchestrator on an ordinary turn cannot search its own memory")
+	}
+	if offered(worker, false) {
+		t.Error("a worker is offered a tool it will be refused on every iteration")
+	}
+	if offered(orch, true) {
+		t.Error("an inlet keyholder is offered a grep of the whole context space")
+	}
+}

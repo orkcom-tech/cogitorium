@@ -129,6 +129,12 @@ paths:
       responses:
         default:
           description: see the reference
+  "/api/v1/context/search":
+    get:
+      summary: "Read context/search"
+      responses:
+        default:
+          description: see the reference
   "/api/v1/context/status":
     get:
       summary: "Read context/status"

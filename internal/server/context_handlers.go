@@ -41,7 +41,32 @@ func (s *Server) handleContextGet(w http.ResponseWriter, r *http.Request) {
 		failContext(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"path": path, "content": content})
+	// The version travels with the body so that the editor can hand it back on
+	// save, which is what lets the save be refused instead of silently
+	// overwriting somebody else's. A version this call cannot determine comes
+	// back empty, and an empty version means the save is unguarded — the same
+	// behaviour as before, rather than a guard that pretends to hold.
+	version, _, _ := s.context.Version(r.Context(), path)
+	writeJSON(w, http.StatusOK, map[string]string{"path": path, "content": content, "version": version})
+}
+
+// handleContextSearch looks INSIDE the space's files.
+//
+// Before this the only way to find a memory was to already know its path, in a
+// product whose claim is that agents keep a durable, shared memory. Behind the
+// same admin rule as reading a file, because it returns the same bytes.
+func (s *Server) handleContextSearch(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	res, err := s.context.Search(r.Context(), q.Get("q"), q.Get("path"), limit)
+	if err != nil {
+		failContext(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (s *Server) handleContextPut(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +86,10 @@ func (s *Server) handleContextPut(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
 	}
-	if err := s.context.Put(r.Context(), path, string(body)); err != nil {
+	// version is what the editor read when it opened the file. Absent means an
+	// unguarded write — a new file, or a client that predates this — and is
+	// allowed, because refusing it would make it impossible to create a file.
+	if err := s.context.PutIfUnchanged(r.Context(), path, string(body), r.URL.Query().Get("version")); err != nil {
 		failContext(w, r, err)
 		return
 	}
@@ -72,7 +100,10 @@ func (s *Server) handleContextPut(w http.ResponseWriter, r *http.Request) {
 // unavailable contextd is 503 with the actionable message.
 func failContext(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, contextstore.ErrConflict):
+	case errors.Is(err, contextstore.ErrConflict), errors.Is(err, contextstore.ErrStale):
+		// 409 for both: they are the same event seen from two places —
+		// contextd refusing a write it can see is out of date, and this server
+		// refusing one it can see is out of date first.
 		writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, contextstore.ErrUnavailable):
 		writeError(w, http.StatusServiceUnavailable, err.Error())
