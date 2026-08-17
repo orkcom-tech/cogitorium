@@ -328,6 +328,19 @@ export type NewSchedule = {
 // because the row outlives both: a ledger that disappeared when the door was
 // deleted could not answer "did job 4471 happen", which is the only reason it
 // exists.
+// What to ask the record. Every field is optional; an empty query is the plain
+// listing. tool matches a tool the run CALLED (a gear appears under its tool
+// name), agent matches any agent that worked in it anywhere in the delegation
+// tree, context a document it read, file a file it produced.
+export type RunQuery = {
+  tool?: string
+  agent?: string
+  context?: string
+  file?: string
+  state?: string
+  failed?: boolean
+}
+
 export type InletRun = {
   id: number
   workspace_id: number
@@ -682,7 +695,13 @@ export const api = {
     updateTask: (id: number, t: InletTaskInput) =>
       req<InletTask>(`/api/v1/inlet-tasks/${id}`, { method: 'PUT', body: JSON.stringify(t) }),
     removeTask: (id: number) => req<void>(`/api/v1/inlet-tasks/${id}`, { method: 'DELETE' }),
-    runs: (wsId: number, limit = 50) => req<InletRun[]>(`/api/v1/workspaces/${wsId}/inlet-runs?limit=${limit}`),
+    // The same endpoint answers the plain listing and the questions the record
+    // exists for. With no filter it IS the listing.
+    runs: (wsId: number, limit = 50, q: RunQuery = {}) => {
+      const p = new URLSearchParams({ limit: String(limit) })
+      for (const [k, v] of Object.entries(q)) if (v) p.set(k, String(v))
+      return req<InletRun[]>(`/api/v1/workspaces/${wsId}/inlet-runs?${p.toString()}`)
+    },
     // One run by number. The list only reaches back so far, and the number a
     // caller quotes is often older than that.
     run: (id: number) => req<InletRun>(`/api/v1/inlet-runs/${id}`),

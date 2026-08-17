@@ -948,8 +948,22 @@ func (s *Server) handleListInletRuns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	runs, err := s.inlets.ListRuns(r.Context(), id, limit)
+	// The same endpoint answers the plain listing and the questions the record
+	// exists for: which runs called this gear, read this document, produced
+	// this file, or did not land. One route rather than a second "search"
+	// endpoint, because with no parameters it IS the listing — and a filtered
+	// list and a list are the same resource seen through a narrower window.
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	runs, err := s.inlets.FindRuns(r.Context(), id, inlet.Query{
+		Tool:    q.Get("tool"),
+		Agent:   q.Get("agent"),
+		Context: q.Get("context"),
+		File:    q.Get("file"),
+		State:   q.Get("state"),
+		Failed:  q.Get("failed") == "true",
+		Limit:   limit,
+	})
 	if err != nil {
 		fail(w, r, err)
 		return
