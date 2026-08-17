@@ -13,6 +13,7 @@ import {
   gearRunStream,
 } from '../api'
 import { collapse, diff, stat, tooBig } from './diff'
+import { PanelTitle } from '../deck/Drawer'
 import { dragging } from '../dnd'
 
 export default function GearsPage({ me, review }: { me: User; review?: number | null }) {
@@ -91,7 +92,7 @@ export default function GearsPage({ me, review }: { me: User; review?: number | 
 
   return (
     <div className="page">
-      <h2>Gears</h2>
+      <PanelTitle>Gears</PanelTitle>
       {/* This paragraph is a security claim, so it states what is actually
           true of THIS server rather than a general sentence. It said "runs as
           a subprocess with your own privileges" long after the sandbox landed,

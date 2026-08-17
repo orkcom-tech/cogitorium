@@ -662,11 +662,17 @@ th {
   min-height: 0;
 }
 
+/* A CANVAS IS A WELL, NOT AN OUTLINED BOX. It carried a 1px border and a 10px
+   radius inside a cavity with a 26px one — a second frame, in a different
+   shape, a few pixels in from the first, on the blueprint and on the access
+   map. A recessed surface separates it from the page without drawing another
+   edge, and 16 is the radius that nests inside 26 across a 10px gap. */
 .canvas {
   flex: 1;
   min-height: 20rem;
-  border: 1px solid var(--border);
-  border-radius: var(--r1);
+  border: 0;
+  border-radius: var(--r2);
+  background: var(--surface-2);
   overflow: hidden;
 }
 
@@ -1475,12 +1481,17 @@ th {
 
 /* A view body fills its slide and owns its own scrolling. Nothing here ever
    inherits the page's viewport maths — that is what the deck replaced. */
+/* CORNERS THAT NEST. A rounded box inside a rounded one only looks right when
+   the two are concentric: inner radius = outer radius − the gap between them.
+   The cavity is 26 and this gap was 8, so everything flush against it — the
+   composer, the canvas, the panels — wanted an 18px corner and carried 16.
+   Ten makes 16 exactly right, which is what they already had. */
 .dk-body {
   display: flex;
   flex-direction: column;
   min-height: 0;
   flex: 1;
-  padding: var(--s2);
+  padding: var(--inset);
 }
 
 .dk-scroll {

@@ -374,14 +374,22 @@ export default function WorkspacePage({ me }: { me: User }) {
               <span className="agent-name">{a.name}</span>
               {a.is_orchestrator && <span className="star" title="the workspace entry point">★</span>}
             </span>
-            <span className="agent-spend-big" title={spendTitle(u)}>
+            <span className={`agent-spend-big ${total > 0 ? '' : 'idle'}`} title={spendTitle(u)}>
               {spendLabel(u)}
             </span>
             <span className="agent-model muted">{a.model_label || 'no model'}</span>
-            <span className="share-bar" aria-hidden>
-              <span style={{ width: `${share}%` }} />
-            </span>
-            <span className="muted share-label">{total > 0 ? `${share}% of this workspace` : 'no spend yet'}</span>
+            {/* No meter before there is anything to meter. An empty track
+                across a card is a hairline rule that means nothing, and every
+                card in a fresh workspace carried one. */}
+            {total > 0 && (
+              <>
+                <span className="share-bar" aria-hidden>
+                  <span style={{ width: `${share}%` }} />
+                </span>
+                <span className="muted share-label">{share}% of this workspace</span>
+              </>
+            )}
+            {total === 0 && <span className="muted share-label">no spend yet</span>}
           </button>
         )
       })}
@@ -728,7 +736,10 @@ function Timeline({
   return (
     <div className="transcript">
       {messages.length === 0 && !busy && (
-        <p className="hint">
+        /* Centred, because an empty transcript is a whole screen and a line of
+           grey text jammed into its top-left corner reads as something left
+           behind rather than as an invitation. */
+        <p className="hint empty-note">
           This is the workspace entry point: talk to the orchestrator. It can create agents, configure them, and
           delegate work.
         </p>
@@ -1082,7 +1093,9 @@ function AgentPanel({
   return (
     <div className="agent-panel">
       <div className="card-head">
-        <strong>{agent.name}</strong>
+        {/* No name here. The drawer head above already prints it, forty pixels
+            up, and this printed it a second time — the same defect the file
+            tree and every other panel had. */}
         {agent.is_orchestrator && <span className="muted">orchestrator — the workspace entry point</span>}
         <span className="muted">
           {status && status.state !== 'idle' ? `${status.state}${status.detail ? `: ${status.detail}` : ''}` : 'idle'}

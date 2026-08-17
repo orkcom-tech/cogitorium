@@ -575,6 +575,13 @@ export default function BlueprintEditor({
 
   return (
     <div className="blueprint">
+      {/* THE CONTROLS FLOAT ON THE WORK, they are not a strip above it.
+          They used to stack two rows deep across the top of the cavity, with
+          the canvas as a bordered box beneath — a toolbar and a document,
+          which is a web page. Everywhere else in this product a control is a
+          capsule standing on something; here it stands on the canvas, in the
+          corner, and the canvas is the whole stage. */}
+      <div className="bp-tools">
       {showHelp && (
         <p className="hint bp-help">
           Drag between nodes to connect — a wire IS the capability, not a picture of one. Select a link and press
@@ -657,6 +664,7 @@ export default function BlueprintEditor({
           onError={onError}
         />
       )}
+      </div>
       <div
         className={`canvas ${drag ? 'bp-catching' : ''}`}
         onDragOver={onCanvasDragOver}

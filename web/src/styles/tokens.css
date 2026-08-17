@@ -68,12 +68,36 @@
      build gate is tsc, which knows nothing about CSS. */
   --selected: color-mix(in srgb, var(--accent) 18%, transparent);
   --focus: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
-  --shadow: light-dark(0 8px 28px rgb(0 0 0 / 0.16), 0 8px 28px rgb(0 0 0 / 0.55));
+
+  /* ELEVATION. --lift and --lift-2 were referenced eighteen times across three
+     stylesheets and DEFINED NOWHERE — they went with the looks, and every rule
+     that named them has been dropping its whole box-shadow declaration ever
+     since, in silence, because that is what an invalid var() does. Nothing in
+     this product has cast a shadow since: not a card, not a dialog, not a
+     drawer over the work. It is why the frame read as flat and why a panel
+     floating over the cavity looked pasted onto it.
+     (--shadow was dead too, and for a sillier reason: light-dark() is a COLOUR
+     function, and it was wrapping two whole shadow values.)
+
+     The ink travels in the colour, which is the only way to make a shadow
+     mode-aware — on paper it is the text's own tinted near-black, so it reads
+     as shade rather than as dirt on a coloured ground; in the dark it is real
+     black, because a shadow mixed towards a pale text colour is a glow. */
+  --sh-1: light-dark(rgb(26 28 23 / 0.07), rgb(0 0 0 / 0.38));
+  --sh-2: light-dark(rgb(26 28 23 / 0.11), rgb(0 0 0 / 0.52));
+  --lift: 0 1px 2px var(--sh-1), 0 2px 6px var(--sh-1);
+  --lift-2: 0 2px 6px var(--sh-1), 0 12px 30px var(--sh-2);
+  --shadow: var(--lift-2);
 
   /* Space and type. Chrome is in px and content in rem: dock chrome must not
      grow with content zoom, and the existing rem-based rules must keep meaning
      what they mean. Prose goes UP and chrome goes DOWN — that asymmetry is
      what reads as a modern client rather than a control panel. */
+  /* The gap between the cavity's edge and whatever sits flush inside it.
+     Ten, not eight, because 26 − 10 = 16 and 16 is the radius those inner
+     boxes already carry — which is what makes the two corners concentric
+     instead of merely close. */
+  --inset: 10px;
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
@@ -695,7 +719,6 @@ textarea {
 
 /* The parts of the contract every look shares, written once. */
 :root {
-  --shadow: var(--lift-2);
   --focus: 0 0 0 3px color-mix(in srgb, var(--accent) 34%, transparent);
 }
 

@@ -1007,3 +1007,114 @@
     animation: none;
   }
 }
+
+/* ── What the sweep turned up ────────────────────────────────────────────────
+   Measured across every screen and every drawer, not looked at: boxes drawn
+   inside boxes, corners that do not nest, and content jammed into a corner of
+   a screen it has all to itself. */
+
+/* An empty screen says so in the middle of itself.
+   Two selectors deep on purpose: `.hint` sets margin:0 and is declared later,
+   so a bare `.empty-note` loses the tie and the note stayed pinned to the top
+   left corner of a screen it had entirely to itself. */
+.empty-note {
+  max-width: 32rem;
+  text-align: center;
+}
+
+.transcript > .empty-note,
+.editor-empty > .empty-note {
+  margin: auto;
+}
+
+.editor-empty {
+  display: flex;
+}
+
+/* Rows are separated by tint, not by rules — the product's own rule, which
+   this one line of the workspace card had never followed. It drew a hairline
+   across a card that already has a boundary, inset from both ends, and read
+   as debris rather than as a division. */
+.ws-card .share-row {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: var(--s3);
+}
+
+/* An agent that has not run yet prints an em dash where the spend goes. Set at
+   the size of a number it reads as a missing value; set as what it is — a
+   quiet nothing — it reads as "not yet". */
+.agent-spend-big.idle {
+  opacity: 0.35;
+  font-weight: 400;
+}
+
+/* ── The blueprint's controls ────────────────────────────────────────────────
+   They stand ON the canvas, in its corner, the way every other control in this
+   product stands on something. What they replaced was two rows stacked across
+   the top of the cavity above a bordered box — chrome over a document, which
+   is the web-page shape the whole shell exists to get away from. */
+
+.blueprint {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.blueprint > .canvas {
+  flex: 1;
+  min-height: 0;
+}
+
+.bp-tools {
+  position: absolute;
+  z-index: 5;
+  top: var(--s3);
+  left: var(--s3);
+  right: var(--s3);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s2);
+  /* The bar itself catches nothing; each capsule inside it does. Otherwise a
+     transparent strip across the top of the canvas would swallow every drag
+     and every click meant for a node under it. */
+  pointer-events: none;
+}
+
+.bp-tools > * {
+  pointer-events: auto;
+  margin: 0;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent),
+    var(--lift);
+}
+
+.bp-tools > .bp-help {
+  padding: var(--s2) var(--s4);
+  max-width: min(60rem, 100%);
+  font-size: var(--t-chrome);
+}
+
+.bp-tools > .row {
+  padding: var(--s1);
+  gap: var(--s1);
+  flex-wrap: wrap;
+}
+
+/* A form is not a capsule: it is a panel, and it opens under the bar. */
+.bp-tools > form,
+.bp-tools > .card {
+  border-radius: var(--r2);
+  padding: var(--s4);
+  max-width: 34rem;
+}
+
+/* The canvas has to clear the bar, or the top of the graph opens underneath
+   it. React Flow reads this as part of the viewport when it fits. */
+.blueprint .react-flow {
+  --xy-fit-padding-top: 96px;
+}

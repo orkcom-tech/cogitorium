@@ -1,4 +1,27 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+
+/**
+ * Whether what is being rendered is inside a drawer.
+ *
+ * One thing depends on it: the title. The drawer head already names the panel,
+ * on the frame, where every other label about the work lives — so a panel that
+ * also prints its own heading puts the same word twice within forty pixels,
+ * and reads it twice to a screen reader. Every drawer did this: "Gears" above
+ * "Gears", "Terminal" above "Terminal".
+ *
+ * A context rather than a prop, because the alternative is threading one
+ * boolean through every panel and every future one, and the panels that
+ * forget it are exactly the ones nobody notices until the screenshot.
+ */
+const InDrawer = createContext(false)
+
+/**
+ * The panel's own title — printed on its own page, silent inside a drawer.
+ */
+export function PanelTitle({ children }: { children: ReactNode }) {
+  // eslint-disable-next-line react-hooks/rules-of-hooks -- a plain read, no branch above it
+  return useContext(InDrawer) ? null : <h2>{children}</h2>
+}
 
 /**
  * A drawer: it crawls out of an edge of the frame and floats over the cavity.
@@ -207,7 +230,9 @@ export function Drawer({
         </button>
       </header>
 
-      <div className="drawer-body">{children}</div>
+      <div className="drawer-body">
+        <InDrawer.Provider value={true}>{children}</InDrawer.Provider>
+      </div>
 
       {/* The grip is on the edge facing the work, which is the only edge that
           can grow. Written straight to state on release; while the pointer is

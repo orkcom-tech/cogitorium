@@ -3,6 +3,7 @@ import { Select } from './Select'
 import { Field, Fields } from './Field'
 import { api, type Instruction } from '../api'
 import { dragging } from '../dnd'
+import { PanelTitle } from '../deck/Drawer'
 
 // The instruction library: guidance written once and reused, so nobody
 // retypes house style into every agent's role. It mirrors the gear
@@ -51,7 +52,7 @@ export default function LibraryPage() {
 
   return (
     <div className="page">
-      <h2>Instructions</h2>
+      <PanelTitle>Instructions</PanelTitle>
       <p className="hint">
         Guidance worth keeping: house style, procedures, checklists. Bind one to a workspace or a single agent from
         the agent panel. The text lives in Contextverse, which versions it — this is the catalogue that makes it
