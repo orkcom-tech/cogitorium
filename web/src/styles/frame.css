@@ -53,11 +53,24 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--s1);
-  padding: var(--s2) var(--s1);
-  border-radius: var(--r-pill);
-  background: var(--surface-2);
+  gap: 2px;
+  padding: var(--s1) 0;
   pointer-events: auto;
+  /* No pill behind it. A capsule floating on the bezel made every button read
+     as a separate object sitting ON the frame; the buttons ARE the frame, and
+     a group is a gap above and below rather than a container drawn round it.
+     The hairline is the whole separator. */
+  position: relative;
+}
+
+.rail-group + .rail-group::before {
+  content: '';
+  position: absolute;
+  top: calc(var(--s3) * -0.5);
+  left: 22%;
+  right: 22%;
+  height: 1px;
+  background: var(--border);
 }
 
 /* The gap that pushes the bottom capsule to the floor, and carries the
@@ -107,31 +120,50 @@
    one is current" without a second colour. */
 .rail-btn {
   position: relative;
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 36px;
   display: grid;
   place-items: center;
   border: 0;
   padding: 0;
-  border-radius: var(--r-pill);
+  border-radius: var(--r1);
   background: transparent;
   color: var(--text-dim);
   cursor: pointer;
   transition:
     background var(--ef-fast-d) var(--ef-fast),
-    color var(--ef-fast-d) var(--ef-fast),
-    border-radius var(--sp-fast-d) var(--sp-fast);
+    color var(--ef-fast-d) var(--ef-fast);
 }
 
+/* A state layer, not a fill: the foreground colour at low opacity laid over
+   whatever is beneath, so it reads the same on every look. */
 .rail-btn:hover {
   background: color-mix(in srgb, var(--text) 7%, transparent);
   color: var(--text);
 }
 
+.rail-btn:active {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+/* Current is a tint and a bar, not a solid green lozenge. A filled circle for
+   every selected thing turned the rail into a row of buttons stuck on the
+   frame; this says "here" without shouting it. */
 .rail-btn.on {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.rail-btn.on::after {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  width: 3px;
+  height: 18px;
+  border-radius: var(--r-pill);
   background: var(--accent);
-  color: var(--on-accent, #fff);
-  border-radius: 13px;
+  transform: translateY(-50%);
 }
 
 .rail-btn .swatch {
@@ -328,10 +360,15 @@
 }
 
 /* ── Drawers ────────────────────────────────────────────────────────────────
-   Something that crawls out of an edge and floats over the cavity, not a box
-   that appears on top of it. Closed, it is translated fully off its edge, so
-   opening is a journey the eye can follow and closing puts it back where it
-   came from. */
+   A drawer is THE FRAME GROWING INWARD, not a card that flies in over the
+   work. That distinction is the whole reason the reference shell reads as one
+   object: a panel coming out of an edge is made of the same material as the
+   bezel, touches the window edge exactly as the bezel does, and is rounded
+   only on the side facing the cavity — so what you see is the frame becoming
+   thicker on that side, with the hole shrinking to make room.
+
+   The first cut had it inset from every edge with a drop shadow, which is a
+   dialog. It even looked fine on its own; it just belonged to nothing. */
 
 .drawer {
   position: fixed;
@@ -339,50 +376,45 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* The rail's material, because the rail is the frame and so is this. */
   background: var(--surface-2);
-  border-radius: var(--r-panel);
-  box-shadow:
-    0 22px 46px -18px rgb(0 0 0 / 30%),
-    0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent);
-  /* Movement takes a spatial curve; nothing else in here moves, so nothing
-     else is listed. */
   transition: transform var(--sp-default-d) var(--sp-default);
   will-change: transform;
 }
 
-/* Inset from the cavity's edges by the bezel again, so the drawer sits inside
-   the hole rather than on the frame — the frame is the instrument, and a
-   drawer is content-side furniture. */
-.drawer-left,
+/* Flush to its own edge of the window; the bezel on the other three sides is
+   still there, so the cavity keeps its inset. Rounded only where it meets the
+   cavity. */
 .drawer-right {
-  top: calc(var(--bezel) + var(--s2));
-  bottom: calc(var(--bezel) + var(--s2));
-}
-
-.drawer-top,
-.drawer-bottom {
-  left: calc(var(--bezel) + var(--rail-w) + var(--rail-gap) + var(--s2));
-  right: calc(var(--bezel) + var(--s2));
-}
-
-.drawer-right {
-  right: calc(var(--bezel) + var(--s2));
-  transform: translateX(calc(100% + var(--bezel) + var(--s4)));
+  top: var(--bezel);
+  bottom: var(--bezel);
+  right: 0;
+  border-radius: var(--r-cavity) 0 0 var(--r-cavity);
+  transform: translateX(100%);
 }
 
 .drawer-left {
-  left: calc(var(--bezel) + var(--rail-w) + var(--rail-gap) + var(--s2));
-  transform: translateX(calc(-100% - var(--rail-w) - var(--s6)));
+  top: var(--bezel);
+  bottom: var(--bezel);
+  left: calc(var(--rail-w) + var(--bezel));
+  border-radius: 0 var(--r-cavity) var(--r-cavity) 0;
+  transform: translateX(calc(-100% - var(--rail-w) - var(--bezel)));
 }
 
 .drawer-top {
-  top: calc(var(--bezel) + var(--s2));
-  transform: translateY(calc(-100% - var(--bezel) - var(--s4)));
+  left: calc(var(--bezel) + var(--rail-w) + var(--rail-gap));
+  right: var(--bezel);
+  top: 0;
+  border-radius: 0 0 var(--r-cavity) var(--r-cavity);
+  transform: translateY(-100%);
 }
 
 .drawer-bottom {
-  bottom: calc(var(--bezel) + var(--s2));
-  transform: translateY(calc(100% + var(--bezel) + var(--s4)));
+  left: calc(var(--bezel) + var(--rail-w) + var(--rail-gap));
+  right: var(--bezel);
+  bottom: 0;
+  border-radius: var(--r-cavity) var(--r-cavity) 0 0;
+  transform: translateY(100%);
 }
 
 /* Declared AFTER the edges on purpose: they set the hidden transform at equal
@@ -403,7 +435,7 @@
   align-items: center;
   gap: var(--s2);
   flex: 0 0 auto;
-  padding: var(--s3) var(--s3) var(--s2) var(--s4);
+  padding: var(--s4) var(--s3) var(--s2) var(--s5);
   font-size: var(--t-ui);
 }
 
@@ -420,9 +452,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 0 var(--s4) var(--s4);
-  /* Panels inside size themselves against this box rather than the window, so
-     a two-field row in a 300px drawer wraps instead of being cut in half. */
+  padding: 0 var(--s5) var(--s5);
   container-type: inline-size;
   container-name: panel;
 }
@@ -435,9 +465,8 @@
   flex-wrap: wrap;
 }
 
-/* The four little edge marks. Each is a square with one thick side, which is
-   the side the drawer would come out of — a picture of the answer rather than
-   the word for it. */
+/* The four edge marks: a square with one thick side, which is the side the
+   drawer would come out of — the answer drawn rather than named. */
 .drawer-edges {
   display: flex;
   gap: 2px;
@@ -471,25 +500,10 @@
   border-radius: 2px;
 }
 
-.edge-left {
-  border-left-width: 4px;
-  border-left-color: currentColor;
-}
-
-.edge-right {
-  border-right-width: 4px;
-  border-right-color: currentColor;
-}
-
-.edge-top {
-  border-top-width: 4px;
-  border-top-color: currentColor;
-}
-
-.edge-bottom {
-  border-bottom-width: 4px;
-  border-bottom-color: currentColor;
-}
+.edge-left { border-left-width: 4px; border-left-color: currentColor; }
+.edge-right { border-right-width: 4px; border-right-color: currentColor; }
+.edge-top { border-top-width: 4px; border-top-color: currentColor; }
+.edge-bottom { border-bottom-width: 4px; border-bottom-color: currentColor; }
 
 .drawer-x {
   width: 26px;
@@ -501,7 +515,6 @@
   font-size: 17px;
   line-height: 1;
   cursor: pointer;
-  transition: background var(--ef-fast-d) var(--ef-fast);
 }
 
 .drawer-x:hover {
@@ -526,17 +539,11 @@
   bottom: var(--s5);
   width: 10px;
   cursor: col-resize;
-}
-
-.drawer-right .drawer-grip {
-  left: -5px;
   border-radius: var(--r-pill);
 }
 
-.drawer-left .drawer-grip {
-  right: -5px;
-  border-radius: var(--r-pill);
-}
+.drawer-right .drawer-grip { left: -5px; }
+.drawer-left .drawer-grip { right: -5px; }
 
 .drawer-top .drawer-grip,
 .drawer-bottom .drawer-grip {
@@ -544,20 +551,41 @@
   right: var(--s5);
   height: 10px;
   cursor: row-resize;
-}
-
-.drawer-bottom .drawer-grip {
-  top: -5px;
   border-radius: var(--r-pill);
 }
 
-.drawer-top .drawer-grip {
-  bottom: -5px;
-  border-radius: var(--r-pill);
-}
+.drawer-bottom .drawer-grip { top: -5px; }
+.drawer-top .drawer-grip { bottom: -5px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .drawer {
-    transition-duration: 1ms;
+  .drawer { transition-duration: 1ms; }
+}
+
+/* ── The name of a button, on hover ─────────────────────────────────────────
+   The rail is icons, so every one of them has to be able to say what it is.
+   It appears BESIDE the button rather than below it — the rail is a column and
+   a tooltip under an icon would cover the next icon — and it is a plain label
+   on the frame's own material rather than the operating system's yellow box,
+   which is the one piece of chrome in any interface that belongs to nobody. */
+.rail-tip {
+  position: fixed;
+  z-index: calc(var(--z-menu) + 2);
+  padding: 6px 11px;
+  border-radius: var(--r1);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--t-chrome);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow:
+    0 10px 24px -12px rgb(0 0 0 / 35%),
+    0 0 0 1px var(--border);
+  animation: rail-tip-in var(--ef-fast-d) var(--ef-fast);
+}
+
+@keyframes rail-tip-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
   }
 }

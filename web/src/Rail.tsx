@@ -118,6 +118,15 @@ export default function Rail({
   const loc = useLocation()
   const nav = useNavigate()
   const shell = useShell()
+  // The rail is icons, so it has to be able to say what each one is. One
+  // element for all of them, moved to whichever button the pointer is over —
+  // cheaper than a node per button, and it cannot leave two on screen at once.
+  const [tip, setTip] = useState<{ text: string; top: number } | null>(null)
+  const hover = (text: string) => (e: React.MouseEvent<HTMLElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    setTip({ text, top: Math.round(r.top + r.height / 2) })
+  }
+  const unhover = () => setTip(null)
 
   // A menu closes on an outside press and on Escape. Deferred by a tick, or
   // the press that opened it closes it again on the same one.
@@ -192,7 +201,8 @@ export default function Rail({
           <button
             data-own
             className={`rail-btn ${menu === 'dests' ? 'on' : ''}`}
-            title="Go to"
+            onMouseEnter={hover(hereDest?.label ?? 'Go to')}
+            onMouseLeave={unhover}
             onClick={(e) => open('dests', e)}
           >
             {hereDest?.icon ?? I.workspaces}
@@ -209,7 +219,8 @@ export default function Rail({
                 data-own
                 className={`rail-btn ${on ? 'on' : ''}`}
                 aria-current={on ? 'page' : undefined}
-                title={d.label}
+                onMouseEnter={hover(d.label)}
+                onMouseLeave={unhover}
                 onClick={() => nav(d.to)}
               >
                 {d.icon}
@@ -235,7 +246,8 @@ export default function Rail({
                 data-own
                 className={`rail-btn ${on ? 'on' : ''}`}
                 aria-current={on ? 'true' : undefined}
-                title={s.title}
+                onMouseEnter={hover(s.title)}
+                onMouseLeave={unhover}
                 onClick={() => shell.stages!.go(s.id)}
               >
                 {s.icon}
@@ -256,7 +268,8 @@ export default function Rail({
                 data-own
                 className={`rail-btn ${on ? 'on' : ''}`}
                 aria-expanded={on}
-                title={d.title}
+                onMouseEnter={hover(d.title)}
+                onMouseLeave={unhover}
                 onClick={() => shell.drawers!.toggle(on ? null : d.id)}
               >
                 {d.icon}
@@ -281,7 +294,13 @@ export default function Rail({
       {(shell?.back || shell?.action) && (
         <div className="rail-group">
           {shell.back && (
-            <button data-own className="rail-btn" title="Back" onClick={() => nav(shell.back!)}>
+            <button
+              data-own
+              className="rail-btn"
+              onMouseEnter={hover('Back')}
+              onMouseLeave={unhover}
+              onClick={() => nav(shell.back!)}
+            >
               {I.back}
               <span className="sr-only">Back</span>
             </button>
@@ -290,7 +309,8 @@ export default function Rail({
             <button
               data-own
               className="rail-btn"
-              title={shell.action.title ?? shell.action.label}
+              onMouseEnter={hover(shell.action.label)}
+              onMouseLeave={unhover}
               onClick={shell.action.run}
             >
               {I.action}
@@ -301,7 +321,13 @@ export default function Rail({
       )}
 
       <div className="rail-group">
-        <button data-own className="rail-btn" title="More" onClick={(e) => open('more', e)}>
+        <button
+          data-own
+          className="rail-btn"
+          onMouseEnter={hover('More')}
+          onMouseLeave={unhover}
+          onClick={(e) => open('more', e)}
+        >
           {I.more}
           <span className="sr-only">More</span>
         </button>
@@ -309,12 +335,23 @@ export default function Rail({
         <button
           data-own
           className={`rail-btn ${menu === 'account' ? 'on' : ''}`}
-          title={user.name}
+          onMouseEnter={hover(user.name)}
+          onMouseLeave={unhover}
           onClick={(e) => open('account', e)}
         >
           <span style={{ font: '650 13px/1 var(--mono)' }}>{user.name.slice(0, 1).toUpperCase()}</span>
         </button>
       </div>
+
+      {tip && !menu && (
+        <span
+          className="rail-tip"
+          role="tooltip"
+          style={{ top: tip.top, left: `calc(var(--bezel) + var(--rail-w) + 2px)`, transform: 'translateY(-50%)' }}
+        >
+          {tip.text}
+        </span>
+      )}
 
       {menu === 'dests' && (
         <div className="rail-menu" style={{ top: menuTop }} role="menu">
