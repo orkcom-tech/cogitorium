@@ -72,7 +72,7 @@ export default function AgentMemory({
     // A real delete now. It used to be an empty write, because contextd had no
     // delete command at all and an emptied document is at least skipped when a
     // prompt is assembled — the effect was right and the space still held the
-    // file. Contextverse v0.31.0 added `file delete`, so the document goes.
+    // file. Contextverse v1.0.0 added `file delete`, so the document goes.
     //
     // Soft, and the wording says so instead of promising an erasure that did
     // not happen: contextd keeps every version and `contextd file undelete`

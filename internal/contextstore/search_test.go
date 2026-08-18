@@ -63,7 +63,7 @@ func requireDelete(t *testing.T) {
 	// silently while claiming to prove the feature.
 	out, err := exec.Command(contextdBinary(t), "file", "delete", "--help").CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "Remove the live copy") {
-		t.Skip("this contextd has no `file delete` — needs Contextverse v0.31.0 or newer")
+		t.Skip("this contextd has no `file delete` — needs Contextverse v1.0.0 or newer")
 	}
 }
 

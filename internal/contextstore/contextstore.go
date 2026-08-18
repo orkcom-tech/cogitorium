@@ -285,7 +285,7 @@ var ErrStale = errors.New("this file changed since you opened it")
 // This used to be a read-to-write guard — read the version, compare it here,
 // then write — because the CLI took no such argument, and that left a race
 // this code could not close from outside. Rather than document the hole
-// forever, the flag was added upstream: contextd v0.31.0. See its CHANGELOG.
+// forever, the flag was added upstream: contextd v1.0.0. See its CHANGELOG.
 //
 // An older contextd rejects the flag rather than ignoring it, so a Cogitorium
 // running against one fails the save loudly instead of silently going back to

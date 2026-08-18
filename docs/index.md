@@ -1282,7 +1282,7 @@ It is a real compare-and-swap: `contextd file put --if-version v4` is refused
 by contextd itself, inside one call against its own storage, so there is no
 window between the check and the write for a third party to slip into. This was
 a read-to-write guard with exactly that window until the flag was added
-upstream in Contextverse v0.31.0 — the hole was documented here for one release
+upstream in Contextverse v1.0.0 — the hole was documented here for one release
 rather than left to be discovered, and then closed rather than documented
 forever.
 
@@ -1308,7 +1308,7 @@ soft-delete one. Emptying a document was what was honestly available: an empty
 document is skipped when a prompt is assembled, so the agent did stop being told
 it, and the file stayed in the space. Rather than document that hole
 indefinitely, the command was added upstream. **This needs Contextverse
-v0.31.0 or newer**; against an older `contextd` the delete is refused with the
+v1.0.0 or newer**; against an older `contextd` the delete is refused with the
 version's own error rather than silently going back to clearing.
 
 ---
@@ -1536,7 +1536,9 @@ member relationships between them.
 
 ## The install map
 
-`/map`, in the pill nav, and open to every role.
+`/map`, beside Workspaces at the top of the rail — where it belongs, because
+seeing everything at once is the other half of the question that screen asks —
+and open to every role.
 
 One zoomable scene at three depths, because zooming should approach rather than
 navigate:
@@ -1682,7 +1684,7 @@ There are two of them, and only one is an administrator's.
   workspace's directory, and is open to **anyone who can reach the workspace**.
   It starts only when you press the button, because a session is never
   restored.
-- **The server-wide Terminal**, in the account menu, is **admin-only**. It is
+- **The server-wide Terminal**, a drawer on the rail, is **admin-only**. It is
   not scoped to anything, which is the whole of the reason.
 
 No agent can open either.

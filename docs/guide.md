@@ -1524,7 +1524,7 @@ there to be read. It is a soft delete — Contextverse keeps every version and
 `contextd file undelete <path>` brings it back — and the confirmation says so
 rather than promising an erasure that did not happen.
 
-Both need **Contextverse v0.31.0 or newer**. Until that release `contextd` had
+Both need **Contextverse v1.0.0 or newer**. Until that release `contextd` had
 no delete at all and no way to state the version you had read, so forgetting
 meant emptying a document and a save could only be guarded from outside.
 
@@ -1585,10 +1585,10 @@ workspace with a team, and the internet gate.
 
 ## Variables & secrets
 
-![The account menu: Variables & secrets and Terminal, the server's version, and
-the way out.](assets/13-rail-menu.png)
+![The rail's More menu: the install-wide pages, the documentation, and the way
+out.](assets/13-rail-menu.png)
 
-In the account button's menu, and administrators only. The install-wide half of
+A drawer on the rail, and administrators only. The install-wide half of
 the mechanism a gear's credentials come from — the per-workspace half is the
 Variables drawer inside a workspace.
 
@@ -1621,7 +1621,7 @@ until something else supplies it."*
 
 ## Terminal
 
-In the same account menu, and administrators only. A shell over HTTP, on the
+The last drawer on the rail, and administrators only. A shell over HTTP, on the
 server rather than in a workspace.
 
 ![The Terminal screen, with the shell not yet started.](assets/19-terminal.png)

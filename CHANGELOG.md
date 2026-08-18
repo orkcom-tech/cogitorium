@@ -104,13 +104,13 @@ possible to do properly and started being possible: `contextd` had no delete
 command at all — its storage layer had the operation and nothing reached it —
 so the honest thing available was to clear the file, which does take it out of
 every prompt while leaving it in the space. Instead of documenting that hole
-indefinitely, the command was added upstream in **Contextverse v0.31.0**, along
+indefinitely, the command was added upstream in **Contextverse v1.0.0**, along
 with `--if-version`, which turns the save guard above from a read-to-write
 check into a real compare-and-swap made by contextd inside one call.
 
 Both are soft: Contextverse keeps every version and `contextd file undelete`
 brings a document back. The interface says that rather than promising an
-erasure that did not happen. **This release needs Contextverse v0.31.0 or
+erasure that did not happen. **This release needs Contextverse v1.0.0 or
 newer** for either; an older `contextd` refuses the flag rather than ignoring
 it, so a save is loudly unavailable instead of quietly going back to
 last-write-wins.
