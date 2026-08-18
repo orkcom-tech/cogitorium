@@ -141,6 +141,51 @@ func (s *Store) CheckStatus(ctx context.Context) Status {
 	return Status{Available: true, Version: version, SpaceRoot: st.SpaceRoot, Mode: st.Mode}
 }
 
+// EnsureSpace creates the context space when contextd is installed and has
+// none.
+//
+// WHY THE SERVER DOES THIS AND NOT AN INSTALLER. A binary is not a working
+// space: with contextd present but uninitialised, every context surface in the
+// product answers "no context space initialized — run: contextd init solo", and
+// memory does nothing. The container image has run that exact command in its
+// entrypoint from the start; every other way of installing — Homebrew, Scoop, a
+// package, the archive, the desktop app — left the person to find that sentence
+// and act on it. Doing it here covers all of them at once, in the place that
+// already knows whether contextd is reachable.
+//
+// IT REACHES THE NETWORK, once. `contextd init solo` fetches its space template
+// from a public repository and caches it, so a machine with no outbound route
+// gets a space that was not created rather than one half-created. That is worth
+// saying in the log rather than burying, which is why the attempt is logged as
+// well as the outcome.
+//
+// Never fatal, and idempotent: an existing space is left exactly as it is.
+func (s *Store) EnsureSpace(ctx context.Context) {
+	st := s.CheckStatus(ctx)
+	switch {
+	case st.Available:
+		return
+	case st.Version == "":
+		// No contextd at all. Its absence is already reported by every surface
+		// that asks, and inventing a space is not this function's business.
+		return
+	case !strings.Contains(st.Error, "no context space initialized"):
+		// Present and broken for some other reason. Initialising on top of
+		// that would turn a legible failure into a confusing one.
+		slog.Warn("contextd is installed but not answering; leaving the space alone", "err", st.Error)
+		return
+	}
+
+	slog.Info("no context space yet — creating one (contextd fetches its template over the network)",
+		"space_root", st.SpaceRoot)
+	if _, err := s.run(ctx, nil, "init", "solo", "--name", "cogitorium", "--role", "workbench"); err != nil {
+		slog.Warn("could not create the context space; memory reports unavailable until one exists",
+			"err", err, "fix", "contextd init solo --name cogitorium --role workbench")
+		return
+	}
+	slog.Info("context space ready", "space_root", s.CheckStatus(ctx).SpaceRoot)
+}
+
 func (s *Store) List(ctx context.Context) ([]File, error) {
 	out, err := s.run(ctx, nil, "file", "list", "--json")
 	if err != nil {

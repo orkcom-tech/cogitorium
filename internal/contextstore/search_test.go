@@ -85,21 +85,17 @@ func requireSupportedContextd(t *testing.T) {
 		"  using: %s", update.MinContextd, contextdBinary(t))
 }
 
-// requireDelete skips a test on a contextd that predates `file delete`.
+// requireDelete is requireSupportedContextd. `file delete` and `--if-version`
+// shipped in the same Contextverse release, so the two were always one gate
+// wearing two names — and they behaved differently, which is the part that
+// mattered: one skipped and one failed, on the same machine, for the same
+// reason.
 //
-// Named rather than inferred from a version string: a build from a branch has
-// no useful version, and what matters is whether the command is there.
+// Kept as a name because the tests that call it are about deletion, and
+// reading `requireDelete` at the top of one says which capability is at stake.
 func requireDelete(t *testing.T) {
 	t.Helper()
-	// An old cobra prints the PARENT's help and exits 0 for an unknown
-	// subcommand, so neither the exit code nor a string from the command's
-	// summary tells the two apart — the first cut matched on the summary,
-	// which never appears in --help output, and every test here skipped
-	// silently while claiming to prove the feature.
-	out, err := exec.Command(contextdBinary(t), "file", "delete", "--help").CombinedOutput()
-	if err != nil || !strings.Contains(string(out), "Remove the live copy") {
-		t.Skip("this contextd has no `file delete` — needs Contextverse v1.0.0 or newer")
-	}
+	requireSupportedContextd(t)
 }
 
 func TestSearchFindsWhatIsInsideAFile(t *testing.T) {
@@ -252,6 +248,7 @@ func TestASaveIsRefusedWhenTheFileMovedUnderIt(t *testing.T) {
 }
 
 func TestASaveGoesThroughWhenNobodyElseTouchedIt(t *testing.T) {
+	requireSupportedContextd(t)
 	s := realSpace(t)
 	ctx := context.Background()
 	_ = s.Put(ctx, "team/policy.md", "one\n")
@@ -371,5 +368,52 @@ func TestTheSaveGuardIsContextdsOwnRefusal(t *testing.T) {
 	body, _ = s.Get(ctx, "team/policy.md")
 	if strings.TrimSpace(body) != "two, edited" {
 		t.Fatalf("the save did not land: %q", body)
+	}
+}
+
+// EnsureSpace is what makes an ordinary install work. Without it a person who
+// installed contextd — by any route — still met "no context space initialized"
+// on every context screen, because a binary is not a space.
+func TestEnsureSpaceCreatesOneAndThenLeavesItAlone(t *testing.T) {
+	requireSupportedContextd(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	s := New(contextdBinary(t))
+	ctx := context.Background()
+
+	if st := s.CheckStatus(ctx); st.Available {
+		t.Fatalf("the fixture is wrong: this HOME already has a space (%+v)", st)
+	}
+
+	s.EnsureSpace(ctx)
+	st := s.CheckStatus(ctx)
+	if !st.Available {
+		t.Fatalf("no space after EnsureSpace: %+v", st)
+	}
+
+	// A file written into it survives a second EnsureSpace. Re-initialising an
+	// existing space would be the worst possible bug in this function: it runs
+	// on every start, so it would eat the operator's memory on the next one.
+	if err := s.Put(ctx, "team/policy.md", "keep me\n"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	s.EnsureSpace(ctx)
+	body, err := s.Get(ctx, "team/policy.md")
+	if err != nil || strings.TrimSpace(body) != "keep me" {
+		t.Fatalf("a second EnsureSpace disturbed the space: %q %v", body, err)
+	}
+}
+
+// With no contextd there is nothing to initialise, and inventing something
+// would be worse than the honest "unavailable" every surface already reports.
+func TestEnsureSpaceDoesNothingWithoutContextd(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	s := New(filepath.Join(t.TempDir(), "contextd-that-is-not-there"))
+
+	s.EnsureSpace(context.Background())
+
+	if _, err := os.Stat(filepath.Join(home, ".context")); !os.IsNotExist(err) {
+		t.Fatalf("something was created without a contextd to create it: %v", err)
 	}
 }

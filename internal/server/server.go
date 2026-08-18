@@ -484,6 +484,11 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	// construction, so the engine never imports the server.
 	s.engine.SetEgressKill(s.egressOff.Load)
 
+	// Before anything else asks for context: an installed contextd with no
+	// space is a product where memory silently does nothing, and until now only
+	// the container image did anything about it. See EnsureSpace.
+	s.context.EnsureSpace(ctx)
+
 	// A pause lives in one process's memory, so nothing left awaiting can
 	// ever be answered after a restart. Saying so in the row is what keeps
 	// the log from implying a request is still open.
