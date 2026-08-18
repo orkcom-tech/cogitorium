@@ -36,6 +36,13 @@ and cannot change under an install between review and use. An install that does
 not phone home should not acquire a catalogue that does. Picking one fills in
 the form and skips no gate.
 
+**Installing by hand and editing afterwards are both in the drawer**, not only
+in the API. Without the edit form two of the library's own entries were
+unfinishable from the interface — the filesystem and git servers ship a
+placeholder path and say to change it before approving, and there was nothing to
+change it with. Saving an edit returns the server to pending, because everything
+editable is inside what was approved.
+
 **A leak closed on the way.** `GET /api/v1/mcp-servers` was open and
 unredacted — survivable while nothing called it, and not once it is in a drawer.
 It carries a full command line and the names of every credential a server is

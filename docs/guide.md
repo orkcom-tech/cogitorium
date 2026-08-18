@@ -1926,9 +1926,22 @@ failure nobody can read.
 
 The list is compiled into the binary, so nothing is fetched to show it, it works
 offline, and it cannot change under an install between the day it was reviewed
-and the day somebody installs from it. Anything not in it installs by name,
-which has always worked. Picking one **fills in the form and skips no gate**:
-what lands is a pending server that does nothing.
+and the day somebody installs from it. Picking one **fills in the form and skips
+no gate**: what lands is a pending server that does nothing.
+
+**Anything not in the list is `add by hand`** — a name, the command, its
+arguments one per line, an optional working directory, and the credentials it
+needs by NAME. Arguments are one per line and never one string, for the reason
+the database stores them as an array: a single string has to be split, splitting
+means quoting, and quoting means an argument containing a space silently becomes
+two. The interesting MCP server is very often internal, so this is the ordinary
+path rather than the exception.
+
+**`edit what it runs`** changes any of that afterwards, and **saving returns the
+server to pending** — everything editable there is inside what was approved, and
+approving what you have just changed is approving something you have not seen.
+Two of the library's own entries need it: the filesystem and git servers ship a
+placeholder path that you point at the directory you actually mean.
 
 **A member sees less than an administrator.** They see that a server exists,
 what it is for and whether it is approved — which is why their agent has a tool.

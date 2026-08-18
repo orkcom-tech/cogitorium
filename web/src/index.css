@@ -1452,6 +1452,7 @@ th {
   font: var(--t-micro)/1.4 var(--mono);
 }
 
+.mcp-form,
 .mcp-library,
 .mcp-notice {
   display: flex;
