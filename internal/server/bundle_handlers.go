@@ -23,6 +23,9 @@ func (s *Server) bundleStores() bundle.Stores {
 		Catalog:    s.catalog,
 		Gears:      s.gears,
 		Context:    s.context,
+		// Nil where external MCP servers are switched off, which the format
+		// reads as "this bundle carries none" rather than as a failure.
+		MCP: s.mcp,
 	}
 }
 
@@ -45,8 +48,14 @@ func (s *Server) handleExportWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	withMCP, err := queryFlag(r, "mcp")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
-	b, err := bundle.Export(r.Context(), s.bundleStores(), id, bundle.Options{Gears: gears, Context: withContext})
+	b, err := bundle.Export(r.Context(), s.bundleStores(), id,
+		bundle.Options{Gears: gears, Context: withContext, MCP: withMCP})
 	if err != nil {
 		failContext(w, r, err)
 		return
@@ -67,6 +76,7 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 		Bundle         bundle.Bundle `json:"bundle"`
 		IncludeGears   bool          `json:"include_gears"`
 		IncludeContext bool          `json:"include_context"`
+		IncludeMCP     bool          `json:"include_mcp"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxBundleBytes)
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -86,6 +96,7 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 		OwnerID:        caller.ID,
 		IncludeGears:   in.IncludeGears,
 		IncludeContext: in.IncludeContext,
+		IncludeMCP:     in.IncludeMCP,
 	})
 	if err != nil {
 		// A malformed document is the caller's to fix, so it must not read as

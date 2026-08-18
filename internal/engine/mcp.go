@@ -69,15 +69,15 @@ func (e *Engine) runMCPTool(ctx context.Context, wsID int64, agent workspace.Age
 			"workspace_id", wsID, "note", "it runs on this host with this server's file access")
 	}
 
-	conn, err := mcpclient.Dial(ctx, spec)
+	// Reused when one is already open for this exact server — see mcppool.go.
+	// The key carries the fingerprint, so a server edited since is a different
+	// server and gets a fresh connection rather than one opened under what it
+	// used to be.
+	conn, release, err := e.mcpPool.take(ctx, srv, spec)
 	if err != nil {
 		return "", err
 	}
-	// One call per connection in this cut. A pool is the obvious next step and
-	// deliberately not here: a connection kept between calls is a process kept
-	// alive between turns, and that is a lifetime question rather than an
-	// optimisation.
-	defer conn.Close()
+	defer release()
 
 	started := time.Now()
 	res, err := conn.CallTool(ctx, tool.RemoteName, json.RawMessage(argsJSON))

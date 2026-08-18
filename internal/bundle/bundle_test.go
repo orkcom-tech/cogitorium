@@ -13,6 +13,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
+	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/store"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
@@ -52,6 +53,7 @@ func newInstallWith(t *testing.T, contextdBin string) *install {
 		Catalog:    catalog.NewStore(db),
 		Gears:      gear.NewStore(db),
 		Context:    contextstore.New(contextdBin),
+		MCP:        mcpstore.NewStore(db),
 	}}
 
 	// The owner is a real user row: an imported workspace belongs to whoever
@@ -755,5 +757,122 @@ func TestExportOfAMissingWorkspaceIsAnError(t *testing.T) {
 	i := newInstall(t)
 	if _, err := Export(context.Background(), i.stores, 4242, Options{}); !errors.Is(err, workspace.ErrNotFound) {
 		t.Fatalf("exporting a workspace that does not exist returned %v, want not-found", err)
+	}
+}
+
+// ── external MCP servers in a bundle ──────────────────────────────────────
+
+// THE RULE, AND THE WHOLE REASON THIS IS TESTED. The shape travels, because the
+// operator on the far side needs it in order to decide at all. The APPROVAL
+// does not, and neither does any credential — an MCP server is a command line
+// or a hostname, so unlike a gear its source cannot be read, and a bundle that
+// arrived pre-approved would be a way to hand somebody a process on their own
+// host by email.
+func TestAnMCPServerTravelsAsAShapeAndArrivesPending(t *testing.T) {
+	from := newInstall(t)
+	ctx := context.Background()
+	ws := from.createWorkspace("atlas", workspace.AgentSpec{Name: "orchestrator"})
+
+	srv, err := from.stores.MCP.Install(ctx, mcpstore.Server{
+		Name: "jira", Description: "our tickets", Transport: mcpstore.TransportStdio,
+		Command: "npx", Args: []string{"-y", "@acme/jira-mcp"}, EnvNames: []string{"JIRA_TOKEN"},
+	}, nil)
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	// Approved HERE, so the test can prove the approval does not travel.
+	if _, err := from.stores.MCP.SetStatus(ctx, srv.ID, mcpstore.StatusApproved); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	if _, err := from.stores.MCP.Bind(ctx, srv.ID, ws.ID, nil); err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+
+	b, err := Export(ctx, from.stores, ws.ID, Options{MCP: true})
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if len(b.MCPServers) != 1 {
+		t.Fatalf("%d servers in the bundle", len(b.MCPServers))
+	}
+	got := b.MCPServers[0]
+	if got.Command != "npx" || got.BoundTo != "workspace" {
+		t.Fatalf("the shape did not travel: %+v", got)
+	}
+	if len(got.EnvNames) != 1 || got.EnvNames[0] != "JIRA_TOKEN" {
+		t.Fatalf("the NAME it wants did not travel: %+v", got.EnvNames)
+	}
+	// There is no field for a status, and there must not be one.
+	raw, _ := json.Marshal(got)
+	for _, forbidden := range []string{"status", "approved", "fingerprint"} {
+		if strings.Contains(strings.ToLower(string(raw)), forbidden) {
+			t.Fatalf("a bundle carries %q: %s", forbidden, raw)
+		}
+	}
+
+	// A DIFFERENT install, which is what a bundle is for.
+	to := newInstall(t)
+	res, err := Import(ctx, to.stores, b, ImportOptions{Name: "arrived", OwnerID: to.owner, IncludeMCP: true})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if len(res.MCPImported) != 1 {
+		t.Fatalf("imported %v, skipped %v", res.MCPImported, res.MCPSkipped)
+	}
+	landed, err := to.stores.MCP.List(ctx)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(landed) != 1 {
+		t.Fatalf("%d servers landed", len(landed))
+	}
+	if landed[0].Status != mcpstore.StatusPending {
+		t.Fatalf("an imported MCP server arrived %q rather than pending", landed[0].Status)
+	}
+	if landed[0].Fingerprint != "" {
+		t.Fatalf("an approval fingerprint travelled: %q", landed[0].Fingerprint)
+	}
+	if len(landed[0].EnvNames) != 1 || landed[0].EnvNames[0] != "JIRA_TOKEN" {
+		t.Fatalf("the name it needs did not arrive: %+v", landed[0].EnvNames)
+	}
+}
+
+// A name that already exists is left alone rather than granted: the local one
+// may be a different thing wearing the same name, and binding it would hand an
+// agent something nobody here chose.
+func TestAnImportedMCPNameClashIsSkippedRatherThanBound(t *testing.T) {
+	to := newInstall(t)
+	ctx := context.Background()
+
+	b := Bundle{
+		Format:    Format,
+		Workspace: Workspace{Name: "incoming"},
+		Agents:    []Agent{{Name: "orchestrator", IsOrchestrator: true}},
+		MCPServers: []MCPServer{{
+			Name: "jira", Transport: mcpstore.TransportStdio, Command: "npx", BoundTo: "workspace",
+		}},
+	}
+	if _, err := to.stores.MCP.Install(ctx, mcpstore.Server{
+		Name: "jira", Transport: mcpstore.TransportStdio, Command: "/usr/local/bin/something-else",
+	}, nil); err != nil {
+		t.Fatalf("install the local one: %v", err)
+	}
+
+	res, err := Import(ctx, to.stores, b, ImportOptions{Name: "arrived", OwnerID: to.owner, IncludeMCP: true})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if len(res.MCPImported) != 0 || len(res.MCPSkipped) != 1 {
+		t.Fatalf("a clashing name was not skipped: imported %v skipped %v", res.MCPImported, res.MCPSkipped)
+	}
+	// And the local one is untouched.
+	local, err := to.stores.MCP.List(ctx)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, s := range local {
+		if s.Name == "jira" && s.Command != "/usr/local/bin/something-else" {
+			t.Fatalf("the local server was overwritten by an import: %+v", s)
+		}
 	}
 }

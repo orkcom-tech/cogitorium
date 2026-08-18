@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+### A bundle carries MCP, and a connection outlives one call
+
+**Workspace bundles carry external MCP servers**, answering the open question
+the plan left: the SHAPE travels — the command or the URL, the arguments, the
+NAMES of the values it wants — and the approval and the credentials never do.
+An imported server arrives pending with no fingerprint, and there is no field in
+the format that could say otherwise.
+
+That rule matters more here than it does for a gear, and the reason is worth
+stating: a gear's complete source is in the bundle, so the receiving operator
+can read what they are approving. An MCP server is a command line or a hostname
+and they cannot. That is an argument for carrying the shape — they need it in
+order to decide at all — and a far stronger one for never carrying the approval.
+A bundle that arrived pre-approved would be a way to hand somebody a process on
+their own host by email. A name that already exists locally is skipped rather
+than granted: it may be a different thing wearing the same name.
+
+**Connections are pooled.** Every tool call used to dial afresh — a process per
+call on stdio, and on a hosted server a TCP connection, a TLS handshake and an
+`initialize` round trip to somebody else's host before the call anybody wanted.
+An agent using four tools paid it four times.
+
+The lifetime rules are the whole of it. A pooled connection is a process that
+outlives a turn, so it is capped by an idle sweep that closes it whether or not
+anybody asks again. It is keyed by the server's FINGERPRINT as well as its name,
+so a server edited since gets a fresh connection rather than one opened under
+what it used to be — a pool keyed only by id would route straight past the check
+that refuses an unapproved edit. A dead connection is never handed out, and the
+sweeper stops with the server rather than leaving children nobody owns.
+
 ### It can be watched now, which it could not be at all
 
 An install on a server or in a cluster had **no metrics of any kind** — no

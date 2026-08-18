@@ -85,6 +85,11 @@ type Event struct {
 }
 
 type Engine struct {
+	// mcpPool keeps an MCP connection between calls, so a turn calling four
+	// tools pays one handshake rather than four. Always present; empty until
+	// something is dialled.
+	mcpPool *mcpPool
+
 	// metrics is what an operator alerts on. Nil is a working engine that
 	// publishes nothing, which is what every test and any embedding gets.
 	metrics *metrics.Set
@@ -166,8 +171,23 @@ func New(ws *workspace.Store, cat *catalog.Store, cs *contextstore.Store, gears 
 		runTokenBudget: budgets.Run,
 		running:        map[int64]bool{},
 		turns:          map[int64]*turnState{},
+		mcpPool:        newMCPPool(),
 	}
 }
+
+// StartMCPPool runs the sweeper that closes idle MCP connections, on the
+// caller's lifetime.
+//
+// SEPARATE FROM New because a pooled connection is a PROCESS THAT OUTLIVES A
+// TURN, and starting a goroutine that owns processes from a constructor would
+// mean every test and every embedding acquires one whether or not it ever dials
+// anything. The server starts it; without it the pool still works and simply
+// never expires, which is the harmless half.
+func (e *Engine) StartMCPPool(ctx context.Context) { e.mcpPool.sweep(ctx) }
+
+// CloseMCP closes every pooled connection. Called when the server shuts down,
+// so a child process does not outlive the thing that started it.
+func (e *Engine) CloseMCP() { e.mcpPool.closeAll() }
 
 // SetEgressKill injects the server's runtime kill switch.
 func (e *Engine) SetEgressKill(f func() bool) { e.egressKilled = f }

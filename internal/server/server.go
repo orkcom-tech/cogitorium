@@ -215,6 +215,10 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		s.engine.SetMCP(mcpStore, env)
 	}
 	s.engine.SetMetrics(s.metrics)
+	// The sweeper that closes idle MCP connections. On the pool's lifetime,
+	// because a pooled connection can be a child process and one that outlived
+	// the server would be a process nobody owns.
+	s.engine.StartMCPPool(poolCtx)
 
 	s.startScheduler(poolCtx)
 
@@ -537,6 +541,11 @@ func (s *Server) Close() {
 	s.stopPool()
 	s.stopPool = nil
 	s.pool.Stop()
+	// Pooled MCP connections can be child processes, and one that outlived the
+	// server would be a process with nobody left to own it. The sweeper would
+	// get there on its own tick; this makes shutdown deterministic, which is
+	// what a test closing a server needs.
+	s.engine.CloseMCP()
 }
 
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
