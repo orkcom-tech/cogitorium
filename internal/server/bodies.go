@@ -101,6 +101,17 @@ type UpdateModeBody struct {
 	Mode string `json:"mode"`
 }
 
+// SetupBody claims a fresh install: it gives the seeded admin the password
+// that from then on is how a person gets in.
+//
+// Token is empty on a local install and required on a server, for the reason
+// spelled out over handleSetup — on a listener the network can reach, an
+// unauthenticated claim is a takeover waiting for a port scan.
+type SetupBody struct {
+	Password string `json:"password"`
+	Token    string `json:"token"`
+}
+
 // InvokeGearBody runs an approved gear. No network field: the grant is the
 // one the operator already made, and offering to override it here would make
 // the approval a suggestion.

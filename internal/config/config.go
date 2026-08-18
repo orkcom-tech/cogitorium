@@ -157,13 +157,12 @@ type Config struct {
 	// error, not a silent degradation to unauthenticated requests.
 	EgressKey string `yaml:"egress_key"`
 
-	// EgressApprovalBearer requires a real bearer token to grant the gate or
-	// approve a search, refusing the implicit-admin that loopback otherwise
-	// confers. Off by default because it would make the feature unusable on a
-	// default single-operator install; the audit records which kind of
-	// authentication each decision actually had, so a row is never mistaken
-	// for stronger evidence than it is.
-	EgressApprovalBearer bool `yaml:"egress_approval_bearer"`
+	// egress_approval_bearer used to live here. It required a real token to
+	// grant the gate, refusing the implicit admin that a loopback request was
+	// once given. Loopback admin is gone, so every approval is now made by
+	// somebody who signed in and the option has nothing left to switch. A
+	// configuration still carrying it loads fine — unknown keys are ignored —
+	// and gets the behaviour it was asking for.
 
 	// VariablesDir and SecretsDir are the directory source for the names a gear
 	// is given: one file per name, the file's contents being the value. Empty
@@ -407,9 +406,6 @@ func Load(path, dataDirOverride string) (Config, error) {
 	}
 	if v := os.Getenv("COGITORIUM_EGRESS_KEY"); v != "" {
 		cfg.EgressKey = v
-	}
-	if v := os.Getenv("COGITORIUM_EGRESS_APPROVAL_BEARER"); v != "" {
-		cfg.EgressApprovalBearer = v == "1" || strings.EqualFold(v, "true")
 	}
 	if v := os.Getenv("COGITORIUM_VARIABLES_DIR"); v != "" {
 		cfg.VariablesDir = v

@@ -41,17 +41,36 @@ const (
 	// are the only paths exempt from normal authentication, and the exemption
 	// matches by prefix so nothing but delivery can ever land under it.
 	AuthInletKey = "inlet-key"
-	// AuthToken is a signed-in user, which on a loopback listen address is
-	// satisfied by being local.
+	// AuthToken is a signed-in user. There is no second way to satisfy it:
+	// a request from this machine used to count as the admin, and does not.
 	AuthToken = "token"
 )
 
+// openToAnyone reports whether a path is reachable without a credential.
+//
+// The authentication middleware and the published description both call this,
+// so the document cannot say a door is locked that is not. It said exactly
+// that about /api/v1/login until this function existed — the middleware let
+// login through, the description demanded a token for it, and both were
+// derived "the same way" only in a comment.
+//
+// The last term covers every non-API path, which is how the single-page app
+// and its assets are served. Delivery is named separately rather than left to
+// that term, so tightening the asset rule cannot silently close it.
+func openToAnyone(path string) bool {
+	return path == "/health" ||
+		path == "/api/v1/login" ||
+		path == "/api/v1/setup" ||
+		strings.HasPrefix(path, inletDeliveryPrefix) ||
+		!strings.HasPrefix(path, "/api/")
+}
+
 func authFor(path string) string {
 	switch {
-	case path == "/health":
-		return AuthNone
-	case strings.HasPrefix(path, "/i/"):
+	case strings.HasPrefix(path, inletDeliveryPrefix):
 		return AuthInletKey
+	case openToAnyone(path):
+		return AuthNone
 	default:
 		return AuthToken
 	}

@@ -61,6 +61,37 @@ func main() {
 	}
 }
 
+// listenSteadily opens a loopback port, preferring the SAME one every launch.
+//
+// It used to ask for port 0 — any free port — which is the right answer for a
+// server nobody bookmarks and the wrong one here. The window is a browser, and
+// a browser files what it remembers under the address of the page: origin,
+// including the port. A different port every launch is a different origin every
+// launch, so the signed-in session saved by the last run belongs to an address
+// that will never come back, and the operator would be asked to sign in every
+// single time, forever.
+//
+// So: the default port first, then a small run of neighbours if somebody else
+// holds it — a second copy of this app, or a cogitorium serve on the usual
+// port. Falling back to 0 at the end because a window that opens and asks for a
+// password beats a window that does not open.
+func listenSteadily() (net.Listener, error) {
+	var last error
+	for port := 8688; port < 8688+8; port++ {
+		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+		if err == nil {
+			return ln, nil
+		}
+		last = err
+	}
+	slog.Warn("the usual ports are taken, so this window will ask you to sign in again", "err", last)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, fmt.Errorf("could not open a local port: %w", err)
+	}
+	return ln, nil
+}
+
 func run() error {
 	cfg, err := config.Load("", "")
 	if err != nil {
@@ -79,11 +110,11 @@ func run() error {
 	defer stop()
 
 	// The desktop shell is a local install by definition, so it listens on
-	// loopback and the server treats the operator as the admin — the same rule
-	// the web shell follows, not a special case for having a window.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	// loopback — the same rule the web shell follows, not a special case for
+	// having a window.
+	ln, err := listenSteadily()
 	if err != nil {
-		return fmt.Errorf("could not open a local port: %w", err)
+		return err
 	}
 	cfg.Listen = ln.Addr().String()
 

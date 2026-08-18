@@ -576,6 +576,7 @@ paths:
   "/api/v1/login":
     post:
       summary: "Create login"
+      security: []
       responses:
         default:
           description: see the reference
@@ -926,6 +927,30 @@ paths:
           format: int64
     post:
       summary: "Create schedules/{id}/run"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/setup":
+    get:
+      summary: "Read setup"
+      security: []
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create setup"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "password":
+                  type: string
+                "token":
+                  type: string
       responses:
         default:
           description: see the reference

@@ -92,10 +92,15 @@ type Server struct {
 	// them out.
 	publicURL string
 	http      *http.Server
-	// trustLoopback lets an unauthenticated local request act as the admin,
-	// which is what makes a single-operator install feel accountless while
-	// running the same model as a team install.
-	trustLoopback bool
+	// localInstall means the listener is reachable only from this machine —
+	// somebody's own laptop rather than a server other people connect to.
+	//
+	// It no longer grants anything. It once did, as trustLoopback, and the
+	// name changed with the meaning: what is left is a fact about the address
+	// this server answers on, which two decisions still legitimately turn on.
+	// An OAuth redirect can point at the loopback address only here, and a
+	// browser is told to remember a session only here.
+	localInstall bool
 	// interactive is the sandbox backend able to host a terminal; nil means
 	// no terminal is possible, and that is a refusal rather than a fallback.
 	interactive     sandbox.Interactive
@@ -108,7 +113,6 @@ type Server struct {
 	searcher       *websearch.Searcher
 	broker         *egress.Broker
 	egressOff      atomic.Bool
-	egressBearer   bool
 	egressKilledBy string
 	egressKilledAt string
 
@@ -183,19 +187,16 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		inlets:   inlet.NewStore(db),
 		engine: engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, queue,
 			engine.Budgets{Run: cfg.BudgetRunTokens}, cfg.DataDir),
-		queue:         queue,
-		schedules:     schedule.NewStore(db),
-		queueMax:      queueMax,
-		callbackHosts: cfg.CallbackHosts,
-		publicURL:     strings.TrimSuffix(cfg.PublicURL, "/"),
-		// A server reachable beyond this machine must not hand out admin
-		// to anyone who can open a socket to it.
-		trustLoopback:   isLoopbackListen(cfg.Listen),
+		queue:           queue,
+		schedules:       schedule.NewStore(db),
+		queueMax:        queueMax,
+		callbackHosts:   cfg.CallbackHosts,
+		publicURL:       strings.TrimSuffix(cfg.PublicURL, "/"),
+		localInstall:    isLoopbackListen(cfg.Listen),
 		terminalEnabled: cfg.Terminal,
 		dataDir:         cfg.DataDir,
 		searcher:        searcher,
 		broker:          broker,
-		egressBearer:    cfg.EgressApprovalBearer,
 		adminToken:      cfg.AdminToken,
 		// The contextd version is fetched at check time, not here: an install
 		// with no contextd should not pay a subprocess on every boot to
@@ -425,6 +426,8 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		writeError(w, http.StatusNotFound, "no such API endpoint: "+r.Method+" "+r.URL.Path)
 	})
 
+	s.route(mux, "GET /api/v1/setup", s.handleSetupState)
+	s.routeIn(mux, "POST /api/v1/setup", s.handleSetup, SetupBody{})
 	s.route(mux, "POST /api/v1/login", s.handleLogin)
 	s.route(mux, "POST /api/v1/logout", s.handleLogout)
 	s.route(mux, "GET /api/v1/whoami", s.handleWhoami)
@@ -459,8 +462,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 }
 
 // isLoopbackListen reports whether the server is only reachable from this
-// machine. A listener on 0.0.0.0 or a routable address is not, so it must
-// demand a token from everyone.
+// machine. A listener on 0.0.0.0 or a routable address is not.
 func isLoopbackListen(addr string) bool {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -518,11 +520,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	if token == "" {
 		return nil
 	}
-	if s.trustLoopback {
-		slog.Info("admin token created; local requests are admin automatically", "token", token)
-	} else {
-		slog.Warn("admin token created — copy it now, it cannot be shown again", "token", token)
-	}
+	slog.Warn("admin token created — copy it now, it cannot be shown again", "token", token)
 	return nil
 }
 

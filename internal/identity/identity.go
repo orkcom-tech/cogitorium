@@ -207,9 +207,30 @@ func (s *Store) GetUserByName(ctx context.Context, name string) (User, error) {
 	return u, s.loadTeams(ctx, &u)
 }
 
-// SetPassword sets or clears a user's password. Clearing it leaves the
-// account reachable only by token, which is what the seeded admin on a
-// loopback install runs with.
+// NeedsSetup reports whether the seeded admin still has no password.
+//
+// That is the state every fresh install starts in: Bootstrap writes a name and
+// a role and mints a token, and nothing has yet been typed by a person. It used
+// not to matter, because a local request was the admin whether or not anyone
+// could prove it. Now it is the difference between a door and a wall, so the
+// first run asks for a password instead of asking to be let in with one that
+// does not exist.
+func (s *Store) NeedsSetup(ctx context.Context) (bool, error) {
+	var hash string
+	err := s.db.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE name = ?`, AdminName).Scan(&hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		// No admin at all: Bootstrap has not run. Not this package's problem
+		// to fix, and definitely not a state to advertise as claimable.
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("needs setup: %w", err)
+	}
+	return hash == "", nil
+}
+
+// SetPassword sets or clears a user's password. Clearing it leaves the account
+// reachable only by token.
 func (s *Store) SetPassword(ctx context.Context, id int64, password string) error {
 	hash := ""
 	if password != "" {

@@ -196,7 +196,7 @@ func (s *Server) mcpChallenge(r *http.Request, srv mcpstore.Server) mcpoauth.Cha
 func (s *Server) oauthRedirectURI() (string, error) {
 	base := strings.TrimSuffix(s.publicURL, "/")
 	if base == "" {
-		if !s.trustLoopback {
+		if !s.localInstall {
 			return "", errors.New("this install does not know how it is reached from outside, and an OAuth " +
 				"redirect has to name an address the browser can return to: set public_url and restart")
 		}

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { auth, Unauthorized, type User } from './api'
+import { auth, setup, Unauthorized, type SetupState, type User } from './api'
 import { session } from './session'
 import LoginPage from './pages/LoginPage'
+import SetupPage from './pages/SetupPage'
 import ModelsPage from './pages/ModelsPage'
 import WorkspacesPage from './pages/WorkspacesPage'
 import WorkspacePage from './pages/WorkspacePage'
@@ -22,21 +23,46 @@ type Health = { status: string; version: string }
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null)
   const [user, setUser] = useState<User | null>(null)
+  const [install, setInstall] = useState<SetupState | null>(null)
   const [checking, setChecking] = useState(true)
   // ⌘B and the collapse state went with the rail it collapsed. There is no
   // global key binding left in the app at all: Escape is deliberately absent
   // because the approval dialog owns it, scoped to itself, so one keypress can
   // never both dismiss some chrome and silently refuse a pending web search.
 
-  // whoami decides the shell: on loopback it succeeds without credentials,
-  // which is why a single-operator install never sees a login screen.
+  // Two questions, in this order, and the order is the point.
+  //
+  // The install is asked about itself FIRST, without credentials, because the
+  // answer decides where a token may be kept — and a token read before that is
+  // settled could be read from disk on a server that must not keep one. Then
+  // whoami, with whatever token that leaves us holding.
+  //
+  // There is no third case where neither is needed. A local install used to
+  // skip both: any request from this machine was the admin, so the app opened
+  // straight into somebody's workspaces without anyone proving anything.
   const identify = useCallback(() => {
     setChecking(true)
-    auth
-      .whoami()
-      .then(setUser)
-      .catch((e: unknown) => {
-        if (e instanceof Unauthorized) setUser(null)
+    setup
+      .state()
+      .then((st) => {
+        setInstall(st)
+        session.setLocal(st.local)
+        return st
+      })
+      .catch(() => null)
+      .then((st) => {
+        // Nothing to be signed in as yet: skip whoami rather than spend a
+        // guaranteed 401 on it.
+        if (st?.needs_setup) {
+          setUser(null)
+          return
+        }
+        return auth
+          .whoami()
+          .then(setUser)
+          .catch((e: unknown) => {
+            if (e instanceof Unauthorized) setUser(null)
+          })
       })
       .finally(() => setChecking(false))
   }, [])
@@ -55,6 +81,7 @@ export default function App() {
   }, [user])
 
   if (checking) return <main className="shell">connecting…</main>
+  if (!user && install?.needs_setup) return <SetupPage local={install.local} onSignedIn={identify} />
   if (!user) return <LoginPage onSignedIn={identify} />
 
   const signOut = () =>

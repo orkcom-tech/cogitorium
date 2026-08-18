@@ -18,10 +18,6 @@ func TestDangerousCapabilitiesAreOffByDefault(t *testing.T) {
 	if d.Egress {
 		t.Error("egress defaults to on: agents could reach the internet on a fresh install")
 	}
-	if d.EgressApprovalBearer {
-		t.Error("EgressApprovalBearer changed default; it is documented as off, and the audit " +
-			"records which authentication each decision had precisely because of that")
-	}
 	if d.EgressKey != "" {
 		t.Error("a credential is baked into the defaults")
 	}

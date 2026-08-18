@@ -151,6 +151,19 @@ body {
   margin: 0 0 0.25rem;
 }
 
+/* A field grows to fill a ROW — that is what `flex: 1 1 13rem` further down is
+ * for, and it is right in the horizontal `.fields` groups it was written for.
+ * In a column it means every field stretches to share the height, which is why
+ * this card used to draw two inputs a hundred pixels apart.
+ *
+ * It went unseen for as long as it did because nothing local ever rendered
+ * this card: a request from the machine was the admin, so the sign-in screen
+ * was reachable only from another host. */
+.login-card .field,
+.theme-dialog .field {
+  flex: 0 0 auto;
+}
+
 .content {
   padding: 1.25rem 1.5rem;
   min-width: 0;

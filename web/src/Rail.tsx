@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { api, type User, type Workspace } from './api'
-import { COG_MARK, DOCS_URL, ORKCOM_URL, ORK_MARK } from './styles/brand'
-import ThemeMenu from './pages/ThemeMenu'
-import UpdateNotice from './pages/UpdateNotice'
-import { useShell } from './shell'
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { api, type User, type Workspace } from "./api";
+import { COG_MARK, DOCS_URL, ORKCOM_URL, ORK_MARK } from "./styles/brand";
+import ThemeMenu from "./pages/ThemeMenu";
+import UpdateNotice from "./pages/UpdateNotice";
+import ChangePassword from "./pages/ChangePassword";
+import { useShell } from "./shell";
 
 /**
  * The rail: everything the operator commands, standing on the frame.
@@ -94,77 +95,85 @@ const I = {
       <circle cx="12" cy="18.5" r="1.4" fill="currentColor" stroke="none" />
     </svg>
   ),
-}
+};
 
 export default function Rail({
   user,
   health,
   onSignOut,
 }: {
-  user: User
-  health: { version: string; status: string } | null
-  onSignOut: () => void
+  user: User;
+  health: { version: string; status: string } | null;
+  onSignOut: () => void;
 }) {
-  const [menu, setMenu] = useState<null | 'more' | 'account' | 'dests'>(null)
-  const [menuTop, setMenuTop] = useState(0)
-  const box = useRef<HTMLElement>(null)
-  const loc = useLocation()
-  const nav = useNavigate()
-  const shell = useShell()
+  const [menu, setMenu] = useState<null | "more" | "account" | "dests">(null);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [menuTop, setMenuTop] = useState(0);
+  const box = useRef<HTMLElement>(null);
+  const loc = useLocation();
+  const nav = useNavigate();
+  const shell = useShell();
   // The rail is icons, so it has to be able to say what each one is. One
   // element for all of them, moved to whichever button the pointer is over —
   // cheaper than a node per button, and it cannot leave two on screen at once.
-  const [tip, setTip] = useState<{ text: string; top: number } | null>(null)
+  const [tip, setTip] = useState<{ text: string; top: number } | null>(null);
   // The rail owns this list because "which workspace am I in, and what are the
   // others" is a question about the frame rather than about any screen. Fetched
   // once; the menu that shows it is opened rarely and a stale name is a smaller
   // problem than a request on every render.
-  const [WORKSPACES, setWorkspaces] = useState<Workspace[]>([])
+  const [WORKSPACES, setWorkspaces] = useState<Workspace[]>([]);
   useEffect(() => {
     api.workspaces
       .list()
       .then(setWorkspaces)
-      .catch(() => setWorkspaces([]))
-  }, [])
+      .catch(() => setWorkspaces([]));
+  }, []);
   const hover = (text: string) => (e: React.MouseEvent<HTMLElement>) => {
-    const r = e.currentTarget.getBoundingClientRect()
-    setTip({ text, top: Math.round(r.top + r.height / 2) })
-  }
-  const unhover = () => setTip(null)
+    const r = e.currentTarget.getBoundingClientRect();
+    setTip({ text, top: Math.round(r.top + r.height / 2) });
+  };
+  const unhover = () => setTip(null);
 
   // A menu closes on an outside press and on Escape. Deferred by a tick, or
   // the press that opened it closes it again on the same one.
   useEffect(() => {
-    if (!menu) return
+    if (!menu) return;
     const away = (e: MouseEvent) => {
-      if (!box.current?.contains(e.target as Node)) setMenu(null)
-    }
+      if (!box.current?.contains(e.target as Node)) setMenu(null);
+    };
     const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenu(null)
-    }
-    const t = setTimeout(() => document.addEventListener('mousedown', away), 0)
-    document.addEventListener('keydown', key)
+      if (e.key === "Escape") setMenu(null);
+    };
+    const t = setTimeout(() => document.addEventListener("mousedown", away), 0);
+    document.addEventListener("keydown", key);
     return () => {
-      clearTimeout(t)
-      document.removeEventListener('mousedown', away)
-      document.removeEventListener('keydown', key)
-    }
-  }, [menu])
+      clearTimeout(t);
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", key);
+    };
+  }, [menu]);
 
   // Route changes close whatever is open, so a menu never outlives the screen
   // it was opened from.
-  useEffect(() => setMenu(null), [loc.pathname])
+  useEffect(() => setMenu(null), [loc.pathname]);
 
-  const open = (which: 'more' | 'account' | 'dests', e: React.MouseEvent<HTMLElement>) => {
-    const r = e.currentTarget.getBoundingClientRect()
+  const open = (
+    which: "more" | "account" | "dests",
+    e: React.MouseEvent<HTMLElement>,
+  ) => {
+    const r = e.currentTarget.getBoundingClientRect();
     // Vertically centred on its button, clamped so a menu opened near the floor
     // does not hang off it.
-    setMenuTop(Math.min(Math.max(8, r.top - 10), window.innerHeight - 320))
-    setMenu((v) => (v === which ? null : which))
-  }
+    setMenuTop(Math.min(Math.max(8, r.top - 10), window.innerHeight - 320));
+    setMenu((v) => (v === which ? null : which));
+  };
 
   return (
-    <nav className={`rail ${menu ? 'joined' : ''}`} ref={box} aria-label="Cogitorium">
+    <nav
+      className={`rail ${menu ? "joined" : ""}`}
+      ref={box}
+      aria-label="Cogitorium"
+    >
       <Link className="rail-brand" to="/workspaces" title="Cogitorium">
         <img src={COG_MARK} alt="Cogitorium" width={26} height={26} />
         <span className="by">
@@ -172,7 +181,10 @@ export default function Rail({
           <span
             className="ork"
             aria-hidden
-            style={{ maskImage: `url("${ORK_MARK}")`, WebkitMaskImage: `url("${ORK_MARK}")` }}
+            style={{
+              maskImage: `url("${ORK_MARK}")`,
+              WebkitMaskImage: `url("${ORK_MARK}")`,
+            }}
           />
         </span>
       </Link>
@@ -187,18 +199,18 @@ export default function Rail({
           am I" is already answered by the screen, and the button repeated the
           word Workspaces one row above the stage of the same name. */}
       {shell?.back && (
-      <div className="rail-group">
-        <button
-          data-own
-          className={`rail-btn ${menu === 'dests' ? 'on' : ''}`}
-          onMouseEnter={hover(shell?.here?.label ?? 'Workspaces')}
-          onMouseLeave={unhover}
-          onClick={(e) => open('dests', e)}
-        >
-          {I.workspaces}
-          <span className="sr-only">Workspaces</span>
-        </button>
-      </div>
+        <div className="rail-group">
+          <button
+            data-own
+            className={`rail-btn ${menu === "dests" ? "on" : ""}`}
+            onMouseEnter={hover(shell?.here?.label ?? "Workspaces")}
+            onMouseLeave={unhover}
+            onClick={(e) => open("dests", e)}
+          >
+            {I.workspaces}
+            <span className="sr-only">Workspaces</span>
+          </button>
+        </div>
       )}
 
       {/* What the screen in the cavity asked the frame to offer. The rail knows
@@ -208,13 +220,13 @@ export default function Rail({
       {shell?.stages && (
         <div className="rail-group">
           {shell.stages.items.map((s) => {
-            const on = shell.stages!.current === s.id
+            const on = shell.stages!.current === s.id;
             return (
               <button
                 key={s.id}
                 data-own
-                className={`rail-btn ${on ? 'on' : ''}`}
-                aria-current={on ? 'true' : undefined}
+                className={`rail-btn ${on ? "on" : ""}`}
+                aria-current={on ? "true" : undefined}
                 onMouseEnter={hover(s.title)}
                 onMouseLeave={unhover}
                 onClick={() => shell.stages!.go(s.id)}
@@ -222,7 +234,7 @@ export default function Rail({
                 {s.icon}
                 <span className="sr-only">{s.title}</span>
               </button>
-            )
+            );
           })}
         </div>
       )}
@@ -230,12 +242,12 @@ export default function Rail({
       {shell?.drawers && (
         <div className="rail-group">
           {shell.drawers.items.map((d) => {
-            const on = shell.drawers!.open === d.id
+            const on = shell.drawers!.open === d.id;
             return (
               <button
                 key={d.id}
                 data-own
-                className={`rail-btn ${on ? 'on' : ''}`}
+                className={`rail-btn ${on ? "on" : ""}`}
                 aria-expanded={on}
                 onMouseEnter={hover(d.title)}
                 onMouseLeave={unhover}
@@ -243,9 +255,11 @@ export default function Rail({
               >
                 {d.icon}
                 <span className="sr-only">{d.title}</span>
-                {d.badge ? <span className="rail-badge quiet">{d.badge}</span> : null}
+                {d.badge ? (
+                  <span className="rail-badge quiet">{d.badge}</span>
+                ) : null}
               </button>
-            )
+            );
           })}
         </div>
       )}
@@ -265,7 +279,7 @@ export default function Rail({
             <button
               data-own
               className="rail-btn"
-              onMouseEnter={hover('Back')}
+              onMouseEnter={hover("Back")}
               onMouseLeave={unhover}
               onClick={() => nav(shell.back!)}
             >
@@ -292,9 +306,9 @@ export default function Rail({
         <button
           data-own
           className="rail-btn"
-          onMouseEnter={hover('More')}
+          onMouseEnter={hover("More")}
           onMouseLeave={unhover}
-          onClick={(e) => open('more', e)}
+          onClick={(e) => open("more", e)}
         >
           {I.more}
           <span className="sr-only">More</span>
@@ -307,12 +321,14 @@ export default function Rail({
         <ThemeMenu />
         <button
           data-own
-          className={`rail-btn ${menu === 'account' ? 'on' : ''}`}
+          className={`rail-btn ${menu === "account" ? "on" : ""}`}
           onMouseEnter={hover(user.name)}
           onMouseLeave={unhover}
-          onClick={(e) => open('account', e)}
+          onClick={(e) => open("account", e)}
         >
-          <span style={{ font: '650 13px/1 var(--mono)' }}>{user.name.slice(0, 1).toUpperCase()}</span>
+          <span style={{ font: "650 13px/1 var(--mono)" }}>
+            {user.name.slice(0, 1).toUpperCase()}
+          </span>
         </button>
       </div>
 
@@ -320,13 +336,17 @@ export default function Rail({
         <span
           className="rail-tip"
           role="tooltip"
-          style={{ top: tip.top, left: `calc(var(--rail-w) + var(--bezel))`, transform: 'translateY(-50%)' }}
+          style={{
+            top: tip.top,
+            left: `calc(var(--rail-w) + var(--bezel))`,
+            transform: "translateY(-50%)",
+          }}
         >
           {tip.text}
         </span>
       )}
 
-      {menu === 'dests' && (
+      {menu === "dests" && (
         <div className="rail-menu" style={{ top: menuTop }} role="menu">
           <span className="rail-menu-label">workspaces</span>
           {WORKSPACES.map((w) => (
@@ -336,16 +356,16 @@ export default function Rail({
             </button>
           ))}
           <hr />
-          <button onClick={() => nav('/workspaces')}>All workspaces…</button>
+          <button onClick={() => nav("/workspaces")}>All workspaces…</button>
         </div>
       )}
 
-      {menu === 'more' && (
+      {menu === "more" && (
         <div className="rail-menu" style={{ top: menuTop }} role="menu">
           <span className="rail-menu-label">the install</span>
           <Link to="/models">Models</Link>
-          {user.role === 'admin' && <Link to="/people">People</Link>}
-          {user.role === 'admin' && <Link to="/context">Context</Link>}
+          {user.role === "admin" && <Link to="/people">People</Link>}
+          {user.role === "admin" && <Link to="/context">Context</Link>}
           <hr />
           <a href={DOCS_URL} target="_blank" rel="noreferrer">
             Documentation
@@ -356,19 +376,41 @@ export default function Rail({
         </div>
       )}
 
-      {menu === 'account' && (
+      {menu === "account" && (
         <div className="rail-menu" style={{ top: menuTop }} role="menu">
           <span className="rail-menu-label">{user.role}</span>
-          <span className="rail-menu-label" style={{ textTransform: 'none', letterSpacing: 0 }}>
-            <strong style={{ color: 'var(--text)', fontSize: 'var(--t-ui)' }}>{user.name}</strong>
+          <span
+            className="rail-menu-label"
+            style={{ textTransform: "none", letterSpacing: 0 }}
+          >
+            <strong style={{ color: "var(--text)", fontSize: "var(--t-ui)" }}>
+              {user.name}
+            </strong>
           </span>
           <hr />
-          <span className="rail-menu-label" style={{ textTransform: 'none', letterSpacing: 0 }}>
-            {health ? `${health.version} · ${health.status}` : 'server unreachable'}
+          <span
+            className="rail-menu-label"
+            style={{ textTransform: "none", letterSpacing: 0 }}
+          >
+            {health
+              ? `${health.version} · ${health.status}`
+              : "server unreachable"}
           </span>
+          <button
+            onClick={() => {
+              setMenu(null);
+              setChangingPassword(true);
+            }}
+          >
+            change password
+          </button>
           <button onClick={onSignOut}>sign out</button>
         </div>
       )}
+
+      {changingPassword && (
+        <ChangePassword me={user} onDone={() => setChangingPassword(false)} />
+      )}
     </nav>
-  )
+  );
 }
