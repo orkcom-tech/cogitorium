@@ -1,5 +1,61 @@
 # Changelog
 
+## Unreleased
+
+### Knowing there is a new version, without being asked to trust anything
+
+Cogitorium and Contextverse ship as binaries people install once and keep, and
+until now nothing told anybody a newer one existed. Somebody `brew install`s
+this in March and runs a year-old build; every fix and every security change is
+invisible unless they think to go and look. The pair versions independently on
+the same machine, so a Cogitorium that needs a newer `contextd` than is
+installed fails a save loudly — correctly — and nothing anywhere joined those
+two facts up.
+
+**The default is neither on nor off. It is `ask`.** This product fetches nothing
+at runtime and sends nothing about itself anywhere, so switching an outbound
+request on by default would trade a headline promise for a convenience; but a
+check that is off by default is a check nobody has, which is the state that made
+this worth building. So the question is put once, in the interface, on the rail,
+and nothing leaves the machine until it is answered. Three answers: check daily,
+never, or **look once now** — which changes no setting, because one press is one
+look and not consent to a request every morning.
+
+**The answer is remembered**, in a new `settings` table. An earlier cut held it
+in memory only, which meant the question came back after every restart — a
+product that asks the same thing forever is a product that did not listen. On
+Kubernetes that would have been every deploy.
+
+**`update_check: off` is absolute and not liftable from a browser.** It is set
+on the server's own disk; never asked, never checked, and *check now* is refused
+with the name of the setting to change. A stored answer written before that edit
+does not outrank it. The Helm chart defaults to `off`, unlike the binary: on a
+cluster the person who decides what a pod may reach is the one applying the
+chart, not whoever opens a browser.
+
+**What goes out** is a GET to GitHub's public releases API carrying no
+identifier, no version, no count and no usage. What comes back is a tag and the
+release notes — shown as text, never as markup, because it is somebody else's
+document arriving over the network. Startup never waits on it, an air-gapped
+install fails one attempt quietly, and a dismissal is remembered against the
+version so a notice cannot come back for something already read.
+
+**Nothing is ever replaced.** Cogitorium does not overwrite its own binary. It
+works out who owns the file — Homebrew, Scoop, winget, a system package, a
+container, a cluster — and prints that owner's command, or none at all where
+none would be honest. A self-updater fighting a package manager produces a
+machine nobody can reason about.
+
+**Three states are kept apart** where one would have been easier: *this is the
+newest release*, *could not ask* (with the reason), and *nothing here can say* —
+the last for a build whose version is not a release version, which is what a
+source build gets. Collapsing them would let the panel claim confidence it does
+not have.
+
+The API description now covers 97 paths and 130 operations; the counts quoted in
+the README, the reference and the guide were already stale before this and are
+corrected.
+
 ## v1.5.0
 
 A new shell, and the record telling more of the truth.

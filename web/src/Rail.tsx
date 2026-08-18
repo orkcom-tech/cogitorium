@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api, type User, type Workspace } from './api'
 import { COG_MARK, DOCS_URL, ORKCOM_URL, ORK_MARK } from './styles/brand'
 import ThemeMenu from './pages/ThemeMenu'
+import UpdateNotice from './pages/UpdateNotice'
 import { useShell } from './shell'
 
 /**
@@ -298,6 +299,11 @@ export default function Rail({
           {I.more}
           <span className="sr-only">More</span>
         </button>
+        {/* Beside the appearance bead and the account, where the product's own
+            state already lives. It draws nothing at all unless there is
+            something to say or — for an administrator on an install nobody has
+            answered for yet — something to ask. */}
+        <UpdateNotice me={user} />
         <ThemeMenu />
         <button
           data-own

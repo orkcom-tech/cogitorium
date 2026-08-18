@@ -113,6 +113,21 @@ config:
   # value should be able to turn on.
   terminal: false
 
+  # May this install ask GitHub whether a newer Cogitorium or Contextverse has
+  # been released: "ask", "on" or "off".
+  #
+  # "off" HERE, and not the "ask" the binary defaults to. A cluster is not a
+  # laptop: the question is put to whoever is looking at the interface, and on
+  # Kubernetes the person who decides what this pod may reach is the person
+  # applying this chart, not the person who happens to open a browser. Set it to
+  # "on" if you want the notice; the notice is the whole feature here anyway,
+  # because the image tag is the version and there is no command a pod could run
+  # that the next roll would not undo.
+  #
+  # Nothing about the install is ever sent — no identifier, no version, no
+  # count. See the guide's Updates section.
+  updateCheck: "off"
+
   # Agents reaching the internet. Off by default, and it needs a sandbox: an
   # unsandboxed gear can rewrite the configuration and the grants table, which
   # would make the gate decorative.

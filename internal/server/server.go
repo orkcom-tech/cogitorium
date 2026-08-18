@@ -32,6 +32,8 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/schedule"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
+	"github.com/orkcom-tech/cogitorium/internal/settings"
+	"github.com/orkcom-tech/cogitorium/internal/update"
 	"github.com/orkcom-tech/cogitorium/internal/version"
 	"github.com/orkcom-tech/cogitorium/internal/websearch"
 	"github.com/orkcom-tech/cogitorium/internal/work"
@@ -97,6 +99,11 @@ type Server struct {
 	egressBearer   bool
 	egressKilledBy string
 	egressKilledAt string
+
+	// updates answers "is there a newer release", and holds the setting that
+	// decides whether it may ask. Never nil: an install with the check off
+	// still has to be able to say that it is off.
+	updates *update.Checker
 
 	// adminToken seeds the first admin instead of generating one. Empty is the
 	// normal case; see config.Config.AdminToken for why it is environment-only.
@@ -168,6 +175,12 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		broker:          broker,
 		egressBearer:    cfg.EgressApprovalBearer,
 		adminToken:      cfg.AdminToken,
+		// The contextd version is fetched at check time, not here: an install
+		// with no contextd should not pay a subprocess on every boot to
+		// discover that, and the check runs at most once a day.
+		updates: update.New(cfg.UpdateCheck, version.Version, func(ctx context.Context) string {
+			return cs.CheckStatus(ctx).Version
+		}),
 	}
 	// The workers, started here rather than in Serve.
 	//
@@ -191,6 +204,19 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	}
 
 	s.startScheduler(poolCtx)
+
+	// The answer an operator gave last time, before the timer is started —
+	// otherwise an install whose operator said "on" months ago starts under
+	// "ask" and asks again, and one whose operator said "no" is asked forever.
+	// Load enforces the ceiling on the way in: a stored answer can never lift
+	// a configured off.
+	s.updates.Load(poolCtx, settings.NewStore(db))
+
+	// The update check, on the same lifetime and deliberately not on the
+	// startup path: it returns immediately and defers its first request, so a
+	// slow or unreachable GitHub is never part of this server's boot. Under
+	// "ask" and "off" it schedules nothing at all.
+	s.updates.Start(poolCtx)
 
 	// A terminal is only offered when the sandbox can host one: without it
 	// the shell would hold the server's own file access.
@@ -263,6 +289,14 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 
 	s.route(mux, "GET /api/v1/workspaces/{id}/graph", s.handleWorkspaceGraph)
 	s.route(mux, "GET /api/v1/map", s.handleAccessMap)
+
+	// Reading is for anybody signed in — a version is a fact about the install,
+	// like its health. Asking, and deciding whether this server may ask at all,
+	// are an administrator's: both are outbound requests on behalf of everybody
+	// on the install rather than a preference one person holds.
+	s.route(mux, "GET /api/v1/updates", s.handleUpdateStatus)
+	s.route(mux, "POST /api/v1/updates/check", s.handleUpdateCheckNow)
+	s.routeIn(mux, "PUT /api/v1/updates/mode", s.handleSetUpdateMode, UpdateModeBody{})
 
 	s.route(mux, "GET /api/v1/egress/status", s.handleEgressStatus)
 	s.route(mux, "POST /api/v1/egress/off", s.handleEgressKill)

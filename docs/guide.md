@@ -1684,6 +1684,87 @@ dark at night, in a colour they like.
 
 ---
 
+## Updates
+
+Cogitorium and Contextverse are binaries you install once and then keep. Until
+now nothing told you a newer one existed: you install it in March and run a
+year-old build, missing every fix, unless you think to go and look. Worse, the
+two version independently on the same machine, so a Cogitorium that needs a
+newer `contextd` than you have fails a save loudly and nothing anywhere joins
+those two facts up.
+
+**The question comes first.** This product fetches nothing at runtime and sends
+nothing about itself anywhere, and a version check is the first outbound request
+the server would make on its own behalf. So it does not make it until you say it
+may. On a fresh install an administrator finds one quiet control on the rail:
+
+> **May this install ask whether a newer version exists?**
+> It is a plain GET to GitHub's public releases API, once a day. Nothing about
+> this install is sent — no identifier, no version, no count, no usage.
+
+Three answers, and the third is the one people actually want: **yes, check
+daily**; **no, never**; or **just look once, now** — which asks this once and
+changes nothing, because one press is one look and not consent to a request
+every morning.
+
+**The answer is remembered.** It lives in the install's own database, so it
+survives a restart. A product that asked the same question after every reboot
+would be a product that did not listen.
+
+**What you are told, and when.** Nothing until there is something to say, and
+then a dot on the rail beside the appearance bead — not a modal, not a banner
+across your work. Opening it shows the release notes, because *"1.6.0 is out"*
+is not a reason to update and *"1.6.0 fixes the thing costing you an hour a
+week"* is. Both halves are reported: Cogitorium and, if `contextd` is on the
+machine, Contextverse.
+
+Three states are kept apart on purpose, because collapsing them would be the
+panel claiming confidence it does not have:
+
+- **this is the newest release** — the comparison ran and you are current;
+- **could not ask** — with the reason. Not the same as being up to date;
+- **nothing here can say** — a build whose version is not a release version,
+  which usually means it was built from source. It is shown the newest tag and
+  told plainly that nothing can tell it whether that is newer.
+
+**Taking it is never done for you.** Cogitorium does not replace its own binary,
+ever. A self-updater that fights a package manager produces a machine nobody can
+reason about — `brew list` saying one version, the file being another, and the
+next `brew upgrade` quietly reverting it. So the panel works out who owns the
+binary and prints *that* owner's command: `brew upgrade cogitorium` under
+Homebrew, `scoop update cogitorium` under Scoop, the winget line under winget.
+In a container or on Kubernetes it prints **no command at all** and says why —
+the image tag is the version there, and anything typed inside a pod is gone at
+the next roll.
+
+**Told once is told.** Dismissing a notice remembers the version it was about,
+on your device. It comes back when there is something new to say and never for
+the thing you already read — a notice that returns every day teaches people to
+dismiss it without reading, which is the state it exists to prevent.
+
+**Switching it off, and keeping it off.** `update_check: off` in the config file
+is absolute: never asked, never checked, and *check now* is refused. It is set
+on the server's own disk and **the interface cannot lift it** — a browser that
+could undo it would make the file a suggestion. An answer stored from before
+that edit does not outrank it either.
+
+| `update_check` | what happens |
+|---|---|
+| `ask` *(default)* | Nothing leaves the machine. An administrator is asked once, on the rail. |
+| `on` | A check a day, and one immediately when the answer is given. |
+| `off` | Never asked, never checked, *check now* refused, not liftable from the interface. |
+
+Reading the state is open to anybody signed in — a version is a fact about the
+install, like its health. Answering the question and pressing *check now* are an
+administrator's, because both are outbound requests made on behalf of everybody
+on the install.
+
+**On an air-gapped install** nothing is broken and nothing nags: one attempt
+fails quietly, the panel says it could not ask and why, and startup never waits
+on it. A slow or unreachable GitHub is not a reason for a workspace to be slow.
+
+---
+
 ## Beyond the interface
 
 The rest is not a screen. It is what the same install looks like from a client,
@@ -1944,7 +2025,7 @@ than counted, because a bundle whose gears were all skipped imports
 approving gears. Those are decisions made while looking at a canvas or a source
 listing, and a flag is a worse place to make them than a screen that shows what
 is being decided. Everything the command line does, it does over the same HTTP
-API described in [openapi.yaml](openapi.yaml) — 92 path items and 124
+API described in [openapi.yaml](openapi.yaml) — 97 path items and 130
 operations — so anything missing here is one `curl` away, not blocked.
 
 ### Letting an agent search the web

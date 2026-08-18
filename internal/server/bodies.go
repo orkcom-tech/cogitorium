@@ -42,6 +42,14 @@ type CreateGearBody = createGearInput
 // given on CreateGearBody.
 type RunGearBody = runGearInput
 
+// UpdateModeBody is the answer to the one question this product asks on its
+// own behalf: may this install ask whether a newer release exists. "ask", "on"
+// or "off" — see internal/update for why the unanswered state is a value of its
+// own rather than a false.
+type UpdateModeBody struct {
+	Mode string `json:"mode"`
+}
+
 // InvokeGearBody runs an approved gear. No network field: the grant is the
 // one the operator already made, and offering to override it here would make
 // the approval a suggestion.

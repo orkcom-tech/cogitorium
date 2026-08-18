@@ -92,6 +92,51 @@ export type FileEntry = { name: string; path: string; dir: boolean; size: number
 // server's configuration file, and a per-agent grant an operator draws on the
 // blueprint. Neither is reachable from an agent, and every individual search
 // still stops the turn and waits for a person.
+// Is there a newer release, and may this install ask.
+//
+// `mode` is three-valued rather than a bool because "nobody has answered yet"
+// is a real state: an install that has not been asked is not the same as one
+// that said no. `off` is set in the server's config file and cannot be changed
+// from here — the interface shows it and does not offer the switch.
+export type UpdateMode = 'ask' | 'on' | 'off'
+
+export type UpdateRelease = {
+  tag: string
+  name: string
+  notes: string
+  url: string
+  published_at: string
+}
+
+export type UpdateProduct = {
+  name: string
+  /** What this machine runs. Empty means the product is not installed here. */
+  running: string
+  latest?: UpdateRelease
+  /** Strictly newer, and only when the comparison was conclusive. */
+  newer: boolean
+  /** False for a development build: "up to date" and "cannot say" differ. */
+  comparable: boolean
+  error?: string
+}
+
+// How this copy got onto the machine, which decides what an honest "take it"
+// line can offer. A container and a cluster carry no command on purpose: the
+// deploy pipeline owns the version there, and anything typed into a pod is
+// undone by the next roll.
+export type UpdateInstall = {
+  kind: 'homebrew' | 'scoop' | 'winget' | 'deb-rpm' | 'container' | 'kubernetes' | 'desktop' | 'manual'
+  command?: string
+  note: string
+}
+
+export type UpdateReport = {
+  mode: UpdateMode
+  checked_at: string
+  products: UpdateProduct[]
+  install: UpdateInstall
+}
+
 export type EgressStatus = {
   enabled: boolean
   reason: string
@@ -624,6 +669,18 @@ export const api = {
     workspace: (wsId: number) => req<AgentUsage[]>(`/api/v1/workspaces/${wsId}/usage`),
     agent: (agentId: number) => req<AgentUsage>(`/api/v1/agents/${agentId}/usage`),
   },
+  // Whether a newer release exists. Reading never triggers a request: the
+  // server holds the last answer and asks GitHub at most once a day, so a rail
+  // that rendered on every navigation cannot rate-limit a team out of the API.
+  updates: {
+    status: () => req<UpdateReport>('/api/v1/updates'),
+    // Asks now. Works while the setting is still `ask` — one press is one look
+    // — and is refused when the config file says off.
+    checkNow: () => req<UpdateReport>('/api/v1/updates/check', { method: 'POST' }),
+    setMode: (mode: UpdateMode) =>
+      req<UpdateReport>('/api/v1/updates/mode', { method: 'PUT', body: JSON.stringify({ mode }) }),
+  },
+
   egress: {
     status: () => req<EgressStatus>('/api/v1/egress/status'),
     kill: () => req<{ killed: boolean; notice: string }>('/api/v1/egress/off', { method: 'POST' }),

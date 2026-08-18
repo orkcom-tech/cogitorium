@@ -62,7 +62,7 @@ spent it.
   credential.
   [→](https://orkcom-tech.github.io/cogitorium/#named-values)
 - 📐 **A described API** — `docs/openapi.yaml` is generated from the server's own
-  route table by a test that fails when the two disagree — **92 paths, 124
+  route table by a test that fails when the two disagree — **97 paths, 130
   operations** — so a route cannot exist without appearing in it.
   [→](https://orkcom-tech.github.io/cogitorium/#the-api-description)
 - 🔌 **Speaks MCP** — `cogitorium mcp` serves your approved gears and receiver
@@ -250,8 +250,8 @@ single-operator install never sees a sign-in screen.
 ## No telemetry
 
 Nothing is reported about you or about this install. There is no analytics
-endpoint, no crash reporter and no update ping, and the interface fetches no
-fonts and no scripts from the network.
+endpoint and no crash reporter, and the interface fetches no fonts and no
+scripts from the network.
 
 Everything this binary does reach, in full:
 
@@ -264,7 +264,28 @@ Everything this binary does reach, in full:
   `echo-page.com`, then `api.duckduckgo.com` as a fallback. They are constants
   fixed at build time rather than settings, so no agent can name where its words
   go and nobody can be talked into repointing them;
-- the **cluster API**, in Kubernetes mode, to create the Job a gear runs as.
+- the **cluster API**, in Kubernetes mode, to create the Job a gear runs as;
+- **`api.github.com`, only if you say yes** — see below.
+
+### The one question this product asks
+
+Cogitorium and Contextverse are binaries people install once and keep. Nothing
+told anybody a newer one existed, so somebody installs this in March and runs a
+year-old build without ever knowing.
+
+The fix is a daily GET to GitHub's public releases API — and because that is the
+first outbound request this server makes on its own behalf, **it does not happen
+until you agree to it.** `update_check` defaults to `ask`: the interface puts
+the question once, on the rail, and nothing leaves the machine until it is
+answered. Set `update_check: off` and it is never asked and never checks,
+including when somebody presses *check now* — and the interface cannot lift
+that, because it is a decision made on the server's own disk.
+
+The request carries **no identifier, no version, no count and no usage**. What
+comes back is a tag and the release notes. Nothing is downloaded and **nothing
+is ever replaced**: whoever installed the binary is who replaces it, so the
+panel prints `brew upgrade cogitorium` on a Homebrew install and no command at
+all in a container, where the next deploy owns the version anyway.
 
 Context and memory go to a `contextd` process on the same machine, not to a
 network service.

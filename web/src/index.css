@@ -1803,6 +1803,56 @@ th {
   flex: 1;
 }
 
+/* The update panel carries .theme-dialog as well, which is where its padding,
+   gap, border and scroll come from — the two dialogs have the same geometry and
+   a second copy of it would be a second place to keep in step. This block is
+   only the difference: it is wider, because release notes at 30rem wrap every
+   line of a changelog twice. */
+.update-dialog {
+  width: min(44rem, calc(100vw - 2rem));
+}
+
+.update-half.newer {
+  border-color: var(--accent);
+}
+
+/* Somebody else's text, shown as text. Monospace and pre-wrap because a
+   changelog is written with hard line breaks and lists, and reflowing it into
+   a paragraph loses the shape that makes it scannable. */
+.update-notes {
+  margin: 0;
+  padding: var(--s2);
+  max-height: 18rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: var(--t-mono)/1.5 var(--mono);
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: var(--r1);
+}
+
+/* The command belonging to whoever owns the binary. Selectable and on its own
+   line: it is meant to be copied into a shell, not read. */
+.update-cmd {
+  margin: 0;
+  padding: var(--s2);
+  overflow-x: auto;
+  font: var(--t-mono)/1.5 var(--mono);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r1);
+  user-select: all;
+}
+
+.update-ask {
+  border-color: var(--accent);
+}
+
+.update-foot {
+  align-items: center;
+}
+
 .theme-head {
   padding: var(--s3) var(--s3) var(--s2);
   border-bottom: 1px solid var(--border);

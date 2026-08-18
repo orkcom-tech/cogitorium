@@ -25,6 +25,7 @@ data:
     kube_memory: {{ .Values.config.gearResources.memory | quote }}
     {{- end }}
     terminal: {{ .Values.config.terminal }}
+    update_check: {{ .Values.config.updateCheck | quote }}
     egress: {{ .Values.config.egress }}
     {{- if .Values.config.variablesConfigMap }}
     variables_dir: /etc/cogitorium/variables

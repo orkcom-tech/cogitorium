@@ -14,6 +14,7 @@ import (
 
 	"github.com/orkcom-tech/cogitorium/internal/gearnet"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
+	"github.com/orkcom-tech/cogitorium/internal/update"
 )
 
 // DefaultBrowserImage carries a real browser and the driver that speaks to it.
@@ -101,6 +102,23 @@ type Config struct {
 	// also requires a sandbox — without one the request is refused rather
 	// than served with the server's own file access.
 	Terminal bool `yaml:"terminal"`
+
+	// UpdateCheck decides whether this install may ask GitHub whether a newer
+	// Cogitorium or Contextverse has been released: "ask", "on" or "off".
+	//
+	// The default is "ask", and it is neither of the other two on purpose. This
+	// product fetches nothing at runtime and sends nothing about itself
+	// anywhere, so switching an outbound request on by default would break the
+	// headline promise for a convenience; but a check that is off by default is
+	// a check nobody has, which is exactly the state that made this worth
+	// building — somebody installs it in March and runs an old one for a year.
+	//
+	// So the question is PUT ONCE, in the interface, and nothing leaves the
+	// machine until it is answered. "off" is the setting for an install that
+	// must not make outbound requests at all: it is never asked, never checks,
+	// and refuses "check now", and the interface cannot undo it — see
+	// update.Checker.SetMode.
+	UpdateCheck string `yaml:"update_check"`
 
 	// Egress is the master switch for agents reaching the internet. Off by
 	// default, and deliberately reachable ONLY from this file and the
@@ -244,6 +262,7 @@ func Defaults() Config {
 		LogLevel:        "info",
 		ContextdPath:    "contextd",
 		Sandbox:         "auto",
+		UpdateCheck:     update.ModeAsk,
 		BrowserImage:    DefaultBrowserImage,
 		GearProxyListen: gearnet.DefaultListen,
 		QueueWorkers:    4,
@@ -347,6 +366,11 @@ func Load(path, dataDirOverride string) (Config, error) {
 	}
 	if v := os.Getenv("COGITORIUM_TERMINAL"); v != "" {
 		cfg.Terminal = v == "1" || strings.EqualFold(v, "true")
+	}
+	// Not a bool: "ask" is a real value and spelling it as a third state of a
+	// flag would make an unanswered question look like a refusal.
+	if v := os.Getenv("COGITORIUM_UPDATE_CHECK"); v != "" {
+		cfg.UpdateCheck = strings.ToLower(strings.TrimSpace(v))
 	}
 	// Same strict parse as Terminal, so COGITORIUM_EGRESS=0 is a working
 	// off-switch over a file that says true.

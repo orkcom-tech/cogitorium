@@ -926,6 +926,33 @@ paths:
       responses:
         default:
           description: see the reference
+  "/api/v1/updates":
+    get:
+      summary: "Read updates"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/updates/check":
+    post:
+      summary: "Create updates/check"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/updates/mode":
+    put:
+      summary: "Replace updates/mode"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "mode":
+                  type: string
+      responses:
+        default:
+          description: see the reference
   "/api/v1/users":
     get:
       summary: "Read users"
