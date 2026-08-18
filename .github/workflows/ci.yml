@@ -228,6 +228,17 @@ jobs:
             echo "FAIL: the chart accepted a short admin token"; exit 1
           fi
           echo "ok: refused a short admin token"
+          if helm template cog deploy/helm/cogitorium --set auth.adminPassword=short >/dev/null 2>&1; then
+            echo "FAIL: the chart accepted a short admin password"; exit 1
+          fi
+          echo "ok: refused a short admin password"
+          # The password is GENERATED when none is given, and that is the
+          # default path every operator takes. A render that produced no
+          # admin-password would leave an install nobody can sign in to.
+          helm template cog deploy/helm/cogitorium | grep -q "admin-password:" || {
+            echo "FAIL: the default render carries no generated admin password"; exit 1
+          }
+          echo "ok: a password is generated when none is supplied"
           # And the valid shape must still render, or the guards are just noise.
           helm template cog deploy/helm/cogitorium --set auth.adminToken="$TOK" >/dev/null
           echo "ok: a valid configuration renders"
@@ -270,6 +281,71 @@ jobs:
           # health check and serve nothing.
           curl -fsS http://127.0.0.1:8688/ | grep -q '<div id="root">'
           echo "ok: API and interface both answer"
+
+      - name: The generated admin password signs in, and is not in the log
+        run: |
+          set -e
+          # Exactly what NOTES.txt tells an operator to run.
+          PW=$(kubectl -n cogitorium get secret cogitorium-auth \
+            -o jsonpath='{.data.admin-password}' | base64 -d)
+          echo "::add-mask::$PW"
+          [ -n "$PW" ] || { echo "FAIL: the Secret carries no admin password"; exit 1; }
+          echo "PW=$PW" >> "$GITHUB_ENV"
+
+          # It is a working credential, not just a string in a Secret.
+          curl -fsS -X POST http://127.0.0.1:8688/api/v1/login \
+            -H 'Content-Type: application/json' \
+            -d "{\"name\":\"admin\",\"password\":\"$PW\"}" | grep -q '"role":"admin"'
+          echo "ok: the generated password signs the admin in"
+
+          # And the install does not also stand there asking to be claimed,
+          # which on a network-reachable address is what a stranger would do.
+          curl -fsS http://127.0.0.1:8688/api/v1/setup | grep -q '"needs_setup":false'
+          echo "ok: the install is claimed, so nobody else can claim it"
+
+          # A credential in a pod log is readable by anyone with log access.
+          if kubectl -n cogitorium logs deploy/cogitorium | grep -qF "$PW"; then
+            echo "FAIL: the admin password appears in the pod log"; exit 1
+          fi
+          echo "ok: the password is not in the pod log"
+
+      - name: An upgrade keeps the password rather than minting a new one
+        run: |
+          set -e
+          # THE TRAP THIS GUARDS. randAlphaNum runs on every render, so a chart
+          # that generated naively would put a fresh password in the Secret at
+          # every upgrade — and the server only adopts one while the admin has
+          # none, so from here on the Secret would advertise a value that does
+          # not work. Nothing catches that except an actual upgrade.
+          helm upgrade cogitorium deploy/helm/cogitorium \
+            --namespace cogitorium \
+            --set image.repository=cogitorium \
+            --set image.tag=ci \
+            --set image.pullPolicy=Never \
+            --set auth.adminToken="$ADMIN_TOKEN" \
+            --wait --timeout 5m
+
+          AFTER=$(kubectl -n cogitorium get secret cogitorium-auth \
+            -o jsonpath='{.data.admin-password}' | base64 -d)
+          echo "::add-mask::$AFTER"
+          if [ "$AFTER" != "$PW" ]; then
+            echo "FAIL: helm upgrade replaced the admin password, so the Secret now names one the server does not have"
+            exit 1
+          fi
+          echo "ok: the upgrade kept the password"
+
+          # The strategy is Recreate, so the upgrade replaced the pod and took
+          # the port-forward with it. Every step after this one needs it back.
+          pkill -f "port-forward svc/cogitorium" || true
+          kubectl -n cogitorium port-forward svc/cogitorium 8688:8688 &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8688/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS -X POST http://127.0.0.1:8688/api/v1/login \
+            -H 'Content-Type: application/json' \
+            -d "{\"name\":\"admin\",\"password\":\"$PW\"}" | grep -q '"role":"admin"'
+          echo "ok: it still signs in after the upgrade"
 
       - name: The seeded admin token works and was never logged
         run: |

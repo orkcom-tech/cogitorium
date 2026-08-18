@@ -154,7 +154,7 @@ func newInstallWithSandbox(t *testing.T, listen string, searcher *websearch.Sear
 	// Empty seed: the fixture wants a generated token back. A seeded one is
 	// deliberately NOT returned by Bootstrap, so passing a literal here would
 	// leave adminTok empty and every admin case would fail as unauthenticated.
-	_, tok, err := in.users.Bootstrap(context.Background(), "")
+	_, tok, err := in.users.Bootstrap(context.Background(), identity.Seeds{})
 	if err != nil {
 		t.Fatalf("bootstrap admin: %v", err)
 	}

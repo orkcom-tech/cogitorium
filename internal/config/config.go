@@ -14,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/orkcom-tech/cogitorium/internal/gearnet"
+	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/update"
 )
@@ -268,6 +269,24 @@ type Config struct {
 	// "in the pod log, for anyone who can read logs". With it, nothing
 	// sensitive is ever written to the log.
 	AdminToken string `yaml:"-"`
+
+	// AdminPassword seeds the first admin's password, so a deployment nobody is
+	// standing in front of comes up able to be signed in to.
+	//
+	// No yaml tag, for the same reason AdminToken has none: on Kubernetes the
+	// config file is a ConfigMap, and a ConfigMap is not a secret.
+	//
+	// Without it the admin is created with no password and the first person to
+	// open the interface is asked to choose one. That is right on a laptop and
+	// wrong in a cluster: on an address the network can reach, the first
+	// stranger to find the port would be the one choosing it, so the setup
+	// route demands the admin token there — which means an unattended deploy
+	// with no password is one an operator has to go and claim by hand.
+	//
+	// Applied at FIRST START only. A later start ignores it, so changing this
+	// value cannot overwrite a password the operator has since chosen, and
+	// cannot be used to recover a forgotten one.
+	AdminPassword string `yaml:"-"`
 }
 
 func Defaults() Config {
@@ -435,6 +454,13 @@ func Load(path, dataDirOverride string) (Config, error) {
 				len(v), MinAdminTokenLen)
 		}
 		cfg.AdminToken = v
+	}
+	if v := os.Getenv("COGITORIUM_ADMIN_PASSWORD"); v != "" {
+		if len(v) < identity.MinPasswordLen {
+			return Config{}, fmt.Errorf("COGITORIUM_ADMIN_PASSWORD is %d characters; it is what the admin signs in with, so at least %d are required",
+				len(v), identity.MinPasswordLen)
+		}
+		cfg.AdminPassword = v
 	}
 	return cfg, nil
 }

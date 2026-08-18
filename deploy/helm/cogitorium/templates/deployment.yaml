@@ -58,6 +58,23 @@ spec:
               # read-only — so HOME has to be on the volume or the context layer
               # has nowhere to write.
               value: /data/home
+            {{- if .Values.auth.existingSecret }}
+            - name: COGITORIUM_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.existingSecret }}
+                  key: {{ .Values.auth.existingSecretPasswordKey }}
+                  # A Secret made before this chart asked for a password has no
+                  # such key. Optional means that install starts and is reached
+                  # with its token, rather than crash-looping on a missing key.
+                  optional: true
+            {{- else }}
+            - name: COGITORIUM_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-auth" (include "cogitorium.fullname" .) }}
+                  key: admin-password
+            {{- end }}
             {{- if or .Values.auth.adminToken .Values.auth.existingSecret }}
             - name: COGITORIUM_ADMIN_TOKEN
               valueFrom:

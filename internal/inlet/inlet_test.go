@@ -43,7 +43,7 @@ func newFixture(t *testing.T) (*Store, int64) {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	admin, _, err := identity.NewStore(db).Bootstrap(ctx, "")
+	admin, _, err := identity.NewStore(db).Bootstrap(ctx, identity.Seeds{})
 	if err != nil {
 		t.Fatalf("bootstrap admin: %v", err)
 	}

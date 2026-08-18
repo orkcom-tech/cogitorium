@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/orkcom-tech/cogitorium/internal/update"
@@ -58,5 +60,43 @@ func TestEgressEnvIsAStrictParseSoZeroTurnsItOff(t *testing.T) {
 		if !cfg.Egress {
 			t.Errorf("COGITORIUM_EGRESS=%q did not enable egress", v)
 		}
+	}
+}
+
+// The seeded admin password is refused at startup when it is weaker than a
+// person would be allowed to choose. One floor, from internal/identity, so a
+// credential supplied by a deployment cannot be the weak one.
+func TestAShortSeededAdminPasswordStopsStartup(t *testing.T) {
+	t.Setenv("COGITORIUM_ADMIN_PASSWORD", "short")
+	if _, err := Load("", ""); err == nil {
+		t.Fatal("a five-character COGITORIUM_ADMIN_PASSWORD was accepted at startup")
+	}
+
+	t.Setenv("COGITORIUM_ADMIN_PASSWORD", "correct-horse-battery")
+	cfg, err := Load("", "")
+	if err != nil {
+		t.Fatalf("a long enough password was refused: %v", err)
+	}
+	if cfg.AdminPassword != "correct-horse-battery" {
+		t.Errorf("AdminPassword is %q, want the value from the environment", cfg.AdminPassword)
+	}
+}
+
+// It is environment-only, like the token and the secret key: on Kubernetes the
+// config file is a ConfigMap, and a ConfigMap is not a secret. A yaml tag would
+// make putting it there possible by mistake.
+func TestTheSeededAdminPasswordCannotComeFromTheConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cogitorium.yaml")
+	if err := os.WriteFile(path, []byte("admin_password: from-the-config-file\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := Load(path, "")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.AdminPassword != "" {
+		t.Errorf("a password in the config file was read as %q; it must come from the environment or not at all",
+			cfg.AdminPassword)
 	}
 }

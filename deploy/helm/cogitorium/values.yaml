@@ -68,9 +68,33 @@ auth:
   #   kubectl create secret generic cogitorium-auth \
   #     --from-literal=admin-token="$(openssl rand -hex 24)"
   adminToken: ""
-  # Or point at a Secret you already made. Takes precedence over adminToken.
+  # The admin's PASSWORD — what a person types into the sign-in card. Distinct
+  # from the token above, which is for the API and the command line; each is the
+  # credential that fits how its caller stores things.
+  #
+  # Leave it empty and the chart GENERATES one at install and keeps it in the
+  # same Secret. `helm install` prints the command to read it back. That is
+  # deliberate rather than printing the password itself: Helm renders NOTES.txt
+  # separately from the Secret, so a generated value there would be a different
+  # string — and a credential in `helm install` output is a credential in CI
+  # logs and shell scratchpads.
+  #
+  # It survives `helm upgrade`: the chart reads back what is already deployed
+  # rather than minting a new one. It reaches the server only while the admin
+  # has NO password, so once you change it in the interface — which you should —
+  # nothing here can overwrite it, and nothing here can recover it either.
+  #
+  # At least 8 characters; the server refuses to start otherwise.
+  adminPassword: ""
+
+  # Or point at a Secret you already made. Takes precedence over adminToken and
+  # adminPassword, and the chart creates neither.
   existingSecret: ""
   existingSecretKey: admin-token
+  # The key in that Secret holding the password. Read as OPTIONAL: a Secret made
+  # before this chart asked for one has no such key, and that install keeps
+  # working — its admin is reached with the token instead.
+  existingSecretPasswordKey: admin-password
 
 config:
   logLevel: info

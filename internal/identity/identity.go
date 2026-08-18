@@ -98,22 +98,107 @@ func newToken(userName string) (string, error) {
 	return fmt.Sprintf("%s-%s-%s", tokenPrefix, userName, hex.EncodeToString(raw)), nil
 }
 
+// adoptSeededPassword gives an existing admin the supplied password, but only
+// when it has none. The UPDATE says so in its own WHERE clause rather than in a
+// read followed by a write: two servers starting at once against one database
+// would both read "no password" and both write, and while they would be writing
+// the same value today, a rule enforced by a comment is one waiting to be
+// broken by the next caller.
+func (s *Store) adoptSeededPassword(ctx context.Context, id int64, password string) error {
+	if len(password) < MinPasswordLen {
+		return fmt.Errorf("the seeded admin password is %d characters; at least %d are required",
+			len(password), MinPasswordLen)
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash the seeded password: %w", err)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ? AND password_hash = ''`,
+		string(hash), now(), id)
+	if err != nil {
+		return fmt.Errorf("adopt the seeded password: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		slog.Info("the admin had no password and the deployment supplied one", "user_id", id)
+	}
+	return nil
+}
+
+// MinPasswordLen is the floor for any password, typed or seeded. One number,
+// so a credential supplied by a deployment cannot be weaker than one a person
+// is allowed to choose.
+const MinPasswordLen = 8
+
+// Seeds are credentials an operator supplied for the first admin instead of
+// letting this package generate them. A struct rather than two strings because
+// they are both opaque text, and a caller that transposed them would compile.
+type Seeds struct {
+	// Token becomes the admin's token instead of a generated one.
+	Token string
+	// Password is what the admin signs in with. Empty leaves the account with
+	// no password, which is the state first-run setup exists to resolve — right
+	// on a laptop, where a person is standing in front of it, and useless in a
+	// cluster where nobody is.
+	Password string
+}
+
 // Bootstrap seeds the admin on first start and adopts any pre-existing
 // workspaces, so an install that predates users does not lose them. It
 // returns the admin's token exactly once — on the run that created it.
 // Bootstrap creates the first admin if there is none.
 //
-// seed, when non-empty, becomes the admin's token instead of a generated one,
-// and the returned token is empty because there is nothing for the caller to
-// print — the operator already has it. That distinction is the whole point on
-// Kubernetes, where "printed once at startup" means "in the pod log".
-func (s *Store) Bootstrap(ctx context.Context, seed string) (admin User, token string, err error) {
+// A seeded token means the returned token is empty, because there is nothing
+// for the caller to print — the operator already has it. That distinction is
+// the whole point on Kubernetes, where "printed once at startup" means "in the
+// pod log".
+//
+// A SEEDED PASSWORD FILLS AN EMPTY SLOT AND NEVER REPLACES A FULL ONE.
+//
+// Applying it on every start would silently undo the operator changing their
+// own password, which is the first thing they are told to do — and on
+// Kubernetes "every start" is every rollout, eviction and node drain. Applying
+// it only when the admin is created would be wrong in the other direction: an
+// install that predates this, or one made before a password was supplied, has
+// an admin with no password at all, and a deployment that handed this server
+// one would be told it took effect while the account stayed unreachable.
+//
+// So: no password, and one was supplied — set it. A password already there —
+// leave it. Neither case can lose anything, because an account with no password
+// is one nobody can sign in to.
+//
+// It follows that a forgotten password is not recoverable by redeploying with a
+// new one, which is the same trade this product already makes for tokens, where
+// only the hash is kept.
+func (s *Store) Bootstrap(ctx context.Context, seed Seeds) (admin User, token string, err error) {
 	existing, err := s.GetUserByName(ctx, AdminName)
 	if err == nil {
+		if seed.Password != "" {
+			if err := s.adoptSeededPassword(ctx, existing.ID, seed.Password); err != nil {
+				return User{}, "", err
+			}
+		}
 		return existing, "", nil
 	}
 	if !errors.Is(err, ErrNotFound) {
 		return User{}, "", err
+	}
+
+	// Refused here rather than shortened or ignored. A deployment that handed
+	// this server a four-character password and got a running install would
+	// have been told nothing, and the weak credential would be the one guarding
+	// it.
+	hash := ""
+	if seed.Password != "" {
+		if len(seed.Password) < MinPasswordLen {
+			return User{}, "", fmt.Errorf("the seeded admin password is %d characters; at least %d are required",
+				len(seed.Password), MinPasswordLen)
+		}
+		h, err := bcrypt.GenerateFromPassword([]byte(seed.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return User{}, "", fmt.Errorf("bootstrap: hash the seeded password: %w", err)
+		}
+		hash = string(h)
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -123,16 +208,16 @@ func (s *Store) Bootstrap(ctx context.Context, seed string) (admin User, token s
 	defer tx.Rollback()
 
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO users (name, role, created_at, updated_at) VALUES (?, ?, ?, ?)`,
-		AdminName, RoleAdmin, now(), now())
+		`INSERT INTO users (name, role, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+		AdminName, RoleAdmin, hash, now(), now())
 	if err != nil {
 		return User{}, "", fmt.Errorf("bootstrap: create admin: %w", err)
 	}
 	id, _ := res.LastInsertId()
 
 	printable := true
-	if seed != "" {
-		token, printable = seed, false
+	if seed.Token != "" {
+		token, printable = seed.Token, false
 	} else {
 		token, err = newToken(AdminName)
 		if err != nil {
@@ -155,7 +240,8 @@ func (s *Store) Bootstrap(ctx context.Context, seed string) (admin User, token s
 	if err := tx.Commit(); err != nil {
 		return User{}, "", fmt.Errorf("bootstrap: commit: %w", err)
 	}
-	slog.Info("admin user seeded", "id", id, "adopted_workspaces", n, "token_source", tokenSource(printable))
+	slog.Info("admin user seeded", "id", id, "adopted_workspaces", n,
+		"token_source", tokenSource(printable), "password_seeded", hash != "")
 	if !printable {
 		// The caller has nothing to show: the operator supplied this token, so
 		// echoing it would only put it somewhere new.

@@ -125,9 +125,11 @@ type Server struct {
 	// still has to be able to say that it is off.
 	updates *update.Checker
 
-	// adminToken seeds the first admin instead of generating one. Empty is the
-	// normal case; see config.Config.AdminToken for why it is environment-only.
-	adminToken string
+	// adminSeeds are the first admin's credentials when the operator supplied
+	// them instead of letting the server generate one and print it. Both empty
+	// is the normal case on a laptop; see config.Config.AdminToken and
+	// AdminPassword for why they are environment-only.
+	adminSeeds identity.Seeds
 
 	// routes is the inventory every registration adds itself to; see routes.go.
 	routes []Route
@@ -197,7 +199,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		dataDir:         cfg.DataDir,
 		searcher:        searcher,
 		broker:          broker,
-		adminToken:      cfg.AdminToken,
+		adminSeeds:      identity.Seeds{Token: cfg.AdminToken, Password: cfg.AdminPassword},
 		// The contextd version is fetched at check time, not here: an install
 		// with no contextd should not pay a subprocess on every boot to
 		// discover that, and the check runs at most once a day.
@@ -509,7 +511,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 		slog.Warn("inlet runs were in flight when the server stopped; they are recorded as interrupted", "count", n)
 	}
 
-	_, token, err := s.identity.Bootstrap(ctx, s.adminToken)
+	_, token, err := s.identity.Bootstrap(ctx, s.adminSeeds)
 	if err != nil {
 		return err
 	}

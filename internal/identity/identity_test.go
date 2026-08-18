@@ -784,7 +784,7 @@ func TestBootstrapSeedsOneAdminAndShowsItsTokenOnce(t *testing.T) {
 	s, _, _ := newStore(t)
 	ctx := context.Background()
 
-	admin, token, err := s.Bootstrap(ctx, "")
+	admin, token, err := s.Bootstrap(ctx, identity.Seeds{})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
@@ -799,7 +799,7 @@ func TestBootstrapSeedsOneAdminAndShowsItsTokenOnce(t *testing.T) {
 		t.Fatalf("the bootstrap token does not authenticate the admin: %+v, %v", got, err)
 	}
 
-	again, secondToken, err := s.Bootstrap(ctx, "")
+	again, secondToken, err := s.Bootstrap(ctx, identity.Seeds{})
 	if err != nil {
 		t.Fatalf("second bootstrap: %v", err)
 	}
@@ -834,7 +834,7 @@ func TestASeededAdminTokenWorksAndIsNeverHandedBack(t *testing.T) {
 	ctx := context.Background()
 
 	const seed = "an-operator-supplied-admin-token-long-enough"
-	admin, token, err := s.Bootstrap(ctx, seed)
+	admin, token, err := s.Bootstrap(ctx, identity.Seeds{Token: seed})
 	if err != nil {
 		t.Fatalf("bootstrap with a seed: %v", err)
 	}
@@ -851,7 +851,7 @@ func TestASeededAdminTokenWorksAndIsNeverHandedBack(t *testing.T) {
 
 	// And the seed does not silently become a second account or a second
 	// admin on the next start.
-	if _, second, err := s.Bootstrap(ctx, seed); err != nil || second != "" {
+	if _, second, err := s.Bootstrap(ctx, identity.Seeds{Token: seed}); err != nil || second != "" {
 		t.Errorf("second bootstrap: token %q, err %v; want no token and no error", second, err)
 	}
 	users, err := s.ListUsers(ctx)
@@ -927,7 +927,7 @@ func TestBootstrapAdoptsOnlyTheUnownedWorkspaces(t *testing.T) {
 		t.Fatalf("seed orphan workspace: %v", err)
 	}
 
-	admin, _, err := s.Bootstrap(ctx, "")
+	admin, _, err := s.Bootstrap(ctx, identity.Seeds{})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
@@ -956,7 +956,7 @@ func TestBootstrapAdminCannotBeDeleted(t *testing.T) {
 	s, _, _ := newStore(t)
 	ctx := context.Background()
 
-	admin, token, err := s.Bootstrap(ctx, "")
+	admin, token, err := s.Bootstrap(ctx, identity.Seeds{})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
@@ -1210,4 +1210,197 @@ func TestNamesThatDifferOnlyInCaseAreDifferentAccounts(t *testing.T) {
 	assertNobody(t, u, err, "logging in as alice with ALICE's password")
 	u, _, err = s.Login(ctx, "ALICE", lowerPassword)
 	assertNobody(t, u, err, "logging in as ALICE with alice's password")
+}
+
+// A seeded password is what makes an unattended deployment reachable. Without
+// one the admin has no password, and the first-run setup screen — which is how
+// a person standing at a laptop resolves that — is the wrong instrument in a
+// cluster where nobody is standing anywhere.
+func TestASeededPasswordSignsTheAdminInImmediately(t *testing.T) {
+	t.Parallel()
+	s, _, _ := newStore(t)
+	ctx := context.Background()
+
+	admin, _, err := s.Bootstrap(ctx, identity.Seeds{Password: "correct-horse-battery"})
+	if err != nil {
+		t.Fatalf("bootstrap with a seeded password: %v", err)
+	}
+
+	got, _, err := s.Login(ctx, "admin", "correct-horse-battery")
+	if err != nil {
+		t.Fatalf("the seeded password does not sign the admin in: %v", err)
+	}
+	if got.ID != admin.ID {
+		t.Errorf("signed in as %d, want the seeded admin %d", got.ID, admin.ID)
+	}
+	// And the install does not ask to be claimed, since it already has been.
+	needs, err := s.NeedsSetup(ctx)
+	if err != nil {
+		t.Fatalf("needs setup: %v", err)
+	}
+	if needs {
+		t.Error("an install seeded with a password still asks for first-run setup, " +
+			"which on a server is a claim anyone who finds the port could make")
+	}
+}
+
+// TestASeededPasswordIsNotReappliedOnRestart is the property that lets an
+// operator do the thing they are told to do. If a seed were applied on every
+// start, changing the admin password would last exactly until the next restart
+// — and on Kubernetes that is the next rollout, eviction or node drain.
+func TestASeededPasswordIsNotReappliedOnRestart(t *testing.T) {
+	t.Parallel()
+	s, _, _ := newStore(t)
+	ctx := context.Background()
+
+	admin, _, err := s.Bootstrap(ctx, identity.Seeds{Password: "the-deployed-one"})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	if err := s.SetPassword(ctx, admin.ID, "the-one-they-chose"); err != nil {
+		t.Fatalf("changing the admin password: %v", err)
+	}
+
+	// The server starting again with the same environment.
+	if _, _, err := s.Bootstrap(ctx, identity.Seeds{Password: "the-deployed-one"}); err != nil {
+		t.Fatalf("second bootstrap: %v", err)
+	}
+	if _, _, err := s.Login(ctx, "admin", "the-one-they-chose"); err != nil {
+		t.Fatalf("the password the operator chose stopped working after a restart: %v", err)
+	}
+	if _, _, err := s.Login(ctx, "admin", "the-deployed-one"); err == nil {
+		t.Fatal("the deployment's password works again after a restart, so changing it achieved nothing")
+	}
+}
+
+// A short seeded password is refused at startup rather than shortened, ignored,
+// or accepted. A deployment that handed this server four characters and got a
+// running install would have been told nothing.
+func TestAWeakSeededPasswordRefusesToBootstrap(t *testing.T) {
+	t.Parallel()
+	s, _, _ := newStore(t)
+	ctx := context.Background()
+
+	if _, _, err := s.Bootstrap(ctx, identity.Seeds{Password: "short"}); err == nil {
+		t.Fatal("a five-character seeded password was accepted")
+	}
+	// And it did not half-create the admin: the next bootstrap is still a first
+	// one, rather than leaving an account nobody can sign in to.
+	admin, token, err := s.Bootstrap(ctx, identity.Seeds{Password: "correct-horse-battery"})
+	if err != nil {
+		t.Fatalf("bootstrap after a refused one: %v", err)
+	}
+	if token == "" || admin.ID == 0 {
+		t.Fatalf("the refused bootstrap left the install in a state a good one cannot fix: %+v", admin)
+	}
+}
+
+// The two seeds are independent: a deployment can supply either, both, or
+// neither, and supplying a password must not stop a generated token coming back
+// for the operator to see.
+func TestSeedingAPasswordStillReturnsAGeneratedToken(t *testing.T) {
+	t.Parallel()
+	s, _, _ := newStore(t)
+	ctx := context.Background()
+
+	_, token, err := s.Bootstrap(ctx, identity.Seeds{Password: "correct-horse-battery"})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	if token == "" {
+		t.Fatal("no token came back, so an install with a seeded password has no credential for its API")
+	}
+	if _, err := s.Authenticate(ctx, token); err != nil {
+		t.Fatalf("the returned token does not authenticate: %v", err)
+	}
+
+	// Both seeded: the token is the operator's own, so nothing is returned to
+	// be printed, and the password still works.
+	s2, _, _ := newStore(t)
+	_, token2, err := s2.Bootstrap(ctx, identity.Seeds{
+		Token:    "cg-admin-supplied-by-the-operator-not-generated",
+		Password: "correct-horse-battery",
+	})
+	if err != nil {
+		t.Fatalf("bootstrap with both seeds: %v", err)
+	}
+	if token2 != "" {
+		t.Errorf("a supplied token was echoed back as %q, putting it somewhere it was not before", token2)
+	}
+	if _, err := s2.Authenticate(ctx, "cg-admin-supplied-by-the-operator-not-generated"); err != nil {
+		t.Fatalf("the supplied token does not authenticate: %v", err)
+	}
+	if _, _, err := s2.Login(ctx, "admin", "correct-horse-battery"); err != nil {
+		t.Fatalf("the seeded password does not work alongside a seeded token: %v", err)
+	}
+}
+
+// TestASeededPasswordReachesAnInstallThatAlreadyExists is the upgrade path, and
+// it is the case a "seed only at creation" rule gets wrong.
+//
+// An install made before a password was supplied — or before this product asked
+// for one at all — has an admin row with an empty password_hash. Its database
+// already exists, so nothing is being created, and a deployment that supplied a
+// password would have been told it took effect while the account stayed
+// unreachable and the operator was left reading a Secret whose value does not
+// work.
+func TestASeededPasswordReachesAnInstallThatAlreadyExists(t *testing.T) {
+	t.Parallel()
+	s, _, _ := newStore(t)
+	ctx := context.Background()
+
+	// The install as it stands today: an admin, and no password.
+	admin, _, err := s.Bootstrap(ctx, identity.Seeds{})
+	if err != nil {
+		t.Fatalf("first bootstrap: %v", err)
+	}
+	if _, _, err := s.Login(ctx, "admin", "the-deployed-one"); err == nil {
+		t.Fatal("the fixture is wrong: this admin already has a password")
+	}
+
+	// Redeployed with a password supplied.
+	again, _, err := s.Bootstrap(ctx, identity.Seeds{Password: "the-deployed-one"})
+	if err != nil {
+		t.Fatalf("bootstrap over an existing install: %v", err)
+	}
+	if again.ID != admin.ID {
+		t.Fatalf("a second admin was created: %d then %d", admin.ID, again.ID)
+	}
+	if _, _, err := s.Login(ctx, "admin", "the-deployed-one"); err != nil {
+		t.Fatalf("the supplied password did not reach an install that already existed: %v", err)
+	}
+	// And the account is no longer asking to be claimed by whoever finds it.
+	if needs, err := s.NeedsSetup(ctx); err != nil || needs {
+		t.Errorf("the install still asks for first-run setup after being given a password (needs=%v err=%v)", needs, err)
+	}
+}
+
+// The other half of the same rule: filling an empty slot must never turn into
+// replacing a full one.
+func TestASeededPasswordNeverReplacesAChosenOne(t *testing.T) {
+	t.Parallel()
+	s, _, _ := newStore(t)
+	ctx := context.Background()
+
+	admin, _, err := s.Bootstrap(ctx, identity.Seeds{Password: "the-deployed-one"})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	if err := s.SetPassword(ctx, admin.ID, "the-one-they-chose"); err != nil {
+		t.Fatalf("changing the admin password: %v", err)
+	}
+
+	// Redeployed, with the deployment still carrying its original value — and
+	// again with a different one, which is what rotating the Secret looks like.
+	for _, seeded := range []string{"the-deployed-one", "a-rotated-deployment-value"} {
+		if _, _, err := s.Bootstrap(ctx, identity.Seeds{Password: seeded}); err != nil {
+			t.Fatalf("restart with %q: %v", seeded, err)
+		}
+		if _, _, err := s.Login(ctx, "admin", seeded); err == nil {
+			t.Fatalf("the deployment's password %q overwrote the one the operator chose", seeded)
+		}
+	}
+	if _, _, err := s.Login(ctx, "admin", "the-one-they-chose"); err != nil {
+		t.Fatalf("the password the operator chose stopped working: %v", err)
+	}
 }

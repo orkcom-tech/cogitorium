@@ -1898,6 +1898,7 @@ then defaults.
 | `budget_run_tokens` | — | 0 (off) | The most one run may spend before it is stopped. Bounds what a caller through an inlet can cost; there is no workspace-wide version on purpose. |
 | — | `COGITORIUM_SECRET_KEY` | — | Encrypts secrets held in this install's database. Has no config-file key on purpose: on Kubernetes the config file is a ConfigMap, and a key beside its own ciphertext protects nothing. |
 | — | `COGITORIUM_ADMIN_TOKEN` | — | Seeds the first admin's token instead of generating one and printing it. At least 24 characters, checked at startup rather than at first use. Environment-only for the same reason as the key above. |
+| — | `COGITORIUM_ADMIN_PASSWORD` | — | Seeds the admin's password, so a deployment nobody is standing in front of comes up able to be signed in to. At least 8 characters. Applied only while the admin has none, so it can never overwrite a password that was chosen. Environment-only, same reason. |
 
 **`COGITORIUM_ADMIN_TOKEN` exists for a cluster.** Without it the server
 generates a token and prints it once, which is correct on a laptop and wrong in
@@ -1908,6 +1909,25 @@ and leaving the key out of the file means it cannot be put there by mistake. A
 short one is refused at startup rather than accepted quietly — a seeded admin
 token is the whole front door, and `admin` as a token would be worse than the
 generated one it replaced.
+
+**`COGITORIUM_ADMIN_PASSWORD` exists for the same reason, one door along.** The
+token opens the API; the password is what a person types into the sign-in card.
+Without one the admin has no password and the interface asks the first visitor
+to choose it — which is right on a laptop, where that visitor is the owner, and
+useless in a cluster, where the first-run screen demands the admin token anyway
+so that a stranger cannot claim the install. Supplying a password means an
+unattended deploy comes up ready to be signed in to.
+
+It reaches the admin ONLY while the admin has none. That single rule covers both
+directions: an install upgraded from a version that had no passwords is given
+one on its next start rather than sitting unreachable, and an operator who has
+since changed theirs keeps it through every restart, rollout and eviction. The
+cost is that a forgotten password cannot be recovered by redeploying with a new
+one — the same trade this product already makes for tokens, where only the hash
+is kept.
+
+The Helm chart generates one when you do not supply it; see
+`deploy/helm/cogitorium/README.md`.
 
 `--config` points at a config file; `--listen`, `--data` and `--log-level` are
 the only flags. Booleans take `1` or `true`, case-insensitively, and nothing

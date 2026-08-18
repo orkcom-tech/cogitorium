@@ -12,9 +12,35 @@ Reach it:
   # then open http://127.0.0.1:8688
 {{- end }}
 
-Sign in:
+Sign in as "admin":
+{{- if .Values.auth.existingSecret }}
+  With the password in {{ .Values.auth.existingSecret }}, under the key
+  "{{ .Values.auth.existingSecretPasswordKey }}". If that Secret has no such key, this install has no
+  password yet and the interface will ask you to choose one — which on a
+  network-reachable address needs the admin token from the same Secret.
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "cogitorium.fullname" . }}-auth \
+    -o jsonpath='{.data.admin-password}' | base64 -d; echo
+{{ if .Values.auth.adminPassword }}
+  That is the password you set in auth.adminPassword.
+{{- else }}
+  That password was GENERATED at install and kept in the Secret. It is not
+  printed here on purpose: this text goes to your terminal, your CI log and
+  `helm get notes`, and a credential should be somewhere you fetch on purpose.
+{{- end }}
+
+  CHANGE IT once you are in — account button at the bottom of the rail, then
+  "change password". After that the Secret's value is stale and nothing in this
+  chart can overwrite what you chose. Nothing can recover it either, so if you
+  lose it the way back is a fresh volume.
+
+  Upgrading an install that already had an admin? It keeps the password it
+  already has. The value above only ever reaches an admin that has none.
+{{- end }}
+
+For the API and the command line, which use a token rather than the password:
 {{- if or .Values.auth.adminToken .Values.auth.existingSecret }}
-  With the admin token you supplied. Nothing was printed to the log.
+  The admin token you supplied. Nothing was printed to the log.
 {{- else }}
   The admin token was GENERATED and written to the pod log, once:
 
@@ -22,7 +48,8 @@ Sign in:
 
   It is in the log for as long as that log is kept, and readable by anyone who
   can read logs in this namespace. Set auth.adminToken — or auth.existingSecret
-  — and redeploy onto a fresh volume if that matters here.
+  — and redeploy onto a fresh volume if that matters here. You can also mint a
+  fresh one at any time, signed in, with `cogitorium login`.
 {{- end }}
 
 Two things about this deployment that are not preferences:
