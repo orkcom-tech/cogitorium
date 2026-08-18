@@ -1162,3 +1162,138 @@
   min-width: 0;
   font-size: var(--t-chrome);
 }
+
+/* ── The controls standing on the canvas ─────────────────────────────────────
+   Measured before this: the legend capsule was 32px tall and the add capsule
+   45px, so two bars of related controls did not line up. Inside them, a legend
+   chip was 24px at 12px type and "+ agent" was 37px at 16px — the size the
+   product uses for a form, not for a control sitting on a graph. And both
+   capsules were pills, 4px of padding, holding children rounded to 10px, so
+   the corners inside disagreed with the corners around them.
+
+   ONE SCALE for everything on the canvas, and corners that nest: a pill with
+   4px of padding wants pills inside it, because a pill minus a gap is a pill. */
+
+.bp-tools > .row {
+  align-items: center;
+  min-height: 32px;
+}
+
+/* `.round` on the elements themselves, not here, and this is why: tokens.css
+   carries `button:not([data-own]):not(.agent-card):not(.card):not(.look-option)
+   :not(.ws-card):not(.dk-view-tab):not(.round)`, whose seven :not() clauses
+   give it a specificity of (0,8,1) — more than any ordinary selector in this
+   product. It sets border-radius: var(--r1), so EVERY radius any other rule
+   gives a button is silently discarded unless the button opts out. That is why
+   `.legend-item { border-radius: var(--r-pill) }` in index.css has been
+   rendering at 10px: the stylesheet has been saying pill and drawing r1.
+   `.round` is that rule's own documented escape hatch, used as intended. The
+   rule itself deserves a fix — a cascade layer rather than weight — and that
+   is its own change, not one made in passing here. */
+.bp-tools > .row > button,
+.bp-tools > .row .drop-trigger,
+.bp-tools > .row .legend-item {
+  height: 24px;
+  padding: 0 var(--s3);
+  border-radius: var(--r-pill);
+  font-size: var(--t-chrome);
+  line-height: 1;
+}
+
+/* A TOGGLE and an ACTION are allowed to differ, and here the difference does a
+   job: a layer toggle is an outline chip holding a state, an action is filled
+   and does something. What was wrong before was not that they differed — it
+   was that they differed in SIZE, which says nothing. */
+.bp-tools .bp-act {
+  border: 0;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  font-weight: 600;
+}
+
+.bp-tools .bp-act:hover {
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+}
+
+/* ── A button that opens a list of things to do ──────────────────────────────
+   Drawn like the rail's menus, because it is the same gesture — but anchored
+   under its trigger rather than joined to the rail's edge, so all four corners
+   are rounded: it is not growing out of anything. */
+
+.drop-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  cursor: pointer;
+}
+
+.drop-caret {
+  font-size: 9px;
+  opacity: 0.55;
+}
+
+.drop-menu {
+  position: fixed;
+  z-index: var(--z-float);
+  max-width: 340px;
+  padding: var(--s2);
+  border-radius: var(--r2);
+  background: var(--bg);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent),
+    var(--lift-2);
+  transform-origin: top left;
+  animation: drop-menu-in var(--sp-fast-d) var(--sp-fast);
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+}
+
+@keyframes drop-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(-6px);
+  }
+}
+
+.drop-menu-label {
+  display: block;
+  padding: var(--s2) var(--s3) var(--s1);
+  font-size: var(--t-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.drop-menu button {
+  display: block;
+  width: 100%;
+  height: auto;
+  text-align: left;
+  padding: var(--s2) var(--s3);
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  font-size: var(--t-ui);
+  cursor: pointer;
+}
+
+.drop-menu button.on,
+.drop-menu button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.drop-menu button .sub {
+  display: block;
+  font-size: var(--t-micro);
+  color: var(--text-dim);
+  margin-top: 1px;
+}
+
+.drop-empty {
+  padding: var(--s2) var(--s3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drop-menu {
+    animation: none;
+  }
+}

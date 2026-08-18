@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { Select } from './Select'
+import { DropMenu } from './DropMenu'
 import {
   Background,
   Controls,
@@ -595,7 +596,7 @@ export default function BlueprintEditor({
         {(['delegation', 'tools', 'memory', 'outward'] as const).map((layer) => (
           <button
             key={layer}
-            className={`legend-item ${layers[layer] ? '' : 'off'}`}
+            className={`legend-item round ${layers[layer] ? '' : 'off'}`}
             onClick={() => setLayers((p) => ({ ...p, [layer]: !p[layer] }))}
             title={LAYER_HINT[layer]}
           >
@@ -613,7 +614,7 @@ export default function BlueprintEditor({
             this one screen holds. Dragging is still the last word: it writes a
             position too, and a stored one always wins. */}
         <button
-          className="legend-item bp-tidy"
+          className="legend-item bp-tidy round"
           onClick={tidy}
           title="Arrange every agent by the wires between them, and keep it. Drag any of them afterwards."
         >
@@ -629,25 +630,31 @@ export default function BlueprintEditor({
           whole subject is the graph, "add a node" is the one verb that has to
           be visible. */}
       <div className="row bp-add">
-        <button onClick={() => setAdding((v) => !v)} title="Put a new agent on this canvas">
+        <button className="bp-act round" onClick={() => setAdding((v) => !v)} title="Put a new agent on this canvas">
           {adding ? 'cancel' : '+ agent'}
         </button>
-        <Select
-          value=""
-          aria-label="Add a gear to this workspace"
-          placeholder={
-            addable.length === 0
-              ? 'every forged gear is already in this workspace'
-              : '+ gear — add one to this workspace (all agents)…'
-          }
-          options={addable.map((g) => ({ value: String(g.id), label: `${g.name} (${g.status})` }))}
-          onChange={(v) => {
-            if (!v) return
+        {/* An ACTION, not a value.
+            
+            This was a <Select> — the control for holding a value you change —
+            carrying the whole sentence "+ gear — add one to this workspace
+            (all agents)…" as its placeholder. Measured: 391px wide against a
+            78px button beside it, looking exactly like a text field, showing a
+            sentence it never stopped showing because there was never a value
+            to show instead. It read as a filter. The sentence is the button's
+            title now, which is where a sentence goes. */}
+        <DropMenu
+          className="bp-act round"
+          label="+ gear"
+          title="Add a forged gear to this workspace — every agent in it can then call it"
+          heading="add to every agent here"
+          empty="Every forged gear is already in this workspace."
+          items={addable.map((g) => ({ value: String(g.id), label: g.name, sub: g.status }))}
+          onPick={(v) =>
             api.gears
               .bind(wsId, Number(v), null)
               .then(reloadGraph)
               .catch((err: Error) => onError(err.message))
-          }}
+          }
         />
       </div>
 
