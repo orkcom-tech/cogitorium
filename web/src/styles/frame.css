@@ -209,6 +209,60 @@
   background: color-mix(in srgb, var(--text) 45%, transparent);
 }
 
+/* A version that has moved is a dot, not a number: there is no count to give,
+   and a badge reading "1" would invite the reader to look for a second one.
+   Same size as the counted badges so the rail's buttons stay optically even. */
+.rail-badge.news {
+  min-width: 9px;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  top: 3px;
+  right: 3px;
+  background: var(--update);
+}
+
+/* The button itself goes orange while there is something unread, so the dot is
+   a second reading of the same fact rather than the only one — a 9px mark is
+   not something to rely on alone.
+   
+   The whole point is being noticed from across the room: this control sits at
+   the bottom of a rail of fourteen identical grey glyphs, and an operator who
+   is not looking for it has to see it anyway. It stops glowing once they have
+   read it. */
+.rail-btn.has-news {
+  color: var(--update);
+  background: color-mix(in srgb, var(--update) 16%, transparent);
+}
+
+.rail-btn.has-news:hover {
+  background: color-mix(in srgb, var(--update) 26%, transparent);
+}
+
+/* A pairing that is already failing, as opposed to one that could be better.
+   Red rather than orange: orange means "there is something newer if you want
+   it", and this means "something you already do is broken right now". */
+.rail-btn.has-problem {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.rail-badge.problem {
+  min-width: 9px;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  top: 3px;
+  right: 3px;
+  background: var(--danger);
+}
+
+/* A question nobody has answered is not news. It is marked, and quietly: the
+   product asks once and then waits, rather than nagging in orange forever. */
+.rail-btn.has-question {
+  color: var(--accent);
+}
+
 /* The brand: the app's mark, and beneath it the maker's.
    It is the one thing on the rail that is not a control, so it has its own
    capsule and no hover state.

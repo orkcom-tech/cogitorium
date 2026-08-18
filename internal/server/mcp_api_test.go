@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/orkcom-tech/cogitorium/internal/config"
+	"github.com/orkcom-tech/cogitorium/internal/update"
 )
 
 // The operator's side of external MCP servers, over HTTP.
@@ -182,5 +183,104 @@ func TestAGrantCannotBeRemovedFromOutsideItsWorkspace(t *testing.T) {
 	// And the administrator, who is in it, can.
 	if rec := d.request(t, http.MethodDelete, "/api/v1/mcp-bindings/1", d.adminTok, ""); rec.Code != http.StatusNoContent {
 		t.Fatalf("the grant could not be removed by somebody entitled to: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// ── the read surface, once it is on a screen ──────────────────────────────
+
+// A member may see THAT a server exists and whether it is approved — that is
+// why their agent has a tool. They may not see how it is spawned.
+//
+// This route was open and unredacted while nothing called it, which is
+// survivable when an operator has to know the endpoint. Putting it in a drawer
+// turns "reachable by curl" into "on everybody's screen", and what it carries
+// is a full command line and the NAMES of every credential the server is
+// handed — a map of this install's integrations and internal hostnames.
+func TestAMemberSeesThatAServerExistsAndNotHowItIsSpawned(t *testing.T) {
+	d := newDoorWithMCP(t)
+	member := d.memberToken(t)
+
+	rec := d.request(t, http.MethodPost, "/api/v1/mcp-servers", d.adminTok,
+		`{"name":"jira","description":"our tickets","command":"npx",`+
+			`"args":["-y","@acme/jira-mcp","--site","acme.internal.example"],"env_names":["JIRA_TOKEN"]}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("install: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// The admin sees everything.
+	rec = d.request(t, http.MethodGet, "/api/v1/mcp-servers", d.adminTok, "")
+	for _, want := range []string{"npx", "acme.internal.example", "JIRA_TOKEN"} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("an administrator cannot see %q, which they need in order to approve it: %s",
+				want, rec.Body.String())
+		}
+	}
+
+	// The member sees the name and the status, and nothing else.
+	rec = d.request(t, http.MethodGet, "/api/v1/mcp-servers", member, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("a member could not list servers at all: %d %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, leak := range []string{"npx", "acme.internal.example", "JIRA_TOKEN"} {
+		if strings.Contains(body, leak) {
+			t.Fatalf("a member can read %q from the server listing: %s", leak, body)
+		}
+	}
+	// And still enough to understand why an agent has a tool.
+	for _, keep := range []string{"jira", "our tickets", "pending"} {
+		if !strings.Contains(body, keep) {
+			t.Fatalf("the redacted listing dropped %q, which a member needs to make sense of it: %s", keep, body)
+		}
+	}
+}
+
+// The library is installed FROM, so it is an administrator's, like every other
+// act that spawns a subprocess on this server or sends a credential off it.
+func TestOnlyAnAdministratorMayReadTheLibrary(t *testing.T) {
+	d := newDoorWithMCP(t)
+
+	rec := d.request(t, http.MethodGet, "/api/v1/mcp-catalog", d.memberToken(t), "")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("a member read the library: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// THE ONE THAT ANSWERS THE OBJECTION. The library is the published registry read
+// live, so an install that has not agreed to make outbound requests does not get
+// one — and is told that, rather than shown an empty list that reads as "there
+// is nothing to install".
+func TestTheLibraryIsRefusedWhenThisInstallMayNotReachOut(t *testing.T) {
+	d := doorAround(t, newInstall(t, doorListen, func(c *config.Config) {
+		c.MCPClients = true
+		c.UpdateCheck = update.ModeOff
+	}))
+
+	rec := d.request(t, http.MethodGet, "/api/v1/mcp-catalog", d.adminTok, "")
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("the library answered %d on an install configured not to reach out: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "update_check") {
+		t.Fatalf("the refusal does not name the setting: %s", rec.Body.String())
+	}
+
+	// And adding by hand is untouched, because it never left the machine.
+	rec = d.request(t, http.MethodPost, "/api/v1/mcp-servers", d.adminTok,
+		`{"name":"byhand","transport":"stdio","command":"/bin/true"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("adding by hand was refused on an offline install: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// With the capability off the library does not exist either, and says how to
+// switch it on rather than answering an empty list.
+func TestTheLibraryIsAbsentWhenMCPIsOff(t *testing.T) {
+	d := newDoor(t)
+	rec := d.request(t, http.MethodGet, "/api/v1/mcp-catalog", d.adminTok, "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("the library answered %d with the capability off: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "mcp_clients") {
+		t.Fatalf("it does not say how to switch it on: %s", rec.Body.String())
 	}
 }

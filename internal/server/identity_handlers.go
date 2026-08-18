@@ -32,13 +32,29 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
+	// Both, because both kinds of caller come through here. A browser uses the
+	// cookie and ignores the field; a script reads the field and drops the
+	// cookie on the floor. Returning the token to a browser costs nothing —
+	// script that could read this response could have asked for it itself,
+	// since it would need the password either way.
+	s.setSession(w, r, token)
 	writeJSON(w, http.StatusOK, map[string]any{"user": user, "token": token})
 }
 
 // handleLogout revokes only the token presented, so signing out on one
 // client leaves the others alone.
+//
+// Whichever credential this request arrived with is the one revoked, and the
+// cookie is taken back either way: a browser that kept a cookie naming a
+// revoked token would be refused on every request afterwards without ever being
+// shown the sign-in card.
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	if token := bearerToken(r); token != "" {
+	token := bearerToken(r)
+	if token == "" {
+		token = sessionToken(r)
+	}
+	clearSession(w, r)
+	if token != "" {
 		if err := s.identity.Logout(r.Context(), token); err != nil {
 			fail(w, r, err)
 			return

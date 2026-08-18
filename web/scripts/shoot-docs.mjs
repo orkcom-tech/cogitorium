@@ -28,6 +28,21 @@ import { mkdir, writeFile } from 'node:fs/promises'
 const base = process.argv[2] || 'http://127.0.0.1:8894'
 const out = new URL('../../docs/assets/', import.meta.url).pathname
 
+// The shooter needs a token like any other client.
+//
+// It did not, once: a request from this machine was the admin, so a browser
+// pointed at a local install was already signed in and this script had nothing
+// to prove. Now every screen behind the sign-in card is behind a token, and
+// without one every shot would picture the same login form.
+const token = process.env.COGITORIUM_TOKEN
+if (!token) {
+  console.error(
+    'Set COGITORIUM_TOKEN to a token for the install being shot. One way:\n' +
+      '  export COGITORIUM_TOKEN=$(cogitorium login --server ' + base + ' --user admin)',
+  )
+  process.exit(2)
+}
+
 // One size for every shot, so the set looks like a set and a reader can
 // compare two pictures without re-scaling them in their head.
 const W = 1440
@@ -104,7 +119,7 @@ shoot('02-workspace-chat', 'the frame: rail on the bezel, chat in the cavity, ag
   await page.waitForTimeout(700)
 })
 
-shoot('03-blueprint', 'the blueprint: every wire is a capability, and the controls float on it', async (page) => {
+shoot('03-blueprint', 'the blueprint: every wire is a capability, the clock says when it next fires, and the controls float on it', async (page) => {
   await page.goto(`${base}/workspaces/1`)
   await ready(page)
   await rail(page, 'Blueprint').click()
@@ -249,6 +264,23 @@ const ctx = await browser.newContext({
 const page = await ctx.newPage()
 
 await mkdir(out, { recursive: true })
+
+// Signed in before the app is ever rendered, so it does not flash the sign-in
+// card on its way to the first screen — and so a reload mid-run cannot land on
+// one.
+//
+// The cookie rather than localStorage, because that is what a signed-in browser
+// actually holds: the app reads no token from JavaScript any more, so seeding
+// one there would leave every shot on the sign-in card.
+await ctx.addCookies([
+  {
+    name: 'cogitorium_session',
+    value: token,
+    url: base,
+    httpOnly: true,
+    sameSite: 'Lax',
+  },
+])
 
 // Every shot starts from the same appearance, or the set is a patchwork.
 await page.goto(base)

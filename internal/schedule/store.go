@@ -25,10 +25,43 @@ const (
 	OutcomeFailed  = "failed"
 )
 
+// What a clock dials.
+//
+// TargetTask is the original and is still right when a job genuinely has a door
+// as well as a clock: the task says which agent, what to tell it, what it
+// accepts and what success means, and a firing is that same job with nobody on
+// the other end.
+//
+// The other two exist because a task describes a DOOR — an inlet, an address, a
+// key, a caller — and a schedule is not that. Making every nightly job invent a
+// receiver nobody would ever call filled the receivers list with entries that
+// had no inlet and no caller, which is a worse lie than the one it avoided.
+const (
+	TargetTask  = "task"
+	TargetAgent = "agent"
+	TargetGear  = "gear"
+)
+
 type Schedule struct {
-	ID          int64     `json:"id"`
-	WorkspaceID int64     `json:"workspace_id"`
-	TaskID      int64     `json:"task_id"`
+	ID          int64  `json:"id"`
+	WorkspaceID int64  `json:"workspace_id"`
+	TargetKind  string `json:"target_kind"`
+	// TaskID is set only for a task schedule. A pointer, because the other two
+	// kinds have no task at all and a 0 in that field would read as a task
+	// whose row happens to be missing.
+	TaskID *int64 `json:"task_id,omitempty"`
+	// TargetAgentID and TargetGearID are the direct paths, and are NIL ON A
+	// BROKEN SCHEDULE: deleting an agent or a gear sets them null rather than
+	// cascading the schedule away, so a nightly job that lost its target shows
+	// as broken instead of vanishing. See Broken.
+	TargetAgentID *int64 `json:"target_agent_id,omitempty"`
+	TargetGearID  *int64 `json:"target_gear_id,omitempty"`
+	// Instruction is the sentence an agent target is given — a clock wired to
+	// an agent with nothing to say produces a turn with an empty prompt. Args
+	// is the argument object a gear target is called with, checked against that
+	// gear's schema when the schedule is SAVED rather than when it fires.
+	Instruction string    `json:"instruction,omitempty"`
+	Args        string    `json:"args,omitempty"`
 	Name        string    `json:"name"`
 	Spec        string    `json:"spec"`
 	TZ          string    `json:"tz"`
@@ -79,16 +112,24 @@ func (s *Store) Create(ctx context.Context, sc Schedule) (Schedule, error) {
 	if strings.TrimSpace(sc.Payload) == "" {
 		sc.Payload = "{}"
 	}
+	if strings.TrimSpace(sc.Args) == "" {
+		sc.Args = "{}"
+	}
+	if err := sc.validTarget(); err != nil {
+		return Schedule{}, err
+	}
 	next, ok := spec.Next(time.Now(), loc)
 	if !ok {
 		return Schedule{}, fmt.Errorf("%q never comes round — check the day and month", sc.Spec)
 	}
 
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO schedules (workspace_id, task_id, name, spec, tz, payload, enabled, on_miss,
+		`INSERT INTO schedules (workspace_id, target_kind, task_id, target_agent_id, target_gear_id,
+		                        instruction, args, name, spec, tz, payload, enabled, on_miss,
 		                        next_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
-		sc.WorkspaceID, sc.TaskID, sc.Name, spec.String(), sc.TZ, sc.Payload, sc.OnMiss,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+		sc.WorkspaceID, sc.TargetKind, sc.TaskID, sc.TargetAgentID, sc.TargetGearID,
+		sc.Instruction, sc.Args, sc.Name, spec.String(), sc.TZ, sc.Payload, sc.OnMiss,
 		stamp(next), now(), now())
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -97,13 +138,79 @@ func (s *Store) Create(ctx context.Context, sc Schedule) (Schedule, error) {
 		return Schedule{}, fmt.Errorf("create schedule: %w", err)
 	}
 	id, _ := res.LastInsertId()
-	slog.Info("schedule created", "id", id, "workspace_id", sc.WorkspaceID, "task_id", sc.TaskID,
+	slog.Info("schedule created", "id", id, "workspace_id", sc.WorkspaceID,
+		"target_kind", sc.TargetKind, "task_id", sc.TaskID,
+		"target_agent_id", sc.TargetAgentID, "target_gear_id", sc.TargetGearID,
 		"name", sc.Name, "spec", spec.String(), "tz", sc.TZ, "next_at", stamp(next))
 	return s.Get(ctx, id)
 }
 
+// validTarget is the half of the shape rule that the CHECK deliberately does
+// not enforce.
+//
+// The table permits a NULL target on an agent or gear row, because that is what
+// a schedule whose target was deleted looks like and it must be storable — see
+// 0031. What must never be STORED FRESH is a row that names nothing, and this
+// is where an operator is still on the other end of the error.
+func (sc *Schedule) validTarget() error {
+	switch sc.TargetKind {
+	case "":
+		// Every row before 0031 was a task schedule, and every caller written
+		// before it says so by saying nothing.
+		sc.TargetKind = TargetTask
+		fallthrough
+	case TargetTask:
+		if sc.TaskID == nil {
+			return errors.New("a schedule on a receiver task needs a task to fire")
+		}
+		sc.TargetAgentID, sc.TargetGearID = nil, nil
+		sc.Instruction = ""
+	case TargetAgent:
+		if sc.TargetAgentID == nil {
+			return errors.New("a schedule on an agent needs an agent to dial")
+		}
+		if strings.TrimSpace(sc.Instruction) == "" {
+			// A clock wired to an agent with nothing to say produces a turn
+			// with an empty prompt, which is a run that costs money and
+			// answers nothing.
+			return errors.New("a schedule on an agent needs something to tell it: " +
+				"a firing with no instruction is a turn with an empty prompt")
+		}
+		sc.TaskID, sc.TargetGearID = nil, nil
+	case TargetGear:
+		if sc.TargetGearID == nil {
+			return errors.New("a schedule on a gear needs a gear to run")
+		}
+		sc.TaskID, sc.TargetAgentID = nil, nil
+		sc.Instruction = ""
+	default:
+		return fmt.Errorf("target_kind is %q; it may be %s, %s or %s",
+			sc.TargetKind, TargetTask, TargetAgent, TargetGear)
+	}
+	return nil
+}
+
+// Broken reports a schedule whose target has been deleted out from under it.
+//
+// This is the state SET NULL exists to produce. The alternative — cascading the
+// schedule away with its agent — means the nightly job silently stops and
+// nobody learns why until the thing it was doing is noticed missing. A broken
+// schedule is refused at fire time, drawn as broken on the canvas, and still
+// there to be repointed.
+func (sc Schedule) Broken() bool {
+	switch sc.TargetKind {
+	case TargetAgent:
+		return sc.TargetAgentID == nil
+	case TargetGear:
+		return sc.TargetGearID == nil
+	default:
+		return false
+	}
+}
+
 const scheduleSelect = `
-	SELECT id, workspace_id, task_id, name, spec, tz, payload, enabled, on_miss,
+	SELECT id, workspace_id, target_kind, task_id, target_agent_id, target_gear_id,
+	       instruction, args, name, spec, tz, payload, enabled, on_miss,
 	       next_at, last_work_id, last_fired_at, last_outcome, fires, skips, created_at, updated_at
 	  FROM schedules`
 
@@ -111,7 +218,9 @@ func scan(row interface{ Scan(...any) error }) (Schedule, error) {
 	var sc Schedule
 	var next string
 	var enabled int
-	if err := row.Scan(&sc.ID, &sc.WorkspaceID, &sc.TaskID, &sc.Name, &sc.Spec, &sc.TZ, &sc.Payload,
+	if err := row.Scan(&sc.ID, &sc.WorkspaceID, &sc.TargetKind, &sc.TaskID,
+		&sc.TargetAgentID, &sc.TargetGearID, &sc.Instruction, &sc.Args,
+		&sc.Name, &sc.Spec, &sc.TZ, &sc.Payload,
 		&enabled, &sc.OnMiss, &next, &sc.LastWorkID, &sc.LastFiredAt, &sc.LastOutcome,
 		&sc.Fires, &sc.Skips, &sc.CreatedAt, &sc.UpdatedAt); err != nil {
 		return Schedule{}, err
@@ -200,6 +309,87 @@ func (s *Store) Advance(ctx context.Context, sc Schedule, next time.Time, outcom
 	}
 	n, _ := res.RowsAffected()
 	return n == 1, nil
+}
+
+// Update changes what a schedule does, keeping what it has done.
+//
+// SEPARATE FROM SetEnabled on purpose, and the pause button is the reason:
+// turning a job off is what an operator does in a hurry, at night, and it must
+// not require sending back the fields they are not changing. This is the other
+// half — the one that was missing, so that changing a spec meant deleting the
+// schedule and drawing a new one, losing its counters and its record of what
+// happened. A schedule you cannot correct is one people replace, and a replaced
+// schedule has no history.
+//
+// The TARGET is not editable here. Re-pointing a clock at a different agent or
+// a different gear is a different act with a different approval — a gear target
+// is an administrator's — and folding it into an edit would be the one path
+// that changes what runs without passing the check that guards it.
+func (s *Store) Update(ctx context.Context, id int64, in Schedule) (Schedule, error) {
+	existing, err := s.Get(ctx, id)
+	if err != nil {
+		return Schedule{}, err
+	}
+	spec, err := Parse(firstSet(in.Spec, existing.Spec))
+	if err != nil {
+		return Schedule{}, err
+	}
+	tz := in.TZ
+	loc, err := Location(tz)
+	if err != nil {
+		return Schedule{}, err
+	}
+	name := strings.TrimSpace(firstSet(in.Name, existing.Name))
+	if name == "" {
+		return Schedule{}, errors.New("a schedule needs a name, so an operator can say which one they mean")
+	}
+	onMiss := firstSet(in.OnMiss, existing.OnMiss)
+	if onMiss != "skip" && onMiss != "run" {
+		return Schedule{}, fmt.Errorf("on_miss is %q; it may be `skip` or `run`", onMiss)
+	}
+	instruction := existing.Instruction
+	if existing.TargetKind == TargetAgent {
+		instruction = firstSet(in.Instruction, existing.Instruction)
+		if strings.TrimSpace(instruction) == "" {
+			return Schedule{}, errors.New("a schedule on an agent needs something to tell it: " +
+				"a firing with no instruction is a turn with an empty prompt")
+		}
+	}
+	payload := firstSet(strings.TrimSpace(in.Payload), existing.Payload)
+	args := firstSet(strings.TrimSpace(in.Args), existing.Args)
+
+	// The next firing is recomputed from the new spec, not carried over: a
+	// schedule edited from hourly to nightly whose next_at still said "in four
+	// minutes" would fire once on the old rule, which is exactly the surprise
+	// an edit is supposed to prevent.
+	next, ok := spec.Next(time.Now(), loc)
+	if !ok {
+		return Schedule{}, fmt.Errorf("%q never comes round — check the day and month", spec.String())
+	}
+
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE schedules SET name = ?, spec = ?, tz = ?, payload = ?, args = ?, instruction = ?,
+		        on_miss = ?, next_at = ?, updated_at = ?
+		  WHERE id = ?`,
+		name, spec.String(), tz, payload, args, instruction, onMiss, stamp(next), now(), id); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return Schedule{}, ErrConflict
+		}
+		return Schedule{}, fmt.Errorf("update schedule %d: %w", id, err)
+	}
+	slog.Info("schedule updated", "id", id, "name", name, "spec", spec.String(), "tz", tz,
+		"on_miss", onMiss, "next_at", stamp(next))
+	return s.Get(ctx, id)
+}
+
+// firstSet is "what was sent, or what was there". An edit that omits a field
+// leaves it alone rather than blanking it, which is what makes this safe to
+// call with a partial body.
+func firstSet(sent, existing string) string {
+	if strings.TrimSpace(sent) != "" {
+		return sent
+	}
+	return existing
 }
 
 // SetEnabled turns a schedule on or off, and re-bases its next firing when it

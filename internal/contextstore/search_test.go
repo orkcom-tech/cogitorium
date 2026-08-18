@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/orkcom-tech/cogitorium/internal/update"
 )
 
 // These run against the REAL contextd if it is installed, because the whole
@@ -38,6 +40,9 @@ func realSpace(t *testing.T) *Store {
 // `--if-version` were tested before either had been released. Otherwise the one
 // on PATH. Skipped, never failed, when there is none: contextd is a separate
 // product and its absence is a fact about the machine, not a defect here.
+//
+// A contextd that is PRESENT AND TOO OLD is a different fact, and it is not
+// skipped — see requireSupportedContextd.
 func contextdBinary(t *testing.T) string {
 	t.Helper()
 	if bin := os.Getenv("COGITORIUM_CONTEXTD"); bin != "" {
@@ -46,25 +51,51 @@ func contextdBinary(t *testing.T) string {
 	bin, err := exec.LookPath("contextd")
 	if err != nil {
 		t.Skip("contextd not installed and COGITORIUM_CONTEXTD not set")
+		// Unreachable; Skip stops the test. Kept so the signature is honest
+		// about always returning a path when it returns at all.
+		return ""
 	}
 	return bin
 }
 
-// requireDelete skips a test on a contextd that predates `file delete`.
+// requireSupportedContextd FAILS on a contextd older than this build declares
+// it works with, rather than skipping.
 //
-// Named rather than inferred from a version string: a build from a branch has
-// no useful version, and what matters is whether the command is there.
+// The distinction against contextdBinary is the whole point. No contextd is a
+// fact about the machine, so those tests skip. A contextd BELOW MinContextd is
+// a machine that cannot run this product correctly — the server says so at
+// startup, in as many words, and refusing quietly here would let a developer
+// believe a green suite meant a working install.
+//
+// It failed before this existed, just not usefully: `--if-version` reached an
+// old binary, cobra answered "unknown flag: --if-version", and the test
+// reported that the other person's work had been lost. Which is what would
+// happen — the save really does become last-write-wins — but the message sent
+// the reader hunting through this package for a bug that was a version.
+func requireSupportedContextd(t *testing.T) {
+	t.Helper()
+	out, err := exec.Command(contextdBinary(t), "file", "put", "--help").CombinedOutput()
+	if err == nil && strings.Contains(string(out), "--if-version") {
+		return
+	}
+	t.Fatalf("this contextd predates --if-version, so a save here is last-write-wins rather than "+
+		"compare-and-swap. Cogitorium needs Contextverse %s or newer, and says so at startup.\n"+
+		"  install it:  scripts/ci/install-contextd.sh ~/.local/bin\n"+
+		"  or point at a build you are working on:  COGITORIUM_CONTEXTD=/path/to/contextd go test ./...\n"+
+		"  using: %s", update.MinContextd, contextdBinary(t))
+}
+
+// requireDelete is requireSupportedContextd. `file delete` and `--if-version`
+// shipped in the same Contextverse release, so the two were always one gate
+// wearing two names — and they behaved differently, which is the part that
+// mattered: one skipped and one failed, on the same machine, for the same
+// reason.
+//
+// Kept as a name because the tests that call it are about deletion, and
+// reading `requireDelete` at the top of one says which capability is at stake.
 func requireDelete(t *testing.T) {
 	t.Helper()
-	// An old cobra prints the PARENT's help and exits 0 for an unknown
-	// subcommand, so neither the exit code nor a string from the command's
-	// summary tells the two apart — the first cut matched on the summary,
-	// which never appears in --help output, and every test here skipped
-	// silently while claiming to prove the feature.
-	out, err := exec.Command(contextdBinary(t), "file", "delete", "--help").CombinedOutput()
-	if err != nil || !strings.Contains(string(out), "Remove the live copy") {
-		t.Skip("this contextd has no `file delete` — needs Contextverse v1.0.0 or newer")
-	}
+	requireSupportedContextd(t)
 }
 
 func TestSearchFindsWhatIsInsideAFile(t *testing.T) {
@@ -183,6 +214,7 @@ func TestNoMatchesIsAlwaysAListNeverNull(t *testing.T) {
 func TestASaveIsRefusedWhenTheFileMovedUnderIt(t *testing.T) {
 	s := realSpace(t)
 	ctx := context.Background()
+	requireSupportedContextd(t)
 	if err := s.Put(ctx, "team/policy.md", "one\n"); err != nil {
 		t.Fatal(err)
 	}
@@ -216,6 +248,7 @@ func TestASaveIsRefusedWhenTheFileMovedUnderIt(t *testing.T) {
 }
 
 func TestASaveGoesThroughWhenNobodyElseTouchedIt(t *testing.T) {
+	requireSupportedContextd(t)
 	s := realSpace(t)
 	ctx := context.Background()
 	_ = s.Put(ctx, "team/policy.md", "one\n")
@@ -335,5 +368,100 @@ func TestTheSaveGuardIsContextdsOwnRefusal(t *testing.T) {
 	body, _ = s.Get(ctx, "team/policy.md")
 	if strings.TrimSpace(body) != "two, edited" {
 		t.Fatalf("the save did not land: %q", body)
+	}
+}
+
+// EnsureSpace is what makes an ordinary install work. Without it a person who
+// installed contextd — by any route — still met "no context space initialized"
+// on every context screen, because a binary is not a space.
+func TestEnsureSpaceCreatesOneAndThenLeavesItAlone(t *testing.T) {
+	requireSupportedContextd(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	s := New(contextdBinary(t))
+	ctx := context.Background()
+
+	if st := s.CheckStatus(ctx); st.Available {
+		t.Fatalf("the fixture is wrong: this HOME already has a space (%+v)", st)
+	}
+
+	s.EnsureSpace(ctx)
+	st := s.CheckStatus(ctx)
+	if !st.Available {
+		t.Fatalf("no space after EnsureSpace: %+v", st)
+	}
+
+	// A file written into it survives a second EnsureSpace. Re-initialising an
+	// existing space would be the worst possible bug in this function: it runs
+	// on every start, so it would eat the operator's memory on the next one.
+	if err := s.Put(ctx, "team/policy.md", "keep me\n"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	s.EnsureSpace(ctx)
+	body, err := s.Get(ctx, "team/policy.md")
+	if err != nil || strings.TrimSpace(body) != "keep me" {
+		t.Fatalf("a second EnsureSpace disturbed the space: %q %v", body, err)
+	}
+}
+
+// With no contextd there is nothing to initialise, and inventing something
+// would be worse than the honest "unavailable" every surface already reports.
+func TestEnsureSpaceDoesNothingWithoutContextd(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	s := New(filepath.Join(t.TempDir(), "contextd-that-is-not-there"))
+
+	s.EnsureSpace(context.Background())
+
+	if _, err := os.Stat(filepath.Join(home, ".context")); !os.IsNotExist(err) {
+		t.Fatalf("something was created without a contextd to create it: %v", err)
+	}
+}
+
+// TestContextdIsFoundBesideTheBinary is what makes the release archive work.
+//
+// It carries cogitorium and contextd side by side, and somebody who unpacks a
+// tarball into ~/bin or /opt has two files in one directory and no reason to
+// think either needs installing further. Looking only at PATH would fail with
+// "contextd not installed" while the file sat next to the one reporting it.
+func TestContextdIsFoundBesideTheBinary(t *testing.T) {
+	body, err := os.ReadFile(contextdBinary(t))
+	if err != nil {
+		t.Skipf("cannot read contextd to copy it: %v", err)
+	}
+
+	// findContextd resolves symlinks before looking, because on macOS the
+	// temporary directory a test binary lives in is reached through one.
+	self, err := os.Executable()
+	if err != nil {
+		t.Skipf("no executable path on this platform: %v", err)
+	}
+	if self, err = filepath.EvalSymlinks(self); err != nil {
+		t.Skipf("cannot resolve %s: %v", self, err)
+	}
+	neighbour := filepath.Join(filepath.Dir(self), "contextd")
+	if _, err := os.Stat(neighbour); err == nil {
+		t.Skip("something is already called contextd beside the test binary")
+	}
+	if err := os.WriteFile(neighbour, body, 0o755); err != nil {
+		t.Skipf("cannot write beside the test binary: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(neighbour) })
+
+	// PATH swept, so only the neighbour can answer.
+	t.Setenv("PATH", filepath.Join(t.TempDir(), "nothing-here"))
+	if got := findContextd("contextd"); got != neighbour {
+		t.Fatalf("findContextd() = %q, want the neighbour %q", got, neighbour)
+	}
+
+	// A contextd ON PATH still wins, so this never overrides one the operator
+	// installed themselves.
+	onPath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(onPath, "contextd"), body, 0o755); err != nil {
+		t.Fatalf("write a contextd on PATH: %v", err)
+	}
+	t.Setenv("PATH", onPath)
+	if got := findContextd("contextd"); got != "contextd" {
+		t.Fatalf("findContextd() = %q, want the bare name so PATH resolves it", got)
 	}
 }

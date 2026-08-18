@@ -366,6 +366,54 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 			InputSchema: remoteSchema(t),
 		})
 	}
+	// A server's DOCUMENTS and PROMPT TEMPLATES reach the model through two
+	// tools rather than one tool each.
+	//
+	// The obvious alternative — a synthetic `read_x` per document — is wrong
+	// for a reason worth stating: a tool is a capability the model chooses
+	// from on every turn, and a wiki with four hundred pages would put four
+	// hundred definitions in every request. They are not four hundred
+	// capabilities; they are one capability with an argument. So the list is
+	// something the model ASKS for, and only when it wants it.
+	//
+	// Offered only where a granted server actually has them, so an install
+	// whose servers are tools-only carries neither.
+	if len(mcpTools) > 0 {
+		tools = append(tools,
+			llm.Tool{
+				Name: mcpReadTool,
+				Description: "List or read documents held by the external MCP servers you have been granted. " +
+					"Call with no uri to list what is available; call with a uri to read one.",
+				InputSchema: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"uri": map[string]any{
+							"type":        "string",
+							"description": "The uri of one document, or omit to list them.",
+						},
+					},
+				},
+			},
+			llm.Tool{
+				Name: mcpPromptTool,
+				Description: "List or render prompt templates offered by the external MCP servers you have been " +
+					"granted. Call with no name to list them; call with a name to render one.",
+				InputSchema: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name": map[string]any{
+							"type":        "string",
+							"description": "The template to render, or omit to list them.",
+						},
+						"arguments": map[string]any{
+							"type":        "object",
+							"description": "Arguments the template declares.",
+						},
+					},
+				},
+			},
+		)
+	}
 	return tools
 }
 
@@ -478,6 +526,12 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 	}
 	// An external MCP tool. Its arguments are the remote server's schema, so
 	// they go through untouched, exactly as a gear's do.
+	switch call.Name {
+	case mcpReadTool:
+		return e.runMCPRead(ctx, wsID, agent, call.InputJSON)
+	case mcpPromptTool:
+		return e.runMCPPrompt(ctx, wsID, agent, call.InputJSON)
+	}
 	if strings.HasPrefix(call.Name, mcpstore.ToolPrefix) {
 		return e.runMCPTool(ctx, wsID, agent, call.Name, call.InputJSON)
 	}

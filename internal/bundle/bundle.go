@@ -21,6 +21,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
+	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
@@ -67,7 +68,42 @@ type Bundle struct {
 	Agents     []Agent       `json:"agents"`
 	Wires      []Wire        `json:"wires"`
 	Gears      []Gear        `json:"gears"`
+	MCPServers []MCPServer   `json:"mcp_servers,omitempty"`
 	Context    []ContextFile `json:"context"`
+}
+
+// MCPServer is an external MCP server this workspace granted to something.
+//
+// WHAT TRAVELS AND WHAT DOES NOT, which is the whole design and is the gear's
+// rule applied to a different noun. The SHAPE travels — the command or the URL,
+// the arguments, the names of the values it wants — because that is what
+// somebody on the far side needs in order to decide. The APPROVAL does not, and
+// neither do any credentials: an imported server arrives pending with nothing
+// resolved, because the whole point of the approval gate is that it is not
+// transferable across a machine boundary.
+//
+// That matters more here than it does for a gear. A gear's source is in the
+// bundle and can be read; an MCP server is a command line or a hostname, so the
+// receiving operator is agreeing to something they cannot inspect at all. A
+// bundle that arrived pre-approved would be a way to hand somebody a process on
+// their own host by email.
+type MCPServer struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Transport   string   `json:"transport"`
+	Command     string   `json:"command,omitempty"`
+	Args        []string `json:"args,omitempty"`
+	Dir         string   `json:"cwd,omitempty"`
+	// EnvNames and HeaderNames are NAMES, never values, exactly as a gear's
+	// are: what a name means is a property of the install it resolves on, and a
+	// value here would be a credential travelling in a document people forward.
+	EnvNames    []string          `json:"env_names,omitempty"`
+	URL         string            `json:"url,omitempty"`
+	HeaderNames map[string]string `json:"header_names,omitempty"`
+	// BoundTo is "workspace" or the name of an agent in this bundle.
+	BoundTo string `json:"bound_to"`
+	// Status is deliberately absent, as the gear's network grant is. There is
+	// no field for it and there must not be one.
 }
 
 type Workspace struct {
@@ -157,6 +193,10 @@ type Stores struct {
 	Catalog    *catalog.Store
 	Gears      *gear.Store
 	Context    *contextstore.Store
+	// MCP is nil on an install where external MCP servers are switched off,
+	// and a nil store means a bundle simply carries none — not an error, and
+	// not a reason an export fails.
+	MCP *mcpstore.Store
 }
 
 // Options says which optional parts of a workspace travel. Agents and wires
@@ -166,6 +206,10 @@ type Stores struct {
 type Options struct {
 	Gears   bool
 	Context bool
+	// MCP carries the SHAPE of any external MCP server this workspace granted:
+	// what it runs or what it calls, and the names of the values it wants.
+	// Never a credential and never an approval — see the MCPServer comment.
+	MCP bool
 }
 
 // filenameUnsafe matches everything a download filename must not carry. A

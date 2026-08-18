@@ -21,10 +21,10 @@ Every command below was run against a real install, and every error message is
 the exact text the software produces. Where something does not exist, it says
 so rather than describing what it might look like.
 
-The examples use `http://127.0.0.1:8688`, the default. On a loopback address you
-are the admin without signing in, so no `Authorization` header appears in them —
-add `-H "Authorization: Bearer $TOKEN"` to every call if your server listens
-anywhere else.
+The examples use `http://127.0.0.1:8688`, the default, and every one of them
+carries `-H "Authorization: Bearer $TOKEN"`. There is no address and no machine
+where that header is optional — see [The token, and when you need
+it](#the-token-and-when-you-need-it) for where `$TOKEN` comes from.
 
 ---
 
@@ -75,39 +75,88 @@ Other routes are in [Install](./#install). The server listens on
 The other subcommands are a client for a running server and an MCP bridge; they
 are in [From a terminal, and from a script](#from-a-terminal-and-from-a-script).
 
+### Signing in the first time
+
+Open `http://127.0.0.1:8688` and the app asks you to choose a password for the
+`admin` account. Nobody has one yet: the first start creates that account with a
+name and a role and nothing else. Pick one, and you are in.
+
+On your own machine that is the whole story — Cogitorium remembers you, and the
+next launch opens straight into your workspaces. It only asks again if you sign
+out.
+
+On a server it asks for one more thing: the admin token this line put in the log
+at first start.
+
+```
+admin token created — copy it now, it cannot be shown again  token=cg-admin-b1e87f6…
+```
+
+That is not ceremony. A server is reachable by everyone who can route to it, so
+without the token the first stranger to find the port would be the one who sets
+the admin password. On loopback it is not asked for, because anyone who can
+reach loopback can already read the database it would be protecting.
+
+Only the SHA-256 hash of the token is stored, so a lost one cannot be recovered
+and there is no reset command. `COGITORIUM_ADMIN_TOKEN` seeds it instead of
+letting the server generate one — read from the environment only, and at least
+24 characters.
+
+**Signing in over the network is not remembered.** A browser reaching a server
+keeps the session until it closes and no longer, so a borrowed or shared machine
+does not keep a working credential after you walk away. Locally it is
+remembered, which is the case where there is nothing to protect it from.
+
+**What the browser is actually holding.** A cookie, not a token in
+`localStorage`. It is marked `HttpOnly`, so no script on the page can read it —
+which is the point: a token in storage is one cross-site scripting bug away from
+being copied somewhere else, and this one cannot be read even by script running
+on the page it belongs to. It is marked `SameSite=Lax`, so the browser never
+attaches it to a write another site caused, and the server refuses one anyway if
+the `Origin` says it came from elsewhere.
+
+Scripts get the other kind. `Authorization: Bearer` cannot be attached by a
+browser on your behalf, so there is nothing for another site to forge, and a
+token in a shell variable is not reachable from a web page at all. Each caller
+gets the credential that fits how it stores things.
+
+To change your password later: the account button at the bottom of the rail →
+**change password**.
+
 ### The token, and when you need it
 
-On first start the log carries one line you cannot get back:
+The password gets you into the app. Anything talking to the API — a script, a
+`curl`, the terminal client — needs a token instead.
 
-```
-admin token created; local requests are admin automatically  token=cg-admin-b1e87f6…
-```
-
-You do not need it on your own machine — a request from loopback *is* the
-admin. You need it the moment the server listens anywhere else. Only the SHA-256
-hash is stored, so a lost token cannot be recovered; there is no reset command.
-
-`COGITORIUM_ADMIN_TOKEN` seeds that credential instead of letting the server
-generate one. It is read from the environment only — there is no config file key
-for it — and it must be at least 24 characters.
-
-Two things people try here that do not work:
-
-- **Pasting the token into the login form.** The login card has three fields —
-  server, user, password — and none of them is for a token. The seeded admin has
-  no password at all, so it answers `invalid username or password`.
-- **Reaching a Docker install and expecting to be the admin.** Inside the
-  container the server listens on `0.0.0.0`, so your request is not loopback:
-
-  ```
-  {"error":{"message":"authentication required: send Authorization: Bearer <token>"}}
-  ```
-
-To give the admin a password — there is no screen for this, only the route:
+The admin token from the log is one. Every sign-in mints another, and the
+command line will do that for you:
 
 ```bash
-curl -X PUT http://127.0.0.1:8688/api/v1/users/1/password -H 'Content-Type: application/json' -d '{"password":"correct-horse-battery"}'
+export COGITORIUM_TOKEN=$(cogitorium login --user admin)
 ```
+
+It asks for the password without echoing it, and prints the token and nothing
+else, so `$(…)` captures a token rather than a sentence. Over HTTP directly, the
+same exchange:
+
+```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:8688/api/v1/login \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"admin","password":"correct-horse-battery"}' | jq -r .token)
+```
+
+Every example below assumes `$TOKEN` holds one. Without the header they all
+answer the same way, on every address including your own machine:
+
+```
+{"error":{"message":"authentication required: send Authorization: Bearer <token>"}}
+```
+
+> **This changed.** Until recently a request from `127.0.0.1` was served as the
+> admin with no credential at all, and these examples carried no header. It made
+> a solo install feel accountless, and the price was that every process on the
+> machine — any script, any package install hook, any page open in your browser
+> that could reach the port — was an administrator of it. A person signs in now.
 
 ---
 
@@ -133,7 +182,7 @@ With a model in the catalog: **+ New workspace** → name it, say what it is for
 pick the orchestrator model → **create workspace**. Or:
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces -H 'Content-Type: application/json' -d '{"name":"research","description":"release notes","orchestrator_model_id":1}'
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"research","description":"release notes","orchestrator_model_id":1}'
 ```
 
 ```json
@@ -152,7 +201,7 @@ The stripe down the left edge of a card is the colour, and it is also the
 picker: click it, choose one of ten hues, or **clear**.
 
 ```bash
-curl -X PATCH http://127.0.0.1:8688/api/v1/workspaces/1 -H 'Content-Type: application/json' -d '{"hue": 210}'
+curl -X PATCH http://127.0.0.1:8688/api/v1/workspaces/1 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"hue": 210}'
 ```
 
 `{"hue": null}` takes it back. Omitting the field entirely is refused —
@@ -197,7 +246,7 @@ them, and, if you tick the boxes, the gears bound to the workspace and its
 context.
 
 ```bash
-curl -sO -J 'http://127.0.0.1:8688/api/v1/workspaces/1/export?gears=1&context=1'
+curl -sO -J 'http://127.0.0.1:8688/api/v1/workspaces/1/export?gears=1&context=1' -H "Authorization: Bearer $TOKEN"
 ```
 
 What comes out (trimmed; this is a real export):
@@ -236,7 +285,7 @@ private and nothing local.
 and asks for a name:
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces/import -H 'Content-Type: application/json' \
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/import -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"release notes (from A)","bundle":'"$(cat release-notes.cogitorium.json)"',"include_gears":true,"include_context":false}'
 ```
 
@@ -329,7 +378,7 @@ The orchestrator calls `agent_create` and then `delegate`, and you watch both
 happen. The same thing over the API:
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/agents -H 'Content-Type: application/json' -d '{"name":"researcher","role":"You summarize sources accurately and cite them.","model_id":1}'
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/agents -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"researcher","role":"You summarize sources accurately and cite them.","model_id":1}'
 ```
 
 **Attaching files.** The **+** beside the composer takes anything at all.
@@ -380,9 +429,9 @@ and the capability is gone on the next turn — click the edge and press Delete.
 Wires are created and deleted, never edited; to change one, remove it and draw
 the new one.
 
-**Four layers, four buttons.** The legend at the top left is four independent
-toggles, not a picker: any combination is legal. Delegation, tools and outward
-start on; memory starts off.
+**Five layers, five buttons.** The legend at the top left is five independent
+toggles, not a picker: any combination is legal. Delegation, tools, outward and
+time start on; memory starts off.
 
 | Layer | An edge means |
 |---|---|
@@ -390,10 +439,39 @@ start on; memory starts off.
 | **tools** | this agent may call that gear |
 | **memory** | this is what the agent knows going into a turn |
 | **outward** | this agent may ask to reach the internet |
+| **time** | this clock starts that agent or that gear |
 
-Every one of them is a permission the runtime checks, not a note about
-intentions. To change what the system can do you change the graph; to know what
-it can do you look at it, rather than reading four prompts and hoping.
+Every one of them is a permission or a cause the runtime acts on, not a note
+about intentions. To change what the system can do you change the graph; to know
+what it can do you look at it, rather than reading five prompts and hoping.
+
+**Clocks on the canvas.** A workspace where something fires at 03:00 every night
+used to look, on this canvas, exactly like one where nothing did. Now it does
+not: a schedule is a node, wired to what it starts, and it says without being
+opened the three things anybody actually asks —
+
+- **when it next fires**, in words rather than a UTC timestamp: *in 18h*, beside
+  the spec and the zone. `0 3 * * 1-5` says nothing about whose 3am it is, and
+  on a shared install that is exactly what two people disagree about.
+- **whether it is paused**, drawn dashed and dimmed like the switched-off
+  internet gate, because a paused schedule that looks identical to a running one
+  is how somebody re-enables the wrong one.
+- **how the last run went**. A schedule that has been failing every night for a
+  week is the single most useful thing this canvas can tell you, and it used to
+  tell you nothing.
+
+**`+ clock`** makes one, and it is a form rather than a gesture for one honest
+reason: every other relationship here is fully described by its two ends, and a
+schedule is not — it carries a spec, and there is no way to draw *every weekday
+at 03:00*. The edge is still the relationship, so **selecting it and pressing
+Delete removes the job**, and because that takes the spec and the record with
+it, this is the one deletion on the canvas that asks first. Pause it instead if
+you only want it to stop for now.
+
+**A clock whose target was deleted stays.** It turns red, drops its edge, and
+says *its agent was deleted — repoint it or remove it*. Deleting an agent must
+not silently take the nightly job that used it: "it stopped, and here is why" is
+something you can act on, and "it vanished" is not.
 
 **Adding to the canvas.** **`+ agent`** takes a name, a model and a role. A model
 is required and not defaulted — an agent with nothing to think with cannot take
@@ -516,7 +594,7 @@ and no key, no token, no conversation, because a bundle has nowhere to put one.
 **[code-court.cogitorium.json](assets/code-court.cogitorium.json)** — 4 KB.
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces/import \
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/import -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d "{\"name\":\"code court\",\"bundle\":$(cat code-court.cogitorium.json)}"
 ```
@@ -675,7 +753,7 @@ Two things follow from what a prohibition is for:
 Over the API, on the agent:
 
 ```bash
-curl -X PATCH http://127.0.0.1:8688/api/v1/agents/1 -H 'Content-Type: application/json' -d '{"avoid":"Never invent a version number.\nNever promise a date."}'
+curl -X PATCH http://127.0.0.1:8688/api/v1/agents/1 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"avoid":"Never invent a version number.\nNever promise a date."}'
 ```
 
 Sending `"avoid": ""` clears them. Leaving the field out of the patch leaves
@@ -840,7 +918,7 @@ the callers holding it.
 Over the API it is a `PUT`, and the body is the whole task:
 
 ```bash
-curl -X PUT http://127.0.0.1:8688/api/v1/inlet-tasks/1 -H 'Content-Type: application/json' -d '{
+curl -X PUT http://127.0.0.1:8688/api/v1/inlet-tasks/1 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{
   "name": "ingest-page",
   "accepts": "json",
   "schema": { "type": "object", "required": ["link"] },
@@ -857,7 +935,7 @@ way in refuses it here too — one validator, both routes.
 #### The same, over the API
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/inlets -H 'Content-Type: application/json' -d '{"address":"drop","description":"files from outside"}'
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/inlets -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"address":"drop","description":"files from outside"}'
 ```
 
 The response carries the first key. `POST /api/v1/inlets/1/key` issues a new one.
@@ -867,7 +945,7 @@ The response carries the first key. `POST /api/v1/inlets/1/key` issues a new one
 Everything below is a real capture from a running install, not an illustration.
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/inlets/1/tasks -H 'Content-Type: application/json' -d '{
+curl -X POST http://127.0.0.1:8688/api/v1/inlets/1/tasks -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{
   "name": "archive",
   "accepts": "file",
   "content_type": "application/zip",
@@ -880,7 +958,7 @@ curl -X POST http://127.0.0.1:8688/api/v1/inlets/1/tasks -H 'Content-Type: appli
 Then a key, which is shown once:
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/inlets/1/key
+curl -X POST http://127.0.0.1:8688/api/v1/inlets/1/key -H "Authorization: Bearer $TOKEN"
 ```
 
 And the delivery — a plain POST from anything you already have:
@@ -1047,15 +1125,47 @@ previous one is still going; by default it is skipped. Each schedule shows when
 it fires next, how many times it has fired and skipped, and its last outcome,
 with **Pause**, **Run now** (which does not move its clock) and **Delete**.
 
+**A clock can dial three things**, and which one you want is usually obvious:
+
+- **a receiver task** — the original, and still right when a job genuinely has a
+  door as well as a clock. The task already says which agent, what to tell it
+  and what counts as success, so a firing is that same job with nobody on the
+  other end.
+- **an agent**, with the sentence to give it. This is what most nightly jobs
+  actually are, and before it existed you had to invent a receiver nobody would
+  ever call to get one — which filled the receivers list with doors that had no
+  inlet and no caller. A firing with no instruction is refused when you save it,
+  because a turn with an empty prompt costs money and answers nothing.
+- **a gear**, with its arguments. A backup, a report, a sync — the jobs where a
+  model is a liability rather than a help. Read the warnings below before you
+  make one.
+
+Whatever it dials, a firing goes into **the same queue and the same record** a
+delivery does, so "did last night's job run" is answerable in the usual place,
+and the ceiling that bounds an unattended run still applies.
+
+### A gear on a clock
+
+This is the most useful thing here and the most dangerous, so it is fenced
+three ways rather than one:
+
+- **Only an administrator may make one.** A schedule that runs a gear is
+  unattended execution of approved code by somebody who did not approve it,
+  which is the same class of act as handing an agent an MCP server.
+- **The gear must be approved, and it is checked twice** — when you save the
+  schedule and again every time it fires. A gear edited since drops back to
+  pending, and a clock is the caller with no second gate behind it, so it
+  refuses rather than running code nobody read.
+- **Nobody is watching**, which is the point and also the risk. The blueprint
+  node showing the last outcome is the cheapest version of somewhere for a
+  failure to be seen.
+
 What it will not do:
 
-- **A schedule has no job of its own.** It fires a task that already says which
-  agent, what to tell it and what counts as success — a schedule with its own
-  copy of all that would be a second definition to keep in step. Until the
-  workspace has one inlet task, there is nothing to schedule and the button is
-  disabled.
 - **A scheduled run never gets web search.** Every search waits for a person to
   approve that exact query, and on a schedule there is nobody to ask.
+- **A file task cannot be scheduled.** A file task is given a path to bytes
+  somebody delivered, and a clock has no bytes to give it.
 
 ### The Variables drawer
 
@@ -1143,7 +1253,7 @@ either code you type or files from disk — a script, a set of them, or a compil
 executable. Or:
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/gears -H 'Content-Type: application/json' -d '{"name":"word_count","description":"count words in a string","tags":["text"],"runtime":"python","code":"import sys, json\nargs = json.load(sys.stdin)\nprint(len(args[\"text\"].split()))\n","args_schema":"{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[\"text\"]}"}'
+curl -X POST http://127.0.0.1:8688/api/v1/gears -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"word_count","description":"count words in a string","tags":["text"],"runtime":"python","code":"import sys, json\nargs = json.load(sys.stdin)\nprint(len(args[\"text\"].split()))\n","args_schema":"{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[\"text\"]}"}'
 ```
 
 ```json
@@ -1200,7 +1310,7 @@ Inside, in this order:
   you choose. That is its entire purpose:
 
   ```bash
-  curl -X POST 'http://127.0.0.1:8688/api/v1/gears/1/run?dry=1' -H 'Content-Type: application/json' -d '{"args":{"text":"one two three"}}'
+  curl -X POST 'http://127.0.0.1:8688/api/v1/gears/1/run?dry=1' -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"args":{"text":"one two three"}}'
   ```
 
   ```json
@@ -1378,7 +1488,7 @@ given the **browser** environment instead — **this is API-only; there is no
 control for it on this screen**:
 
 ```bash
-curl -X PATCH http://127.0.0.1:8688/api/v1/gears/1 -H 'Content-Type: application/json' \
+curl -X PATCH http://127.0.0.1:8688/api/v1/gears/1 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"environment":"browser","network":{"granted":true,"hosts":["example.com"]},"status":"approved"}'
 ```
 
@@ -1460,7 +1570,7 @@ here.
 **add provider** takes a name of your choosing, a kind, a base URL and a key:
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/providers -H 'Content-Type: application/json' -d '{"name":"local","type":"openai-compatible","base_url":"http://127.0.0.1:11434/v1","api_key":""}'
+curl -X POST http://127.0.0.1:8688/api/v1/providers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"local","type":"openai-compatible","base_url":"http://127.0.0.1:11434/v1","api_key":""}'
 ```
 
 ```json
@@ -1482,7 +1592,7 @@ one as a button; the ones already in the catalog are ticked and disabled. For a
 server that cannot list its own, **add a model by name**:
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/models -H 'Content-Type: application/json' -d '{"provider_id":1,"model_name":"qwen2.5:0.5b","label":"local / tiny"}'
+curl -X POST http://127.0.0.1:8688/api/v1/models -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"provider_id":1,"model_name":"qwen2.5:0.5b","label":"local / tiny"}'
 ```
 
 ```json
@@ -1539,10 +1649,15 @@ The page says the same thing in place of the file list, with the two ways out:
 run `contextd init solo`, or point Cogitorium at the binary with `contextd_path`
 in config.yaml (or `COGITORIUM_CONTEXTD`).
 
-Homebrew, Scoop and the container image bring `contextd` along. The container
-initialises the space on first start, which fetches a template from GitHub — so
-a first `docker compose up` on a machine with no outbound network comes up with
-memory unavailable and says why in the log.
+Every install route brings `contextd` along — Homebrew, Scoop and winget declare
+it, and the container image, the Linux packages and the release archive carry
+it. In the archive it sits beside `cogitorium`, and the server looks there
+before PATH, so unpacking a tarball into one directory is a working install.
+
+The server also creates the space on first start when there is none, which
+fetches a template from GitHub. A machine with no outbound network therefore
+comes up with memory unavailable and says why in the log — a space that was not
+created rather than one half-created.
 
 Each workspace gets its own branch plus a shared one, and each agent its own
 under that, so one workspace's memory does not leak into another's. Putting a
@@ -1684,6 +1799,167 @@ dark at night, in a colour they like.
 
 ---
 
+## Updates
+
+Cogitorium and Contextverse are binaries you install once and then keep. Until
+now nothing told you a newer one existed: you install it in March and run a
+year-old build, missing every fix, unless you think to go and look. Worse, the
+two version independently on the same machine, so a Cogitorium that needs a
+newer `contextd` than you have fails a save loudly and nothing anywhere joins
+those two facts up.
+
+**The question comes first.** This product fetches nothing at runtime and sends
+nothing about itself anywhere, and a version check is the first outbound request
+the server would make on its own behalf. So it does not make it until you say it
+may. On a fresh install an administrator finds one quiet control on the rail:
+
+> **May this install ask whether a newer version exists?**
+> It is a plain GET to GitHub's public releases API, once a day. Nothing about
+> this install is sent — no identifier, no version, no count, no usage.
+
+Three answers, and the third is the one people actually want: **yes, check
+daily**; **no, never**; or **just look once, now** — which asks this once and
+changes nothing, because one press is one look and not consent to a request
+every morning.
+
+**The answer is remembered.** It lives in the install's own database, so it
+survives a restart. A product that asked the same question after every reboot
+would be a product that did not listen.
+
+**Where it lives.** One button on the rail, beside the appearance bead and the
+account — the corner where the product's own state already is. It is always
+there, so the settings are reachable on a day when there is nothing to report,
+and **it turns orange, with a dot, the moment a newer version exists.** Orange
+rather than your accent colour, deliberately: the accent is whatever you chose,
+so a notice painted in it is invisible on exactly the install whose owner picked
+orange. It stops glowing once you have read it.
+
+**What you are told, and when.** Nothing until there is something to say — not a
+modal, not a banner across your work. Opening it shows the release notes,
+because *"1.6.0 is out"* is not a reason to update and *"1.6.0 fixes the thing
+costing you an hour a week"* is. Both halves are reported: Cogitorium and, if
+`contextd` is on the machine, Contextverse.
+
+**And it says when the pair no longer fits.** "There is a newer one" and "the
+one you have is too old for the one you are running" are different questions,
+and the second is the urgent one: it describes something that is already
+failing. Cogitorium needs `contextd` 1.0.0 or newer for the compare-and-set a
+context save uses; on an older one the save is refused with a message about an
+unknown flag, which is true and useless. The notice now says so in advance, in
+red rather than orange, because it is not a suggestion.
+
+Three states are kept apart on purpose, because collapsing them would be the
+panel claiming confidence it does not have:
+
+- **this is the newest release** — the comparison ran and you are current;
+- **could not ask** — with the reason. Not the same as being up to date;
+- **nothing here can say** — a build whose version is not a release version,
+  which usually means it was built from source. It is shown the newest tag and
+  told plainly that nothing can tell it whether that is newer.
+
+**Installing it: one button, and it does the most it honestly can.** The panel
+works out who owns the binary and offers the action that fits. Under Homebrew,
+Scoop or winget, **install the update** puts that owner's exact command on your
+clipboard — `brew upgrade cogitorium` and so on — so you paste it and press
+return. Where the binary was placed by hand, it opens the release page for your
+platform. In a container or on Kubernetes it offers nothing and says why: the
+image tag is the version there, and anything typed inside a pod is gone at the
+next roll.
+
+**What it will not do is run it for you**, and the reason is the same one the
+rest of this product is built on. Cogitorium never replaces its own binary: a
+self-updater that fights a package manager produces a machine nobody can reason
+about — `brew list` saying one version, the file being another, and the next
+`brew upgrade` quietly reverting it. And a button that made this server execute
+a shell command because a browser asked would be remote code execution with a
+friendly label, in a product whose whole argument is that nothing runs until
+somebody has read it.
+
+**Told once is told.** Dismissing a notice remembers the version it was about,
+on your device. It comes back when there is something new to say and never for
+the thing you already read — a notice that returns every day teaches people to
+dismiss it without reading, which is the state it exists to prevent.
+
+**Switching it off, and keeping it off.** `update_check: off` in the config file
+is absolute: never asked, never checked, and *check now* is refused. It is set
+on the server's own disk and **the interface cannot lift it** — a browser that
+could undo it would make the file a suggestion. An answer stored from before
+that edit does not outrank it either.
+
+| `update_check` | what happens |
+|---|---|
+| `ask` *(default)* | Nothing leaves the machine. An administrator is asked once, on the rail. |
+| `on` | A check a day, and one immediately when the answer is given. |
+| `off` | Never asked, never checked, *check now* refused, not liftable from the interface. |
+
+Reading the state is open to anybody signed in — a version is a fact about the
+install, like its health. Answering the question and pressing *check now* are an
+administrator's, because both are outbound requests made on behalf of everybody
+on the install.
+
+**On an air-gapped install** nothing is broken and nothing nags: one attempt
+fails quietly, the panel says it could not ask and why, and startup never waits
+on it. A slow or unreachable GitHub is not a reason for a workspace to be slow.
+
+---
+
+## Watching it
+
+Nothing here is a screen — it is what an install looks like to Prometheus,
+Grafana, Loki, Elastic or whatever you already run.
+
+**Metrics are off until you name a port.** `metrics_listen: 127.0.0.1:9090`
+and `GET /metrics` answers in the Prometheus text format. Its **own** listener,
+never a route on the API: the API is authenticated and a scrape is not, so an
+unauthenticated path on the authenticated surface would be a way in. A separate
+port is something you bind to a private interface or firewall, exactly as you
+already do for every other exporter.
+
+**Nothing you named is ever a label** — not a workspace, an agent, a model, a
+tool or a user. A scrape reaches a monitoring system that is usually less
+guarded than the product, and a dashboard has a wider audience than a screen.
+It is also how a metrics database runs out of memory: one series per workspace
+per agent is unbounded by construction. The route label is the *template*,
+`/api/v1/workspaces/{id}`, never the id.
+
+The three worth building an alert on first:
+
+- **`cogitorium_schedule_fires_total{outcome="failed"}`** — the nightly job that
+  has been failing every night for a week, which nothing in this product could
+  tell anybody until now.
+- **`cogitorium_model_tokens_total`** — the money. `cogitorium_model_calls_total`
+  carries `reported`, so a provider that returns no usage is counted separately
+  rather than as free.
+- **`cogitorium_work_queued`** — how far behind the queue is, which is where an
+  install silently falls over rather than failing.
+
+Gear outcomes are kept apart into `ok`, `failed`, `refused`, `timed_out` and
+`nonzero_exit` on purpose: a gear nobody approved is a decision somebody has to
+make, and a gear that exited 1 is a bug somebody has to fix. Alerting on them
+together pages the wrong person.
+
+**A metric nobody has touched is not published.** A zero cannot be told apart
+from "this is not wired up", and the second is the one worth noticing.
+
+**Logs get a format, not a destination.** `log_format: json` writes one object
+per line with stable field names, which is what Loki, Elastic and the vendor
+agents want. Cogitorium ships logs **nowhere** — that is what Vector, Fluent
+Bit, Alloy and the agents are for, and a product that grew its own exporter
+would be a product maintaining four of them. Every operation, error and state
+change already logs; the format is the only thing that was missing.
+
+**On Kubernetes** the chart does it for you: metrics on, the port on the
+Service, `log_format: json` (unlike the binary's own default, because a cluster
+is read by a collector rather than by somebody at a console), and a
+`ServiceMonitor` when `metrics.serviceMonitor.enabled` tells it the Prometheus
+Operator is there — guarded, because applying a manifest whose kind does not
+exist fails the whole release. With `networkPolicy.enabled` on, the scrape gets
+its own ingress rule; set `networkPolicy.scrapeFrom` to your monitoring
+namespace, or leave it open to the cluster deliberately rather than discovering
+a blocked scrape that looks exactly like a broken exporter.
+
+---
+
 ## Beyond the interface
 
 The rest is not a screen. It is what the same install looks like from a client,
@@ -1752,28 +2028,118 @@ child runs on this host as the server's own user, so approving one means it can
 read the database and the provider keys in it. What bounds that is who may do
 it, not what it can reach.
 
-So it is three deliberate acts, all administrator-only, and no agent can reach
-any of them:
+**Where it is.** A drawer on the rail beside Gears, because they are the same
+kind of object: somebody else's code, granted to an agent, behind an approval.
+The card is the gear's card with harder wording, not softer — it opens with the
+four facts you are agreeing to, and a granted server is drawn on the blueprint
+as a node saying *not sandboxed · reaches the network*, so "what can this
+workspace reach" is answered by looking rather than by remembering.
+
+**A server is a command here, or a URL somewhere else**, and Cogitorium speaks
+both — `stdio`, `streamable-http` and the deprecated `sse` shape. The difference
+is not a technicality, it is what you are agreeing to:
+
+- **runs here** — a package, downloaded and executed on this machine as this
+  server's user, outside the container gears run in. It can read this install's
+  database and the provider keys in it.
+- **hosted** — nothing runs here at all, which is the one way it is safer. What
+  leaves instead is your credential, on every request, and every argument your
+  agents send it. Cleartext is refused outright: `https`, or `localhost`.
+
+**The library.** Adding your issue tracker is choosing it from a list, not
+knowing that its server is an npm package, what its binary is called, which
+arguments it takes and which environment variables it reads. It is the
+**published MCP registry, read live**, so it holds what is actually out there
+rather than a handful somebody curated — and both shapes are installable,
+because two thirds of the registry is hosted services and a library that offered
+only the other third would be mostly buttons that do nothing.
+
+Each entry names what it reaches, the command or the URL, the credentials it
+needs **by name**, and the prerequisite — a packaged server is usually an `npx`
+or a `uvx` away, which means node or python on the machine, and an entry that
+did not say so would produce a spawn failure nobody can read. Where a server
+publishes both shapes the **hosted one is offered**, because it runs no code
+here; edit the row before approving if you want the package instead.
+
+**The library is fetched, so it is behind the same consent as the update check.**
+An install where `update_check` is `off` has no library and is told why —
+reading the registry is an outbound request, and an install that does not phone
+home should not quietly acquire a catalogue that does. **`add by hand` is
+unaffected**, because it never reached anything to begin with.
+
+Picking an entry **fills in the form and skips no gate**: what lands is a
+pending server that does nothing.
+
+**Anything not in the list is `add by hand`** — a name, the command, its
+arguments one per line, an optional working directory, and the credentials it
+needs by NAME. Arguments are one per line and never one string, for the reason
+the database stores them as an array: a single string has to be split, splitting
+means quoting, and quoting means an argument containing a space silently becomes
+two. The interesting MCP server is very often internal, so this is the ordinary
+path rather than the exception.
+
+**`edit what it runs`** changes any of that afterwards — including switching a
+server between a local package and a hosted URL, which is an ordinary thing to
+want — and **saving returns the server to pending** — everything editable there is inside what was approved, and
+approving what you have just changed is approving something you have not seen.
+Two of the library's own entries need it: the filesystem and git servers ship a
+placeholder path that you point at the directory you actually mean.
+
+**Signing in, instead of pasting a token.** A hosted server usually wants OAuth
+rather than a token you can copy. Press **sign in** on its card and this install
+walks the whole flow: it asks the server, reads the refusal to find the
+authorization server, registers itself if it has never met one, and sends you
+there in a new tab. What comes back is a token this server holds — the one live
+credential in the whole product, sealed with the same key the secrets table
+uses.
+
+That is also why an install with **no `COGITORIUM_SECRET_KEY` is refused** the
+flow rather than given a worse version of it: holding somebody's refresh token
+in plaintext is worse than not supporting the feature. Name a header instead, or
+set a key and restart.
+
+It needs `public_url` unless you are on a laptop, because the authorization
+server sends the browser back to an address it has to be able to reach.
+**Signing in is not approving**: what lands is still a pending server that does
+nothing until an administrator reads what it calls.
+
+**A member sees less than an administrator.** They see that a server exists,
+what it is for and whether it is approved — which is why their agent has a tool.
+They do not see its command line or the names of the credentials it is handed:
+those are a map of this install's integrations and internal hostnames, and a
+drawer would otherwise put it on everybody's screen.
+
+The same three acts drive it from a shell, all administrator-only, and no agent
+can reach any of them:
 
 ```bash
 # 1. Install it. It exists, and it is pending.
-curl -X POST http://127.0.0.1:8688/api/v1/mcp-servers -H 'Content-Type: application/json' \
+curl -X POST http://127.0.0.1:8688/api/v1/mcp-servers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"files","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","/srv/shared"]}'
 
 # 2. Probe it: started once, given nothing at all, and asked what it offers.
-curl -X POST http://127.0.0.1:8688/api/v1/mcp-servers/1/probe
+curl -X POST http://127.0.0.1:8688/api/v1/mcp-servers/1/probe -H "Authorization: Bearer $TOKEN"
 
 # 3. Approve the server, then each tool you actually want.
-curl -X PATCH http://127.0.0.1:8688/api/v1/mcp-servers/1 -H 'Content-Type: application/json' -d '{"status":"approved"}'
-curl -X PATCH http://127.0.0.1:8688/api/v1/mcp-tools/3  -H 'Content-Type: application/json' -d '{"approved":true}'
+curl -X PATCH http://127.0.0.1:8688/api/v1/mcp-servers/1 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"status":"approved"}'
+curl -X PATCH http://127.0.0.1:8688/api/v1/mcp-tools/3 -H "Authorization: Bearer $TOKEN"  -H 'Content-Type: application/json' -d '{"approved":true}'
 
 # Then grant it — to a workspace, or to one agent in it.
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/mcp-bindings \
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/mcp-bindings -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' -d '{"server_id":1}'
 ```
 
 The tools then appear to that agent as `mcp_files__read_file` and so on, beside
 its gears, and a call is dispatched to the server you installed.
+
+**Documents and prompt templates too, through two tools rather than four
+hundred.** A server that holds a wiki reaches the agent as `mcp_documents` —
+call it with nothing to list what is there, with a uri to read one — and its
+prompt templates as `mcp_prompts`. The alternative, a synthetic tool per
+document, would put a definition per page into every request: they are not four
+hundred capabilities, they are one capability with an argument. A server that
+offers neither answers "method not found", which is the answer rather than a
+failure, so a tools-only server does not look broken.
 
 **Per tool, not per server**, and that is the part worth keeping: a server that
 grows a `run_shell` tool after you approved it has grown one nobody agreed to,
@@ -1795,9 +2161,9 @@ export COGITORIUM_URL=http://127.0.0.1:8688
 export COGITORIUM_TOKEN=…
 ```
 
-`--server` and `--token` override them per command. On a loopback address a
-local call is already the admin, so on your own machine the token is optional —
-change the listen address and it stops being.
+`--server` and `--token` override them per command. The token is required on
+every address, your own machine included; `cogitorium login` is one way to mint
+one, and the admin token from the first-start log is another.
 
 **Look around.**
 
@@ -1944,7 +2310,7 @@ than counted, because a bundle whose gears were all skipped imports
 approving gears. Those are decisions made while looking at a canvas or a source
 listing, and a flag is a worse place to make them than a screen that shows what
 is being decided. Everything the command line does, it does over the same HTTP
-API described in [openapi.yaml](openapi.yaml) — 92 path items and 124
+API described in [openapi.yaml](openapi.yaml) — 97 path items and 130
 operations — so anything missing here is one `curl` away, not blocked.
 
 ### Letting an agent search the web
@@ -2010,7 +2376,8 @@ So that you do not go looking:
 - No control for the gear browser environment in the interface; it is API-only.
 - No upload, download, rename or delete for workspace files.
 - No token management: tokens cannot be listed, named, rotated or expired individually.
-- No self-service signup, and no password-change screen.
+- No self-service signup. Changing your OWN password has a screen; changing
+  somebody else's does not, and neither does resetting a forgotten one.
 - No screen for the search audit log, though the route exists.
 - No workspace-wide prohibitions; they are per agent, and a created agent inherits its creator's.
 - A bundle carries the conversation nowhere, and no colour — it is a template, not a transcript.

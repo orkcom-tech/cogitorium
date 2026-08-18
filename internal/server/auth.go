@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net"
 	"net/http"
 	"strings"
 
@@ -23,15 +22,24 @@ func callerFrom(ctx context.Context) identity.User {
 	return u
 }
 
-// authenticate resolves every request to a user. A loopback request with no
-// credentials is treated as the admin: that is what makes a single-operator
-// install feel like it has no accounts, without there being a second code
-// path anywhere — the model is identical, only the way the caller proves
-// who they are differs.
+// authenticate resolves every request to a user, and there are two ways to be
+// resolved — a bearer token or a session cookie. See internal/server/session.go
+// for why a browser gets a different one from a script, and why neither is
+// simply better.
+//
+// It used to be two. A request arriving from 127.0.0.1 with no credentials was
+// served as the admin, so that a single-operator install felt accountless. The
+// cost of that convenience was that EVERY process on the machine was an
+// administrator of this install — any script, any dependency's postinstall, any
+// page in a browser that could reach the port. The account model was sound and
+// the front door was propped open. It is closed: a person signs in, and what
+// they get back is a token like everybody else's.
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Login is the one API route that must be reachable without
-		// credentials — it is where credentials come from. Inlet delivery is
+		// Login and setup are the API routes that must be reachable without
+		// credentials — they are where credentials come from, and on a fresh
+		// install there is no password to send yet. Setup carries its own
+		// guards, which is where the reasoning for them lives. Inlet delivery is
 		// exempt for the same reason: it proves itself against an inlet's own
 		// key rather than against a token, so there is nothing here to resolve.
 		// callerFrom then returns the zero user inside that handler, and any
@@ -48,17 +56,39 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 		// must not be exempt only as a side effect of a rule about static
 		// files, which somebody tightening the SPA fallback would take away
 		// without ever seeing an inlet.
-		if r.URL.Path == "/health" || r.URL.Path == "/api/v1/login" ||
-			strings.HasPrefix(r.URL.Path, inletDeliveryPrefix) ||
-			!strings.HasPrefix(r.URL.Path, "/api/") {
+		if openToAnyone(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		if token := bearerToken(r); token != "" {
+		// Bearer first. A client that went to the trouble of naming a token
+		// meant that token, and silently preferring a stale cookie sitting in
+		// the same browser would be the confusing failure.
+		token, byCookie := bearerToken(r), false
+		if token == "" {
+			token, byCookie = sessionToken(r), true
+		}
+		if token != "" {
+			// Only the browser's credential can be attached to a request the
+			// operator did not make, so only the browser's credential needs
+			// this. See checkOrigin.
+			if byCookie && !checkOrigin(r) {
+				slog.Warn("cross-origin write refused",
+					"origin", r.Header.Get("Origin"), "host", r.Host, "path", r.URL.Path)
+				writeError(w, http.StatusForbidden,
+					"this request came from another site, and a signed-in session is not usable from one")
+				return
+			}
 			user, err := s.identity.Authenticate(r.Context(), token)
 			if err != nil {
 				if errors.Is(err, identity.ErrUnauthorized) {
+					if byCookie {
+						// The session was revoked or the database replaced.
+						// Take the cookie back, or every request from this
+						// browser fails the same way until it is cleared by
+						// hand.
+						clearSession(w, r)
+					}
 					writeError(w, http.StatusUnauthorized, "invalid token")
 					return
 				}
@@ -66,16 +96,6 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, user)))
-			return
-		}
-
-		if s.trustLoopback && isLoopback(r) {
-			admin, err := s.identity.GetUserByName(r.Context(), identity.AdminName)
-			if err != nil {
-				fail(w, r, err)
-				return
-			}
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, admin)))
 			return
 		}
 
@@ -99,43 +119,29 @@ func bearerToken(r *http.Request) string {
 	return ""
 }
 
-func isLoopback(r *http.Request) bool {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
-}
-
-// human is a caller together with HOW they proved who they were. The two are
-// not the same fact: a loopback request carries the admin's identity without
-// anyone having typed anything, so a decision recorded as "admin" may or may
-// not be evidence that a person made it. Every egress record stores both.
+// human is a caller together with HOW they proved who they were, which every
+// egress record stores. Today there is one way and the field is always
+// "bearer"; it is kept because rows written before loopback admin was retired
+// say "loopback-implicit", and a reader of the audit trail needs to be able to
+// tell those apart rather than have the distinction quietly rewritten.
 type human struct {
 	user identity.User
-	auth string // "bearer" | "loopback-implicit"
+	auth string // "bearer" | "loopback-implicit" (historical)
 }
 
 // requireHuman gates the two actions that must be a person's: granting the
-// internet gate, and approving one search. It is admin-only, and when the
-// install has asked for it, implicit loopback admin is refused outright.
+// internet gate, and approving one search.
+//
+// It used to also refuse an implicitly-admin loopback caller, under the
+// egress_approval_bearer option. Both are gone: there is no implicit caller
+// left to refuse, so every grant is now made by someone who signed in — which
+// is what that option asked for, unconditionally.
 func (s *Server) requireHuman(w http.ResponseWriter, r *http.Request) (human, bool) {
 	u, ok := requireAdmin(w, r)
 	if !ok {
 		return human{}, false
 	}
-	auth := "loopback-implicit"
-	if bearerToken(r) != "" {
-		auth = "bearer"
-	}
-	if s.egressBearer && auth != "bearer" {
-		writeError(w, http.StatusForbidden,
-			"this action needs a signed-in operator: send Authorization: Bearer <token> "+
-				"(egress_approval_bearer is on in this server's configuration)")
-		return human{}, false
-	}
-	return human{user: u, auth: auth}, true
+	return human{user: u, auth: "bearer"}, true
 }
 
 // requireWorkspaceCtx is requireWorkspace with a caller-supplied context, so

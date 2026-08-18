@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -77,6 +78,12 @@ func Export(ctx context.Context, s Stores, wsID int64, opts Options) (Bundle, er
 			return Bundle{}, err
 		}
 	}
+	if opts.MCP && s.MCP != nil {
+		b.MCPServers, err = exportMCP(ctx, s, wsID, nameOf)
+		if err != nil {
+			return Bundle{}, err
+		}
+	}
 	if opts.Context {
 		b.Context, err = exportContext(ctx, s, ws.Branch)
 		if err != nil {
@@ -85,7 +92,8 @@ func Export(ctx context.Context, s Stores, wsID int64, opts Options) (Bundle, er
 	}
 
 	slog.Info("workspace exported as a bundle", "workspace_id", wsID, "name", ws.Name,
-		"agents", len(b.Agents), "wires", len(b.Wires), "gears", len(b.Gears), "context_files", len(b.Context))
+		"agents", len(b.Agents), "wires", len(b.Wires), "gears", len(b.Gears),
+		"mcp_servers", len(b.MCPServers), "context_files", len(b.Context))
 	return b, nil
 }
 
@@ -186,5 +194,61 @@ func exportContext(ctx context.Context, s Stores, branch string) ([]ContextFile,
 		}
 		out = append(out, ContextFile{Path: strings.TrimPrefix(f.Path, prefix), Content: content})
 	}
+	return out, nil
+}
+
+// exportMCP carries the SHAPE of every external MCP server this workspace
+// granted, and nothing else.
+//
+// The same three rules the gears follow, for the same reasons. A server bound
+// both workspace-wide and to one agent appears once as workspace-wide, because
+// that is the broader grant. The status is not carried, so an import arrives
+// pending. And the names of the values it wants travel while the values do not.
+//
+// The difference from a gear is worth stating rather than assuming: a gear's
+// complete source is in the bundle, so the receiving operator can read what
+// they are approving. An MCP server is a command line or a hostname, and they
+// cannot. That is an argument for carrying it — they need the shape in order to
+// decide at all — and a much stronger argument for never carrying the approval.
+func exportMCP(ctx context.Context, s Stores, wsID int64, nameOf map[int64]string) ([]MCPServer, error) {
+	bindings, err := s.MCP.Bindings(ctx, wsID)
+	if err != nil {
+		return nil, fmt.Errorf("read this workspace's MCP grants: %w", err)
+	}
+	broadest := map[int64]string{}
+	for _, b := range bindings {
+		if b.AgentID == nil {
+			broadest[b.ServerID] = "workspace"
+			continue
+		}
+		if _, already := broadest[b.ServerID]; already {
+			continue
+		}
+		if name, ok := nameOf[*b.AgentID]; ok {
+			broadest[b.ServerID] = name
+		}
+	}
+
+	out := []MCPServer{}
+	for serverID, boundTo := range broadest {
+		srv, err := s.MCP.Get(ctx, serverID)
+		if err != nil {
+			// A grant whose server has gone is not a reason to fail the whole
+			// export: the workspace is still exportable and the missing row is
+			// already invisible to everything else.
+			slog.Warn("an MCP grant names a server that is gone; it is left out of the bundle",
+				"workspace_id", wsID, "server_id", serverID, "err", err)
+			continue
+		}
+		out = append(out, MCPServer{
+			Name: srv.Name, Description: srv.Description, Transport: srv.Transport,
+			Command: srv.Command, Args: srv.Args, Dir: srv.Dir, EnvNames: srv.EnvNames,
+			URL: srv.URL, HeaderNames: srv.HeaderNames,
+			BoundTo: boundTo,
+		})
+	}
+	// Sorted, so two exports of the same workspace are the same bytes: a map
+	// has no order, and a bundle people diff must not churn.
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }

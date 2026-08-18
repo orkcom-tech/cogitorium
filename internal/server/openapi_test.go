@@ -19,14 +19,17 @@ import (
 //	go test ./internal/server -run TestOpenAPI -update
 //
 // rewrites it after a deliberate change.
-var update = flag.Bool("update", false, "rewrite docs/openapi.yaml from the current routes")
+// Named rewrite rather than update, because this package now imports
+// internal/update and a package-level var of that name shadows it. The FLAG is
+// still -update: the documented command above is what people type.
+var rewrite = flag.Bool("update", false, "rewrite docs/openapi.yaml from the current routes")
 
 func TestOpenAPIDescribesEveryRouteThisServerServes(t *testing.T) {
 	d := newDoor(t)
 	got := openAPI(d.srv.Routes())
 
 	path := filepath.Join("..", "..", "docs", "openapi.yaml")
-	if *update {
+	if *rewrite {
 		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
 			t.Fatalf("write %s: %v", path, err)
 		}
@@ -135,7 +138,7 @@ func TestADescribedBodyIsWhereASchemaBelongs(t *testing.T) {
 func TestTheNumberOfUndescribedBodiesOnlyFalls(t *testing.T) {
 	// Raise this only by describing MORE. If this fails because the number
 	// went up, a route was added without a named body type or one was removed.
-	const described = 13
+	const described = 17
 
 	d := newDoor(t)
 	got, mutating := describedBodies(d.srv.Routes())

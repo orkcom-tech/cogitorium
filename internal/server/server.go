@@ -14,6 +14,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -28,10 +29,15 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/inlet"
 	"github.com/orkcom-tech/cogitorium/internal/library"
+	"github.com/orkcom-tech/cogitorium/internal/mcpcatalog"
+	"github.com/orkcom-tech/cogitorium/internal/mcpoauth"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
+	"github.com/orkcom-tech/cogitorium/internal/metrics"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/schedule"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
+	"github.com/orkcom-tech/cogitorium/internal/settings"
+	"github.com/orkcom-tech/cogitorium/internal/update"
 	"github.com/orkcom-tech/cogitorium/internal/version"
 	"github.com/orkcom-tech/cogitorium/internal/websearch"
 	"github.com/orkcom-tech/cogitorium/internal/work"
@@ -55,11 +61,19 @@ type Server struct {
 	// mcp is external MCP servers — somebody else's tools, granted to an agent.
 	// Nil unless the operator switched it on, because it is the one thing this
 	// product runs that it never saw the source of.
-	mcp      *mcpstore.Store
-	library  *library.Store
-	identity *identity.Store
-	inlets   *inlet.Store
-	engine   *engine.Engine
+	mcp *mcpstore.Store
+	// mcpOAuth holds the grants for remote MCP servers signed in to. Never nil;
+	// whether it can hold anything is decided by COGITORIUM_SECRET_KEY, because
+	// a grant is the one live credential this schema stores.
+	mcpOAuth *mcpoauth.Store
+
+	// mcpLibrary reads the published MCP registry. Never nil; whether it may
+	// actually fetch is decided per request by the update-check consent.
+	mcpLibrary *mcpcatalog.Registry
+	library    *library.Store
+	identity   *identity.Store
+	inlets     *inlet.Store
+	engine     *engine.Engine
 	// queue is where a delivery waits when its workspace is busy, and pool is
 	// what runs it. queueMax bounds the waiting, because a queue with no bound
 	// is a way to run a server out of disk politely.
@@ -78,10 +92,15 @@ type Server struct {
 	// them out.
 	publicURL string
 	http      *http.Server
-	// trustLoopback lets an unauthenticated local request act as the admin,
-	// which is what makes a single-operator install feel accountless while
-	// running the same model as a team install.
-	trustLoopback bool
+	// localInstall means the listener is reachable only from this machine —
+	// somebody's own laptop rather than a server other people connect to.
+	//
+	// It no longer grants anything. It once did, as trustLoopback, and the
+	// name changed with the meaning: what is left is a fact about the address
+	// this server answers on, which two decisions still legitimately turn on.
+	// An OAuth redirect can point at the loopback address only here, and a
+	// browser is told to remember a session only here.
+	localInstall bool
 	// interactive is the sandbox backend able to host a terminal; nil means
 	// no terminal is possible, and that is a refusal rather than a fallback.
 	interactive     sandbox.Interactive
@@ -94,13 +113,23 @@ type Server struct {
 	searcher       *websearch.Searcher
 	broker         *egress.Broker
 	egressOff      atomic.Bool
-	egressBearer   bool
 	egressKilledBy string
 	egressKilledAt string
 
-	// adminToken seeds the first admin instead of generating one. Empty is the
-	// normal case; see config.Config.AdminToken for why it is environment-only.
-	adminToken string
+	// metrics is what an operator can alert on. Never nil; whether anything
+	// scrapes it is decided by metrics_listen.
+	metrics *metrics.Set
+
+	// updates answers "is there a newer release", and holds the setting that
+	// decides whether it may ask. Never nil: an install with the check off
+	// still has to be able to say that it is off.
+	updates *update.Checker
+
+	// adminSeeds are the first admin's credentials when the operator supplied
+	// them instead of letting the server generate one and print it. Both empty
+	// is the normal case on a laptop; see config.Config.AdminToken and
+	// AdminPassword for why they are environment-only.
+	adminSeeds identity.Seeds
 
 	// routes is the inventory every registration adds itself to; see routes.go.
 	routes []Route
@@ -149,25 +178,35 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		env:        env,
 		gearNet:    gate,
 		mcp:        mcpStore,
-		library:    lib,
-		identity:   identity.NewStore(db),
-		inlets:     inlet.NewStore(db),
+		mcpLibrary: mcpcatalog.NewRegistry(),
+		// The key is rebuilt from the config rather than reached for through
+		// the resolver: the resolver's job is resolving names, and reaching
+		// into it for its key would make one type answer two questions.
+		// A nil key is an ordinary install — see mcpoauth.Store.Available.
+		mcpOAuth: mcpoauth.NewStore(db, oauthKey(cfg)),
+		library:  lib,
+		identity: identity.NewStore(db),
+		inlets:   inlet.NewStore(db),
 		engine: engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, queue,
 			engine.Budgets{Run: cfg.BudgetRunTokens}, cfg.DataDir),
-		queue:         queue,
-		schedules:     schedule.NewStore(db),
-		queueMax:      queueMax,
-		callbackHosts: cfg.CallbackHosts,
-		publicURL:     strings.TrimSuffix(cfg.PublicURL, "/"),
-		// A server reachable beyond this machine must not hand out admin
-		// to anyone who can open a socket to it.
-		trustLoopback:   isLoopbackListen(cfg.Listen),
+		queue:           queue,
+		schedules:       schedule.NewStore(db),
+		queueMax:        queueMax,
+		callbackHosts:   cfg.CallbackHosts,
+		publicURL:       strings.TrimSuffix(cfg.PublicURL, "/"),
+		localInstall:    isLoopbackListen(cfg.Listen),
 		terminalEnabled: cfg.Terminal,
 		dataDir:         cfg.DataDir,
 		searcher:        searcher,
 		broker:          broker,
-		egressBearer:    cfg.EgressApprovalBearer,
-		adminToken:      cfg.AdminToken,
+		adminSeeds:      identity.Seeds{Token: cfg.AdminToken, Password: cfg.AdminPassword},
+		// The contextd version is fetched at check time, not here: an install
+		// with no contextd should not pay a subprocess on every boot to
+		// discover that, and the check runs at most once a day.
+		metrics: metrics.NewSet(version.Version),
+		updates: update.New(cfg.UpdateCheck, version.Version, func(ctx context.Context) string {
+			return cs.CheckStatus(ctx).Version
+		}),
 	}
 	// The workers, started here rather than in Serve.
 	//
@@ -189,8 +228,31 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	if mcpStore != nil {
 		s.engine.SetMCP(mcpStore, env)
 	}
+	s.engine.SetMetrics(s.metrics)
+	s.engine.SetMCPOAuth(s.mcpOAuth)
+	// The sweeper that closes idle MCP connections. On the pool's lifetime,
+	// because a pooled connection can be a child process and one that outlived
+	// the server would be a process nobody owns.
+	s.engine.StartMCPPool(poolCtx)
 
 	s.startScheduler(poolCtx)
+
+	// The answer an operator gave last time, before the timer is started —
+	// otherwise an install whose operator said "on" months ago starts under
+	// "ask" and asks again, and one whose operator said "no" is asked forever.
+	// Load enforces the ceiling on the way in: a stored answer can never lift
+	// a configured off.
+	s.updates.Load(poolCtx, settings.NewStore(db))
+
+	// The update check, on the same lifetime and deliberately not on the
+	// startup path: it returns immediately and defers its first request, so a
+	// slow or unreachable GitHub is never part of this server's boot. Under
+	// "ask" and "off" it schedules nothing at all.
+	s.updates.Start(poolCtx)
+
+	// The metrics listener, on the same lifetime as everything else the server
+	// owns. Empty address is off, which is the default.
+	s.metrics.Serve(poolCtx, cfg.MetricsListen)
 
 	// A terminal is only offered when the sandbox can host one: without it
 	// the shell would hold the server's own file access.
@@ -264,6 +326,14 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "GET /api/v1/workspaces/{id}/graph", s.handleWorkspaceGraph)
 	s.route(mux, "GET /api/v1/map", s.handleAccessMap)
 
+	// Reading is for anybody signed in — a version is a fact about the install,
+	// like its health. Asking, and deciding whether this server may ask at all,
+	// are an administrator's: both are outbound requests on behalf of everybody
+	// on the install rather than a preference one person holds.
+	s.route(mux, "GET /api/v1/updates", s.handleUpdateStatus)
+	s.route(mux, "POST /api/v1/updates/check", s.handleUpdateCheckNow)
+	s.routeIn(mux, "PUT /api/v1/updates/mode", s.handleSetUpdateMode, UpdateModeBody{})
+
 	s.route(mux, "GET /api/v1/egress/status", s.handleEgressStatus)
 	s.route(mux, "POST /api/v1/egress/off", s.handleEgressKill)
 	s.route(mux, "GET /api/v1/workspaces/{id}/egress", s.handleListEgressGrants)
@@ -305,6 +375,13 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// External MCP servers. Reading is open to any authenticated caller; every
 	// write is admin-only, and there is deliberately no agent-reachable path to
 	// any of them.
+	s.route(mux, "GET /api/v1/mcp-catalog", s.handleMCPCatalog)
+	s.route(mux, "POST /api/v1/mcp-servers/{id}/oauth", s.handleStartMCPOAuth)
+	s.route(mux, "DELETE /api/v1/mcp-servers/{id}/oauth", s.handleForgetMCPOAuth)
+	// Unauthenticated of necessity: it arrives on a browser redirect from
+	// somebody else's authorization server, and the `state` is what stands in
+	// for a credential. See mcpoauth_handlers.go.
+	s.route(mux, "GET /api/v1/mcp-oauth/callback", s.handleMCPOAuthCallback)
 	s.route(mux, "GET /api/v1/mcp-servers", s.handleListMCPServers)
 	s.routeIn(mux, "POST /api/v1/mcp-servers", s.handleInstallMCPServer, CreateMCPServerBody{})
 	s.routeIn(mux, "PATCH /api/v1/mcp-servers/{id}", s.handleUpdateMCPServer, UpdateMCPServerBody{})
@@ -336,8 +413,11 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "GET /api/v1/workspaces/{id}/queue", s.handleWorkspaceQueue)
 	s.route(mux, "GET /api/v1/workspaces/{id}/spend", s.handleWorkspaceSpend)
 	s.route(mux, "GET /api/v1/workspaces/{id}/schedules", s.handleListSchedules)
-	s.route(mux, "POST /api/v1/workspaces/{id}/schedules", s.handleCreateSchedule)
+	s.routeIn(mux, "POST /api/v1/workspaces/{id}/schedules", s.handleCreateSchedule, CreateScheduleBody{})
 	s.route(mux, "PATCH /api/v1/schedules/{id}", s.handleSetScheduleEnabled)
+	// PUT rather than another PATCH on the same path: PATCH already means
+	// "turn this off", and the shortest route to that stays the shortest.
+	s.routeIn(mux, "PUT /api/v1/schedules/{id}", s.handleEditSchedule, EditScheduleBody{})
 	s.route(mux, "DELETE /api/v1/schedules/{id}", s.handleDeleteSchedule)
 	s.route(mux, "POST /api/v1/schedules/{id}/run", s.handleRunScheduleNow)
 	s.route(mux, "DELETE /api/v1/queue/{id}", s.handleCancelQueued)
@@ -348,6 +428,8 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		writeError(w, http.StatusNotFound, "no such API endpoint: "+r.Method+" "+r.URL.Path)
 	})
 
+	s.route(mux, "GET /api/v1/setup", s.handleSetupState)
+	s.routeIn(mux, "POST /api/v1/setup", s.handleSetup, SetupBody{})
 	s.route(mux, "POST /api/v1/login", s.handleLogin)
 	s.route(mux, "POST /api/v1/logout", s.handleLogout)
 	s.route(mux, "GET /api/v1/whoami", s.handleWhoami)
@@ -375,15 +457,14 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 
 	s.http = &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           logRequests(s.authenticate(mux)),
+		Handler:           s.logRequests(mux, s.authenticate(mux)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	return s
 }
 
 // isLoopbackListen reports whether the server is only reachable from this
-// machine. A listener on 0.0.0.0 or a routable address is not, so it must
-// demand a token from everyone.
+// machine. A listener on 0.0.0.0 or a routable address is not.
 func isLoopbackListen(addr string) bool {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -402,6 +483,11 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	// The runtime kill switch is handed to the engine here rather than at
 	// construction, so the engine never imports the server.
 	s.engine.SetEgressKill(s.egressOff.Load)
+
+	// Before anything else asks for context: an installed contextd with no
+	// space is a product where memory silently does nothing, and until now only
+	// the container image did anything about it. See EnsureSpace.
+	s.context.EnsureSpace(ctx)
 
 	// A pause lives in one process's memory, so nothing left awaiting can
 	// ever be answered after a restart. Saying so in the row is what keeps
@@ -430,7 +516,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 		slog.Warn("inlet runs were in flight when the server stopped; they are recorded as interrupted", "count", n)
 	}
 
-	_, token, err := s.identity.Bootstrap(ctx, s.adminToken)
+	_, token, err := s.identity.Bootstrap(ctx, s.adminSeeds)
 	if err != nil {
 		return err
 	}
@@ -441,11 +527,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	if token == "" {
 		return nil
 	}
-	if s.trustLoopback {
-		slog.Info("admin token created; local requests are admin automatically", "token", token)
-	} else {
-		slog.Warn("admin token created — copy it now, it cannot be shown again", "token", token)
-	}
+	slog.Warn("admin token created — copy it now, it cannot be shown again", "token", token)
 	return nil
 }
 
@@ -482,6 +564,11 @@ func (s *Server) Close() {
 	s.stopPool()
 	s.stopPool = nil
 	s.pool.Stop()
+	// Pooled MCP connections can be child processes, and one that outlived the
+	// server would be a process with nobody left to own it. The sweeper would
+	// get there on its own tick; this makes shutdown deterministic, which is
+	// what a test closing a server needs.
+	s.engine.CloseMCP()
 }
 
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
@@ -597,17 +684,76 @@ func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return h.Hijack()
 }
 
-func logRequests(next http.Handler) http.Handler {
+func (s *Server) logRequests(mux *http.ServeMux, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
+		took := time.Since(start)
 		slog.Info("http request",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", rec.status,
-			"duration_ms", time.Since(start).Milliseconds(),
+			"duration_ms", took.Milliseconds(),
 			"remote", r.RemoteAddr,
 		)
+		// THE TEMPLATE, NEVER THE PATH. `/api/v1/workspaces/41` as a label is
+		// one time series per workspace forever, which is the textbook way to
+		// make a metrics database run out of memory — and it publishes how many
+		// workspaces exist and which ids are live to whoever can scrape.
+		route := s.templateFor(mux, r)
+		labels := map[string]string{
+			"method": r.Method,
+			"route":  route,
+			"status": strconv.Itoa(rec.status),
+		}
+		s.metrics.HTTPRequests.Inc(labels)
+		// Without the route, because a latency histogram per route per method
+		// per status is the cardinality problem again in a shape that looks
+		// reasonable.
+		s.metrics.HTTPSeconds.Observe(map[string]string{"method": r.Method}, took.Seconds())
 	})
+}
+
+// templateFor turns a request into the route pattern it matched, so a label is
+// bounded by the number of endpoints rather than by the number of rows.
+//
+// THE MUX IS ASKED, rather than reading r.Pattern. The obvious version of this
+// reads that field and gets an empty string every time: the mux sets it on the
+// request it passes DOWN to the handler, and this middleware wraps the mux from
+// the outside, so the request it holds never has it. The symptom is quiet —
+// every route labelled "other", which looks like a working metric.
+//
+// Handler() does the routing without serving, which is exactly the question
+// being asked. A path that matched nothing is bucketed rather than passed
+// through: an unmatched path is usually somebody probing, and one series per
+// probe is what a label must never allow.
+func (s *Server) templateFor(mux *http.ServeMux, r *http.Request) string {
+	_, pattern := mux.Handler(r)
+	if pattern == "" {
+		return "other"
+	}
+	if _, path, ok := strings.Cut(pattern, " "); ok {
+		return path
+	}
+	return pattern
+}
+
+// oauthKey builds the AEAD key an OAuth grant is sealed with, or nil.
+//
+// Nil is an ordinary install: one that keeps nothing sensitive in its own
+// database. What it cannot then do is hold a grant, which mcpoauth refuses
+// rather than degrading — see ErrNoSecretKey.
+func oauthKey(cfg config.Config) *secrets.Key {
+	if cfg.SecretKey == "" {
+		return nil
+	}
+	k, err := secrets.NewKey(cfg.SecretKey)
+	if err != nil {
+		// Cannot happen: the same material was already accepted at startup,
+		// where a short key is a startup error rather than a nil here.
+		slog.Error("the secret key could not be used for MCP grants", "err", err)
+		return nil
+	}
+	return k
 }

@@ -8,6 +8,20 @@ Wants=network-online.target
 Type=simple
 User=cogitorium
 Group=cogitorium
+# The contextd this package carries. It lives under /usr/libexec rather than on
+# PATH so it cannot collide with a contextd somebody installs properly — dpkg
+# refuses to unpack a package over another package's file, and two packages
+# both owning /usr/bin/contextd would be mutually uninstallable.
+#
+# Named here rather than found: the service runs as its own user with a
+# restricted environment, so "whatever is on PATH" is not a thing this unit
+# should be relying on either way.
+Environment=COGITORIUM_CONTEXTD=/usr/libexec/cogitorium/contextd
+# HOME is where contextd keeps its space, and a system user has none unless it
+# is given one. Without this the space would land somewhere the unit cannot
+# write and context would report unavailable on a machine that has everything
+# it needs.
+Environment=HOME=/var/lib/cogitorium
 # Loopback by default. This server holds provider API keys, and on any other
 # address it requires a token — that is the same binary behaving differently,
 # not a second mode, so widening the bind is a deliberate edit here.

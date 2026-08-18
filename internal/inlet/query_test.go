@@ -12,7 +12,7 @@ import (
 func recorded(t *testing.T, s *Store, wsID int64, state string, did map[string]any) int64 {
 	t.Helper()
 	ctx := context.Background()
-	id, err := s.Accept(ctx, wsID, 0, "tickets", "triage", "orchestrator")
+	id, err := s.Accept(ctx, wsID, ptr(0), "tickets", "triage", "orchestrator")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestARunWithNoRecordIsNeverClaimedToHaveDoneNothing(t *testing.T) {
 	// by appearing, and must not answer "which did" either.
 	s := queryFixture(t)
 	ctx := context.Background()
-	id, err := s.Accept(ctx, 1, 0, "tickets", "triage", "orchestrator")
+	id, err := s.Accept(ctx, 1, ptr(0), "tickets", "triage", "orchestrator")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,3 +189,8 @@ func TestQueriesAreScopedToTheirWorkspace(t *testing.T) {
 		}
 	}
 }
+
+// ptr is what these tests need now that a run's inlet is nullable — see Accept.
+// A clock firing straight at an agent or a gear has no door at all, so the
+// column had to admit NULL and the argument had to admit nil.
+func ptr(n int64) *int64 { return &n }

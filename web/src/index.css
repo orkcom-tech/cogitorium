@@ -151,6 +151,19 @@ body {
   margin: 0 0 0.25rem;
 }
 
+/* A field grows to fill a ROW — that is what `flex: 1 1 13rem` further down is
+ * for, and it is right in the horizontal `.fields` groups it was written for.
+ * In a column it means every field stretches to share the height, which is why
+ * this card used to draw two inputs a hundred pixels apart.
+ *
+ * It went unseen for as long as it did because nothing local ever rendered
+ * this card: a request from the machine was the admin, so the sign-in screen
+ * was reachable only from another host. */
+.login-card .field,
+.theme-dialog .field {
+  flex: 0 0 auto;
+}
+
 .content {
   padding: 1.25rem 1.5rem;
   min-width: 0;
@@ -1334,6 +1347,196 @@ th {
   --kind: var(--outward);
 }
 
+/* MCP servers on the canvas. Beside the gears because they are the same kind of
+   thing — code an agent may call — and coloured apart because only one of them
+   runs outside the sandbox. */
+.react-flow__node.bp-mcp {
+  border-color: var(--mcp);
+  border-width: 2px;
+  background: color-mix(in srgb, var(--mcp) 12%, transparent);
+  max-width: 15rem;
+}
+
+/* Not approved: drawn, and doing nothing. The same dashed vocabulary a pending
+   gear and a switched-off gate use. */
+.react-flow__node.bp-mcp-pending,
+.react-flow__node.bp-mcp-disabled {
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+.react-flow__edge.bp-mcp-edge .react-flow__edge-path {
+  stroke: var(--mcp);
+  stroke-width: 2;
+}
+
+/* The drawer. */
+.mcp-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.mcp-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+
+.mcp-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  cursor: grab;
+}
+
+.mcp-name {
+  text-align: left;
+}
+
+/* Which shape a server is, at a glance, beside its status. The two facts are
+   independent — a hosted server can be pending and a local one approved — so
+   they are two marks rather than one combined word. */
+.pill.mcp-kind {
+  color: var(--mcp);
+  border-color: color-mix(in srgb, var(--mcp) 45%, transparent);
+}
+
+.mcp-status-pending,
+.mcp-status-disabled {
+  color: var(--warn);
+}
+
+.mcp-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding-top: var(--s2);
+}
+
+/* The four facts. Bordered in the danger colour on purpose: this is the one
+   screen in the product where the honest summary of what is being agreed to is
+   worse than the operator expects, and a soft box would undersell it. */
+.mcp-warning {
+  border-color: var(--danger);
+}
+
+.mcp-warning ul {
+  margin: var(--s1) 0 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+
+.mcp-cmd {
+  margin: 0;
+  padding: var(--s2);
+  overflow-x: auto;
+  font: var(--t-mono)/1.5 var(--mono);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r1);
+  user-select: all;
+}
+
+.mcp-tools {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.mcp-tools li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: var(--r1);
+}
+
+.mcp-tools li.on {
+  border-color: var(--mcp);
+  background: color-mix(in srgb, var(--mcp) 8%, transparent);
+}
+
+.mcp-tools label {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.mcp-offered {
+  font: var(--t-micro)/1.4 var(--mono);
+}
+
+.mcp-form,
+.mcp-library,
+.mcp-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.mcp-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  padding: var(--s2) 0;
+  border-top: 1px solid var(--border);
+}
+
+/* Clocks. Three states have to be legible without opening anything: a paused
+   schedule that looks like a running one is how somebody re-enables the wrong
+   one, and a schedule failing every night for a week is the most useful thing
+   this canvas can say. */
+.react-flow__node.bp-clock {
+  border-color: var(--clock);
+  border-width: 2px;
+  background: color-mix(in srgb, var(--clock) 12%, transparent);
+  max-width: 15rem;
+}
+
+/* Paused. Dashed and dimmed, the same vocabulary the switched-off internet gate
+   uses, so "this is not currently doing anything" reads the same way twice. */
+.react-flow__node.bp-clock-off {
+  border-style: dashed;
+  opacity: 0.55;
+}
+
+/* Its target was deleted. Not dimmed — a broken job is not a quiet one, and
+   dimming it would say the opposite of what it means. */
+.react-flow__node.bp-clock-broken {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.react-flow__node.bp-clock-failed {
+  border-color: var(--warn);
+}
+
+.react-flow__edge.bp-clock-edge .react-flow__edge-path {
+  stroke: var(--clock);
+  stroke-width: 2;
+  stroke-dasharray: 2 5;
+  stroke-linecap: round;
+}
+
+.react-flow__edge.bp-clock-edge.off .react-flow__edge-path {
+  opacity: 0.45;
+}
+
+.react-flow__edge.bp-clock-edge.failed .react-flow__edge-path {
+  stroke: var(--warn);
+}
+
+.legend-dot.layer-time {
+  --kind: var(--clock);
+}
+
 /* The approval dialog. Every rule here exists so that what the operator reads
    is provably the bytes that leave: no ligatures, no bidi reordering, no
    scroll container that could hide the tail of a query. */
@@ -1801,6 +2004,68 @@ th {
 
 .theme-dialog .mode-row button {
   flex: 1;
+}
+
+/* The update panel carries .theme-dialog as well, which is where its padding,
+   gap, border and scroll come from — the two dialogs have the same geometry and
+   a second copy of it would be a second place to keep in step. This block is
+   only the difference: it is wider, because release notes at 30rem wrap every
+   line of a changelog twice. */
+.update-dialog {
+  width: min(44rem, calc(100vw - 2rem));
+}
+
+.update-half.newer {
+  border-color: var(--accent);
+}
+
+.update-half.broken {
+  border-color: var(--danger);
+}
+
+/* Somebody else's text, shown as text. Monospace and pre-wrap because a
+   changelog is written with hard line breaks and lists, and reflowing it into
+   a paragraph loses the shape that makes it scannable. */
+.update-notes {
+  margin: 0;
+  padding: var(--s2);
+  max-height: 18rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: var(--t-mono)/1.5 var(--mono);
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: var(--r1);
+}
+
+/* The command belonging to whoever owns the binary. Selectable and on its own
+   line: it is meant to be copied into a shell, not read. */
+.update-cmd {
+  margin: 0;
+  padding: var(--s2);
+  overflow-x: auto;
+  font: var(--t-mono)/1.5 var(--mono);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r1);
+  user-select: all;
+}
+
+.update-ask {
+  border-color: var(--accent);
+}
+
+.update-foot {
+  align-items: center;
+}
+
+/* The one action on this panel, so it looks like one. An <a> is used where the
+   destination is a page rather than a command, and it has to sit level with the
+   button it replaces. */
+.update-go {
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .theme-head {

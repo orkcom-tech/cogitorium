@@ -28,7 +28,7 @@ func TestADueScheduleRunsTheJob(t *testing.T) {
 	d.provider.answers(func(n int, c modelCall) modelReply { return says("done") })
 
 	sc, err := d.srv.schedules.Create(ctx, schedule.Schedule{
-		WorkspaceID: d.wsID, TaskID: task.ID, Name: "nightly", Spec: "every 1m",
+		WorkspaceID: d.wsID, TaskID: &task.ID, Name: "nightly", Spec: "every 1m",
 		Payload: `{"id":7}`,
 	})
 	if err != nil {
@@ -89,7 +89,7 @@ func TestASlowJobSkipsItsNextFiringRatherThanPilingUp(t *testing.T) {
 	})
 
 	sc, err := d.srv.schedules.Create(ctx, schedule.Schedule{
-		WorkspaceID: d.wsID, TaskID: task.ID, Name: "nightly", Spec: "every 1m", Payload: `{}`,
+		WorkspaceID: d.wsID, TaskID: &task.ID, Name: "nightly", Spec: "every 1m", Payload: `{}`,
 	})
 	if err != nil {
 		t.Fatalf("create schedule: %v", err)
@@ -187,7 +187,7 @@ func TestADisabledScheduleDoesNotFire(t *testing.T) {
 	task := d.addJSONTask(t, "nightly", `{"type":"object"}`, "orchestrator", "do it")
 	d.provider.answers(func(n int, c modelCall) modelReply { return says("done") })
 	sc, err := d.srv.schedules.Create(ctx, schedule.Schedule{
-		WorkspaceID: d.wsID, TaskID: task.ID, Name: "nightly", Spec: "every 1m", Payload: `{}`,
+		WorkspaceID: d.wsID, TaskID: &task.ID, Name: "nightly", Spec: "every 1m", Payload: `{}`,
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)

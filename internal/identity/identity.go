@@ -98,22 +98,136 @@ func newToken(userName string) (string, error) {
 	return fmt.Sprintf("%s-%s-%s", tokenPrefix, userName, hex.EncodeToString(raw)), nil
 }
 
+// adoptSeededPassword gives an existing admin the supplied password, but only
+// when it has none. The UPDATE says so in its own WHERE clause rather than in a
+// read followed by a write: two servers starting at once against one database
+// would both read "no password" and both write, and while they would be writing
+// the same value today, a rule enforced by a comment is one waiting to be
+// broken by the next caller.
+func (s *Store) adoptSeededPassword(ctx context.Context, id int64, password string) error {
+	if err := checkPassword(password); err != nil {
+		return fmt.Errorf("the seeded admin password is unusable: %w", err)
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash the seeded password: %w", err)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ? AND password_hash = ''`,
+		string(hash), now(), id)
+	if err != nil {
+		return fmt.Errorf("adopt the seeded password: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		slog.Info("the admin had no password and the deployment supplied one", "user_id", id)
+	} else {
+		// Said out loud, because the operator who just changed the Secret is
+		// about to wonder why the new value does not work. Silence here reads
+		// as "applied".
+		slog.Info("a password was supplied for the admin and ignored: this account already has one, "+
+			"and nothing outside the interface may replace it", "user_id", id)
+	}
+	return nil
+}
+
+// MinPasswordLen is the floor for any password, typed or seeded. One number,
+// so a credential supplied by a deployment cannot be weaker than one a person
+// is allowed to choose.
+const MinPasswordLen = 8
+
+// MaxPasswordLen is bcrypt's, not a policy.
+//
+// bcrypt hashes at most 72 bytes and, since golang.org/x/crypto stopped
+// silently truncating, REFUSES anything longer. A deployment that set a long
+// passphrase would not get a weak password — it would get a pod that fails to
+// start, on every start, with a hashing error in its log and no clue that the
+// value it was handed is the cause. Refusing it where the value is read says so
+// while somebody is still looking.
+//
+// Bytes rather than characters: it is a byte limit, and a 40-character
+// passphrase with accents in it is over 72 bytes.
+const MaxPasswordLen = 72
+
+// checkPassword is the one place either bound is stated.
+func checkPassword(password string) error {
+	if len(password) < MinPasswordLen {
+		return fmt.Errorf("password must be at least %d characters", MinPasswordLen)
+	}
+	if len(password) > MaxPasswordLen {
+		return fmt.Errorf("password is %d bytes; bcrypt hashes at most %d, and refuses rather than truncates",
+			len(password), MaxPasswordLen)
+	}
+	return nil
+}
+
+// Seeds are credentials an operator supplied for the first admin instead of
+// letting this package generate them. A struct rather than two strings because
+// they are both opaque text, and a caller that transposed them would compile.
+type Seeds struct {
+	// Token becomes the admin's token instead of a generated one.
+	Token string
+	// Password is what the admin signs in with. Empty leaves the account with
+	// no password, which is the state first-run setup exists to resolve — right
+	// on a laptop, where a person is standing in front of it, and useless in a
+	// cluster where nobody is.
+	Password string
+}
+
 // Bootstrap seeds the admin on first start and adopts any pre-existing
 // workspaces, so an install that predates users does not lose them. It
 // returns the admin's token exactly once — on the run that created it.
 // Bootstrap creates the first admin if there is none.
 //
-// seed, when non-empty, becomes the admin's token instead of a generated one,
-// and the returned token is empty because there is nothing for the caller to
-// print — the operator already has it. That distinction is the whole point on
-// Kubernetes, where "printed once at startup" means "in the pod log".
-func (s *Store) Bootstrap(ctx context.Context, seed string) (admin User, token string, err error) {
+// A seeded token means the returned token is empty, because there is nothing
+// for the caller to print — the operator already has it. That distinction is
+// the whole point on Kubernetes, where "printed once at startup" means "in the
+// pod log".
+//
+// A SEEDED PASSWORD FILLS AN EMPTY SLOT AND NEVER REPLACES A FULL ONE.
+//
+// Applying it on every start would silently undo the operator changing their
+// own password, which is the first thing they are told to do — and on
+// Kubernetes "every start" is every rollout, eviction and node drain. Applying
+// it only when the admin is created would be wrong in the other direction: an
+// install that predates this, or one made before a password was supplied, has
+// an admin with no password at all, and a deployment that handed this server
+// one would be told it took effect while the account stayed unreachable.
+//
+// So: no password, and one was supplied — set it. A password already there —
+// leave it. Neither case can lose anything, because an account with no password
+// is one nobody can sign in to.
+//
+// It follows that a forgotten password is not recoverable by redeploying with a
+// new one, which is the same trade this product already makes for tokens, where
+// only the hash is kept.
+func (s *Store) Bootstrap(ctx context.Context, seed Seeds) (admin User, token string, err error) {
 	existing, err := s.GetUserByName(ctx, AdminName)
 	if err == nil {
+		if seed.Password != "" {
+			if err := s.adoptSeededPassword(ctx, existing.ID, seed.Password); err != nil {
+				return User{}, "", err
+			}
+		}
 		return existing, "", nil
 	}
 	if !errors.Is(err, ErrNotFound) {
 		return User{}, "", err
+	}
+
+	// Refused here rather than shortened or ignored. A deployment that handed
+	// this server a four-character password and got a running install would
+	// have been told nothing, and the weak credential would be the one guarding
+	// it.
+	hash := ""
+	if seed.Password != "" {
+		if err := checkPassword(seed.Password); err != nil {
+			return User{}, "", fmt.Errorf("the seeded admin password is unusable: %w", err)
+		}
+		h, err := bcrypt.GenerateFromPassword([]byte(seed.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return User{}, "", fmt.Errorf("bootstrap: hash the seeded password: %w", err)
+		}
+		hash = string(h)
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -123,26 +237,45 @@ func (s *Store) Bootstrap(ctx context.Context, seed string) (admin User, token s
 	defer tx.Rollback()
 
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO users (name, role, created_at, updated_at) VALUES (?, ?, ?, ?)`,
-		AdminName, RoleAdmin, now(), now())
+		`INSERT INTO users (name, role, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+		AdminName, RoleAdmin, hash, now(), now())
 	if err != nil {
 		return User{}, "", fmt.Errorf("bootstrap: create admin: %w", err)
 	}
 	id, _ := res.LastInsertId()
 
-	printable := true
-	if seed != "" {
-		token, printable = seed, false
-	} else {
+	// WHETHER A TOKEN IS PRINTED AT ALL.
+	//
+	// A supplied token is never echoed: the operator has it, and printing it
+	// would only put it somewhere new — which on Kubernetes is the pod log.
+	//
+	// A supplied PASSWORD suppresses it for a stronger reason. That is the
+	// deployment case, and a generated token written to the log is a permanent
+	// admin credential readable by anyone who can read logs in the namespace,
+	// for as long as the log is kept. The chart refuses to print the password
+	// in its own install output on exactly that reasoning; leaving an equally
+	// privileged token in a worse place would make that refusal theatre. The
+	// operator signs in with the password and mints tokens with `cogitorium
+	// login`, so nothing is lost by not having one at first start.
+	printable := false
+	switch {
+	case seed.Token != "":
+		token = seed.Token
+	case hash == "":
+		// The laptop: no password either, so this token is the only way in and
+		// the operator has to be shown it.
 		token, err = newToken(AdminName)
 		if err != nil {
 			return User{}, "", err
 		}
+		printable = true
 	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO tokens (user_id, name, token_hash, created_at) VALUES (?, 'bootstrap', ?, ?)`,
-		id, hashToken(token), now()); err != nil {
-		return User{}, "", fmt.Errorf("bootstrap: store token: %w", err)
+	if token != "" {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO tokens (user_id, name, token_hash, created_at) VALUES (?, 'bootstrap', ?, ?)`,
+			id, hashToken(token), now()); err != nil {
+			return User{}, "", fmt.Errorf("bootstrap: store token: %w", err)
+		}
 	}
 
 	// Workspaces created before there were users belong to the admin.
@@ -155,7 +288,8 @@ func (s *Store) Bootstrap(ctx context.Context, seed string) (admin User, token s
 	if err := tx.Commit(); err != nil {
 		return User{}, "", fmt.Errorf("bootstrap: commit: %w", err)
 	}
-	slog.Info("admin user seeded", "id", id, "adopted_workspaces", n, "token_source", tokenSource(printable))
+	slog.Info("admin user seeded", "id", id, "adopted_workspaces", n,
+		"token_source", tokenSource(printable), "password_seeded", hash != "")
 	if !printable {
 		// The caller has nothing to show: the operator supplied this token, so
 		// echoing it would only put it somewhere new.
@@ -207,21 +341,52 @@ func (s *Store) GetUserByName(ctx context.Context, name string) (User, error) {
 	return u, s.loadTeams(ctx, &u)
 }
 
-// SetPassword sets or clears a user's password. Clearing it leaves the
-// account reachable only by token, which is what the seeded admin on a
-// loopback install runs with.
-func (s *Store) SetPassword(ctx context.Context, id int64, password string) error {
-	hash := ""
-	if password != "" {
-		if len(password) < 8 {
-			return errors.New("password must be at least 8 characters")
-		}
-		h, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		if err != nil {
-			return fmt.Errorf("hash password: %w", err)
-		}
-		hash = string(h)
+// NeedsSetup reports whether the seeded admin still has no password.
+//
+// That is the state every fresh install starts in: Bootstrap writes a name and
+// a role and mints a token, and nothing has yet been typed by a person. It used
+// not to matter, because a local request was the admin whether or not anyone
+// could prove it. Now it is the difference between a door and a wall, so the
+// first run asks for a password instead of asking to be let in with one that
+// does not exist.
+func (s *Store) NeedsSetup(ctx context.Context) (bool, error) {
+	var hash string
+	err := s.db.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE name = ?`, AdminName).Scan(&hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		// No admin at all: Bootstrap has not run. Not this package's problem
+		// to fix, and definitely not a state to advertise as claimable.
+		return false, nil
 	}
+	if err != nil {
+		return false, fmt.Errorf("needs setup: %w", err)
+	}
+	return hash == "", nil
+}
+
+// SetPassword replaces a user's password. It cannot clear one.
+//
+// It could once, leaving an account reachable only by token, and nothing in the
+// product used that — but the route behind it did, because an absent JSON field
+// is an empty string. That was a way to UNCLAIM AN INSTALL: "the admin has no
+// password" is exactly how NeedsSetup recognises one nobody has taken, so an
+// admin clearing their own password reopened the unauthenticated first-run
+// route on a live install. On a local one that is anybody with a socket to the
+// port; on a server it is anybody holding the admin token, which is a lower bar
+// than the password they just erased.
+//
+// So an empty password is refused rather than read as a command.
+func (s *Store) SetPassword(ctx context.Context, id int64, password string) error {
+	if password == "" {
+		return errors.New("a password cannot be empty: an account with no password is one this install treats as unclaimed")
+	}
+	if err := checkPassword(password); err != nil {
+		return err
+	}
+	h, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+	hash := string(h)
 	res, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`, hash, now(), id)
 	if err != nil {
 		return fmt.Errorf("set password for user %d: %w", id, err)
@@ -229,7 +394,7 @@ func (s *Store) SetPassword(ctx context.Context, id int64, password string) erro
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("user %d: %w", id, ErrNotFound)
 	}
-	slog.Info("password changed", "user_id", id, "cleared", password == "")
+	slog.Info("password changed", "user_id", id)
 	return nil
 }
 
@@ -344,10 +509,13 @@ func (s *Store) CreateUser(ctx context.Context, name, role, password string) (Us
 	}
 	defer tx.Rollback()
 
+	// Empty is allowed here and nowhere else: creating somebody without a
+	// password is how an admin hands out an account reached by its token, and
+	// it is a NEW user rather than the admin whose empty hash means unclaimed.
 	hash := ""
 	if password != "" {
-		if len(password) < 8 {
-			return User{}, "", errors.New("password must be at least 8 characters")
+		if err := checkPassword(password); err != nil {
+			return User{}, "", err
 		}
 		h, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 		if err != nil {

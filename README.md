@@ -61,8 +61,14 @@ spent it.
   at — which is the argument for granting the network to anything that carries a
   credential.
   [→](https://orkcom-tech.github.io/cogitorium/#named-values)
+- 📊 **Watchable when it is somebody's job to watch it** — a Prometheus endpoint
+  on its own port (off by default), JSON logs for whatever collects them, and a
+  Helm chart that wires both up. No workspace, agent or model name is ever a
+  label: a scrape has a different audience from a screen, and a label per
+  workspace is how a metrics database runs out of memory.
+  [→](https://orkcom-tech.github.io/cogitorium/#metrics--what-an-operator-can-alert-on)
 - 📐 **A described API** — `docs/openapi.yaml` is generated from the server's own
-  route table by a test that fails when the two disagree — **92 paths, 124
+  route table by a test that fails when the two disagree — **97 paths, 130
   operations** — so a route cannot exist without appearing in it.
   [→](https://orkcom-tech.github.io/cogitorium/#the-api-description)
 - 🔌 **Speaks MCP** — `cogitorium mcp` serves your approved gears and receiver
@@ -72,9 +78,11 @@ spent it.
   [→](https://orkcom-tech.github.io/cogitorium/#mcp--this-install-as-a-tool-provider)
 - 🔗 **And consumes it, when you say so** — an agent can be granted an external
   MCP server's tools the way it is granted a gear: install, probe, approve the
-  server *and each tool*, then grant. Off by default, admin-only, driven through
-  the HTTP API for now, and the documentation says plainly what it costs — the
-  child runs on the host, outside the sandbox.
+  server *and each tool*, then grant. **Pick one from the built-in library**
+  rather than knowing that Jira's server is an npm package, drag it onto an
+  agent on the blueprint, and see it there as a node. Off by default,
+  admin-only, and the review screen states plainly what it costs — the child
+  runs on the host, outside the sandbox, fetched fresh every time it starts.
   [→](https://orkcom-tech.github.io/cogitorium/#consuming-mcp--somebody-elses-tools-granted-to-an-agent)
 - 🌐 **A browser, when you grant one** — a gear can be given an environment with a
   real browser in it, through the API: `PATCH /api/v1/gears/{id}` with
@@ -223,9 +231,10 @@ is mixed towards it, so the ground and the surfaces carry a little of it too.
 
 ## Install
 
-Every route installs the same binary. Context and memory are stored by
-[Contextverse](https://github.com/orkcom-tech/contextverse), so the channels
-that can bring it do.
+Every route installs the same binary, and every route brings
+[Contextverse](https://github.com/orkcom-tech/contextverse) with it — declared
+as a dependency where a package manager can act on it, carried in the artifact
+where nothing can. The context space is created on first start.
 
 **macOS and Linux — Homebrew** (brings `contextd` with it):
 
@@ -241,17 +250,19 @@ scoop bucket add contextverse https://github.com/orkcom-tech/scoop-bucket
 scoop install cogitorium
 ```
 
-**Anywhere — the binary**, from [releases](https://github.com/orkcom-tech/cogitorium/releases).
-Install `contextd` separately; Cogitorium refuses to store context without it.
+**Anywhere — the archive**, from [releases](https://github.com/orkcom-tech/cogitorium/releases).
+It carries `contextd` beside `cogitorium`; unpack both into the same directory
+and the server finds it there. Debian and RPM packages from the same page carry
+it too.
 
-Then open `http://127.0.0.1:8688`. On loopback the first run needs no login: a
-single-operator install never sees a sign-in screen.
+Then open `http://127.0.0.1:8688`. The first run asks you to choose a password
+for the `admin` account; after that, on your own machine, it remembers you.
 
 ## No telemetry
 
 Nothing is reported about you or about this install. There is no analytics
-endpoint, no crash reporter and no update ping, and the interface fetches no
-fonts and no scripts from the network.
+endpoint and no crash reporter, and the interface fetches no fonts and no
+scripts from the network.
 
 Everything this binary does reach, in full:
 
@@ -264,7 +275,30 @@ Everything this binary does reach, in full:
   `echo-page.com`, then `api.duckduckgo.com` as a fallback. They are constants
   fixed at build time rather than settings, so no agent can name where its words
   go and nobody can be talked into repointing them;
-- the **cluster API**, in Kubernetes mode, to create the Job a gear runs as.
+- the **cluster API**, in Kubernetes mode, to create the Job a gear runs as;
+- **whatever scrapes `/metrics`**, if you switched it on — inbound rather than
+  outbound, on its own port, carrying no name you chose;
+- **`api.github.com`, only if you say yes** — see below.
+
+### The one question this product asks
+
+Cogitorium and Contextverse are binaries people install once and keep. Nothing
+told anybody a newer one existed, so somebody installs this in March and runs a
+year-old build without ever knowing.
+
+The fix is a daily GET to GitHub's public releases API — and because that is the
+first outbound request this server makes on its own behalf, **it does not happen
+until you agree to it.** `update_check` defaults to `ask`: the interface puts
+the question once, on the rail, and nothing leaves the machine until it is
+answered. Set `update_check: off` and it is never asked and never checks,
+including when somebody presses *check now* — and the interface cannot lift
+that, because it is a decision made on the server's own disk.
+
+The request carries **no identifier, no version, no count and no usage**. What
+comes back is a tag and the release notes. Nothing is downloaded and **nothing
+is ever replaced**: whoever installed the binary is who replaces it, so the
+panel prints `brew upgrade cogitorium` on a Homebrew install and no command at
+all in a container, where the next deploy owns the version anyway.
 
 Context and memory go to a `contextd` process on the same machine, not to a
 network service.

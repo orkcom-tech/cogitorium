@@ -24,9 +24,11 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: session.headers({ 'Content-Type': 'application/json', ...(init?.headers as object) }),
   })
-  if (r.status === 401) throw new Unauthorized('sign in required')
   if (r.status === 204) return undefined as T
   const body = await r.json().catch(() => null)
+  // The server's own words, when it gave any. A 401 flattened to "sign in
+  // required" is why a mistyped password used to be reported as one.
+  if (r.status === 401) throw new Unauthorized(body?.error?.message ?? 'sign in required')
   if (!r.ok) {
     throw new Error(body?.error?.message ?? `${r.status} ${r.statusText}`)
   }
@@ -92,6 +94,57 @@ export type FileEntry = { name: string; path: string; dir: boolean; size: number
 // server's configuration file, and a per-agent grant an operator draws on the
 // blueprint. Neither is reachable from an agent, and every individual search
 // still stops the turn and waits for a person.
+// Is there a newer release, and may this install ask.
+//
+// `mode` is three-valued rather than a bool because "nobody has answered yet"
+// is a real state: an install that has not been asked is not the same as one
+// that said no. `off` is set in the server's config file and cannot be changed
+// from here — the interface shows it and does not offer the switch.
+export type UpdateMode = 'ask' | 'on' | 'off'
+
+export type UpdateRelease = {
+  tag: string
+  name: string
+  notes: string
+  url: string
+  published_at: string
+}
+
+export type UpdateProduct = {
+  name: string
+  /** What this machine runs. Empty means the product is not installed here. */
+  running: string
+  latest?: UpdateRelease
+  /** Strictly newer, and only when the comparison was conclusive. */
+  newer: boolean
+  /** False for a development build: "up to date" and "cannot say" differ. */
+  comparable: boolean
+  /** This install HAS this product, in a version too old for the Cogitorium
+   *  running. Different from `newer`: that is "there is something better if
+   *  you want it", this is "something you already do is failing". */
+  too_old?: boolean
+  /** The version that would fix it, when too_old. */
+  needs?: string
+  error?: string
+}
+
+// How this copy got onto the machine, which decides what an honest "take it"
+// line can offer. A container and a cluster carry no command on purpose: the
+// deploy pipeline owns the version there, and anything typed into a pod is
+// undone by the next roll.
+export type UpdateInstall = {
+  kind: 'homebrew' | 'scoop' | 'winget' | 'deb-rpm' | 'container' | 'kubernetes' | 'desktop' | 'manual'
+  command?: string
+  note: string
+}
+
+export type UpdateReport = {
+  mode: UpdateMode
+  checked_at: string
+  products: UpdateProduct[]
+  install: UpdateInstall
+}
+
 export type EgressStatus = {
   enabled: boolean
   reason: string
@@ -297,10 +350,26 @@ export type QueueEntry = {
 
 export type QueueView = { queued: number; running: number; entries: QueueEntry[] }
 
+// What a clock dials. `task` is the original and is still right when a job has
+// a door as well as a clock; the other two exist because a task describes a
+// DOOR — an inlet, an address, a key, a caller — and a schedule is not that.
+export type ScheduleTarget = 'task' | 'agent' | 'gear'
+
 export type Schedule = {
   id: number
   workspace_id: number
-  task_id: number
+  target_kind: ScheduleTarget
+  /** Set only for a task schedule. */
+  task_id?: number
+  /** Null on a BROKEN schedule: deleting an agent or a gear nulls the target
+   *  rather than cascading the schedule away, so a nightly job that lost what
+   *  it dialled shows as broken instead of vanishing. */
+  target_agent_id?: number
+  target_gear_id?: number
+  /** The sentence an agent target is given; the arguments a gear is called
+   *  with, held against that gear's schema when the schedule is saved. */
+  instruction?: string
+  args?: string
   name: string
   spec: string
   tz: string
@@ -313,15 +382,29 @@ export type Schedule = {
   last_outcome?: 'fired' | 'skipped' | 'failed'
   fires: number
   skips: number
+  /** Resolved by the server, because the row cannot answer either on its own:
+   *  what this dials by name, and which agent node an edge should land on —
+   *  including for a task schedule, whose agent is named by the task. */
+  target_name?: string
+  edge_agent_id?: number
+  broken: boolean
 }
 
 export type NewSchedule = {
-  task_id: number
+  target_kind?: ScheduleTarget
   name: string
   spec: string
   tz?: string
-  payload?: unknown
   on_miss?: 'skip' | 'run'
+  /** task */
+  task_id?: number
+  payload?: unknown
+  /** agent */
+  target_agent_id?: number
+  instruction?: string
+  /** gear */
+  target_gear_id?: number
+  args?: unknown
 }
 
 // One delivery, whatever became of it. inlet_id and agent_id are nullable
@@ -387,6 +470,22 @@ export type AgentUsage = {
 }
 export type Team = { id: number; name: string }
 
+// SetupState is what an unauthenticated client is allowed to learn about an
+// install before it can prove anything: whether anybody has claimed it yet,
+// and whether it is somebody's own machine or a server on a network.
+export type SetupState = { needs_setup: boolean; local: boolean }
+
+export const setup = {
+  state: () => req<SetupState>('/api/v1/setup'),
+  // token is ignored on a local install and required on a server, where an
+  // anonymous claim would be a takeover.
+  claim: (password: string, token?: string) =>
+    req<{ user: User; token: string }>('/api/v1/setup', {
+      method: 'POST',
+      body: JSON.stringify({ password, token: token ?? '' }),
+    }),
+}
+
 export const auth = {
   whoami: () => req<User>('/api/v1/whoami'),
   login: (name: string, password: string) =>
@@ -412,6 +511,99 @@ export const auth = {
     req<void>(`/api/v1/teams/${teamId}/members`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
   removeMember: (teamId: number, userId: number) =>
     req<void>(`/api/v1/teams/${teamId}/members/${userId}`, { method: 'DELETE' }),
+}
+
+// Somebody else's tools, granted to an agent the way a gear is — and worse than
+// a gear on every axis, which is why the card says so rather than making it feel
+// like installing a plugin.
+export type MCPTransport = 'stdio' | 'streamable-http' | 'sse'
+
+export type MCPServer = {
+  id: number
+  name: string
+  description: string
+  /** A command on this host, or a URL somewhere else. The difference is what
+   *  an operator is agreeing to: one puts somebody else's code on this
+   *  machine, the other sends this install's credential to a host they do not
+   *  control. */
+  transport: MCPTransport
+  /** The remote half. header_names maps a header to a NAMED value — never a
+   *  value — resolved at connect time like a gear's env names. */
+  url: string
+  header_names: Record<string, string>
+  /** Blank for a non-administrator: the command line and the credential NAMES
+   *  are a map of this install's integrations, and a member needs to know that
+   *  a server exists and is approved, not how it is spawned. */
+  command: string
+  args: string[]
+  cwd: string
+  env_names: string[]
+  status: 'pending' | 'approved' | 'disabled'
+  approved_fingerprint: string
+  timeout_seconds: number
+  created_at: string
+  updated_at: string
+}
+
+/** What an operator types to install or correct a server, either shape. */
+export type MCPServerInput = {
+  name: string
+  description?: string
+  transport?: MCPTransport
+  command?: string
+  args?: string[]
+  cwd?: string
+  env_names?: string[]
+  url?: string
+  header_names?: Record<string, string>
+  timeout_seconds?: number
+}
+
+export type MCPTool = {
+  id: number
+  server_id: number
+  server_name: string
+  /** What the server calls it, and what the model is offered. They differ:
+   *  somebody else's namespace may hold characters no provider accepts. */
+  remote_name: string
+  offered_name: string
+  description: string
+  input_schema: string
+  /** Per tool, on purpose. Granting a Jira server should not have to mean
+   *  granting delete_issue. */
+  approved: boolean
+  first_seen_at: string
+  listed_at: string
+}
+
+export type MCPBinding = {
+  id: number
+  server_id: number
+  server_name: string
+  workspace_id: number
+  /** Null means the whole workspace, exactly as a gear binding does. */
+  agent_id: number | null
+  created_at: string
+}
+
+/** One server in the shipped library: what an operator picks instead of knowing
+ *  an npm package name. Nothing is fetched to render this. */
+export type MCPCatalogEntry = {
+  /** The registry's own name, globally unique; `name` is what it will be
+   *  called here, squeezed into the shape the store accepts. */
+  id: string
+  name: string
+  title: string
+  reaches: string
+  transport: MCPTransport
+  /** One half or the other, never both. */
+  command: string
+  args: string[]
+  env_names?: string[]
+  url: string
+  header_names?: Record<string, string>
+  needs: string
+  docs: string
 }
 
 export const api = {
@@ -624,6 +816,61 @@ export const api = {
     workspace: (wsId: number) => req<AgentUsage[]>(`/api/v1/workspaces/${wsId}/usage`),
     agent: (agentId: number) => req<AgentUsage>(`/api/v1/agents/${agentId}/usage`),
   },
+  // Whether a newer release exists. Reading never triggers a request: the
+  // server holds the last answer and asks GitHub at most once a day, so a rail
+  // that rendered on every navigation cannot rate-limit a team out of the API.
+  mcp: {
+    servers: () => req<MCPServer[]>('/api/v1/mcp-servers'),
+    library: (q = '') =>
+      req<{ entries: MCPCatalogEntry[]; fetched_at_spawn: string }>(
+        `/api/v1/mcp-catalog${q ? `?q=${encodeURIComponent(q)}` : ''}`,
+      ),
+    install: (body: MCPServerInput) =>
+      req<MCPServer>('/api/v1/mcp-servers', { method: 'POST', body: JSON.stringify(body) }),
+    // An edit and an approval are never the same request: approving what you
+    // have just changed is approving something you have not seen.
+    edit: (id: number, body: Partial<MCPServerInput>) =>
+      req<MCPServer>(`/api/v1/mcp-servers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    setStatus: (id: number, status: MCPServer['status']) =>
+      req<MCPServer>(`/api/v1/mcp-servers/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    remove: (id: number) => req<void>(`/api/v1/mcp-servers/${id}`, { method: 'DELETE' }),
+    // Starts it once and asks what it offers, given no credentials at all —
+    // the question is "what does this claim to be", and a server that needs a
+    // secret to answer it is one to be suspicious of.
+    probe: (id: number) =>
+      req<{ tools: MCPTool[]; capped: boolean; cap: number; identified: string }>(
+        `/api/v1/mcp-servers/${id}/probe`,
+        { method: 'POST' },
+      ),
+    tools: (id: number) => req<MCPTool[]>(`/api/v1/mcp-servers/${id}/tools`),
+    approveTool: (toolId: number, approved: boolean) =>
+      req<void>(`/api/v1/mcp-tools/${toolId}`, { method: 'PATCH', body: JSON.stringify({ approved }) }),
+    bindings: (wsId: number) => req<MCPBinding[]>(`/api/v1/workspaces/${wsId}/mcp-bindings`),
+    bind: (wsId: number, serverId: number, agentId: number | null) =>
+      req<MCPBinding>(`/api/v1/workspaces/${wsId}/mcp-bindings`, {
+        method: 'POST',
+        body: JSON.stringify({ server_id: serverId, agent_id: agentId }),
+      }),
+    unbind: (bindingId: number) => req<void>(`/api/v1/mcp-bindings/${bindingId}`, { method: 'DELETE' }),
+    // Signs this install in to a hosted server, instead of pasting a token.
+    // Answers with where to send the browser; the callback lands back here.
+    signIn: (id: number) =>
+      req<{ authorize_url: string; issuer: string; scopes: string[]; resource: string }>(
+        `/api/v1/mcp-servers/${id}/oauth`,
+        { method: 'POST' },
+      ),
+    signOut: (id: number) => req<void>(`/api/v1/mcp-servers/${id}/oauth`, { method: 'DELETE' }),
+  },
+
+  updates: {
+    status: () => req<UpdateReport>('/api/v1/updates'),
+    // Asks now. Works while the setting is still `ask` — one press is one look
+    // — and is refused when the config file says off.
+    checkNow: () => req<UpdateReport>('/api/v1/updates/check', { method: 'POST' }),
+    setMode: (mode: UpdateMode) =>
+      req<UpdateReport>('/api/v1/updates/mode', { method: 'PUT', body: JSON.stringify({ mode }) }),
+  },
+
   egress: {
     status: () => req<EgressStatus>('/api/v1/egress/status'),
     kill: () => req<{ killed: boolean; notice: string }>('/api/v1/egress/off', { method: 'POST' }),

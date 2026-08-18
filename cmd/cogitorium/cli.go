@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/orkcom-tech/cogitorium/internal/client"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // The command line, over the same HTTP API the interface uses.
@@ -38,6 +40,27 @@ func (f *clientFlags) bind(cmd *cobra.Command) {
 
 func (f *clientFlags) client() *client.Client { return client.New(f.server, f.token) }
 
+// readPassword takes one without putting it in the terminal's scrollback, and
+// falls back to plain stdin when there is no terminal to suppress echo on —
+// which is the case in a pipe, where there is no echo to begin with.
+func readPassword(msg io.Writer) (string, error) {
+	fd := int(os.Stdin.Fd())
+	if term.IsTerminal(fd) {
+		fmt.Fprint(msg, "password: ")
+		raw, err := term.ReadPassword(fd)
+		fmt.Fprintln(msg)
+		if err != nil {
+			return "", fmt.Errorf("could not read the password: %w", err)
+		}
+		return string(raw), nil
+	}
+	raw, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return "", fmt.Errorf("could not read the password from stdin: %w", err)
+	}
+	return strings.TrimRight(string(raw), "\r\n"), nil
+}
+
 // out writes a table, or the raw JSON when asked. Both, because a person wants
 // columns and a script wants to keep every field this client does not model.
 func table(header string, rows func(*tabwriter.Writer)) {
@@ -51,6 +74,47 @@ func table(header string, rows func(*tabwriter.Writer)) {
 
 func newCLICmds() []*cobra.Command {
 	var f clientFlags
+
+	// login exists because the CLI stopped working without a token.
+	//
+	// It did work: a call from the server's own machine was served as the
+	// admin, so `cogitorium queue list` needed no credential on a laptop. That
+	// shortcut is gone, and without this command the only way to get a token
+	// for the terminal client would be to reach for curl — a documented
+	// workflow that starts by telling people not to use the tool.
+	var loginUser string
+	login := &cobra.Command{
+		Use:   "login",
+		Short: "Exchange a password for a token, and print it",
+		Long: "Prints a token on stdout and nothing else, so it can be captured:\n\n" +
+			"    export COGITORIUM_TOKEN=$(cogitorium login --user admin)\n\n" +
+			"The password is read from the terminal without echoing. When stdin is not a\n" +
+			"terminal it is read from there instead, so a script can pipe one in.",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			password, err := readPassword(cmd.ErrOrStderr())
+			if err != nil {
+				return err
+			}
+			var out struct {
+				Token string `json:"token"`
+			}
+			body := map[string]string{"name": loginUser, "password": password}
+			// A client with no token: this is the route that issues one, and
+			// sending a stale one would be the only way to fail here twice.
+			c := client.New(f.server, "-")
+			c.Token = ""
+			if err := c.Do(cmd.Context(), http.MethodPost, "/api/v1/login", body, &out); err != nil {
+				return err
+			}
+			// stdout carries the token alone, so $(…) captures a token and not
+			// a sentence. Anything for a person goes to stderr.
+			fmt.Fprintln(cmd.OutOrStdout(), out.Token)
+			return nil
+		},
+	}
+	login.Flags().StringVar(&loginUser, "user", "admin", "the account to sign in as")
+	login.Flags().StringVar(&f.server, "server", "", "Cogitorium's address (default $COGITORIUM_URL, then "+client.DefaultURL+")")
 
 	workspaces := &cobra.Command{
 		Use:          "workspaces",
@@ -392,7 +456,7 @@ carries on; cogitorium run <id> reads it back.`,
 	for _, c := range []*cobra.Command{workspaces, gears, receivers, queue, runs} {
 		f.bind(c)
 	}
-	return []*cobra.Command{workspaces, gears, receivers, queue, runs}
+	return []*cobra.Command{login, workspaces, gears, receivers, queue, runs}
 }
 
 // flag01 writes a boolean the way the export route reads one. It refuses

@@ -22,6 +22,9 @@ import {
   type GraphData,
   type GraphNode,
   type EgressGrant,
+  type Schedule,
+  type MCPBinding,
+  type MCPServer,
   type ContextBinding,
   type Model,
   type Wire,
@@ -44,12 +47,14 @@ const bindingEdge = (id: number) => `b-${id}`
 const idOf = (nodeOrEdgeId: string) => Number(nodeOrEdgeId.slice(2))
 
 type NodeData = {
-  kind: 'agent' | 'gear' | 'memory' | 'outward'
+  kind: 'agent' | 'gear' | 'memory' | 'outward' | 'clock' | 'mcp'
   egressOn?: boolean
   destination?: string
   agent?: Agent
   gear?: Gear
+  server?: MCPServer
   memory?: GraphNode
+  clock?: Schedule
   workspaceWide?: boolean
   state: string
 }
@@ -64,6 +69,7 @@ const LAYER_HINT = {
   tools: 'Gears: which tools each agent may call',
   memory: 'Memory and context: what each agent knows',
   outward: 'The internet gate: which agents may ask to search the web',
+  time: 'Clocks: what starts on its own, when it next fires, and how it went',
 }
 
 // The one node that is not part of this workspace. Wiring an agent to it IS
@@ -71,6 +77,17 @@ const LAYER_HINT = {
 // wire is the capability rather than a picture of one.
 const OUTWARD = 'outward'
 const egressEdge = (id: number) => `x-${id}`
+
+// A clock is a node like any other, so it gets a namespaced id like any other.
+// `k` for klok, because `c` is taken by nothing yet but `s-shared` already uses
+// the obvious letter and a collision here is an edge pointing at the wrong
+// thing.
+const clockNode = (id: number) => `k-${id}`
+const clockEdge = (id: number) => `t-${id}`
+// An MCP server is the same kind of thing as a gear on this canvas — somebody
+// else's code an agent may call — so it gets a node and a binding edge like one.
+const mcpNode = (id: number) => `p-${id}`
+const mcpBindingEdge = (id: number) => `n-${id}`
 
 export default function BlueprintEditor({
   wsId,
@@ -103,9 +120,17 @@ export default function BlueprintEditor({
   // memory is context for that work and is opened when it is wanted.
   // outward defaults ON: a capability that reaches off the machine must not
   // hide behind a toggle the operator has to remember to switch on.
-  const [layers, setLayers] = useState({ delegation: true, tools: true, memory: false, outward: true })
+  // time defaults ON for the same reason outward does, and it is the whole
+  // point of drawing it: a workspace where something fires at 03:00 every night
+  // looked, on this canvas, exactly like one where nothing did. A layer that
+  // hid it again would leave the canvas lying by omission.
+  const [layers, setLayers] = useState({ delegation: true, tools: true, memory: false, outward: true, time: true })
   const [showHelp, setShowHelp] = useState(() => localStorage.getItem('cogitorium.bpHelp') !== 'off')
   const [egress, setEgress] = useState<{ enabled: boolean; destination: string; grants: EgressGrant[]; reach: Record<string, string[]> } | null>(null)
+  const [schedules, setSchedules] = useState<Schedule[]>([])
+  const [mcpBindings, setMcpBindings] = useState<MCPBinding[]>([])
+  const [mcpServers, setMcpServers] = useState<MCPServer[]>([])
+  const [addingClock, setAddingClock] = useState(false)
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<NodeData>>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   // What the canvas already knows, so a drop can say "it already has that"
@@ -141,14 +166,23 @@ export default function BlueprintEditor({
         api.graph.workspace(wsId),
         api.egress.grants(wsId),
         api.context.bindings(wsId),
+        api.schedules.list(wsId),
+        // Its own catch: this route answers 404 when mcp_clients is off, which
+        // is an ordinary install rather than an error, and one rejected promise
+        // in a Promise.all would take the whole canvas down with it.
+        api.mcp.bindings(wsId).catch(() => [] as MCPBinding[]),
+        api.mcp.servers().catch(() => [] as MCPServer[]),
       ])
-        .then(([w, b, c, g, e, cb]) => {
+        .then(([w, b, c, g, e, cb, sch, mb, ms]) => {
           setWires(w)
           setBindings(b)
           setCatalog(c)
           setGraph(g)
           setEgress(e)
           setContext(cb)
+          setSchedules(sch)
+          setMcpBindings(mb)
+          setMcpServers(ms)
         })
         .catch((e: Error) => onError(e.message)),
     [wsId, onError],
@@ -219,8 +253,46 @@ export default function BlueprintEditor({
           },
         ]
 
-    setNodes([...agentNodes, ...gearNodes, ...memoryNodes, ...outwardNodes])
-  }, [agents, positions, bindings, gearById, graph, layers.tools, layers.memory, layers.outward, egress, setNodes])
+    // MCP servers sit beside the gears and on the same layer: both are tools an
+    // agent may call, and splitting them would make an operator check two
+    // places to answer one question. They are drawn one row lower so the two
+    // kinds stay distinguishable at a glance.
+    const mcpById = new Map(mcpServers.map((m) => [m.id, m]))
+    const mcpIds = layers.tools ? [...new Set(mcpBindings.map((b) => b.server_id))] : []
+    const mcpNodes: Node<NodeData>[] = mcpIds.map((sid, i) => {
+      const srv = mcpById.get(sid)
+      const wide = mcpBindings.some((b) => b.server_id === sid && b.agent_id === null)
+      return {
+        id: mcpNode(sid),
+        position: { x: (i - (mcpIds.length - 1) / 2) * 220, y: 560 },
+        data: { kind: 'mcp', server: srv, workspaceWide: wide, state: 'idle' },
+        className: `bp-node bp-mcp bp-mcp-${srv?.status ?? 'pending'}`,
+      }
+    })
+
+    // Clocks sit below everything, opposite the memory layer — the canvas reads
+    // top to bottom as "what this knows, who it is, what it may use, and what
+    // starts it".
+    //
+    // BELOW THE DEEPEST THING ACTUALLY DRAWN, not at a fixed depth. A fixed y
+    // was right until a workspace had a delegation chain four deep: the clock
+    // landed on top of the last agent and ran its edge straight through it.
+    // Gears sit at 440, so the floor is whichever is lower.
+    const deepestAgent = agents.reduce((low, a) => Math.max(low, positions.get(a.id)?.y ?? 0), 0)
+    const clockY = Math.max(deepestAgent, gearIds.length > 0 ? 440 : 0, mcpIds.length > 0 ? 560 : 0) + 200
+    const clockNodes: Node<NodeData>[] = !layers.time
+      ? []
+      : schedules.map((sc, i, all) => ({
+          id: clockNode(sc.id),
+          position: { x: (i - (all.length - 1) / 2) * 230, y: clockY },
+          data: { kind: 'clock', clock: sc, state: 'idle' },
+          className: `bp-node bp-clock${sc.broken ? ' bp-clock-broken' : ''}${sc.enabled ? '' : ' bp-clock-off'}${
+            sc.last_outcome === 'failed' ? ' bp-clock-failed' : ''
+          }`,
+        }))
+
+    setNodes([...agentNodes, ...gearNodes, ...mcpNodes, ...memoryNodes, ...outwardNodes, ...clockNodes])
+  }, [agents, positions, bindings, gearById, graph, layers.tools, layers.memory, layers.outward, layers.time, egress, schedules, mcpBindings, mcpServers, setNodes])
 
   useEffect(() => {
     setNodes((prev) =>
@@ -286,6 +358,16 @@ export default function BlueprintEditor({
             target: agentNode(b.agent_id as number),
             className: 'bp-binding-edge',
           }))
+    const mcpEdges: Edge[] = !layers.tools
+      ? []
+      : mcpBindings
+          .filter((b) => b.agent_id !== null)
+          .map((b) => ({
+            id: mcpBindingEdge(b.id),
+            source: mcpNode(b.server_id),
+            target: agentNode(b.agent_id as number),
+            className: 'bp-mcp-edge',
+          }))
     const memoryEdges: Edge[] = !layers.memory
       ? []
       : (graph?.edges ?? [])
@@ -308,8 +390,47 @@ export default function BlueprintEditor({
           className: g.stale ? 'bp-egress-edge stale' : 'bp-egress-edge',
           label: g.stale ? 'lapsed — review it' : undefined,
         }))
-    setEdges([...wireEdges, ...bindingEdges, ...memoryEdges, ...egressEdges])
-  }, [wires, bindings, graph, layers, egress, setEdges])
+    // A clock's edge points at what it starts. THE EDGE IS THE RELATIONSHIP
+    // here as everywhere else on this canvas: cutting it deletes the schedule
+    // rather than hiding it, which is why the delete asks first.
+    //
+    // A broken clock draws no edge at all, and that is the honest picture: its
+    // target was deleted, so there is nothing on the other end. The node says
+    // so in words rather than leaving an operator to notice a missing line.
+    // Which nodes are actually on the canvas to land on. An edge whose target
+    // is not drawn is worse than no edge: React Flow silently drops it and the
+    // clock reads as unconnected when it is not.
+    //
+    // Agent nodes exist for every agent; GEAR nodes are drawn from bindings and
+    // only while the tools layer is on, so a clock on a gear that no agent
+    // holds — which is an ordinary thing, since a schedule is the caller — has
+    // nothing to point at. It stands alone and says what it runs in its label.
+    const drawnAgents = new Set(agents.map((a) => a.id))
+    const drawnGears = new Set(layers.tools ? bindings.map((b) => b.gear_id) : [])
+    const clockEdges: Edge[] = !layers.time
+      ? []
+      : schedules.flatMap((sc) => {
+          let to: string | null = null
+          if (sc.target_kind === 'gear') {
+            if (sc.target_gear_id !== undefined && drawnGears.has(sc.target_gear_id)) {
+              to = gearNode(sc.target_gear_id)
+            }
+          } else if (sc.edge_agent_id !== undefined && drawnAgents.has(sc.edge_agent_id)) {
+            to = agentNode(sc.edge_agent_id)
+          }
+          if (!to) return []
+          return [
+            {
+              id: clockEdge(sc.id),
+              source: clockNode(sc.id),
+              target: to,
+              className: `bp-clock-edge${sc.enabled ? '' : ' off'}${sc.last_outcome === 'failed' ? ' failed' : ''}`,
+              animated: sc.enabled && !sc.broken,
+            },
+          ]
+        })
+    setEdges([...wireEdges, ...bindingEdges, ...mcpEdges, ...memoryEdges, ...egressEdges, ...clockEdges])
+  }, [wires, bindings, graph, layers, egress, schedules, agents, mcpBindings, setEdges])
 
   const onConnect = useCallback(
     (c: Connection) => {
@@ -342,6 +463,13 @@ export default function BlueprintEditor({
           .catch((e: Error) => onError(e.message))
         return
       }
+      if (from.data.kind === 'clock' || to.data.kind === 'clock') {
+        onError(
+          'A clock is made with “+ clock”, not by dragging: it needs a spec, and a spec cannot be drawn. ' +
+            'Select its edge and press Delete to remove the schedule.',
+        )
+        return
+      }
       if (from.data.kind === 'memory' || to.data.kind === 'memory') {
         onError('Memory is attached in the Context tab, not by dragging: bind a document to the workspace or to one agent.')
         return
@@ -354,6 +482,16 @@ export default function BlueprintEditor({
         api.gears
           .bind(wsId, idOf(from.id), idOf(to.id))
           .then(reloadGraph)
+          .catch((e: Error) => onError(e.message))
+        return
+      }
+      if (from.data.kind === 'mcp') {
+        api.mcp
+          .bind(wsId, idOf(from.id), idOf(to.id))
+          .then(reloadGraph)
+          // Granting one is an administrator's, unlike a gear binding: a gear's
+          // source is in this install and somebody read it, while an MCP server
+          // is a host process. A member gets that refusal here, in words.
           .catch((e: Error) => onError(e.message))
         return
       }
@@ -370,10 +508,38 @@ export default function BlueprintEditor({
 
   const onEdgesDelete = useCallback(
     (deleted: Edge[]) => {
+      // A clock's edge IS the schedule, so cutting it deletes the job rather
+      // than unlinking it from something. That is a different weight from
+      // revoking a grant — the grant can be redrawn from what is on screen, and
+      // a deleted schedule takes its spec, its timezone and its record of what
+      // happened with it — so this one asks.
+      const clocks = deleted.filter((e) => e.id.startsWith('t-'))
+      if (clocks.length > 0) {
+        const names = clocks
+          .map((e) => schedules.find((sc) => sc.id === idOf(e.id))?.name ?? 'this schedule')
+          .join(', ')
+        if (
+          !confirm(
+            `Delete ${names}?\n\nThe edge is the schedule: cutting it removes the job, its spec and its record of what happened. Disable it instead if you only want it to stop for now.`,
+          )
+        ) {
+          void reloadGraph()
+          return
+        }
+      }
       Promise.all(
         deleted
-          .filter((e) => e.id.startsWith('b-') || e.id.startsWith('w-') || e.id.startsWith('x-'))
+          .filter(
+            (e) =>
+              e.id.startsWith('b-') ||
+              e.id.startsWith('w-') ||
+              e.id.startsWith('x-') ||
+              e.id.startsWith('t-') ||
+              e.id.startsWith('n-'),
+          )
           .map((e) => {
+            if (e.id.startsWith('t-')) return api.schedules.remove(idOf(e.id))
+            if (e.id.startsWith('n-')) return api.mcp.unbind(idOf(e.id))
             if (e.id.startsWith('x-')) return api.egress.revoke(idOf(e.id))
             if (e.id.startsWith('b-')) return api.gears.unbind(idOf(e.id))
             return api.wires.remove(idOf(e.id))
@@ -385,7 +551,7 @@ export default function BlueprintEditor({
         })
         .catch((err: Error) => onError(err.message))
     },
-    [onChanged, reloadGraph, onError],
+    [onChanged, reloadGraph, onError, schedules],
   )
 
   // Agent positions persist; gear nodes are laid out deterministically and
@@ -579,6 +745,33 @@ export default function BlueprintEditor({
         return
       }
 
+      if (d.kind === 'mcp') {
+        if (mcpBindings.some((b) => b.server_id === d.id && b.agent_id === (target?.id ?? null))) {
+          setLanded({ text: `${where} already has ${d.name}.` })
+          return
+        }
+        api.mcp
+          .bind(wsId, d.id, target?.id ?? null)
+          .then(() => {
+            setLayers((p) => (p.tools ? p : { ...p, tools: true }))
+            return reloadGraph()
+          })
+          .then(() =>
+            setLanded({
+              text: `${d.name} → ${where}.`,
+              // Same rule as a gear: the link is drawn and the truth is stated
+              // rather than the drop being refused for a rule it does not
+              // enforce — an unapproved server's tools are never offered.
+              warn:
+                d.status === 'approved'
+                  ? undefined
+                  : `Nobody has approved ${d.name}. The link is drawn and it does nothing — no agent is offered its tools until an administrator reads what it runs and says yes.`,
+            }),
+          )
+          .catch((err: Error) => onError(err.message))
+        return
+      }
+
       if (context.some((c) => c.path === d.path && c.agent_id === (target?.id ?? null))) {
         setLanded({ text: `${where} already reads ${d.name}.` })
         return
@@ -626,7 +819,7 @@ export default function BlueprintEditor({
         </p>
       )}
       <div className="row legend">
-        {(['delegation', 'tools', 'memory', 'outward'] as const).map((layer) => (
+        {(['delegation', 'tools', 'memory', 'outward', 'time'] as const).map((layer) => (
           <button
             key={layer}
             className={`legend-item round ${layers[layer] ? '' : 'off'}`}
@@ -675,6 +868,13 @@ export default function BlueprintEditor({
             sentence it never stopped showing because there was never a value
             to show instead. It read as a filter. The sentence is the button's
             title now, which is where a sentence goes. */}
+        <button
+          className="bp-act round"
+          onClick={() => setAddingClock((v) => !v)}
+          title="Make something here happen on its own, on a schedule"
+        >
+          {addingClock ? 'cancel' : '+ clock'}
+        </button>
         <DropMenu
           className="bp-act round"
           label="+ gear"
@@ -690,6 +890,21 @@ export default function BlueprintEditor({
           }
         />
       </div>
+
+      {addingClock && (
+        <NewClockForm
+          wsId={wsId}
+          agents={agents}
+          gears={catalog}
+          taken={new Set(schedules.map((sc) => sc.name))}
+          onDone={() => {
+            setAddingClock(false)
+            setLayers((p) => (p.time ? p : { ...p, time: true }))
+            void reloadGraph()
+          }}
+          onError={onError}
+        />
+      )}
 
       {adding && (
         <NewAgentForm
@@ -777,7 +992,64 @@ export default function BlueprintEditor({
   )
 }
 
+/**
+ * When this fires next, in the operator's own words.
+ *
+ * "in 4 hours" rather than a UTC timestamp, because the question a clock on a
+ * canvas answers is "is this about to happen" and nobody converts zones in
+ * their head to find out. The zone is still named beside it — `0 3 * * *` says
+ * nothing about whose 3am it is, and on a shared install that is exactly the
+ * thing two people disagree about.
+ */
+function whenNext(iso: string): string {
+  const at = new Date(iso).getTime()
+  if (!Number.isFinite(at)) return 'never'
+  const secs = Math.round((at - Date.now()) / 1000)
+  if (secs <= 0) return 'due now'
+  if (secs < 90) return `in ${secs}s`
+  const mins = Math.round(secs / 60)
+  if (mins < 90) return `in ${mins}m`
+  const hours = Math.round(mins / 60)
+  if (hours < 36) return `in ${hours}h`
+  return `in ${Math.round(hours / 24)}d`
+}
+
 function nodeLabel(data: NodeData) {
+  if (data.kind === 'clock') {
+    const sc = data.clock
+    if (!sc) return null
+    // Three states, and all three are here rather than behind a click. A
+    // paused schedule that looks identical to a running one is how somebody
+    // re-enables the wrong thing; a schedule that has been failing every night
+    // for a week is the single most useful thing this canvas could say.
+    return (
+      <div className="bp-label">
+        <strong>⏱ {sc.name}</strong>
+        <span className="muted">
+          {sc.spec}
+          {sc.tz ? ` · ${sc.tz}` : ' · UTC'}
+        </span>
+        <span className="muted">
+          {sc.target_kind === 'gear' ? '⚙ ' : sc.target_kind === 'task' ? '↧ ' : '→ '}
+          {sc.target_name || '(gone)'}
+        </span>
+        {sc.broken ? (
+          <span className="warn">
+            its {sc.target_kind} was deleted — repoint it or remove it
+          </span>
+        ) : !sc.enabled ? (
+          <span className="warn">paused</span>
+        ) : (
+          <span className="bp-state">{whenNext(sc.next_at)}</span>
+        )}
+        {sc.last_outcome && (
+          <span className={sc.last_outcome === 'failed' ? 'warn' : 'muted'}>
+            last: {sc.last_outcome}
+          </span>
+        )}
+      </div>
+    )
+  }
   if (data.kind === 'outward') {
     return (
       <div className="bp-label">
@@ -798,6 +1070,20 @@ function nodeLabel(data: NodeData) {
         </strong>
         <span className="muted">{m?.detail}</span>
         <span className="bp-state">{KINDS[m?.kind ?? '']?.label ?? m?.kind}</span>
+      </div>
+    )
+  }
+  if (data.kind === 'mcp') {
+    const m = data.server
+    return (
+      <div className="bp-label">
+        <strong>🔌 {m?.name ?? 'mcp server'}</strong>
+        <span className="muted">{m?.status ?? 'unknown'}</span>
+        {/* Said on the canvas, not only in the drawer: this is the one thing
+            here that runs outside the sandbox, and somebody reading the graph
+            to answer "what can this workspace reach" needs it in the picture. */}
+        <span className="warn">not sandboxed · reaches the network</span>
+        {data.workspaceWide && <span className="bp-state">all agents</span>}
       </div>
     )
   }
@@ -912,6 +1198,149 @@ function NewAgentForm({
         </span>
         <button className="primary" type="submit" disabled={busy || !name.trim() || clash || modelId === ''}>
           add to the canvas
+        </button>
+      </div>
+    </form>
+  )
+}
+
+/**
+ * A clock, made by hand.
+ *
+ * WHY THIS IS A FORM AND NOT A GESTURE. Every other relationship on this canvas
+ * is drawn, because every other one is fully described by its two ends: a wire
+ * from A to B says everything a wire can say. A schedule is not — it carries a
+ * spec, and there is no way to draw "every weekday at 03:00". So the edge is
+ * still the relationship, and deleting it still deletes the job; only the
+ * making of it needs somewhere to type.
+ *
+ * The three targets are one control rather than three, because they are one
+ * question — what should this start — and splitting them into tabs would make
+ * the operator choose a mechanism before choosing a thing.
+ */
+function NewClockForm({
+  wsId,
+  agents,
+  gears,
+  taken,
+  onDone,
+  onError,
+}: {
+  wsId: number
+  agents: Agent[]
+  gears: Gear[]
+  taken: Set<string>
+  onDone: () => void
+  onError: (m: string) => void
+}) {
+  const [name, setName] = useState('')
+  const [spec, setSpec] = useState('every 1h')
+  const [tz, setTz] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || '')
+  const [target, setTarget] = useState('')
+  const [instruction, setInstruction] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const clash = taken.has(name.trim())
+  // Only approved gears are offered. A clock is the caller and there is no
+  // second gate behind it, so the server refuses an unapproved one — offering
+  // it here would be an option that always fails.
+  const approved = gears.filter((g) => g.status === 'approved')
+  const kind = target.startsWith('a-') ? 'agent' : target.startsWith('g-') ? 'gear' : ''
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!kind) {
+      onError('A clock needs something to start: pick an agent or a gear.')
+      return
+    }
+    setBusy(true)
+    const id = Number(target.slice(2))
+    api.schedules
+      .create(wsId, {
+        target_kind: kind,
+        name: name.trim(),
+        spec: spec.trim(),
+        tz,
+        ...(kind === 'agent' ? { target_agent_id: id, instruction: instruction.trim() } : { target_gear_id: id }),
+      })
+      .then(onDone)
+      .catch((err: Error) => onError(err.message))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <form className="card bp-new-agent" onSubmit={submit}>
+      <div className="row">
+        <input
+          required
+          autoFocus
+          aria-label="Schedule name"
+          placeholder="nightly sweep"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <Select
+          value={target}
+          aria-label="What it starts"
+          placeholder="what should this start…"
+          onChange={setTarget}
+          options={[
+            ...agents.map((a) => ({ value: `a-${a.id}`, label: `agent · ${a.name}` })),
+            ...approved.map((g) => ({ value: `g-${g.id}`, label: `gear · ${g.name}` })),
+          ]}
+        />
+      </div>
+      <div className="row">
+        <input
+          required
+          aria-label="Spec"
+          placeholder="every 15m — or 0 3 * * 1-5"
+          value={spec}
+          onChange={(e) => setSpec(e.target.value)}
+        />
+        <input
+          aria-label="Timezone"
+          placeholder="Europe/Berlin — blank is UTC"
+          value={tz}
+          onChange={(e) => setTz(e.target.value)}
+        />
+      </div>
+      {clash && <span className="hint danger">this workspace already has a schedule called “{name.trim()}”</span>}
+
+      {kind === 'agent' && (
+        <label className="field">
+          <span className="muted">what to tell it — a firing with nothing to say is a turn with an empty prompt</span>
+          <textarea
+            rows={2}
+            required
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
+            placeholder="Sweep yesterday's tickets and say what is still open."
+          />
+        </label>
+      )}
+
+      <div className="row spread">
+        <span className="hint">
+          {kind === 'gear' ? (
+            <>
+              <strong>This runs code with nobody watching.</strong> Only an administrator may make one, it may only
+              point at a gear somebody read and approved, and it still lands in this workspace’s queue and record —
+              which is where a nightly job that has been failing all week becomes visible.
+            </>
+          ) : (
+            <>
+              It fires into the same queue and the same record a delivery does, so “did last night’s job run” is
+              answerable in the usual place. Blank timezone means UTC.
+            </>
+          )}
+        </span>
+        <button
+          className="primary"
+          type="submit"
+          disabled={busy || !name.trim() || !spec.trim() || clash || !kind || (kind === 'agent' && !instruction.trim())}
+        >
+          put it on the canvas
         </button>
       </div>
     </form>

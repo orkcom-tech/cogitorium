@@ -12,17 +12,43 @@ Reach it:
   # then open http://127.0.0.1:8688
 {{- end }}
 
-Sign in:
-{{- if or .Values.auth.adminToken .Values.auth.existingSecret }}
-  With the admin token you supplied. Nothing was printed to the log.
+Sign in as "admin":
+{{- if .Values.auth.existingSecret }}
+  With the password in {{ .Values.auth.existingSecret }}, under the key
+  "{{ .Values.auth.existingSecretPasswordKey }}". If that Secret has no such key, this install has no
+  password yet and the interface will ask you to choose one — which on a
+  network-reachable address needs the admin token from the same Secret.
 {{- else }}
-  The admin token was GENERATED and written to the pod log, once:
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "cogitorium.fullname" . }}-auth \
+    -o jsonpath='{.data.admin-password}' | base64 -d; echo
+{{ if .Values.auth.adminPassword }}
+  That is the password you set in auth.adminPassword.
+{{- else }}
+  That password was GENERATED at install and kept in the Secret. It is not
+  printed here on purpose: this text goes to your terminal, your CI log and
+  `helm get notes`, and a credential should be somewhere you fetch on purpose.
+{{- end }}
 
-    kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "cogitorium.fullname" . }} | grep 'admin token'
+  CHANGE IT once you are in — account button at the bottom of the rail, then
+  "change password". After that the Secret's value is stale and nothing in this
+  chart can overwrite what you chose. Nothing can recover it either, so if you
+  lose it the way back is a fresh volume.
 
-  It is in the log for as long as that log is kept, and readable by anyone who
-  can read logs in this namespace. Set auth.adminToken — or auth.existingSecret
-  — and redeploy onto a fresh volume if that matters here.
+  Upgrading an install that already had an admin? It keeps the password it
+  already has. The value above only ever reaches an admin that has none.
+{{- end }}
+
+For the API and the command line, which use a token rather than the password:
+{{- if or .Values.auth.adminToken .Values.auth.existingSecret }}
+  The admin token you supplied. Nothing was printed to the log.
+{{- else }}
+  Mint one from the password, as often as you like:
+
+    cogitorium login --server <this install> --user admin
+
+  Nothing is printed to the pod log. A first start with no password generates a
+  token and logs it, because there would otherwise be no way in at all — but
+  this deployment HAS a password, so it does not.
 {{- end }}
 
 Two things about this deployment that are not preferences:

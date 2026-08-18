@@ -67,8 +67,9 @@ type install struct {
 }
 
 // newInstall builds a server the way cmd/ does: real config, real database,
-// real stores. listen decides whether an unauthenticated local request is
-// the admin, so it is the one thing every caller states explicitly.
+// real stores. listen decides whether this is a local install or one reachable
+// over the network, which changes what first-run setup demands, so it is the
+// one thing every caller states explicitly.
 func newInstall(t *testing.T, listen string, tweak func(*config.Config)) *install {
 	return newInstallWithSearcher(t, listen, nil, tweak)
 }
@@ -153,7 +154,7 @@ func newInstallWithSandbox(t *testing.T, listen string, searcher *websearch.Sear
 	// Empty seed: the fixture wants a generated token back. A seeded one is
 	// deliberately NOT returned by Bootstrap, so passing a literal here would
 	// leave adminTok empty and every admin case would fail as unauthenticated.
-	_, tok, err := in.users.Bootstrap(context.Background(), "")
+	_, tok, err := in.users.Bootstrap(context.Background(), identity.Seeds{})
 	if err != nil {
 		t.Fatalf("bootstrap admin: %v", err)
 	}
@@ -685,33 +686,39 @@ func TestWorkspaceAccessFollowsTheTeamGrant(t *testing.T) {
 	}
 }
 
-// TestLoopbackAdminOnlyOnALoopbackListenAddress is the rule that makes a
-// single-operator install feel accountless without opening a team install to
-// the network: an unauthenticated request is the admin ONLY when the server
-// cannot be reached from anywhere but this machine.
-func TestLoopbackAdminOnlyOnALoopbackListenAddress(t *testing.T) {
+// TestNoListenAddressGrantsAdminWithoutACredential is the guard on the change
+// that retired loopback admin.
+//
+// The behaviour it replaces was narrow and defensible on its own terms: an
+// unauthenticated request WAS the admin, but only when the server could not be
+// reached from anywhere except this machine. What that overlooked is that "this
+// machine" is not one principal. Every process on it — a script, a package's
+// install hook, a page in a browser that can reach the port — was an
+// administrator of this install.
+//
+// So the table below is the old one with its expectations collapsed into a
+// single row: there is no listen address, and no client, that gets in without
+// a token. It is kept as a table rather than one call because the interesting
+// failure is a regression on ONE of these rows.
+func TestNoListenAddressGrantsAdminWithoutACredential(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name      string
-		listen    string
-		client    string
-		wantAdmin bool
+		name   string
+		listen string
+		client string
 	}{
-		{"loopback listen, local client", "127.0.0.1:8688", onBox, true},
-		{"localhost listen", "localhost:8688", onBox, true},
-		{"ipv6 loopback listen", "[::1]:8688", "[::1]:52101", true},
-		// Everything below is reachable from off this machine, so an
-		// anonymous caller must never be the admin.
-		{"all interfaces", "0.0.0.0:8688", onBox, false},
-		{"all interfaces, bare port", ":8688", onBox, false},
-		{"all interfaces, ipv6", "[::]:8688", onBox, false},
-		{"routable address", "192.168.1.10:8688", onBox, false},
-		{"public address", "203.0.113.9:8688", onBox, false},
-		// A loopback listener cannot receive this, but a proxy in front of
-		// one can forward it, and then the connection is the only evidence
-		// left about where the request came from.
-		{"loopback listen, off-box client", "127.0.0.1:8688", offBox, false},
+		// These three were the ones that used to be let through.
+		{"loopback listen, local client", "127.0.0.1:8688", onBox},
+		{"localhost listen", "localhost:8688", onBox},
+		{"ipv6 loopback listen", "[::1]:8688", "[::1]:52101"},
+		// And these never were.
+		{"all interfaces", "0.0.0.0:8688", onBox},
+		{"all interfaces, bare port", ":8688", onBox},
+		{"all interfaces, ipv6", "[::]:8688", onBox},
+		{"routable address", "192.168.1.10:8688", onBox},
+		{"public address", "203.0.113.9:8688", onBox},
+		{"loopback listen, off-box client", "127.0.0.1:8688", offBox},
 	}
 
 	for _, c := range cases {
@@ -719,58 +726,38 @@ func TestLoopbackAdminOnlyOnALoopbackListenAddress(t *testing.T) {
 			t.Parallel()
 			in := newInstall(t, c.listen, nil)
 			rec := in.requestFrom(t, c.client, "GET", "/api/v1/whoami", "", "")
-
-			if !c.wantAdmin {
-				if rec.Code != http.StatusUnauthorized {
-					t.Fatalf("listen %q, client %s: got %d, want 401\nbody: %s",
-						c.listen, c.client, rec.Code, rec.Body.String())
-				}
-				if strings.Contains(rec.Body.String(), `"role"`) {
-					t.Fatalf("listen %q: an anonymous caller was handed an identity: %s", c.listen, rec.Body.String())
-				}
-				// And it is not just whoami: nothing behind the gate opens.
-				rec = in.requestFrom(t, c.client, "GET", "/api/v1/users", "", "")
-				if rec.Code != http.StatusUnauthorized {
-					t.Fatalf("listen %q: anonymous user list: got %d, want 401\nbody: %s",
-						c.listen, rec.Code, rec.Body.String())
-				}
-				return
-			}
-
-			if rec.Code != http.StatusOK {
-				t.Fatalf("listen %q, client %s: got %d, want 200\nbody: %s",
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("listen %q, client %s: got %d, want 401\nbody: %s",
 					c.listen, c.client, rec.Code, rec.Body.String())
 			}
-			who := asMap(t, rec)
-			if who["name"] != "admin" || who["role"] != "admin" {
-				t.Fatalf("listen %q: local caller is %v, want the admin", c.listen, who)
+			if strings.Contains(rec.Body.String(), `"role"`) {
+				t.Fatalf("listen %q: an anonymous caller was handed an identity: %s", c.listen, rec.Body.String())
 			}
-			// The identity is real, not cosmetic: it opens admin routes.
+			// And it is not just whoami: nothing behind the gate opens.
 			rec = in.requestFrom(t, c.client, "GET", "/api/v1/users", "", "")
-			if rec.Code != http.StatusOK {
-				t.Fatalf("listen %q: implicit admin refused an admin route: %d %s",
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("listen %q: anonymous user list: got %d, want 401\nbody: %s",
 					c.listen, rec.Code, rec.Body.String())
+			}
+			// The admin's own token still works from the same place, so the
+			// rows above are about the credential and not about the address
+			// being unreachable in the test harness.
+			rec = in.requestFrom(t, c.client, "GET", "/api/v1/whoami", in.adminTok, "")
+			if rec.Code != http.StatusOK || asMap(t, rec)["name"] != "admin" {
+				t.Fatalf("listen %q: the admin token was refused: %d %s", c.listen, rec.Code, rec.Body.String())
 			}
 		})
 	}
 }
 
-// TestBearerIdentityWinsOverLoopbackAdmin: on a solo install every request is
-// local, so if the loopback shortcut ran first — or ran as a fallback for a
-// bad token — every member on that machine would silently be the admin.
-func TestBearerIdentityWinsOverLoopbackAdmin(t *testing.T) {
+// TestATokenIsTheOnlyThingThatIdentifiesACaller: being on the server's own
+// machine says nothing about who you are. A member there is a member, and a
+// token that is not real is nobody — never a quiet promotion to admin.
+func TestATokenIsTheOnlyThingThatIdentifiesACaller(t *testing.T) {
 	t.Parallel()
 	tm := seedTeam(t, "127.0.0.1:8688")
 
-	// Precondition: this install really does hand admin to anonymous local
-	// requests, so the assertions below are about the token, not the listen
-	// address.
-	rec := tm.requestFrom(t, onBox, "GET", "/api/v1/whoami", "", "")
-	if rec.Code != http.StatusOK || asMap(t, rec)["name"] != "admin" {
-		t.Fatalf("loopback install does not grant implicit admin: %d %s", rec.Code, rec.Body.String())
-	}
-
-	rec = tm.requestFrom(t, onBox, "GET", "/api/v1/whoami", tm.bobTok, "")
+	rec := tm.requestFrom(t, onBox, "GET", "/api/v1/whoami", tm.bobTok, "")
 	who := asMap(t, rec)
 	if rec.Code != http.StatusOK || who["name"] != "bob" || who["role"] != "member" {
 		t.Fatalf("a member's token on the server's own machine resolved to %v", who)
@@ -897,17 +884,21 @@ func TestInternetGateIsAnAdminsCall(t *testing.T) {
 	}
 }
 
-// TestEgressGrantNeedsASignedInOperator: with egress_approval_bearer on, the
-// install has said the internet gate needs a person who typed something. The
-// implicit loopback admin is exactly what that setting refuses, so a script
-// running on the server's own machine must not be able to open the gate.
+// TestEgressGrantNeedsASignedInOperator: the internet gate needs a person who
+// typed something, so a script running on the server's own machine cannot open
+// it.
+//
+// This used to need egress_approval_bearer switched on, because by default a
+// local request WAS the admin and could grant the gate silently. That option is
+// gone and this is now the only behaviour, which is why the test no longer
+// configures anything: if implicit local admin ever comes back, the first
+// request below stops being a 401.
 func TestEgressGrantNeedsASignedInOperator(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	// A single-operator install: local requests are the admin, and the
-	// operator has asked for a real sign-in before the gate moves.
-	in := newInstall(t, "127.0.0.1:8688", func(c *config.Config) { c.EgressApprovalBearer = true })
+	// A single-operator install, configured with nothing in particular.
+	in := newInstall(t, "127.0.0.1:8688", nil)
 	spaces := in.spaces
 	cat := in.cat
 	provider, err := cat.CreateProvider(ctx, "house", "openai-compatible", deadProvider, "sk-key")
@@ -932,10 +923,10 @@ func TestEgressGrantNeedsASignedInOperator(t *testing.T) {
 	}
 	body := `{"agent_id":` + id(agents[0].ID) + `}`
 
-	// Implicit local admin: authenticated, admin, and still refused.
+	// From the server's own machine, with nothing to prove who is asking.
 	rec := in.requestFrom(t, onBox, "POST", "/api/v1/workspaces/"+id(ws.ID)+"/egress", "", body)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("implicit loopback admin granting egress: got %d, want 403\nbody: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("an unauthenticated local request granting egress: got %d, want 401\nbody: %s", rec.Code, rec.Body.String())
 	}
 	grants, err := spaces.ListEgressGrants(ctx, ws.ID)
 	if err != nil {

@@ -24,3 +24,8 @@ web/tsconfig.tsbuildinfo
 # Agent worktrees and session scratch. These are checkouts of THIS repository,
 # so committing them records gitlinks nobody can resolve.
 .claude/
+
+# Where scripts/ci/fetch-contextd.sh stages the Contextverse binaries the
+# release artifacts carry. Not dist/, because goreleaser refuses to run with
+# anything in dist before it builds.
+/build/

@@ -576,6 +576,7 @@ paths:
   "/api/v1/login":
     post:
       summary: "Create login"
+      security: []
       responses:
         default:
           description: see the reference
@@ -601,6 +602,18 @@ paths:
           format: int64
     delete:
       summary: "Delete mcp-bindings/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/mcp-catalog":
+    get:
+      summary: "Read mcp-catalog"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/mcp-oauth/callback":
+    get:
+      summary: "Read mcp-oauth/callback"
       responses:
         default:
           description: see the reference
@@ -633,10 +646,17 @@ paths:
                   type: array
                   items:
                     type: string
+                "header_names":
+                  type: object
+                  additionalProperties: true
                 "name":
                   type: string
                 "timeout_seconds":
                   type: integer
+                "transport":
+                  type: string
+                "url":
+                  type: string
       responses:
         default:
           description: see the reference
@@ -676,10 +696,35 @@ paths:
                   type: array
                   items:
                     type: string
+                "header_names":
+                  type: object
+                  additionalProperties: true
                 "status":
                   type: string
                 "timeout_seconds":
                   type: integer
+                "transport":
+                  type: string
+                "url":
+                  type: string
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/mcp-servers/{id}/oauth":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete mcp-servers/{id}/oauth"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create mcp-servers/{id}/oauth"
       responses:
         default:
           description: see the reference
@@ -846,6 +891,32 @@ paths:
       responses:
         default:
           description: see the reference
+    put:
+      summary: "Replace schedules/{id}"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "args":
+                  description: any JSON value
+                "instruction":
+                  type: string
+                "name":
+                  type: string
+                "on_miss":
+                  type: string
+                "payload":
+                  description: any JSON value
+                "spec":
+                  type: string
+                "tz":
+                  type: string
+      responses:
+        default:
+          description: see the reference
   "/api/v1/schedules/{id}/run":
     parameters:
       - name: "id"
@@ -856,6 +927,30 @@ paths:
           format: int64
     post:
       summary: "Create schedules/{id}/run"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/setup":
+    get:
+      summary: "Read setup"
+      security: []
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create setup"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "password":
+                  type: string
+                "token":
+                  type: string
       responses:
         default:
           description: see the reference
@@ -923,6 +1018,33 @@ paths:
   "/api/v1/terminal/status":
     get:
       summary: "Read terminal/status"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/updates":
+    get:
+      summary: "Read updates"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/updates/check":
+    post:
+      summary: "Create updates/check"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/updates/mode":
+    put:
+      summary: "Replace updates/mode"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "mode":
+                  type: string
       responses:
         default:
           description: see the reference
@@ -1390,6 +1512,35 @@ paths:
           description: see the reference
     post:
       summary: "Create workspaces/{id}/schedules"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "args":
+                  description: any JSON value
+                "instruction":
+                  type: string
+                "name":
+                  type: string
+                "on_miss":
+                  type: string
+                "payload":
+                  description: any JSON value
+                "spec":
+                  type: string
+                "target_agent_id":
+                  type: integer
+                "target_gear_id":
+                  type: integer
+                "target_kind":
+                  type: string
+                "task_id":
+                  type: integer
+                "tz":
+                  type: string
       responses:
         default:
           description: see the reference

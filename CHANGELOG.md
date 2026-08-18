@@ -1,5 +1,408 @@
 # Changelog
 
+## Unreleased
+
+### Signing in to a hosted MCP server, rather than pasting a token
+
+Static headers by name covered a token somebody could copy. Most hosted servers
+want OAuth, so most of the registry installed and could not authenticate.
+
+The whole flow: ask the server, read the `WWW-Authenticate` refusal, fetch the
+protected resource metadata, discover the authorization server through **both**
+RFC 8414 and OpenID Connect (a client must support each), register with RFC 7591
+if this install has never met it, and send the operator's browser there.
+
+**Four checks, none optional.** PKCE with S256 — OAuth 2.1 removed `plain`, and
+offering it would let a server choose the weaker one. The `resource` parameter
+on the authorization request *and* the token request *and* every refresh, naming
+what the token is for; without it a token minted for one server is replayable
+against another. The callback's `iss` validated against the issuer recorded
+**before** the redirect and taken from the validated metadata document — with no
+normalisation of any kind, because case folding, a default port or a trailing
+slash would each let a lookalike compare equal. And a `state` generated with a
+CSPRNG and consumed exactly once, which is the only thing tying a callback to
+the request that began it.
+
+**This is the first live credential this schema holds**, and it says so: every
+other one is a NAME resolved at the moment of use, which works because the
+operator has the value. A token minted by somebody else, arriving through a
+redirect and refreshed by this server on its own, has no name to resolve. So
+access tokens, refresh tokens, client secrets and the PKCE verifier of a flow in
+progress are all sealed with the same AEAD the secrets table uses — and **an
+install with no `COGITORIUM_SECRET_KEY` is refused the flow** rather than
+handed a worse version of it.
+
+A step-up asks for the **union** of what is held and what the challenge demands:
+a server naming only the scopes one operation needs would otherwise have the
+client re-authorize into a token that lost everything else. A refresh that omits
+a new refresh token keeps the old one, because a rotating server issues one and
+a non-rotating server omits the field — and overwriting with empty would throw
+the grant away.
+
+### Documents and prompts, which were offered to nothing
+
+Only `tools/list` and `tools/call` were implemented, so a server holding a wiki,
+a drive or a codebase looked empty against this install — and a good share of
+what people publish is exactly that.
+
+**Two tools rather than one per item.** A server's documents reach an agent
+through `mcp_documents` and its templates through `mcp_prompts`: call either
+with nothing to list, or with a uri or a name to fetch one. The obvious
+alternative — a synthetic `read_x` per document — would put four hundred tool
+definitions into every request for a four-hundred-page wiki, and they are not
+four hundred capabilities but one capability with an argument.
+
+A server that does neither answers `method not found`, which is treated as the
+ANSWER rather than a failure, so a tools-only server does not read as broken. A
+prompt template arrives as a conversation and is flattened with the role as a
+LABEL: splicing somebody else's "assistant" turns into an agent's history would
+let a server write words into the transcript as though the model had said them.
+Binary content is named rather than decoded, the same rule the tool path
+already follows.
+
+### It says when the pair no longer fits, instead of letting a save fail
+
+The last open question from the update-checking plan, and the thing that
+prompted the whole document: Cogitorium needs `contextd` 1.0.0 or newer for the
+compare-and-set a context save uses, and on an older one the save is refused
+with a message about an unknown flag — the right failure, arriving at the worst
+moment, saying nothing about why.
+
+"There is a newer one" and "the one you have is too old for the one you are
+running" are different questions, and only the second describes something that
+is already broken. It is reported separately, in red rather than orange, with
+the version that would fix it — and a development build of `contextd` is never
+called too old, because telling somebody to reinstall a binary they built
+deliberately is a notice they cannot act on.
+
+### A bundle carries MCP, and a connection outlives one call
+
+**Workspace bundles carry external MCP servers**, answering the open question
+the plan left: the SHAPE travels — the command or the URL, the arguments, the
+NAMES of the values it wants — and the approval and the credentials never do.
+An imported server arrives pending with no fingerprint, and there is no field in
+the format that could say otherwise.
+
+That rule matters more here than it does for a gear, and the reason is worth
+stating: a gear's complete source is in the bundle, so the receiving operator
+can read what they are approving. An MCP server is a command line or a hostname
+and they cannot. That is an argument for carrying the shape — they need it in
+order to decide at all — and a far stronger one for never carrying the approval.
+A bundle that arrived pre-approved would be a way to hand somebody a process on
+their own host by email. A name that already exists locally is skipped rather
+than granted: it may be a different thing wearing the same name.
+
+**Connections are pooled.** Every tool call used to dial afresh — a process per
+call on stdio, and on a hosted server a TCP connection, a TLS handshake and an
+`initialize` round trip to somebody else's host before the call anybody wanted.
+An agent using four tools paid it four times.
+
+The lifetime rules are the whole of it. A pooled connection is a process that
+outlives a turn, so it is capped by an idle sweep that closes it whether or not
+anybody asks again. It is keyed by the server's FINGERPRINT as well as its name,
+so a server edited since gets a fresh connection rather than one opened under
+what it used to be — a pool keyed only by id would route straight past the check
+that refuses an unapproved edit. A dead connection is never handed out, and the
+sweeper stops with the server rather than leaving children nobody owns.
+
+### It can be watched now, which it could not be at all
+
+An install on a server or in a cluster had **no metrics of any kind** — no
+`/metrics`, no Prometheus, no OpenTelemetry — and wrote logs only as prose to
+stderr. Every operation, error and state change was already logged, and none of
+it was machine-readable, so Loki, Elastic and the vendor agents were handed
+paragraphs to regex. This product runs agents that spend money, gears that
+execute code and schedules that fire unattended: it is exactly the class of
+thing an operator wants an alert on, and it could not be alerted on at all.
+
+**A Prometheus endpoint, on its own port, off by default.** Its own listener
+and never a route on the API — the API is authenticated and a scrape is not, so
+an unauthenticated path on the authenticated surface would be a way in. Off by
+default in the binary because starting a listener on somebody's laptop is not
+our decision; **on** by default in the Helm chart, because somebody applying a
+chart is running a cluster that has a scraper in it.
+
+**No name anybody chose is ever a label** — not a workspace, agent, model, tool
+or user. A scrape reaches a monitoring system that is usually less guarded than
+the product, and a label whose values are unbounded turns a time series database
+into a memory leak. The route label is the TEMPLATE, `/api/v1/workspaces/{id}`,
+never the id — which was got wrong first: reading `r.Pattern` in middleware that
+wraps the mux from outside gets an empty string every time, and every route was
+silently labelled `other`, which looks exactly like a working metric.
+
+**What is measured is what somebody would be paged on**: the schedule that has
+been failing every night, the tokens (with providers that report no usage
+counted separately, so a zero is never mistaken for free), the queue depth, gear
+outcomes split into refused / failed / timed-out / non-zero exit because they
+page different people, MCP calls by transport, and the outward gate. A metric
+nobody has touched is not published, because a zero cannot be told apart from
+"this is not wired up".
+
+**Written by hand, no dependency.** `client_golang` pulls a tree for counters in
+a map and a few hundred bytes of text, and it carries a global registry that
+collects the runtime whether or not anybody asked. The precedent is `openapi.go`
+— same reasoning, already in this repository. Its histogram bug was caught by
+its own test: buckets are cumulative, and an implementation that tallies into
+every matching bucket AND cumulates on write produces a histogram where every
+quantile is the maximum.
+
+**`log_format: json`**, and nothing more. Cogitorium ships logs nowhere; that is
+what Vector, Fluent Bit, Alloy and the agents are for. What it owed them was a
+format.
+
+**Helm**: the port on the Service, a guarded `ServiceMonitor` (applying a
+manifest whose kind does not exist fails the whole release), and a NetworkPolicy
+rule of its own — which was found by reading the existing policy, where an
+enabled policy would have silently blocked every scrape and looked precisely
+like a broken exporter.
+
+### Three protocol and interface debts, paid
+
+**`Mcp-Name` was not being sent.** The spec requires it on `tools/call`,
+`resources/read` and `prompts/get`, and a conformant server answers 400 with
+`-32020 HeaderMismatch` without it. Now sent, with the base64 sentinel encoding
+for a name that is not header-safe, and sent on those three alone — there is no
+body field for anything else to be validated against.
+
+**`x-mcp-header` is implemented**, which the spec says a client MUST support: a
+tool may ask for annotated parameters to be mirrored into `Mcp-Param-*` headers,
+and a tool whose annotation breaks the rules is excluded from the list rather
+than called — one malformed definition must not take a server's other tools with
+it.
+
+**The registry was read one page deep.** `nextCursor` was parsed and never
+followed, so a search saw the first fifty and called it the library — and most
+of a page collapses, because every published version of a server comes back
+separately. Now followed, bounded, and a later page that fails keeps what the
+earlier ones found.
+
+**A schedule's spec could not be edited.** `PATCH` took `enabled` and nothing
+else, so changing a clock meant deleting and redrawing it, losing its counters —
+and a schedule you cannot correct is one people replace, which is how a job ends
+up with no history. `PUT` is the fuller edit, beside the pause rather than
+replacing it: turning a job off in a hurry at night must stay the shortest
+route. An omitted field is left alone, the next firing is recomputed from the
+new spec, and the target is deliberately not editable — re-pointing a clock is a
+different act with a different approval.
+
+### Any MCP server, not the third of them that happen to be packages
+
+The first cut of this spoke stdio only, and the library was six entries compiled
+into the binary. Both were wrong, and measurably: in a sample of the published
+registry, **two thirds of servers are hosted services** with no package to run
+at all. A product that could install the other third has a library that is
+mostly buttons doing nothing, and "we support MCP servers, except most of them"
+is not a sentence worth shipping.
+
+**All three transports.** `stdio` as before; `streamable-http`, which is one
+POST per message with the answer arriving as a JSON object or as an SSE stream
+scoped to that request; and the deprecated 2024-11-05 `sse` shape, where a GET
+opens a stream whose first event names where to POST. 0027's `CHECK (transport
+IN ('stdio'))` said in its own comment that widening it would cost a table
+rebuild — this is that rebuild.
+
+**The client was restructured rather than branched.** Message framing, the id
+table, notification-versus-request classification and the timeouts are protocol
+and are written once; a transport's whole job is to deliver one message and feed
+what comes back into the same dispatch. stdio keeps its reader goroutine; the
+HTTP one answers on the POST that asked.
+
+**What is being agreed to is different for each, so the card says different
+things.** A packaged server runs here as this server's user, outside the
+sandbox, refetched at every start. A hosted one runs nothing here — genuinely
+safer — and instead sends a credential on every request and every argument the
+agents write. Saying the same four warnings for both would have been false in
+two of them.
+
+**A URL is part of what is approved.** The fingerprint now covers it and the
+header names, because a hostname that was repointed after approval looks
+identical to one that was not. Cleartext to anywhere but this machine is refused
+outright rather than warned about, and a legacy server that names a POST
+endpoint on another host is refused too — that is the one place this transport
+lets a server redirect somebody else's credential.
+
+**Credentials stay names on both sides.** A remote server's headers are stored
+as header → NAMED VALUE and resolved at connect time, exactly as a child's
+environment is. The obvious design — a column holding what to send — would have
+put a live bearer token in plaintext in this database.
+
+**The library is the published registry, read live**, and the objection that
+stopped that the first time is answered rather than ignored: it is fetched only
+where an operator has agreed this install may make outbound requests, through
+the same switch the update check uses. An install that said no has no library
+and is told why; `add by hand` is untouched, because it never reached anything.
+Where a server publishes both shapes the hosted one is offered, because it runs
+no code here. An entry this install could not connect to produces no entry at
+all rather than a button that fails on first use.
+
+**Caught by its own test:** scoped npm packages start with `@`, so the check for
+a version separator matched the scope and left `@acme/thing` unpinned — which is
+most of the registry, and the difference between approving a version and
+approving whatever `latest` means tomorrow.
+
+### MCP servers are a thing you pick, not a command line you type
+
+Consuming MCP was built and working, in the backend — the store, the client, the
+per-tool approval, the bindings, the dispatch. **Nothing under `web/src`
+mentioned it.** An operator added a server by POSTing JSON with a command line
+and an argument array, which means the capability shipped and effectively
+nobody had it.
+
+**A drawer beside Gears**, because they are the same kind of object: somebody
+else's code, granted to an agent, behind an approval. Same card, same
+review-then-approve. Drag one onto an agent on the blueprint and it is granted
+there, exactly as a gear is; **a node on the canvas** says *not sandboxed ·
+reaches the network*, so "what can this workspace reach" is answered by looking.
+Tools are listed and approved **one at a time**, because a server's tool list is
+its own claim about itself and can change between spawns — granting your issue
+tracker should not have to mean granting `delete_issue`.
+
+**The card opens with what it costs, and the wording is harder rather than
+softer.** An MCP server is worse than a gear on every axis and the interface has
+to say so instead of feeling like installing a plugin: it is not sandboxed and
+can read this install's database and the provider keys in it; it reaches the
+network by definition, so the gate that covers web search does not cover it; its
+code is fetched at every spawn, so what was approved on Tuesday is not
+necessarily what runs on Friday; and it is handed real credentials.
+
+**And a library.** Adding Jira is choosing "Jira", not knowing that its server
+is an npm package. Six entries to begin with, each naming what it reaches, the
+command, the credentials it needs by NAME, and the prerequisite — most are an
+`npx` or a `uvx` away, and an entry that did not say so produces a spawn failure
+nobody can read. Compiled into the binary rather than fetched: it works offline
+and cannot change under an install between review and use. An install that does
+not phone home should not acquire a catalogue that does. Picking one fills in
+the form and skips no gate.
+
+**Installing by hand and editing afterwards are both in the drawer**, not only
+in the API. Without the edit form two of the library's own entries were
+unfinishable from the interface — the filesystem and git servers ship a
+placeholder path and say to change it before approving, and there was nothing to
+change it with. Saving an edit returns the server to pending, because everything
+editable is inside what was approved.
+
+**A leak closed on the way.** `GET /api/v1/mcp-servers` was open and
+unredacted — survivable while nothing called it, and not once it is in a drawer.
+It carries a full command line and the names of every credential a server is
+handed, which is a map of an install's integrations and internal hostnames. A
+member now sees the name, description and status, and nothing about how it is
+spawned.
+
+### A clock you can draw, that can dial an agent or a gear
+
+The canvas is supposed to answer "what does this workspace do, and what may
+reach what". A workspace where something fired at 03:00 every night looked, on
+that canvas, exactly like one where nothing did.
+
+**A schedule is a node now**, on a fifth layer that defaults on — hiding the
+thing this was built to surface would defeat it. It says the three things
+anybody asks, without being opened: **when it next fires** in words rather than
+a UTC timestamp (`0 3 * * 1-5` says nothing about whose 3am it is), **whether it
+is paused**, drawn dashed and dimmed like the switched-off internet gate, and
+**how the last run went** — a job that has been failing every night for a week
+being the single most useful thing this canvas could say, and it said nothing.
+
+**And it can dial an agent or a gear directly.** A schedule used to point only
+at an inlet task. The reasoning held as far as it went — the task already says
+which agent, what to tell it and what success means — but it missed what a task
+IS: a door somebody else pushes work through, with an inlet, an address, a key
+and a caller. To get a nightly job you first invented a receiver nobody would
+ever call, and the receivers list filled with doors that had no inlet and no
+caller. That is a worse lie than the one it avoided.
+
+All three targets land in **the same queue, the same ledger row, the same lane
+and the same ceiling**. A direct schedule that skipped any of that would be a
+second, weaker way to run work, and the weaker one is the one nobody watches. A
+clock firing carries a null `inlet_id` and the address `clock`, so a reader sees
+what started the run instead of a blank. An agent's instruction is deliberately
+**not** fenced as untrusted: an operator typed it into this install, and fencing
+it would be telling the agent to ignore the only thing it was given.
+
+**A gear on a clock is fenced three ways**, because it is the most useful thing
+here and the most dangerous: only an administrator may create one; the gear must
+be approved when the schedule is saved and again every time it fires, since a
+clock is the caller with no second gate behind it; and the run still lands in
+the workspace's record, which is the only place an unattended failure becomes
+visible.
+
+**Deleting an agent or a gear no longer deletes the job that used it.** The row
+survives with a null target, refuses to fire with a reason, and draws itself red
+saying what to do. "It stopped, and here is why" is something an operator can
+act on; "it vanished" is not.
+
+Cutting a clock's edge deletes the schedule — the edge is the relationship here
+as everywhere else on this canvas — so it is the one deletion that asks first,
+since it takes the spec and the record with it. Making one is a form rather than
+a gesture, for the one honest reason that a spec cannot be drawn.
+
+**A fixed bug found while writing this**: a schedule whose firing could not be
+queued had its `last_work_id` set to null, and because overlap protection is
+gated on that column being non-null, one failed enqueue silently switched
+`on_miss: skip` off until the next firing that worked.
+
+### Knowing there is a new version, without being asked to trust anything
+
+Cogitorium and Contextverse ship as binaries people install once and keep, and
+until now nothing told anybody a newer one existed. Somebody `brew install`s
+this in March and runs a year-old build; every fix and every security change is
+invisible unless they think to go and look. The pair versions independently on
+the same machine, so a Cogitorium that needs a newer `contextd` than is
+installed fails a save loudly — correctly — and nothing anywhere joined those
+two facts up.
+
+**The default is neither on nor off. It is `ask`.** This product fetches nothing
+at runtime and sends nothing about itself anywhere, so switching an outbound
+request on by default would trade a headline promise for a convenience; but a
+check that is off by default is a check nobody has, which is the state that made
+this worth building. So the question is put once, in the interface, on the rail,
+and nothing leaves the machine until it is answered. Three answers: check daily,
+never, or **look once now** — which changes no setting, because one press is one
+look and not consent to a request every morning.
+
+**The answer is remembered**, in a new `settings` table. An earlier cut held it
+in memory only, which meant the question came back after every restart — a
+product that asks the same thing forever is a product that did not listen. On
+Kubernetes that would have been every deploy.
+
+**`update_check: off` is absolute and not liftable from a browser.** It is set
+on the server's own disk; never asked, never checked, and *check now* is refused
+with the name of the setting to change. A stored answer written before that edit
+does not outrank it. The Helm chart defaults to `off`, unlike the binary: on a
+cluster the person who decides what a pod may reach is the one applying the
+chart, not whoever opens a browser.
+
+**What goes out** is a GET to GitHub's public releases API carrying no
+identifier, no version, no count and no usage. What comes back is a tag and the
+release notes — shown as text, never as markup, because it is somebody else's
+document arriving over the network. Startup never waits on it, an air-gapped
+install fails one attempt quietly, and a dismissal is remembered against the
+version so a notice cannot come back for something already read.
+
+**One button on the rail, beside the account, and it goes orange when a version
+is waiting** — orange rather than the accent, because the accent is whatever the
+operator chose and a notice painted in it is invisible on exactly the install
+whose owner picked orange. It is always present, so the settings are reachable
+on a day with nothing to report, and it stops glowing once read.
+
+**Nothing is ever replaced.** Cogitorium does not overwrite its own binary. It
+works out who owns the file — Homebrew, Scoop, winget, a system package, a
+container, a cluster — and **install the update** does the most it honestly can
+for that owner: copies the exact command to the clipboard, opens the release
+page, or offers nothing and says why. It does not RUN it. A self-updater
+fighting a package manager produces a machine nobody can reason about, and a
+button making this server execute a shell command because a browser asked would
+be remote code execution with a friendly label.
+
+**Three states are kept apart** where one would have been easier: *this is the
+newest release*, *could not ask* (with the reason), and *nothing here can say* —
+the last for a build whose version is not a release version, which is what a
+source build gets. Collapsing them would let the panel claim confidence it does
+not have.
+
+The API description now covers 97 paths and 130 operations; the counts quoted in
+the README, the reference and the guide were already stale before this and are
+corrected.
+
 ## v1.5.0
 
 A new shell, and the record telling more of the truth.

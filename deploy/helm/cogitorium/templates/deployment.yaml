@@ -58,6 +58,30 @@ spec:
               # read-only — so HOME has to be on the volume or the context layer
               # has nowhere to write.
               value: /data/home
+            {{- if .Values.auth.existingSecret }}
+            - name: COGITORIUM_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.existingSecret }}
+                  key: {{ .Values.auth.existingSecretPasswordKey }}
+                  # A Secret made before this chart asked for a password has no
+                  # such key. Optional means that install starts and is reached
+                  # with its token, rather than crash-looping on a missing key.
+                  optional: true
+            {{- else }}
+            - name: COGITORIUM_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-auth" (include "cogitorium.fullname" .) }}
+                  key: admin-password
+                  # Optional so the key can be REMOVED once the password has
+                  # been changed in the interface, at which point the Secret
+                  # holds a stale string rather than a live credential. Required
+                  # here, deleting it would stop the next rollout starting — and
+                  # the natural reaction to "this Secret holds a password I no
+                  # longer use" is to delete it.
+                  optional: true
+            {{- end }}
             {{- if or .Values.auth.adminToken .Values.auth.existingSecret }}
             - name: COGITORIUM_ADMIN_TOKEN
               valueFrom:
@@ -82,6 +106,10 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+            {{- end }}
               protocol: TCP
           # /health answers only once the database is open and migrated, so it
           # is a real readiness signal rather than "the process started".

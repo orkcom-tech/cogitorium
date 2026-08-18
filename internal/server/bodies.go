@@ -42,6 +42,76 @@ type CreateGearBody = createGearInput
 // given on CreateGearBody.
 type RunGearBody = runGearInput
 
+// CreateScheduleBody writes a clock, and its shape is a union: which fields
+// matter depends on target_kind.
+//
+// One body for three targets rather than three routes, because they are one
+// noun — "a thing that fires on a spec" — and three creates would be three
+// places for the spec, the timezone and the miss rule to drift. Which fields
+// are required for which kind is checked in the handler, where the operator is
+// still on the other end of the error.
+type CreateScheduleBody struct {
+	// TargetKind is "task", "agent" or "gear". Empty means task, because every
+	// caller written before a clock could dial anything else says so by saying
+	// nothing.
+	TargetKind string `json:"target_kind"`
+	Name       string `json:"name"`
+	Spec       string `json:"spec"`
+	TZ         string `json:"tz"`
+	OnMiss     string `json:"on_miss"`
+
+	// A receiver task, and the body handed to it — exactly what an HTTP caller
+	// would have sent.
+	TaskID  *int64          `json:"task_id"`
+	Payload json.RawMessage `json:"payload"`
+
+	// An agent, and the sentence it is given. A clock wired to an agent with
+	// nothing to say produces a turn with an empty prompt.
+	TargetAgentID *int64 `json:"target_agent_id"`
+	Instruction   string `json:"instruction"`
+
+	// A gear, and the arguments it is called with, held against that gear's own
+	// schema when this is saved rather than at 03:00 every night.
+	TargetGearID *int64          `json:"target_gear_id"`
+	Args         json.RawMessage `json:"args"`
+}
+
+// EditScheduleBody changes what a clock does, keeping what it has done.
+//
+// Every field is optional and an omitted one is left alone — an edit that
+// blanked what it did not mention would make a partial body dangerous. The
+// TARGET is deliberately absent: re-pointing a clock is a different act with a
+// different approval, and folding it in here would be the one path that changes
+// what runs without passing the check that guards it.
+type EditScheduleBody struct {
+	Name        string          `json:"name"`
+	Spec        string          `json:"spec"`
+	TZ          string          `json:"tz"`
+	OnMiss      string          `json:"on_miss"`
+	Instruction string          `json:"instruction"`
+	Payload     json.RawMessage `json:"payload"`
+	Args        json.RawMessage `json:"args"`
+}
+
+// UpdateModeBody is the answer to the one question this product asks on its
+// own behalf: may this install ask whether a newer release exists. "ask", "on"
+// or "off" — see internal/update for why the unanswered state is a value of its
+// own rather than a false.
+type UpdateModeBody struct {
+	Mode string `json:"mode"`
+}
+
+// SetupBody claims a fresh install: it gives the seeded admin the password
+// that from then on is how a person gets in.
+//
+// Token is empty on a local install and required on a server, for the reason
+// spelled out over handleSetup — on a listener the network can reach, an
+// unauthenticated claim is a takeover waiting for a port scan.
+type SetupBody struct {
+	Password string `json:"password"`
+	Token    string `json:"token"`
+}
+
 // InvokeGearBody runs an approved gear. No network field: the grant is the
 // one the operator already made, and offering to override it here would make
 // the approval a suggestion.
@@ -79,24 +149,34 @@ type CreateMCPServerBody struct {
 	// Command and Args are separate, and never one string: one string means a
 	// shell, and a shell means the arguments are parsed by something with its
 	// own opinion about quoting.
-	Command        string   `json:"command"`
-	Args           []string `json:"args"`
-	Dir            string   `json:"cwd"`
-	EnvNames       []string `json:"env_names"`
-	TimeoutSeconds int      `json:"timeout_seconds"`
+	// Transport is "stdio", "streamable-http" or "sse". Empty means stdio, so
+	// every caller written before there was a choice still means what it said.
+	Transport string   `json:"transport"`
+	Command   string   `json:"command"`
+	Args      []string `json:"args"`
+	// URL and HeaderNames are the remote half. HeaderNames maps a header to a
+	// NAMED value, never a value: `{"Authorization": "JIRA_TOKEN"}`.
+	URL            string            `json:"url"`
+	HeaderNames    map[string]string `json:"header_names"`
+	Dir            string            `json:"cwd"`
+	EnvNames       []string          `json:"env_names"`
+	TimeoutSeconds int               `json:"timeout_seconds"`
 }
 
 // UpdateMCPServerBody edits one, or changes its status — never both in one
 // request, because approving what you just changed is approving something you
 // have not seen.
 type UpdateMCPServerBody struct {
-	Status         *string   `json:"status"`
-	Description    *string   `json:"description"`
-	Command        *string   `json:"command"`
-	Args           *[]string `json:"args"`
-	Dir            *string   `json:"cwd"`
-	EnvNames       *[]string `json:"env_names"`
-	TimeoutSeconds *int      `json:"timeout_seconds"`
+	Status         *string            `json:"status"`
+	Description    *string            `json:"description"`
+	Transport      *string            `json:"transport"`
+	URL            *string            `json:"url"`
+	HeaderNames    *map[string]string `json:"header_names"`
+	Command        *string            `json:"command"`
+	Args           *[]string          `json:"args"`
+	Dir            *string            `json:"cwd"`
+	EnvNames       *[]string          `json:"env_names"`
+	TimeoutSeconds *int               `json:"timeout_seconds"`
 }
 
 // ApproveMCPToolBody approves one tool, which is the granularity that matters:

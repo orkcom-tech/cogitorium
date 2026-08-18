@@ -68,9 +68,45 @@ auth:
   #   kubectl create secret generic cogitorium-auth \
   #     --from-literal=admin-token="$(openssl rand -hex 24)"
   adminToken: ""
-  # Or point at a Secret you already made. Takes precedence over adminToken.
+  # The admin's PASSWORD — what a person types into the sign-in card. Distinct
+  # from the token above, which is for the API and the command line; each is the
+  # credential that fits how its caller stores things.
+  #
+  # Leave it empty and the chart GENERATES one at install and keeps it in the
+  # same Secret. `helm install` prints the command to read it back. That is
+  # deliberate rather than printing the password itself: Helm renders NOTES.txt
+  # separately from the Secret, so a generated value there would be a different
+  # string — and a credential in `helm install` output is a credential in CI
+  # logs and shell scratchpads.
+  #
+  # It survives `helm upgrade`, because the chart reads the deployed Secret back
+  # with `lookup` before generating. THAT ONLY WORKS WHEN HELM IS TALKING TO A
+  # CLUSTER — `helm install`, `helm upgrade`, and Flux's helm-controller, which
+  # drives the same SDK. Under `helm template` and `--dry-run` there is nothing
+  # to look up, so a NEW password is minted on every render.
+  #
+  # Which matters for one popular tool: Argo CD renders charts with a
+  # client-side `helm template` by default, so leaving this empty there gives
+  # you a Secret that is permanently OutOfSync and, with auto-sync on, is
+  # rewritten every reconciliation with a value the server will not adopt. Set
+  # existingSecret and manage the credential yourself if you deploy that way.
+  # (`ignoreDifferences` hides the diff; it does not fix it.)
+  #
+  # It reaches the server only while the admin has NO password, so once you
+  # change it in the interface — which you should — nothing here can overwrite
+  # it, and nothing here can recover it either.
+  #
+  # At least 8 characters; the server refuses to start otherwise.
+  adminPassword: ""
+
+  # Or point at a Secret you already made. Takes precedence over adminToken and
+  # adminPassword, and the chart creates neither.
   existingSecret: ""
   existingSecretKey: admin-token
+  # The key in that Secret holding the password. Read as OPTIONAL: a Secret made
+  # before this chart asked for one has no such key, and that install keeps
+  # working — its admin is reached with the token instead.
+  existingSecretPasswordKey: admin-password
 
 config:
   logLevel: info
@@ -112,6 +148,31 @@ config:
   # interactive code execution with the server's file access is not something a
   # value should be able to turn on.
   terminal: false
+
+  # May this install ask GitHub whether a newer Cogitorium or Contextverse has
+  # been released: "ask", "on" or "off".
+  #
+  # "off" HERE, and not the "ask" the binary defaults to. A cluster is not a
+  # laptop: the question is put to whoever is looking at the interface, and on
+  # Kubernetes the person who decides what this pod may reach is the person
+  # applying this chart, not the person who happens to open a browser. Set it to
+  # "on" if you want the notice; the notice is the whole feature here anyway,
+  # because the image tag is the version and there is no command a pod could run
+  # that the next roll would not undo.
+  #
+  # Nothing about the install is ever sent — no identifier, no version, no
+  # count. See the guide's Updates section.
+  updateCheck: "off"
+
+  # How logs are written: "text" for a person at a terminal, "json" for a
+  # collector. JSON HERE, unlike the binary's own default, because a cluster
+  # install is being read by Loki, Elastic or a vendor agent rather than by
+  # somebody watching a console — and every one of them would otherwise be
+  # handed prose to regex.
+  #
+  # Cogitorium ships logs nowhere. That is what Vector, Fluent Bit, Alloy and
+  # the vendor agents are for; what this owes them is a format.
+  logFormat: json
 
   # Agents reaching the internet. Off by default, and it needs a sandbox: an
   # unsandboxed gear can rewrite the configuration and the grants table, which
@@ -185,9 +246,49 @@ securityContext:
 # Egress is left alone: the server has to reach the model providers you
 # configured, and this chart cannot know their addresses.
 networkPolicy:
+  scrapeFrom: []
   enabled: false
   # Namespaces and pods allowed to reach the service.
   allowFrom: []
+
+# Who may scrape /metrics, when both networkPolicy and metrics are on.
+#
+# Empty allows it from anywhere in the cluster, which is the lesser evil: a
+# policy that silently blocks every scrape looks exactly like a broken exporter.
+# Narrow it to the namespace your Prometheus runs in:
+#
+#   scrapeFrom:
+#     - namespaceSelector:
+#         matchLabels:
+#           kubernetes.io/metadata.name: monitoring
+#
+# It lives under networkPolicy rather than under metrics because it is a
+# statement about the network, and that is where somebody looks for it.
+
+# The Prometheus endpoint.
+#
+# Its own port, never a route on the API: the API is authenticated and a scrape
+# is not, so an unauthenticated path on the authenticated surface would be a way
+# in. A separate port is something a NetworkPolicy can bound, which is how every
+# other exporter in a cluster is treated.
+#
+# ON by default here and off in the binary, and the difference is the audience:
+# somebody applying a chart is running a cluster that has a scraper in it, while
+# somebody running the binary on a laptop is not — and starting a listener
+# nobody asked for on their machine is a decision that is not ours.
+metrics:
+  enabled: true
+  port: 9090
+  # A ServiceMonitor needs the Prometheus Operator's CRD, so it is off unless
+  # you say you have one: applying a manifest whose kind does not exist fails
+  # the whole release, which is a bad way to learn that.
+  serviceMonitor:
+    enabled: false
+    # Blank means the release's own namespace and the operator's default
+    # selectors, which is right on most clusters and wrong on the ones that
+    # scope Prometheus by label.
+    interval: 30s
+    labels: {}
 
 # Cuts egress for gear Jobs the operator did not grant the network. Enabled by
 # default because "no network unless granted" is what the product promises

@@ -101,7 +101,11 @@ type Run struct {
 // Accept records a delivery that got past the door, before the payload is
 // looked at. Its id is the run number the caller is answered with, so it has to
 // exist before anything can go wrong with the payload.
-func (s *Store) Accept(ctx context.Context, wsID, inletID int64, address, taskName, agentName string) (int64, error) {
+// inletID is a POINTER because a run need not have a door. inlet_runs.inlet_id
+// is nullable and carries no foreign key deliberately (see 0016), and a clock
+// firing directly at an agent or a gear has no inlet at all — passing 0 would
+// store a zero that reads as a door whose row has gone missing.
+func (s *Store) Accept(ctx context.Context, wsID int64, inletID *int64, address, taskName, agentName string) (int64, error) {
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO inlet_runs (workspace_id, inlet_id, inlet_address, task_name, agent_name, state, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,

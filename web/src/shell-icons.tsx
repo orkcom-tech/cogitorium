@@ -63,6 +63,13 @@ export const DRAWER_ICON: Record<string, ReactNode> = {
       <path d="M16 5.6a3.2 3.2 0 0 1 0 5.8M17.5 14.9c2 .6 3.3 2.3 3.3 4.6" />
     </>,
   ),
+  mcp: svg(
+    <>
+      <path d="M9 3.5v5M15 3.5v5" />
+      <rect x="6" y="8.5" width="12" height="6" rx="2" />
+      <path d="M12 14.5v3.2a2.8 2.8 0 0 0 2.8 2.8h1.7" />
+    </>,
+  ),
   gears: svg(
     <>
       <circle cx="12" cy="12" r="3.2" />

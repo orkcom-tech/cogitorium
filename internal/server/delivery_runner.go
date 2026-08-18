@@ -6,9 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/orkcom-tech/cogitorium/internal/gear"
 
 	"github.com/orkcom-tech/cogitorium/internal/engine"
 	"github.com/orkcom-tech/cogitorium/internal/inlet"
+	"github.com/orkcom-tech/cogitorium/internal/metrics"
 	"github.com/orkcom-tech/cogitorium/internal/work"
 )
 
@@ -27,6 +32,28 @@ type deliveryArgs struct {
 	// which can look up an inlet that has since been deleted.
 	Address string `json:"address"`
 	Task    string `json:"task"`
+
+	// Gear is set instead of Agent when a clock dials a gear with no agent in
+	// the loop.
+	//
+	// A FIELD IN THE ARGS RATHER THAN A NEW work.kind, deliberately. The queue's
+	// kind column is `CHECK (kind IN ('delivery','chat','callback'))` and 0022
+	// says in its own comment that adding a value later means rebuilding a table
+	// that by then holds rows. The args blob exists precisely so a unit can
+	// carry everything it needs, and "a delivery that runs a gear" is a delivery
+	// — same lane, same ledger row, same queue, same ceiling.
+	Gear *gearCall `json:"gear,omitempty"`
+}
+
+// gearCall is a gear firing carried in a unit.
+//
+// The NAME travels beside the id for the same reason the address and task do:
+// whoever reads the queue or the log cannot look up a gear that has since been
+// deleted, and "gear 41" is not something anybody can act on.
+type gearCall struct {
+	ID   int64           `json:"id"`
+	Name string          `json:"name"`
+	Args json.RawMessage `json:"args"`
 }
 
 // runDelivery is what a worker does with a delivery unit: run the agent, hold
@@ -51,6 +78,10 @@ func (s *Server) runDelivery(ctx context.Context, u work.Unit) error {
 		cause := fmt.Errorf("this delivery's stored arguments could not be read: %w", err)
 		s.settle(ledgerCtx, runID, inlet.StateFailed, "", cause.Error(), engine.Record{})
 		return cause
+	}
+
+	if args.Gear != nil {
+		return s.runScheduledGear(ctx, ledgerCtx, runID, args)
 	}
 
 	if err := s.inlets.Start(ledgerCtx, runID); err != nil {
@@ -136,6 +167,17 @@ func (s *Server) failedRun(ctx context.Context, runID int64, cause error, did en
 // otherwise settle successfully having done nothing, which is the exact shape
 // of failure this whole ledger exists to make impossible.
 func (s *Server) runWork(ctx context.Context, u work.Unit) error {
+	// Counted around the whole unit rather than inside each runner, so a kind
+	// that grows a third runner is measured without anybody remembering to.
+	s.metrics.WorkRunning.Add(map[string]string{"kind": u.Kind}, 1)
+	defer s.metrics.WorkRunning.Add(map[string]string{"kind": u.Kind}, -1)
+
+	err := s.runWorkOf(ctx, u)
+	s.metrics.WorkUnits.Inc(map[string]string{"kind": u.Kind, "outcome": metrics.Outcome(err)})
+	return err
+}
+
+func (s *Server) runWorkOf(ctx context.Context, u work.Unit) error {
 	switch u.Kind {
 	case work.KindDelivery:
 		return s.runDelivery(ctx, u)
@@ -143,4 +185,111 @@ func (s *Server) runWork(ctx context.Context, u work.Unit) error {
 		return s.runCallback(ctx, u)
 	}
 	return fmt.Errorf("nothing in this server knows how to run a %q unit", u.Kind)
+}
+
+// runScheduledGear is a gear firing with nobody watching.
+//
+// It goes through the SAME ledger row a delivery gets — accepted, running,
+// settled — because "did last night's backup run" has to be answerable in the
+// same place as every other question about this workspace. What it does not do
+// is call a model: there is no agent, and that is the whole point of the path.
+//
+// The approval is re-checked by the executor rather than trusted from creation
+// time. A gear edited since its schedule was written drops back to pending, and
+// gear.ErrNotApproved is what stops it — the clock is the caller here and there
+// is no second gate behind it.
+func (s *Server) runScheduledGear(ctx, ledgerCtx context.Context, runID int64, args deliveryArgs) error {
+	if err := s.inlets.Start(ledgerCtx, runID); err != nil {
+		slog.Info("a queued gear firing was no longer waiting when its turn came", "run_id", runID, "err", err)
+		return nil
+	}
+
+	g, err := s.gears.Get(ctx, args.Gear.ID)
+	if err != nil {
+		// Deleted between the firing and the worker picking it up. Said
+		// plainly, because the schedule is still there and still pointing at
+		// nothing.
+		cause := fmt.Errorf("gear %s (%d) is gone, so this schedule has nothing to run: %w",
+			args.Gear.Name, args.Gear.ID, err)
+		s.settle(ledgerCtx, runID, inlet.StateFailed, "", cause.Error(), engine.Record{})
+		return nil
+	}
+
+	body := "{}"
+	if len(args.Gear.Args) > 0 {
+		body = string(args.Gear.Args)
+	}
+	// No Caller fields: not a dry run, and not on behalf of an agent. The
+	// executor's own check refuses a pending or disabled gear here, which is
+	// what makes the approval gate hold on a path with no human in it.
+	started := time.Now()
+	res, runErr := s.gearExec.Run(ctx, g, body, gear.Caller{})
+	elapsed := time.Since(started).Milliseconds()
+	s.metrics.GearSeconds.Observe(nil, time.Since(started).Seconds())
+
+	// The record is built from the executor's own result rather than from
+	// anything the gear said about itself, exactly as a delegated tool call is.
+	// The FILES matter as much as the exit code here: a nightly job that wrote
+	// four files and then fell over did that work, and whoever decides whether
+	// to run it again needs to know what is already on disk.
+	did := engine.Record{
+		Tools: []engine.ToolRun{{
+			Name: g.Name, OK: runErr == nil && res.ExitCode == 0 && !res.TimedOut, Ms: elapsed,
+		}},
+		Files: []engine.FileMade{},
+	}
+	for _, f := range res.Produced {
+		did.Files = append(did.Files, engine.FileMade{Path: f.Path, Bytes: f.Bytes})
+	}
+
+	s.metrics.GearRuns.Inc(map[string]string{"outcome": gearOutcome(runErr, res)})
+
+	switch {
+	case errors.Is(runErr, gear.ErrNotApproved):
+		// Not a broken job: somebody edited this gear and it has not been read
+		// since. Its own state, so a reader is not sent to look for a bug.
+		slog.Warn("a scheduled gear was refused: it is not approved",
+			"run_id", runID, "gear", g.Name, "status", g.Status)
+		s.settle(ledgerCtx, runID, inlet.StateRefusedExpectation, "", runErr.Error(), did)
+	case runErr != nil:
+		slog.Error("a scheduled gear failed", "run_id", runID, "gear", g.Name, "err", runErr)
+		s.settle(ledgerCtx, runID, inlet.StateFailed, "", runErr.Error(), did)
+	case res.ExitCode != 0 || res.TimedOut:
+		// A non-zero exit IS the failure, and the stderr is what somebody
+		// reading this at nine in the morning actually needs.
+		why := fmt.Sprintf("exit %d", res.ExitCode)
+		if res.TimedOut {
+			why = "timed out"
+		}
+		if trimmed := strings.TrimSpace(res.Stderr); trimmed != "" {
+			why += ": " + trimmed
+		}
+		slog.Error("a scheduled gear ended badly", "run_id", runID, "gear", g.Name,
+			"exit_code", res.ExitCode, "timed_out", res.TimedOut)
+		s.settle(ledgerCtx, runID, inlet.StateFailed, res.Stdout, why, did)
+	default:
+		slog.Info("a scheduled gear ran", "run_id", runID, "gear", g.Name,
+			"ms", elapsed, "files", len(did.Files))
+		s.settle(ledgerCtx, runID, inlet.StateCompleted, res.Stdout, "", did)
+	}
+	return nil
+}
+
+// gearOutcome is the one label a dashboard reads, and it keeps "refused" apart
+// from "broke" for the same reason the ledger states do: a gear that was not
+// approved is a decision somebody has to make, and a gear that exited 1 is a
+// bug somebody has to fix. Alerting on them together pages the wrong person.
+func gearOutcome(err error, res gear.Result) string {
+	switch {
+	case errors.Is(err, gear.ErrNotApproved):
+		return "refused"
+	case err != nil:
+		return "failed"
+	case res.TimedOut:
+		return "timed_out"
+	case res.ExitCode != 0:
+		return "nonzero_exit"
+	default:
+		return "ok"
+	}
 }

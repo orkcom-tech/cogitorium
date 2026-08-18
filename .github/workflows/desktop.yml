@@ -86,6 +86,17 @@ jobs:
             -o "dist/cogitorium-desktop${{ runner.os == 'Windows' && '.exe' || '' }}" \
             ./cmd/cogitorium-desktop
 
+      # Contextverse, for this runner's own platform. The desktop builds are
+      # native — a system webview cannot be cross-compiled — so "whatever this
+      # machine is" is exactly the right target, and install-contextd.sh reads
+      # the version from MinContextd like everything else.
+      #
+      # Before the packaging steps, because each of them puts it somewhere
+      # different: inside the .app on macOS, beside the binary elsewhere.
+      - name: Fetch contextd
+        shell: bash
+        run: ./scripts/ci/install-contextd.sh dist
+
       - name: Assemble the macOS application
         if: runner.os == 'macOS'
         shell: bash
@@ -108,12 +119,15 @@ jobs:
           stage="Cogitorium-desktop_${{ steps.v.outputs.version }}_${{ matrix.artifact }}"
           mkdir -p "$stage"
           cp dist/cogitorium-desktop "$stage/"
+          # Beside the application, which is where the server looks when PATH
+          # has no contextd — so unpacking this is a working install.
+          cp dist/contextd "$stage/"
           cp packaging/desktop/cogitorium.desktop "$stage/"
           cp packaging/desktop/cogitorium.png "$stage/"
           cp packaging/desktop/install-linux.sh "$stage/install.sh"
           cp LICENSE NOTICE README.md "$stage/"
           tar czf "dist/$stage.tar.gz" "$stage"
-          rm -rf "$stage" dist/cogitorium-desktop
+          rm -rf "$stage" dist/cogitorium-desktop dist/contextd
 
       - name: Assemble the Windows archive
         if: runner.os == 'Windows'
@@ -122,9 +136,12 @@ jobs:
           stage="Cogitorium-desktop_${{ steps.v.outputs.version }}_${{ matrix.artifact }}"
           mkdir -p "$stage"
           cp dist/cogitorium-desktop.exe "$stage/Cogitorium.exe"
+          # Beside the application. The server looks in its own directory when
+          # PATH has no contextd, so the unpacked folder is a working install.
+          cp dist/contextd.exe "$stage/"
           cp LICENSE NOTICE README.md "$stage/"
           cd "$stage" && 7z a "../dist/$stage.zip" . && cd ..
-          rm -rf "$stage" dist/cogitorium-desktop.exe
+          rm -rf "$stage" dist/cogitorium-desktop.exe dist/contextd.exe
 
       - uses: actions/upload-artifact@v4
         with:

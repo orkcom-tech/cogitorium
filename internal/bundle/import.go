@@ -9,6 +9,7 @@ import (
 
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
+	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
 
@@ -25,6 +26,9 @@ type ImportOptions struct {
 	OwnerID        int64
 	IncludeGears   bool
 	IncludeContext bool
+	// IncludeMCP recreates the external MCP servers the bundle carried. Every
+	// one arrives PENDING with no credential resolved — see importMCP.
+	IncludeMCP bool
 }
 
 // Result is what an import did, in the operator's terms. It reports the parts
@@ -38,6 +42,8 @@ type Result struct {
 	Wires            int                 `json:"wires"`
 	GearsImported    []string            `json:"gears_imported"`
 	GearsSkipped     []SkippedGear       `json:"gears_skipped"`
+	MCPImported      []string            `json:"mcp_imported"`
+	MCPSkipped       []SkippedGear       `json:"mcp_skipped"`
 	ContextFiles     int                 `json:"context_files"`
 	UnresolvedModels []UnresolvedModel   `json:"unresolved_models"`
 }
@@ -159,6 +165,11 @@ func Import(ctx context.Context, s Stores, b Bundle, opts ImportOptions) (Result
 
 	if opts.IncludeGears {
 		if err := importGears(ctx, s, b, ws, created, &res); err != nil {
+			return res, err
+		}
+	}
+	if opts.IncludeMCP && s.MCP != nil {
+		if err := importMCP(ctx, s, b, ws, created, &res); err != nil {
 			return res, err
 		}
 	}
@@ -285,5 +296,87 @@ func resolve(a Agent, models map[string]int64, res *Result) *int64 {
 	res.UnresolvedModels = append(res.UnresolvedModels, UnresolvedModel{
 		Agent: a.Name, ProviderType: a.Model.ProviderType, ModelName: a.Model.ModelName,
 	})
+	return nil
+}
+
+// importMCP recreates the SHAPE of the external MCP servers a bundle carried,
+// and nothing else.
+//
+// EVERY ONE ARRIVES PENDING, with no fingerprint, and there is no path here
+// that could make it otherwise — the bundle has no field for a status and this
+// function has no branch that reads one. That is the point rather than an
+// implementation detail: an MCP server is a command line or a hostname, so the
+// operator on this side cannot read what they are agreeing to the way they can
+// read a gear's source. A bundle that arrived pre-approved would be a way to
+// hand somebody a process on their own host by email.
+//
+// The names of the values it wants come across; the values do not, and there is
+// nowhere in the bundle they could have been. What an imported server needs is
+// therefore visible immediately — it names JIRA_TOKEN and this install has no
+// such value — which is the honest failure rather than a silent one.
+func importMCP(ctx context.Context, s Stores, b Bundle, ws workspace.Workspace,
+	created map[string]workspace.Agent, res *Result) error {
+	for _, m := range b.MCPServers {
+		existing, err := s.MCP.List(ctx)
+		if err != nil {
+			return fmt.Errorf("workspace %q was created (id %d) but the MCP catalog could not be read: %w",
+				ws.Name, ws.ID, err)
+		}
+		clash := false
+		for _, e := range existing {
+			if e.Name == m.Name {
+				clash = true
+				break
+			}
+		}
+		if clash {
+			// Left alone rather than bound: an install's existing server may be
+			// a different thing wearing the same name, and quietly granting it
+			// to an imported workspace would be handing an agent something
+			// nobody here chose.
+			res.MCPSkipped = append(res.MCPSkipped, SkippedGear{
+				Name: m.Name,
+				Why: "an MCP server with this name already exists in this install; it was left untouched " +
+					"and not granted to the imported workspace",
+			})
+			continue
+		}
+
+		srv, err := s.MCP.Install(ctx, mcpstore.Server{
+			Name: m.Name, Description: m.Description, Transport: m.Transport,
+			Command: m.Command, Args: m.Args, Dir: m.Dir, EnvNames: m.EnvNames,
+			URL: m.URL, HeaderNames: m.HeaderNames,
+		}, nil)
+		if err != nil {
+			// A bundle from a newer install may carry a transport this one does
+			// not speak, or a shape this one refuses. Skipped with the reason
+			// rather than failing an import that is otherwise fine.
+			res.MCPSkipped = append(res.MCPSkipped, SkippedGear{Name: m.Name, Why: err.Error()})
+			continue
+		}
+
+		var agentID *int64
+		if m.BoundTo != "" && m.BoundTo != "workspace" {
+			a, ok := created[m.BoundTo]
+			if !ok {
+				res.MCPSkipped = append(res.MCPSkipped, SkippedGear{
+					Name: m.Name,
+					Why:  "it was granted to agent " + m.BoundTo + ", which this bundle does not contain",
+				})
+				continue
+			}
+			agentID = &a.ID
+		}
+		if _, err := s.MCP.Bind(ctx, srv.ID, ws.ID, agentID); err != nil {
+			return fmt.Errorf("workspace %q was created (id %d) but the MCP server %q could not be granted: %w",
+				ws.Name, ws.ID, m.Name, err)
+		}
+		res.MCPImported = append(res.MCPImported, m.Name)
+	}
+	if len(res.MCPImported) > 0 {
+		slog.Warn("a bundle brought external MCP servers; every one is PENDING and does nothing",
+			"workspace_id", ws.ID, "servers", res.MCPImported,
+			"note", "an approval never travels in a bundle: read what each one runs or calls before approving it")
+	}
 	return nil
 }

@@ -1,34 +1,35 @@
-import { useState } from 'react'
-import { auth } from '../api'
-import { session } from '../session'
+import { useState } from "react";
+import { auth } from "../api";
+import { session } from "../session";
 
 // The one door into the app, shared by every shell. Served from a server the
 // address is already known, so it stays out of the way; a desktop shell has
 // no origin of its own and needs it, so it is offered — with the servers
 // seen before, to save retyping.
 export default function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
-  const servedFromServer = !!window.location.origin && window.location.protocol.startsWith('http')
-  const [server, setServer] = useState(session.server())
-  const [name, setName] = useState('')
-  const [password, setPassword] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const known = session.knownServers()
+  const servedFromServer =
+    !!window.location.origin && window.location.protocol.startsWith("http");
+  const [server, setServer] = useState(session.server());
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const known = session.knownServers();
 
   const submit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setBusy(true)
-    setError(null)
-    session.setServer(server)
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    session.setServer(server);
     auth
       .login(name, password)
       .then((r) => {
-        session.setToken(r.token)
-        onSignedIn()
+        session.keep(r.token);
+        onSignedIn();
       })
       .catch((err: Error) => setError(err.message))
-      .finally(() => setBusy(false))
-  }
+      .finally(() => setBusy(false));
+  };
 
   return (
     <div className="login">
@@ -37,7 +38,11 @@ export default function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
         <label className="field">
           <span className="muted">server</span>
           <input
-            placeholder={servedFromServer ? window.location.origin : 'https://cogitorium.example.com'}
+            placeholder={
+              servedFromServer
+                ? window.location.origin
+                : "https://cogitorium.example.com"
+            }
             value={server}
             onChange={(e) => setServer(e.target.value)}
             list="known-servers"
@@ -50,21 +55,33 @@ export default function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
         </label>
         <label className="field">
           <span className="muted">user</span>
-          <input required autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+          <input
+            required
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
         </label>
         <label className="field">
           <span className="muted">password</span>
-          <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input
+            required
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
         </label>
         {error && <p className="error">{error}</p>}
         <button type="submit" disabled={busy || !name || !password}>
-          {busy ? 'signing in…' : 'sign in'}
+          {busy ? "signing in…" : "sign in"}
         </button>
-        <p className="hint">
-          On your own machine Cogitorium signs you in as the admin automatically — this page is for reaching a
-          server over the network.
-        </p>
+        {session.local() && (
+          <p className="hint">
+            This is your own machine, so Cogitorium will remember you and not
+            ask again.
+          </p>
+        )}
       </form>
     </div>
-  )
+  );
 }

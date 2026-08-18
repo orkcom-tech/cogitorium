@@ -59,9 +59,31 @@ const stderrKept = 4096
 // inherited the write end and holds it open.
 const stderrGrace = 2 * time.Second
 
-// Spec is what to run, and under what bounds.
+// The transports this client speaks. A server is a command or a URL, and which
+// one is not a detail: it decides whether approving it means letting a process
+// onto this host or letting a credential leave it.
+const (
+	// TransportStdio is a child process on this machine, spoken to over its
+	// standard streams.
+	TransportStdio = "stdio"
+	// TransportStreamableHTTP is the current HTTP transport: one POST per
+	// message to a single endpoint, the answer arriving either as a JSON object
+	// or as an SSE stream scoped to that request.
+	TransportStreamableHTTP = "streamable-http"
+	// TransportSSE is the deprecated 2024-11-05 shape: a GET that opens a
+	// stream whose first event names the URL to POST to. Supported because it
+	// is deployed, not because it is good.
+	TransportSSE = "sse"
+)
+
+// Spec is what to talk to, and under what bounds.
 type Spec struct {
-	Name    string
+	Name string
+	// Transport is one of the three above. Empty means stdio, so every caller
+	// written before there was a choice still means what it said.
+	Transport string
+
+	// The stdio half.
 	Command string
 	Args    []string
 	Dir     string
@@ -69,19 +91,45 @@ type Spec struct {
 	// it holds credentials, and the whole point of naming values is that the
 	// child gets what it was granted and nothing else.
 	Env map[string]string
+	// The remote half. URL is the endpoint; Headers are the RESOLVED headers to
+	// send with every request — the store holds names and the caller has
+	// already turned them into values, exactly as Env is resolved for a child.
+	URL     string
+	Headers map[string]string
+
 	// Timeout bounds one call, not the connection: a slow tool must not take
 	// the process down and make the next call pay to start it again.
 	Timeout time.Duration
 }
 
-// Conn is one running MCP server.
+// Remote reports whether this spec talks to somebody else's host rather than
+// starting something on this one.
+func (s Spec) Remote() bool {
+	return s.Transport == TransportStreamableHTTP || s.Transport == TransportSSE
+}
+
+// backend is what actually moves bytes, and it is the only thing the three
+// transports disagree about.
+//
+// Everything above it — the id bookkeeping, the notification/request/response
+// classification, the pending table, the timeouts — is protocol rather than
+// plumbing and is written once. A transport's whole job is to deliver one
+// outbound message and to feed whatever comes back into Conn.handle.
+type backend interface {
+	// send delivers one message. Anything the server says in reply must reach
+	// Conn.handle, whether that happens on this call or on a reader goroutine.
+	send(m mcpwire.Message) error
+	// close releases whatever was taken. It must be safe to call once.
+	close()
+	// explain turns the reason this connection stopped into something an
+	// operator can act on: a child's last line of stderr, or an HTTP failure.
+	explain(err error) string
+}
+
+// Conn is one live MCP server, however it is reached.
 type Conn struct {
 	spec Spec
-	cmd  *exec.Cmd
-	in   io.WriteCloser
-	out  *bufio.Reader
-
-	writeMu sync.Mutex
+	be   backend
 
 	mu      sync.Mutex
 	nextID  int64
@@ -89,27 +137,77 @@ type Conn struct {
 	// dead is closed when the reader stops, whatever the reason. Every waiter
 	// selects on it, so a child that dies fails its calls instead of leaving
 	// them to time out one by one.
-	dead    chan struct{}
-	deadErr error
-	closed  bool
-	stderr  *tailBuffer
-	// stderrDone closes when the child's stderr has been drained to EOF. The
-	// death path waits on it, because the reason a child died arrives on a
-	// DIFFERENT pipe from the EOF that reveals it died.
-	stderrDone chan struct{}
-	release    func()
-	end        context.CancelFunc
-	serverIn   string // what the server called itself, for the log
+	dead     chan struct{}
+	deadErr  error
+	closed   bool
+	serverIn string // what the server called itself, for the log
+
+	// mirrors is, per tool, the parameters its schema asked to have copied into
+	// HTTP headers. Populated by Tools; empty for almost every server, and read
+	// only by CallTool.
+	mirrors map[string][]paramHeader
+	// paramHeaders is what the NEXT outbound request should carry. Set around
+	// one call, because it belongs to that call's arguments and to nothing
+	// else; stdio ignores it entirely.
+	paramHeaders map[string]string
+
+	// deadOnce guards close(dead): a remote transport can discover it is
+	// finished on more than one goroutine, and closing a closed channel is a
+	// panic rather than an error.
+	deadOnce sync.Once
+}
+
+// setParamHeaders holds the headers one call should mirror. A pointer-free
+// swap under the same lock everything else uses.
+func (c *Conn) setParamHeaders(h map[string]string) {
+	c.mu.Lock()
+	c.paramHeaders = h
+	c.mu.Unlock()
+}
+
+// takeParamHeaders is what a transport asks for when building a request.
+func (c *Conn) takeParamHeaders() map[string]string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.paramHeaders
+}
+
+// die marks the connection finished and releases every waiter, exactly once.
+func (c *Conn) die(err error) {
+	c.deadOnce.Do(func() {
+		c.mu.Lock()
+		c.deadErr = err
+		// The waiters are released by close(c.dead) below and deliberately NOT
+		// by closing their own channels: a closed reply channel hands the
+		// caller a zero-valued message, which reads as an answer that could not
+		// be parsed rather than as a server that stopped.
+		c.pending = map[string]chan mcpwire.Message{}
+		c.mu.Unlock()
+		close(c.dead)
+	})
 }
 
 // Dial spawns the server and completes the handshake.
 //
 // The handshake is not optional politeness: a server may not answer tools/list
 // before initialize, and one that does is not one to rely on.
+// Dial connects, whatever the transport, and completes the handshake.
 func Dial(ctx context.Context, spec Spec) (*Conn, error) {
 	if spec.Timeout <= 0 {
 		spec.Timeout = 60 * time.Second
 	}
+	switch spec.Transport {
+	case "", TransportStdio:
+		return dialStdio(ctx, spec)
+	case TransportStreamableHTTP, TransportSSE:
+		return dialRemote(ctx, spec)
+	default:
+		return nil, fmt.Errorf("the MCP server %q names transport %q, which this client does not speak",
+			spec.Name, spec.Transport)
+	}
+}
+
+func dialStdio(ctx context.Context, spec Spec) (*Conn, error) {
 	// The child gets the CONNECTION's own context, not the caller's. Binding it
 	// to the request that happened to open it would kill the server the moment
 	// that request ended, which is the opposite of a connection. Cancelling this
@@ -152,20 +250,24 @@ func Dial(ctx context.Context, spec Spec) (*Conn, error) {
 	}
 	afterStart()
 
-	c := &Conn{
-		spec: spec, cmd: cmd, in: in, out: bufio.NewReader(out),
-		pending:    map[string]chan mcpwire.Message{},
-		dead:       make(chan struct{}),
-		stderr:     &tailBuffer{limit: stderrKept},
-		stderrDone: make(chan struct{}),
-		release:    release,
-		end:        end,
+	be := &stdioBackend{
+		name: spec.Name, cmd: cmd, in: in, out: bufio.NewReader(out),
+		stderr: &tailBuffer{limit: stderrKept}, stderrDone: make(chan struct{}),
+		release: release, end: end,
 	}
+	c := &Conn{
+		spec:    spec,
+		be:      be,
+		pending: map[string]chan mcpwire.Message{},
+		mirrors: map[string][]paramHeader{},
+		dead:    make(chan struct{}),
+	}
+	be.conn = c
 	go func() {
-		io.Copy(c.stderr, errPipe)
-		close(c.stderrDone)
+		_, _ = io.Copy(be.stderr, errPipe)
+		close(be.stderrDone)
 	}()
-	go c.read()
+	go be.read()
 
 	if err := c.handshake(ctx); err != nil {
 		c.Close()
@@ -227,7 +329,24 @@ func (c *Conn) Tools(ctx context.Context, cap int) ([]mcpwire.Tool, bool, error)
 			return nil, false, fmt.Errorf("the MCP server %q answered tools/list with something this "+
 				"cannot read: %w", c.spec.Name, err)
 		}
-		all = append(all, page.Tools...)
+		for _, t := range page.Tools {
+			mirror, err := headerParams(t.InputSchema)
+			if err != nil {
+				// The spec's rule, and the reason for it: an annotation this
+				// client cannot construct a header from is a tool whose every
+				// call the server would refuse. Dropping the one definition
+				// keeps the server's other tools usable.
+				slog.Warn("an MCP tool was dropped: its schema annotates x-mcp-header illegally",
+					"server", c.spec.Name, "tool", t.Name, "err", err)
+				continue
+			}
+			if len(mirror) > 0 {
+				c.mu.Lock()
+				c.mirrors[t.Name] = mirror
+				c.mu.Unlock()
+			}
+			all = append(all, t)
+		}
 		if len(all) >= cap {
 			return all[:cap], true, nil
 		}
@@ -256,6 +375,15 @@ func (c *Conn) CallTool(ctx context.Context, name string, args json.RawMessage) 
 	if len(args) == 0 {
 		args = json.RawMessage("{}")
 	}
+	// The schema the server published for this tool, if it was listed on this
+	// connection. It is needed only to know whether any parameter asked to be
+	// mirrored into a header — see paramheaders.go.
+	c.mu.Lock()
+	mirror := c.mirrors[name]
+	c.mu.Unlock()
+	c.setParamHeaders(paramHeaderValues(mirror, args))
+	defer c.setParamHeaders(nil)
+
 	raw, err := c.Call(ctx, "tools/call", map[string]any{"name": name, "arguments": args})
 	if err != nil {
 		return CallResult{}, err
@@ -342,59 +470,10 @@ func (c *Conn) notify(method string, params any) error {
 	return c.write(mcpwire.Message{JSONRPC: "2.0", Method: method, Params: enc})
 }
 
-func (c *Conn) write(m mcpwire.Message) error {
-	line, err := json.Marshal(m)
-	if err != nil {
-		return err
-	}
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
-	if _, err := c.in.Write(append(line, '\n')); err != nil {
-		return fmt.Errorf("write to the MCP server %q: %w", c.spec.Name, err)
-	}
-	return nil
-}
+func (c *Conn) write(m mcpwire.Message) error { return c.be.send(m) }
 
 // read is the only reader of the pipe, and it classifies every line before
 // doing anything with it.
-func (c *Conn) read() {
-	defer close(c.dead)
-	for {
-		line, err := c.out.ReadBytes('\n')
-		if len(line) > 0 {
-			c.handle(line)
-		}
-		if err != nil {
-			// Drain stderr BEFORE releasing anybody. A child that gives up
-			// writes the reason on stderr and then exits; the exit is what
-			// closes stdout and lands us here. Those are two independent
-			// pipes with two independent readers, so without this wait the
-			// waiters are woken by close(c.dead) below and build their error
-			// from a tail buffer the copier has not filled in yet — the
-			// caller is told "stopped: EOF" and the sentence explaining why
-			// arrives microseconds later, into nothing. It read as flaky
-			// because on an idle machine the copier usually won.
-			select {
-			case <-c.stderrDone:
-			case <-time.After(stderrGrace):
-				// A grandchild holding the pipe open would otherwise wedge
-				// every waiter here. Losing the quote beats not answering.
-			}
-			c.mu.Lock()
-			c.deadErr = err
-			c.pending = map[string]chan mcpwire.Message{}
-			c.mu.Unlock()
-			// The waiters are released by close(c.dead) in the defer, and
-			// deliberately NOT by closing their own channels: a closed reply
-			// channel hands the caller a zero-valued message, which reads as an
-			// answer that could not be parsed rather than as a server that
-			// died. That is what it did, and the error said "something this
-			// cannot read" while quoting nothing.
-			return
-		}
-	}
-}
-
 func (c *Conn) handle(line []byte) {
 	var m mcpwire.Message
 	if err := json.Unmarshal(line, &m); err != nil {
@@ -455,20 +534,13 @@ func (c *Conn) forget(id string) {
 	c.mu.Unlock()
 }
 
-// death explains a child that stopped, with the last thing it said.
+// death explains a connection that stopped, in whatever terms its transport
+// has: the last line a child wrote, or what the HTTP request did.
 func (c *Conn) death() error {
 	c.mu.Lock()
 	err := c.deadErr
 	c.mu.Unlock()
-	last := c.stderr.lastLine()
-	switch {
-	case last != "" && err != nil:
-		return fmt.Errorf("the MCP server %q stopped (%v); it last said: %s", c.spec.Name, err, last)
-	case last != "":
-		return fmt.Errorf("the MCP server %q stopped; it last said: %s", c.spec.Name, last)
-	default:
-		return fmt.Errorf("the MCP server %q stopped: %v", c.spec.Name, err)
-	}
+	return fmt.Errorf("the MCP server %q stopped: %s", c.spec.Name, c.be.explain(err))
 }
 
 // Close ends the connection and the process group behind it.
@@ -480,19 +552,7 @@ func (c *Conn) Close() error {
 	}
 	c.closed = true
 	c.mu.Unlock()
-
-	// Closing stdin is how an MCP server is asked to stop. Cancelling the
-	// connection's context is what happens to one that does not: procgroup
-	// turned that into a kill of the whole group, so a wrapper that exec'd the
-	// real server does not leave it behind.
-	_ = c.in.Close()
-	select {
-	case <-c.dead:
-	case <-time.After(3 * time.Second):
-	}
-	c.end()
-	_ = c.cmd.Wait()
-	c.release()
+	c.be.close()
 	return nil
 }
 

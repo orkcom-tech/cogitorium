@@ -4,6 +4,7 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -13,7 +14,9 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/orkcom-tech/cogitorium/internal/gearnet"
+	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
+	"github.com/orkcom-tech/cogitorium/internal/update"
 )
 
 // DefaultBrowserImage carries a real browser and the driver that speaks to it.
@@ -102,6 +105,43 @@ type Config struct {
 	// than served with the server's own file access.
 	Terminal bool `yaml:"terminal"`
 
+	// MetricsListen is where the Prometheus endpoint listens, e.g.
+	// "127.0.0.1:9090". EMPTY MEANS OFF, and off is the default.
+	//
+	// Its own address rather than a route on the API, deliberately. The API is
+	// authenticated and a scrape is not, so an unauthenticated path on the
+	// authenticated surface would be a way in; a separate port is something an
+	// operator can bind to a private interface or firewall, which is what they
+	// already do for every other exporter they run.
+	MetricsListen string `yaml:"metrics_listen"`
+
+	// LogFormat is "text" or "json". Text is the default and is for a person
+	// reading a terminal; json is one object per line with stable field names,
+	// which is what Elastic, Loki, Datadog and every other collector want.
+	//
+	// Cogitorium ships logs NOWHERE. That is what Vector, Fluent Bit, Alloy and
+	// the vendor agents are for, and a product that grew its own exporter would
+	// be a product maintaining four of them. What it owes a collector is a
+	// format, and this is it.
+	LogFormat string `yaml:"log_format"`
+
+	// UpdateCheck decides whether this install may ask GitHub whether a newer
+	// Cogitorium or Contextverse has been released: "ask", "on" or "off".
+	//
+	// The default is "ask", and it is neither of the other two on purpose. This
+	// product fetches nothing at runtime and sends nothing about itself
+	// anywhere, so switching an outbound request on by default would break the
+	// headline promise for a convenience; but a check that is off by default is
+	// a check nobody has, which is exactly the state that made this worth
+	// building — somebody installs it in March and runs an old one for a year.
+	//
+	// So the question is PUT ONCE, in the interface, and nothing leaves the
+	// machine until it is answered. "off" is the setting for an install that
+	// must not make outbound requests at all: it is never asked, never checks,
+	// and refuses "check now", and the interface cannot undo it — see
+	// update.Checker.SetMode.
+	UpdateCheck string `yaml:"update_check"`
+
 	// Egress is the master switch for agents reaching the internet. Off by
 	// default, and deliberately reachable ONLY from this file and the
 	// environment: there is no route, no setter and no database row, so no
@@ -118,13 +158,12 @@ type Config struct {
 	// error, not a silent degradation to unauthenticated requests.
 	EgressKey string `yaml:"egress_key"`
 
-	// EgressApprovalBearer requires a real bearer token to grant the gate or
-	// approve a search, refusing the implicit-admin that loopback otherwise
-	// confers. Off by default because it would make the feature unusable on a
-	// default single-operator install; the audit records which kind of
-	// authentication each decision actually had, so a row is never mistaken
-	// for stronger evidence than it is.
-	EgressApprovalBearer bool `yaml:"egress_approval_bearer"`
+	// egress_approval_bearer used to live here. It required a real token to
+	// grant the gate, refusing the implicit admin that a loopback request was
+	// once given. Loopback admin is gone, so every approval is now made by
+	// somebody who signed in and the option has nothing left to switch. A
+	// configuration still carrying it loads fine — unknown keys are ignored —
+	// and gets the behaviour it was asking for.
 
 	// VariablesDir and SecretsDir are the directory source for the names a gear
 	// is given: one file per name, the file's contents being the value. Empty
@@ -230,6 +269,24 @@ type Config struct {
 	// "in the pod log, for anyone who can read logs". With it, nothing
 	// sensitive is ever written to the log.
 	AdminToken string `yaml:"-"`
+
+	// AdminPassword seeds the first admin's password, so a deployment nobody is
+	// standing in front of comes up able to be signed in to.
+	//
+	// No yaml tag, for the same reason AdminToken has none: on Kubernetes the
+	// config file is a ConfigMap, and a ConfigMap is not a secret.
+	//
+	// Without it the admin is created with no password and the first person to
+	// open the interface is asked to choose one. That is right on a laptop and
+	// wrong in a cluster: on an address the network can reach, the first
+	// stranger to find the port would be the one choosing it, so the setup
+	// route demands the admin token there — which means an unattended deploy
+	// with no password is one an operator has to go and claim by hand.
+	//
+	// Applied at FIRST START only. A later start ignores it, so changing this
+	// value cannot overwrite a password the operator has since chosen, and
+	// cannot be used to recover a forgotten one.
+	AdminPassword string `yaml:"-"`
 }
 
 func Defaults() Config {
@@ -244,6 +301,8 @@ func Defaults() Config {
 		LogLevel:        "info",
 		ContextdPath:    "contextd",
 		Sandbox:         "auto",
+		UpdateCheck:     update.ModeAsk,
+		LogFormat:       "text",
 		BrowserImage:    DefaultBrowserImage,
 		GearProxyListen: gearnet.DefaultListen,
 		QueueWorkers:    4,
@@ -348,6 +407,17 @@ func Load(path, dataDirOverride string) (Config, error) {
 	if v := os.Getenv("COGITORIUM_TERMINAL"); v != "" {
 		cfg.Terminal = v == "1" || strings.EqualFold(v, "true")
 	}
+	if v := os.Getenv("COGITORIUM_METRICS_LISTEN"); v != "" {
+		cfg.MetricsListen = v
+	}
+	if v := os.Getenv("COGITORIUM_LOG_FORMAT"); v != "" {
+		cfg.LogFormat = strings.ToLower(strings.TrimSpace(v))
+	}
+	// Not a bool: "ask" is a real value and spelling it as a third state of a
+	// flag would make an unanswered question look like a refusal.
+	if v := os.Getenv("COGITORIUM_UPDATE_CHECK"); v != "" {
+		cfg.UpdateCheck = strings.ToLower(strings.TrimSpace(v))
+	}
 	// Same strict parse as Terminal, so COGITORIUM_EGRESS=0 is a working
 	// off-switch over a file that says true.
 	if v := os.Getenv("COGITORIUM_EGRESS"); v != "" {
@@ -355,9 +425,6 @@ func Load(path, dataDirOverride string) (Config, error) {
 	}
 	if v := os.Getenv("COGITORIUM_EGRESS_KEY"); v != "" {
 		cfg.EgressKey = v
-	}
-	if v := os.Getenv("COGITORIUM_EGRESS_APPROVAL_BEARER"); v != "" {
-		cfg.EgressApprovalBearer = v == "1" || strings.EqualFold(v, "true")
 	}
 	if v := os.Getenv("COGITORIUM_VARIABLES_DIR"); v != "" {
 		cfg.VariablesDir = v
@@ -388,12 +455,55 @@ func Load(path, dataDirOverride string) (Config, error) {
 		}
 		cfg.AdminToken = v
 	}
+	if v := os.Getenv("COGITORIUM_ADMIN_PASSWORD"); v != "" {
+		// A TRAILING NEWLINE IS NOT PART OF THE PASSWORD, and this is where it
+		// gets in: `kubectl create secret generic --from-file=admin-password=pw`
+		// stores the file, and a file written by an editor ends in a newline.
+		// Kept, it is hashed into the credential — and the failure is silent,
+		// because the operator then types the password they chose and gets the
+		// same 401 a typo produces. It even helps the length check pass.
+		//
+		// Line endings only. Trimming all whitespace would quietly change a
+		// password somebody deliberately ended with a space.
+		v = strings.TrimRight(v, "\r\n")
+		if len(v) < identity.MinPasswordLen {
+			return Config{}, fmt.Errorf("COGITORIUM_ADMIN_PASSWORD is %d characters; it is what the admin signs in with, so at least %d are required",
+				len(v), identity.MinPasswordLen)
+		}
+		if len(v) > identity.MaxPasswordLen {
+			// Refused here rather than at the hashing call, which is inside
+			// Bootstrap and therefore inside a pod that would crash-loop with
+			// a message about bcrypt rather than about this variable.
+			return Config{}, fmt.Errorf("COGITORIUM_ADMIN_PASSWORD is %d bytes; bcrypt hashes at most %d and refuses rather than truncates, so a longer one would fail at every start",
+				len(v), identity.MaxPasswordLen)
+		}
+		cfg.AdminPassword = v
+	}
 	return cfg, nil
 }
 
 // MinAdminTokenLen is the floor for a seeded admin token. Generated tokens are
 // far longer; this exists so that a seeded one cannot be trivially guessable.
 const MinAdminTokenLen = 24
+
+// SlogHandler builds the log handler this install asked for.
+//
+// Text for a person at a terminal; JSON for a collector. The LEVEL is the same
+// either way — the format decides who can read a line, not which lines exist —
+// and an unknown format falls back to text with a word rather than to silence.
+func (c Config) SlogHandler(w io.Writer) slog.Handler {
+	opts := &slog.HandlerOptions{Level: c.SlogLevel()}
+	switch c.LogFormat {
+	case "json":
+		return slog.NewJSONHandler(w, opts)
+	case "", "text":
+		return slog.NewTextHandler(w, opts)
+	default:
+		h := slog.NewTextHandler(w, opts)
+		slog.New(h).Warn("unknown log_format, using text", "log_format", c.LogFormat)
+		return h
+	}
+}
 
 // SlogLevel maps LogLevel to a slog.Level, defaulting to info on garbage.
 func (c Config) SlogLevel() slog.Level {

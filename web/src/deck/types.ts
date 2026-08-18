@@ -27,6 +27,7 @@ export type OverlayId =
   | 'agents'
   | 'agent'
   | 'gears'
+  | 'mcp'
   | 'instructions'
   | 'memory'
   | 'inlets'
@@ -42,6 +43,7 @@ export const VIEW_ORDER: ViewId[] = ['chat', 'blueprint', 'workbench']
 export const OVERLAY_ORDER: OverlayId[] = [
   'agents',
   'gears',
+  'mcp',
   'instructions',
   'memory',
   'inlets',
