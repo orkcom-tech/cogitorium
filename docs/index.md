@@ -151,11 +151,11 @@ cosign verify-blob --signature checksums.txt.sig \
 The server listens on `127.0.0.1:8688` and keeps its data in `~/.cogitorium`.
 Open <http://127.0.0.1:8688>.
 
-On first start it creates an `admin` user and prints a token. On a loopback
-listen address you are treated as that admin without signing in — that is what
-makes a single-operator install feel accountless while running exactly the same
-permission model as a team install. Change the listen address to anything other
-than loopback and the token becomes required.
+On first start it creates an `admin` user with no password and prints a token,
+and the app asks you to choose that password. On your own machine that is all it
+asks; on a server it also asks for the printed token, so that whoever finds the
+port first is not the one who claims the install. After that you are signed in,
+and on a local install you stay signed in across restarts.
 
 **Add a model first.** A workspace cannot exist without one, because its
 orchestrator needs something to think with. Go to **Models**, add a provider,
@@ -870,8 +870,8 @@ narrow enough to pipe.
 | `run <id>` | read a delivery back from the ledger |
 
 **Address and credential.** `--server` and `--token`, or `COGITORIUM_URL` and
-`COGITORIUM_TOKEN`; the flag wins. On a loopback listen address a local call is
-already the admin, so on one machine the token is optional. Delivery is the
+`COGITORIUM_TOKEN`; the flag wins. The token is required on every address,
+including your own machine. Delivery is the
 exception: it takes the *receiver's* key — `--key` or `COGITORIUM_INLET_KEY` —
 because a door's credential opens that door and nothing else, and it is the one
 the ledger records.
@@ -1868,7 +1868,7 @@ then defaults.
 
 | Key (`config.yaml`) | Environment | Default | What it does |
 |---|---|---|---|
-| `listen` | `COGITORIUM_LISTEN` | `127.0.0.1:8688` | HTTP listen address. A non-loopback address turns off implicit-admin. |
+| `listen` | `COGITORIUM_LISTEN` | `127.0.0.1:8688` | HTTP listen address. A loopback address marks this a local install: first-run setup does not ask for the admin token, and browsers are told to remember the session. |
 | `data_dir` | `COGITORIUM_DATA_DIR` | `~/.cogitorium` | SQLite database and server-owned files. |
 | `log_level` | `COGITORIUM_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 | `contextd_path` | `COGITORIUM_CONTEXTD` | `contextd` | How to find the Contextverse CLI. |
@@ -1888,7 +1888,6 @@ then defaults.
 | `update_check` | `COGITORIUM_UPDATE_CHECK` | `ask` | Whether this install may ask GitHub if a newer Cogitorium or Contextverse exists: `ask`, `on` or `off`. Under `ask` nothing leaves the machine until an operator answers the question the interface puts on the rail; the answer is remembered across restarts. `off` never asks and never checks — including for *check now* — and the interface cannot lift it. |
 | `egress` | `COGITORIUM_EGRESS` | off | Master switch for agents reaching the web. |
 | `egress_key` | `COGITORIUM_EGRESS_KEY` | — | Credential for the search service. Required when egress is on. |
-| `egress_approval_bearer` | `COGITORIUM_EGRESS_APPROVAL_BEARER` | off | Requires a real signed-in token to grant or approve egress, refusing implicit loopback admin. |
 | `variables_dir` | `COGITORIUM_VARIABLES_DIR` | — | A directory of files read as named variables, one file per name. The Kubernetes ConfigMap mount. |
 | `secrets_dir` | `COGITORIUM_SECRETS_DIR` | — | The same, read as secrets: redacted everywhere they could surface. The Kubernetes Secret mount. |
 | `gear_proxy_listen` | `COGITORIUM_GEAR_PROXY_LISTEN` | worked out from Docker | Where the gate for granted gears listens. Left empty, the server asks Docker which address a container reaches this machine on and binds there — the loopback works on Docker Desktop and is unreachable from a container on Linux. Naming an address here uses it exactly, and failing to bind it stops startup. |
@@ -1955,11 +1954,16 @@ What is actually true, without softening:
   workspace's memory and every agent's private branch. Per-branch access for
   non-admins does not exist yet; until it does, an unrestricted reader would be
   a hole.
-- **Loopback trust**: on a loopback listen address, an uncredentialed local
-  request is treated as the admin. Anything on your machine that can open a
-  socket to the port can therefore act as you. Set a non-loopback listen address,
-  or `egress_approval_bearer: true`, to require a real token for the decisions
-  that matter most.
+- **Sessions are remembered on a local install.** The browser holds an
+  `HttpOnly`, `SameSite=Lax` cookie, which script on the page cannot read and
+  another site cannot spend; on a local install it is given an expiry so the app
+  does not ask again, and anything able to read that browser profile from disk
+  can therefore act as you. Reaching a server over the network is not
+  remembered: the cookie has no expiry and dies with the browser. API clients
+  use `Authorization: Bearer` instead, which no web page can attach on your
+  behalf.
+  (Loopback trust — where an uncredentialed local request was simply served as
+  the admin, so that any process on the machine could act as you — was removed.)
 - **No telemetry.** There is no analytics and no crash reporting in this
   codebase. The binary talks to the providers you configured, the hosts you
   named, and — only once an operator has answered `yes` to the question the

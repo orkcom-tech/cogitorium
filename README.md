@@ -252,8 +252,8 @@ scoop install cogitorium
 **Anywhere — the binary**, from [releases](https://github.com/orkcom-tech/cogitorium/releases).
 Install `contextd` separately; Cogitorium refuses to store context without it.
 
-Then open `http://127.0.0.1:8688`. On loopback the first run needs no login: a
-single-operator install never sees a sign-in screen.
+Then open `http://127.0.0.1:8688`. The first run asks you to choose a password
+for the `admin` account; after that, on your own machine, it remembers you.
 
 ## No telemetry
 

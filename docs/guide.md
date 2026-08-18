@@ -21,10 +21,10 @@ Every command below was run against a real install, and every error message is
 the exact text the software produces. Where something does not exist, it says
 so rather than describing what it might look like.
 
-The examples use `http://127.0.0.1:8688`, the default. On a loopback address you
-are the admin without signing in, so no `Authorization` header appears in them —
-add `-H "Authorization: Bearer $TOKEN"` to every call if your server listens
-anywhere else.
+The examples use `http://127.0.0.1:8688`, the default, and every one of them
+carries `-H "Authorization: Bearer $TOKEN"`. There is no address and no machine
+where that header is optional — see [The token, and when you need
+it](#the-token-and-when-you-need-it) for where `$TOKEN` comes from.
 
 ---
 
@@ -75,39 +75,88 @@ Other routes are in [Install](./#install). The server listens on
 The other subcommands are a client for a running server and an MCP bridge; they
 are in [From a terminal, and from a script](#from-a-terminal-and-from-a-script).
 
+### Signing in the first time
+
+Open `http://127.0.0.1:8688` and the app asks you to choose a password for the
+`admin` account. Nobody has one yet: the first start creates that account with a
+name and a role and nothing else. Pick one, and you are in.
+
+On your own machine that is the whole story — Cogitorium remembers you, and the
+next launch opens straight into your workspaces. It only asks again if you sign
+out.
+
+On a server it asks for one more thing: the admin token this line put in the log
+at first start.
+
+```
+admin token created — copy it now, it cannot be shown again  token=cg-admin-b1e87f6…
+```
+
+That is not ceremony. A server is reachable by everyone who can route to it, so
+without the token the first stranger to find the port would be the one who sets
+the admin password. On loopback it is not asked for, because anyone who can
+reach loopback can already read the database it would be protecting.
+
+Only the SHA-256 hash of the token is stored, so a lost one cannot be recovered
+and there is no reset command. `COGITORIUM_ADMIN_TOKEN` seeds it instead of
+letting the server generate one — read from the environment only, and at least
+24 characters.
+
+**Signing in over the network is not remembered.** A browser reaching a server
+keeps the session until it closes and no longer, so a borrowed or shared machine
+does not keep a working credential after you walk away. Locally it is
+remembered, which is the case where there is nothing to protect it from.
+
+**What the browser is actually holding.** A cookie, not a token in
+`localStorage`. It is marked `HttpOnly`, so no script on the page can read it —
+which is the point: a token in storage is one cross-site scripting bug away from
+being copied somewhere else, and this one cannot be read even by script running
+on the page it belongs to. It is marked `SameSite=Lax`, so the browser never
+attaches it to a write another site caused, and the server refuses one anyway if
+the `Origin` says it came from elsewhere.
+
+Scripts get the other kind. `Authorization: Bearer` cannot be attached by a
+browser on your behalf, so there is nothing for another site to forge, and a
+token in a shell variable is not reachable from a web page at all. Each caller
+gets the credential that fits how it stores things.
+
+To change your password later: the account button at the bottom of the rail →
+**change password**.
+
 ### The token, and when you need it
 
-On first start the log carries one line you cannot get back:
+The password gets you into the app. Anything talking to the API — a script, a
+`curl`, the terminal client — needs a token instead.
 
-```
-admin token created; local requests are admin automatically  token=cg-admin-b1e87f6…
-```
-
-You do not need it on your own machine — a request from loopback *is* the
-admin. You need it the moment the server listens anywhere else. Only the SHA-256
-hash is stored, so a lost token cannot be recovered; there is no reset command.
-
-`COGITORIUM_ADMIN_TOKEN` seeds that credential instead of letting the server
-generate one. It is read from the environment only — there is no config file key
-for it — and it must be at least 24 characters.
-
-Two things people try here that do not work:
-
-- **Pasting the token into the login form.** The login card has three fields —
-  server, user, password — and none of them is for a token. The seeded admin has
-  no password at all, so it answers `invalid username or password`.
-- **Reaching a Docker install and expecting to be the admin.** Inside the
-  container the server listens on `0.0.0.0`, so your request is not loopback:
-
-  ```
-  {"error":{"message":"authentication required: send Authorization: Bearer <token>"}}
-  ```
-
-To give the admin a password — there is no screen for this, only the route:
+The admin token from the log is one. Every sign-in mints another, and the
+command line will do that for you:
 
 ```bash
-curl -X PUT http://127.0.0.1:8688/api/v1/users/1/password -H 'Content-Type: application/json' -d '{"password":"correct-horse-battery"}'
+export COGITORIUM_TOKEN=$(cogitorium login --user admin)
 ```
+
+It asks for the password without echoing it, and prints the token and nothing
+else, so `$(…)` captures a token rather than a sentence. Over HTTP directly, the
+same exchange:
+
+```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:8688/api/v1/login \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"admin","password":"correct-horse-battery"}' | jq -r .token)
+```
+
+Every example below assumes `$TOKEN` holds one. Without the header they all
+answer the same way, on every address including your own machine:
+
+```
+{"error":{"message":"authentication required: send Authorization: Bearer <token>"}}
+```
+
+> **This changed.** Until recently a request from `127.0.0.1` was served as the
+> admin with no credential at all, and these examples carried no header. It made
+> a solo install feel accountless, and the price was that every process on the
+> machine — any script, any package install hook, any page open in your browser
+> that could reach the port — was an administrator of it. A person signs in now.
 
 ---
 
@@ -133,7 +182,7 @@ With a model in the catalog: **+ New workspace** → name it, say what it is for
 pick the orchestrator model → **create workspace**. Or:
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces -H 'Content-Type: application/json' -d '{"name":"research","description":"release notes","orchestrator_model_id":1}'
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"research","description":"release notes","orchestrator_model_id":1}'
 ```
 
 ```json
@@ -152,7 +201,7 @@ The stripe down the left edge of a card is the colour, and it is also the
 picker: click it, choose one of ten hues, or **clear**.
 
 ```bash
-curl -X PATCH http://127.0.0.1:8688/api/v1/workspaces/1 -H 'Content-Type: application/json' -d '{"hue": 210}'
+curl -X PATCH http://127.0.0.1:8688/api/v1/workspaces/1 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"hue": 210}'
 ```
 
 `{"hue": null}` takes it back. Omitting the field entirely is refused —
@@ -197,7 +246,7 @@ them, and, if you tick the boxes, the gears bound to the workspace and its
 context.
 
 ```bash
-curl -sO -J 'http://127.0.0.1:8688/api/v1/workspaces/1/export?gears=1&context=1'
+curl -sO -J 'http://127.0.0.1:8688/api/v1/workspaces/1/export?gears=1&context=1' -H "Authorization: Bearer $TOKEN"
 ```
 
 What comes out (trimmed; this is a real export):
@@ -236,7 +285,7 @@ private and nothing local.
 and asks for a name:
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces/import -H 'Content-Type: application/json' \
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/import -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"release notes (from A)","bundle":'"$(cat release-notes.cogitorium.json)"',"include_gears":true,"include_context":false}'
 ```
 
@@ -329,7 +378,7 @@ The orchestrator calls `agent_create` and then `delegate`, and you watch both
 happen. The same thing over the API:
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/agents -H 'Content-Type: application/json' -d '{"name":"researcher","role":"You summarize sources accurately and cite them.","model_id":1}'
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/agents -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"researcher","role":"You summarize sources accurately and cite them.","model_id":1}'
 ```
 
 **Attaching files.** The **+** beside the composer takes anything at all.
@@ -545,7 +594,7 @@ and no key, no token, no conversation, because a bundle has nowhere to put one.
 **[code-court.cogitorium.json](assets/code-court.cogitorium.json)** — 4 KB.
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces/import \
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/import -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d "{\"name\":\"code court\",\"bundle\":$(cat code-court.cogitorium.json)}"
 ```
@@ -704,7 +753,7 @@ Two things follow from what a prohibition is for:
 Over the API, on the agent:
 
 ```bash
-curl -X PATCH http://127.0.0.1:8688/api/v1/agents/1 -H 'Content-Type: application/json' -d '{"avoid":"Never invent a version number.\nNever promise a date."}'
+curl -X PATCH http://127.0.0.1:8688/api/v1/agents/1 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"avoid":"Never invent a version number.\nNever promise a date."}'
 ```
 
 Sending `"avoid": ""` clears them. Leaving the field out of the patch leaves
@@ -869,7 +918,7 @@ the callers holding it.
 Over the API it is a `PUT`, and the body is the whole task:
 
 ```bash
-curl -X PUT http://127.0.0.1:8688/api/v1/inlet-tasks/1 -H 'Content-Type: application/json' -d '{
+curl -X PUT http://127.0.0.1:8688/api/v1/inlet-tasks/1 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{
   "name": "ingest-page",
   "accepts": "json",
   "schema": { "type": "object", "required": ["link"] },
@@ -886,7 +935,7 @@ way in refuses it here too — one validator, both routes.
 #### The same, over the API
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/inlets -H 'Content-Type: application/json' -d '{"address":"drop","description":"files from outside"}'
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/inlets -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"address":"drop","description":"files from outside"}'
 ```
 
 The response carries the first key. `POST /api/v1/inlets/1/key` issues a new one.
@@ -896,7 +945,7 @@ The response carries the first key. `POST /api/v1/inlets/1/key` issues a new one
 Everything below is a real capture from a running install, not an illustration.
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/inlets/1/tasks -H 'Content-Type: application/json' -d '{
+curl -X POST http://127.0.0.1:8688/api/v1/inlets/1/tasks -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{
   "name": "archive",
   "accepts": "file",
   "content_type": "application/zip",
@@ -909,7 +958,7 @@ curl -X POST http://127.0.0.1:8688/api/v1/inlets/1/tasks -H 'Content-Type: appli
 Then a key, which is shown once:
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/inlets/1/key
+curl -X POST http://127.0.0.1:8688/api/v1/inlets/1/key -H "Authorization: Bearer $TOKEN"
 ```
 
 And the delivery — a plain POST from anything you already have:
@@ -1204,7 +1253,7 @@ either code you type or files from disk — a script, a set of them, or a compil
 executable. Or:
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/gears -H 'Content-Type: application/json' -d '{"name":"word_count","description":"count words in a string","tags":["text"],"runtime":"python","code":"import sys, json\nargs = json.load(sys.stdin)\nprint(len(args[\"text\"].split()))\n","args_schema":"{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[\"text\"]}"}'
+curl -X POST http://127.0.0.1:8688/api/v1/gears -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"word_count","description":"count words in a string","tags":["text"],"runtime":"python","code":"import sys, json\nargs = json.load(sys.stdin)\nprint(len(args[\"text\"].split()))\n","args_schema":"{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[\"text\"]}"}'
 ```
 
 ```json
@@ -1261,7 +1310,7 @@ Inside, in this order:
   you choose. That is its entire purpose:
 
   ```bash
-  curl -X POST 'http://127.0.0.1:8688/api/v1/gears/1/run?dry=1' -H 'Content-Type: application/json' -d '{"args":{"text":"one two three"}}'
+  curl -X POST 'http://127.0.0.1:8688/api/v1/gears/1/run?dry=1' -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"args":{"text":"one two three"}}'
   ```
 
   ```json
@@ -1439,7 +1488,7 @@ given the **browser** environment instead — **this is API-only; there is no
 control for it on this screen**:
 
 ```bash
-curl -X PATCH http://127.0.0.1:8688/api/v1/gears/1 -H 'Content-Type: application/json' \
+curl -X PATCH http://127.0.0.1:8688/api/v1/gears/1 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"environment":"browser","network":{"granted":true,"hosts":["example.com"]},"status":"approved"}'
 ```
 
@@ -1521,7 +1570,7 @@ here.
 **add provider** takes a name of your choosing, a kind, a base URL and a key:
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/providers -H 'Content-Type: application/json' -d '{"name":"local","type":"openai-compatible","base_url":"http://127.0.0.1:11434/v1","api_key":""}'
+curl -X POST http://127.0.0.1:8688/api/v1/providers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"local","type":"openai-compatible","base_url":"http://127.0.0.1:11434/v1","api_key":""}'
 ```
 
 ```json
@@ -1543,7 +1592,7 @@ one as a button; the ones already in the catalog are ticked and disabled. For a
 server that cannot list its own, **add a model by name**:
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/models -H 'Content-Type: application/json' -d '{"provider_id":1,"model_name":"qwen2.5:0.5b","label":"local / tiny"}'
+curl -X POST http://127.0.0.1:8688/api/v1/models -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"provider_id":1,"model_name":"qwen2.5:0.5b","label":"local / tiny"}'
 ```
 
 ```json
@@ -2060,18 +2109,18 @@ can reach any of them:
 
 ```bash
 # 1. Install it. It exists, and it is pending.
-curl -X POST http://127.0.0.1:8688/api/v1/mcp-servers -H 'Content-Type: application/json' \
+curl -X POST http://127.0.0.1:8688/api/v1/mcp-servers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"files","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","/srv/shared"]}'
 
 # 2. Probe it: started once, given nothing at all, and asked what it offers.
-curl -X POST http://127.0.0.1:8688/api/v1/mcp-servers/1/probe
+curl -X POST http://127.0.0.1:8688/api/v1/mcp-servers/1/probe -H "Authorization: Bearer $TOKEN"
 
 # 3. Approve the server, then each tool you actually want.
-curl -X PATCH http://127.0.0.1:8688/api/v1/mcp-servers/1 -H 'Content-Type: application/json' -d '{"status":"approved"}'
-curl -X PATCH http://127.0.0.1:8688/api/v1/mcp-tools/3  -H 'Content-Type: application/json' -d '{"approved":true}'
+curl -X PATCH http://127.0.0.1:8688/api/v1/mcp-servers/1 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"status":"approved"}'
+curl -X PATCH http://127.0.0.1:8688/api/v1/mcp-tools/3 -H "Authorization: Bearer $TOKEN"  -H 'Content-Type: application/json' -d '{"approved":true}'
 
 # Then grant it — to a workspace, or to one agent in it.
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/mcp-bindings \
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/mcp-bindings -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' -d '{"server_id":1}'
 ```
 
@@ -2107,9 +2156,9 @@ export COGITORIUM_URL=http://127.0.0.1:8688
 export COGITORIUM_TOKEN=…
 ```
 
-`--server` and `--token` override them per command. On a loopback address a
-local call is already the admin, so on your own machine the token is optional —
-change the listen address and it stops being.
+`--server` and `--token` override them per command. The token is required on
+every address, your own machine included; `cogitorium login` is one way to mint
+one, and the admin token from the first-start log is another.
 
 **Look around.**
 
