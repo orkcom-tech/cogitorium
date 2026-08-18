@@ -2034,6 +2034,14 @@ th {
   align-items: center;
 }
 
+/* The one action on this panel, so it looks like one. An <a> is used where the
+   destination is a page rather than a command, and it has to sit level with the
+   button it replaces. */
+.update-go {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 .theme-head {
   padding: var(--s3) var(--s3) var(--s2);
   border-bottom: 1px solid var(--border);

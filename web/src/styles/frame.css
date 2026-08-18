@@ -219,13 +219,29 @@
   padding: 0;
   top: 3px;
   right: 3px;
-  background: var(--accent);
+  background: var(--update);
 }
 
-/* The button itself carries the accent while there is something unread, so the
-   dot is a second reading of the same fact rather than the only one — a 9px
-   mark is not something to rely on alone. */
+/* The button itself goes orange while there is something unread, so the dot is
+   a second reading of the same fact rather than the only one — a 9px mark is
+   not something to rely on alone.
+   
+   The whole point is being noticed from across the room: this control sits at
+   the bottom of a rail of fourteen identical grey glyphs, and an operator who
+   is not looking for it has to see it anyway. It stops glowing once they have
+   read it. */
 .rail-btn.has-news {
+  color: var(--update);
+  background: color-mix(in srgb, var(--update) 16%, transparent);
+}
+
+.rail-btn.has-news:hover {
+  background: color-mix(in srgb, var(--update) 26%, transparent);
+}
+
+/* A question nobody has answered is not news. It is marked, and quietly: the
+   product asks once and then waits, rather than nagging in orange forever. */
+.rail-btn.has-question {
   color: var(--accent);
 }
 

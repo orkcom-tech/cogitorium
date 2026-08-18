@@ -133,11 +133,20 @@ document arriving over the network. Startup never waits on it, an air-gapped
 install fails one attempt quietly, and a dismissal is remembered against the
 version so a notice cannot come back for something already read.
 
+**One button on the rail, beside the account, and it goes orange when a version
+is waiting** — orange rather than the accent, because the accent is whatever the
+operator chose and a notice painted in it is invisible on exactly the install
+whose owner picked orange. It is always present, so the settings are reachable
+on a day with nothing to report, and it stops glowing once read.
+
 **Nothing is ever replaced.** Cogitorium does not overwrite its own binary. It
 works out who owns the file — Homebrew, Scoop, winget, a system package, a
-container, a cluster — and prints that owner's command, or none at all where
-none would be honest. A self-updater fighting a package manager produces a
-machine nobody can reason about.
+container, a cluster — and **install the update** does the most it honestly can
+for that owner: copies the exact command to the clipboard, opens the release
+page, or offers nothing and says why. It does not RUN it. A self-updater
+fighting a package manager produces a machine nobody can reason about, and a
+button making this server execute a shell command because a browser asked would
+be remote code execution with a friendly label.
 
 **Three states are kept apart** where one would have been easier: *this is the
 newest release*, *could not ask* (with the reason), and *nothing here can say* —

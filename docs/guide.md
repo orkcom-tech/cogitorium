@@ -1772,12 +1772,19 @@ every morning.
 survives a restart. A product that asked the same question after every reboot
 would be a product that did not listen.
 
-**What you are told, and when.** Nothing until there is something to say, and
-then a dot on the rail beside the appearance bead — not a modal, not a banner
-across your work. Opening it shows the release notes, because *"1.6.0 is out"*
-is not a reason to update and *"1.6.0 fixes the thing costing you an hour a
-week"* is. Both halves are reported: Cogitorium and, if `contextd` is on the
-machine, Contextverse.
+**Where it lives.** One button on the rail, beside the appearance bead and the
+account — the corner where the product's own state already is. It is always
+there, so the settings are reachable on a day when there is nothing to report,
+and **it turns orange, with a dot, the moment a newer version exists.** Orange
+rather than your accent colour, deliberately: the accent is whatever you chose,
+so a notice painted in it is invisible on exactly the install whose owner picked
+orange. It stops glowing once you have read it.
+
+**What you are told, and when.** Nothing until there is something to say — not a
+modal, not a banner across your work. Opening it shows the release notes,
+because *"1.6.0 is out"* is not a reason to update and *"1.6.0 fixes the thing
+costing you an hour a week"* is. Both halves are reported: Cogitorium and, if
+`contextd` is on the machine, Contextverse.
 
 Three states are kept apart on purpose, because collapsing them would be the
 panel claiming confidence it does not have:
@@ -1788,15 +1795,23 @@ panel claiming confidence it does not have:
   which usually means it was built from source. It is shown the newest tag and
   told plainly that nothing can tell it whether that is newer.
 
-**Taking it is never done for you.** Cogitorium does not replace its own binary,
-ever. A self-updater that fights a package manager produces a machine nobody can
-reason about — `brew list` saying one version, the file being another, and the
-next `brew upgrade` quietly reverting it. So the panel works out who owns the
-binary and prints *that* owner's command: `brew upgrade cogitorium` under
-Homebrew, `scoop update cogitorium` under Scoop, the winget line under winget.
-In a container or on Kubernetes it prints **no command at all** and says why —
-the image tag is the version there, and anything typed inside a pod is gone at
-the next roll.
+**Installing it: one button, and it does the most it honestly can.** The panel
+works out who owns the binary and offers the action that fits. Under Homebrew,
+Scoop or winget, **install the update** puts that owner's exact command on your
+clipboard — `brew upgrade cogitorium` and so on — so you paste it and press
+return. Where the binary was placed by hand, it opens the release page for your
+platform. In a container or on Kubernetes it offers nothing and says why: the
+image tag is the version there, and anything typed inside a pod is gone at the
+next roll.
+
+**What it will not do is run it for you**, and the reason is the same one the
+rest of this product is built on. Cogitorium never replaces its own binary: a
+self-updater that fights a package manager produces a machine nobody can reason
+about — `brew list` saying one version, the file being another, and the next
+`brew upgrade` quietly reverting it. And a button that made this server execute
+a shell command because a browser asked would be remote code execution with a
+friendly label, in a product whose whole argument is that nothing runs until
+somebody has read it.
 
 **Told once is told.** Dismissing a notice remembers the version it was about,
 on your device. It comes back when there is something new to say and never for

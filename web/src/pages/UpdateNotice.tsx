@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { api, type UpdateProduct, type UpdateReport, type User } from '../api'
+import { api, type UpdateInstall, type UpdateProduct, type UpdateReport, type User } from '../api'
 
 /**
  * Knowing there is a new version, without being nagged about it.
@@ -105,9 +105,10 @@ export default function UpdateNotice({ me }: { me: User }) {
   // it to a member would be asking permission from a person the server will
   // refuse.
   const asking = report.mode === 'ask' && admin
-  // Nothing to say and nothing to ask: no button at all. An always-present
-  // control for a thing that is fine is chrome.
-  if (!unread && !asking && !open) return null
+  // The button is always here, beside the account, because it is how somebody
+  // reaches the update settings on a day when there is nothing to report. What
+  // changes is its COLOUR, not its presence: a control that appears only when
+  // there is news is a control nobody can find when they go looking for it.
 
   const dismiss = () => {
     const next = [...dismissed, available].slice(-20)
@@ -124,10 +125,16 @@ export default function UpdateNotice({ me }: { me: User }) {
   return (
     <>
       <button
-        className={`rail-btn ${unread ? 'has-news' : ''}`}
+        className={`rail-btn ${unread ? 'has-news' : ''} ${asking && !unread ? 'has-question' : ''}`}
         data-own
         onClick={() => setOpen((v) => !v)}
-        title={unread ? 'A newer version is available' : 'Updates'}
+        title={
+          unread
+            ? `A newer version is available — ${available.replace(/@/g, ' ')}`
+            : asking
+              ? 'Updates — this install has not been asked yet'
+              : 'Updates'
+        }
       >
         <svg viewBox="0 0 24 24" aria-hidden>
           <path d="M12 20.2v-13M7.8 11.4 12 7.2l4.2 4.2" />
@@ -194,20 +201,13 @@ export default function UpdateNotice({ me }: { me: User }) {
               ))}
 
               {available !== '' && (
-                <div className="card update-take">
-                  <strong>Taking it</strong>
-                  <p className="hint">{report.install.note}</p>
-                  {report.install.command && (
-                    <pre className="update-cmd">
-                      <code>{report.install.command}</code>
-                    </pre>
-                  )}
-                  <p className="hint">
-                    Cogitorium never replaces its own binary. A self-updater that fights a package manager
-                    produces a machine nobody can reason about — <code>brew list</code> saying one version, the
-                    file being another, and the next upgrade quietly reverting it.
-                  </p>
-                </div>
+                <Install
+                  install={report.install}
+                  // The page to download from, when there is no command to run.
+                  // Cogitorium's own release, not whichever product happens to
+                  // be first in the list.
+                  release={report.products.find((p) => p.newer && p.latest)?.latest?.url ?? ''}
+                />
               )}
 
               {error && <p className="error">{error}</p>}
@@ -299,6 +299,90 @@ function Half({ p }: { p: UpdateProduct }) {
           )}
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * Taking the update.
+ *
+ * THE BUTTON DOES THE MOST IT HONESTLY CAN, WHICH IS NOT "RUN IT". Cogitorium
+ * never replaces its own binary and never shells out to a package manager on
+ * an HTTP request — that would be a browser making this server execute
+ * `brew upgrade` as its own user, which is remote code execution wearing a
+ * friendly label, in a product whose whole argument is that nothing runs
+ * without somebody reading it first.
+ *
+ * What it does instead is remove every step between reading the notes and
+ * being updated except the one that has to stay: pressing it puts the exact
+ * command on the clipboard, so the operator pastes and presses return. Where
+ * there is no honest command — a container, a cluster — it opens the release
+ * page rather than offering a button that would lie.
+ */
+function Install({ install, release }: { install: UpdateInstall; release: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const copy = () => {
+    if (!install.command) return
+    navigator.clipboard
+      .writeText(install.command)
+      .then(() => setCopied(true))
+      // A browser that refuses the clipboard — no permission, an insecure
+      // origin — leaves the command on screen to be selected by hand, which is
+      // where it already is. Nothing is lost and nothing needs saying.
+      .catch(() => setCopied(false))
+  }
+
+  // A container and a cluster are the only cases with no action at all: the
+  // image tag is the version there, and anything this panel offered would be
+  // undone by the next roll.
+  const owned = install.kind === 'container' || install.kind === 'kubernetes'
+
+  return (
+    <div className="card update-take">
+      <strong>Installing it</strong>
+      <p className="hint">{install.note}</p>
+
+      {install.command && (
+        <pre className="update-cmd">
+          <code>{install.command}</code>
+        </pre>
+      )}
+
+      {install.command ? (
+        <div className="row">
+          <button className="primary update-go" onClick={copy}>
+            {copied ? 'copied — paste it in a terminal' : 'install the update'}
+          </button>
+          <span className="hint">
+            {copied ? 'Run it, then restart Cogitorium.' : 'Puts the command on your clipboard.'}
+          </span>
+        </div>
+      ) : owned ? (
+        <p className="hint">
+          There is no command this panel could offer that would still be true after your next deploy, so it does
+          not invent one.
+        </p>
+      ) : (
+        release && (
+          <div className="row">
+            <a className="button primary update-go" href={release} target="_blank" rel="noreferrer">
+              install the update
+            </a>
+            <span className="hint">
+              Opens the release page. Download the build for your platform and swap it while the server is
+              stopped.
+            </span>
+          </div>
+        )
+      )}
+
+      <p className="hint">
+        Cogitorium does not replace its own binary and does not run this for you. A self-updater that fights a
+        package manager produces a machine nobody can reason about — <code>brew list</code> saying one version,
+        the file being another, and the next upgrade quietly reverting it. And a button that made this server run
+        a shell command because a browser asked would be the one thing this product refuses everywhere else.
+      </p>
     </div>
   )
 }
