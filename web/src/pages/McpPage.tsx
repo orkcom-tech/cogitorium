@@ -203,6 +203,21 @@ export default function McpPage({ me }: { me: User }) {
               })
             }
             onStatus={(status) => run(api.mcp.setStatus(s.id, status))}
+            onSignIn={() =>
+              api.mcp
+                .signIn(s.id)
+                .then((r) => {
+                  // A new tab rather than a redirect: the operator is in the
+                  // middle of configuring this and should come back to it.
+                  window.open(r.authorize_url, '_blank', 'noopener')
+                  setNotice(
+                    `Sent you to ${r.issuer} to sign in${
+                      r.scopes.length ? ` for ${r.scopes.join(', ')}` : ''
+                    }. Come back when it says so — signing in is not approving, and this server is still pending.`,
+                  )
+                })
+                .catch((e: Error) => setError(e.message))
+            }
             onEdit={(body) =>
               run(api.mcp.edit(s.id, body), () =>
                 setNotice(
@@ -231,6 +246,7 @@ function ServerCard({
   onOpen,
   onProbe,
   onStatus,
+  onSignIn,
   onEdit,
   onTool,
   onDelete,
@@ -243,6 +259,7 @@ function ServerCard({
   onOpen: () => void
   onProbe: () => void
   onStatus: (s: MCPServer['status']) => void
+  onSignIn: () => void
   onEdit: (body: ServerFields) => void
   onTool: (toolId: number, approved: boolean) => void
   onDelete: () => void
@@ -389,6 +406,18 @@ function ServerCard({
               <button disabled={busy} onClick={() => setEditing((v) => !v)}>
                 {editing ? 'cancel edit' : 'edit what it runs'}
               </button>
+              {/* Only for a hosted server: a child process here takes its
+                  credentials from named values, and there is nothing to sign
+                  in to. */}
+              {server.transport !== 'stdio' && (
+                <button
+                  disabled={busy}
+                  onClick={onSignIn}
+                  title="Sign this install in to the server, instead of pasting a token"
+                >
+                  sign in
+                </button>
+              )}
               {server.status !== 'approved' && (
                 <button className="primary" disabled={busy} onClick={() => onStatus('approved')}>
                   approve the server

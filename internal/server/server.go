@@ -30,6 +30,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/inlet"
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/mcpcatalog"
+	"github.com/orkcom-tech/cogitorium/internal/mcpoauth"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/metrics"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
@@ -61,6 +62,11 @@ type Server struct {
 	// Nil unless the operator switched it on, because it is the one thing this
 	// product runs that it never saw the source of.
 	mcp *mcpstore.Store
+	// mcpOAuth holds the grants for remote MCP servers signed in to. Never nil;
+	// whether it can hold anything is decided by COGITORIUM_SECRET_KEY, because
+	// a grant is the one live credential this schema stores.
+	mcpOAuth *mcpoauth.Store
+
 	// mcpLibrary reads the published MCP registry. Never nil; whether it may
 	// actually fetch is decided per request by the update-check consent.
 	mcpLibrary *mcpcatalog.Registry
@@ -167,9 +173,14 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		gearNet:    gate,
 		mcp:        mcpStore,
 		mcpLibrary: mcpcatalog.NewRegistry(),
-		library:    lib,
-		identity:   identity.NewStore(db),
-		inlets:     inlet.NewStore(db),
+		// The key is rebuilt from the config rather than reached for through
+		// the resolver: the resolver's job is resolving names, and reaching
+		// into it for its key would make one type answer two questions.
+		// A nil key is an ordinary install — see mcpoauth.Store.Available.
+		mcpOAuth: mcpoauth.NewStore(db, oauthKey(cfg)),
+		library:  lib,
+		identity: identity.NewStore(db),
+		inlets:   inlet.NewStore(db),
 		engine: engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, queue,
 			engine.Budgets{Run: cfg.BudgetRunTokens}, cfg.DataDir),
 		queue:         queue,
@@ -215,6 +226,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		s.engine.SetMCP(mcpStore, env)
 	}
 	s.engine.SetMetrics(s.metrics)
+	s.engine.SetMCPOAuth(s.mcpOAuth)
 	// The sweeper that closes idle MCP connections. On the pool's lifetime,
 	// because a pooled connection can be a child process and one that outlived
 	// the server would be a process nobody owns.
@@ -361,6 +373,12 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// write is admin-only, and there is deliberately no agent-reachable path to
 	// any of them.
 	s.route(mux, "GET /api/v1/mcp-catalog", s.handleMCPCatalog)
+	s.route(mux, "POST /api/v1/mcp-servers/{id}/oauth", s.handleStartMCPOAuth)
+	s.route(mux, "DELETE /api/v1/mcp-servers/{id}/oauth", s.handleForgetMCPOAuth)
+	// Unauthenticated of necessity: it arrives on a browser redirect from
+	// somebody else's authorization server, and the `state` is what stands in
+	// for a credential. See mcpoauth_handlers.go.
+	s.route(mux, "GET /api/v1/mcp-oauth/callback", s.handleMCPOAuthCallback)
 	s.route(mux, "GET /api/v1/mcp-servers", s.handleListMCPServers)
 	s.routeIn(mux, "POST /api/v1/mcp-servers", s.handleInstallMCPServer, CreateMCPServerBody{})
 	s.routeIn(mux, "PATCH /api/v1/mcp-servers/{id}", s.handleUpdateMCPServer, UpdateMCPServerBody{})
@@ -714,4 +732,23 @@ func (s *Server) templateFor(mux *http.ServeMux, r *http.Request) string {
 		return path
 	}
 	return pattern
+}
+
+// oauthKey builds the AEAD key an OAuth grant is sealed with, or nil.
+//
+// Nil is an ordinary install: one that keeps nothing sensitive in its own
+// database. What it cannot then do is hold a grant, which mcpoauth refuses
+// rather than degrading — see ErrNoSecretKey.
+func oauthKey(cfg config.Config) *secrets.Key {
+	if cfg.SecretKey == "" {
+		return nil
+	}
+	k, err := secrets.NewKey(cfg.SecretKey)
+	if err != nil {
+		// Cannot happen: the same material was already accepted at startup,
+		// where a short key is a startup error rather than a nil here.
+		slog.Error("the secret key could not be used for MCP grants", "err", err)
+		return nil
+	}
+	return k
 }

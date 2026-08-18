@@ -834,6 +834,14 @@ export const api = {
         body: JSON.stringify({ server_id: serverId, agent_id: agentId }),
       }),
     unbind: (bindingId: number) => req<void>(`/api/v1/mcp-bindings/${bindingId}`, { method: 'DELETE' }),
+    // Signs this install in to a hosted server, instead of pasting a token.
+    // Answers with where to send the browser; the callback lands back here.
+    signIn: (id: number) =>
+      req<{ authorize_url: string; issuer: string; scopes: string[]; resource: string }>(
+        `/api/v1/mcp-servers/${id}/oauth`,
+        { method: 'POST' },
+      ),
+    signOut: (id: number) => req<void>(`/api/v1/mcp-servers/${id}/oauth`, { method: 'DELETE' }),
   },
 
   updates: {

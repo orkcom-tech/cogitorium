@@ -610,6 +610,12 @@ paths:
       responses:
         default:
           description: see the reference
+  "/api/v1/mcp-oauth/callback":
+    get:
+      summary: "Read mcp-oauth/callback"
+      responses:
+        default:
+          description: see the reference
   "/api/v1/mcp-servers":
     get:
       summary: "Read mcp-servers"
@@ -700,6 +706,24 @@ paths:
                   type: string
                 "url":
                   type: string
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/mcp-servers/{id}/oauth":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete mcp-servers/{id}/oauth"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create mcp-servers/{id}/oauth"
       responses:
         default:
           description: see the reference

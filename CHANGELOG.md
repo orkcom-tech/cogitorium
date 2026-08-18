@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+### Signing in to a hosted MCP server, rather than pasting a token
+
+Static headers by name covered a token somebody could copy. Most hosted servers
+want OAuth, so most of the registry installed and could not authenticate.
+
+The whole flow: ask the server, read the `WWW-Authenticate` refusal, fetch the
+protected resource metadata, discover the authorization server through **both**
+RFC 8414 and OpenID Connect (a client must support each), register with RFC 7591
+if this install has never met it, and send the operator's browser there.
+
+**Four checks, none optional.** PKCE with S256 — OAuth 2.1 removed `plain`, and
+offering it would let a server choose the weaker one. The `resource` parameter
+on the authorization request *and* the token request *and* every refresh, naming
+what the token is for; without it a token minted for one server is replayable
+against another. The callback's `iss` validated against the issuer recorded
+**before** the redirect and taken from the validated metadata document — with no
+normalisation of any kind, because case folding, a default port or a trailing
+slash would each let a lookalike compare equal. And a `state` generated with a
+CSPRNG and consumed exactly once, which is the only thing tying a callback to
+the request that began it.
+
+**This is the first live credential this schema holds**, and it says so: every
+other one is a NAME resolved at the moment of use, which works because the
+operator has the value. A token minted by somebody else, arriving through a
+redirect and refreshed by this server on its own, has no name to resolve. So
+access tokens, refresh tokens, client secrets and the PKCE verifier of a flow in
+progress are all sealed with the same AEAD the secrets table uses — and **an
+install with no `COGITORIUM_SECRET_KEY` is refused the flow** rather than
+handed a worse version of it.
+
+A step-up asks for the **union** of what is held and what the challenge demands:
+a server naming only the scopes one operation needs would otherwise have the
+client re-authorize into a token that lost everything else. A refresh that omits
+a new refresh token keeps the old one, because a rotating server issues one and
+a non-rotating server omits the field — and overwriting with empty would throw
+the grant away.
+
 ### Documents and prompts, which were offered to nothing
 
 Only `tools/list` and `tools/call` were implemented, so a server holding a wiki,

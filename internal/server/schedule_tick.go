@@ -74,6 +74,10 @@ func (s *Server) tick(ctx context.Context) {
 		s.pool.Wake()
 	}
 	s.sampleQueue(ctx)
+	// Abandoned MCP sign-ins, on the clock that already runs. A pending row
+	// holds a PKCE verifier, so one that lived forever would be a growing table
+	// of credentials for sign-ins nobody finished.
+	s.mcpOAuth.SweepPending(ctx)
 }
 
 // sampleQueue publishes how much work is waiting, on the clock that already

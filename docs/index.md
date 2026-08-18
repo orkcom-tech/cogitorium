@@ -773,6 +773,29 @@ credential is ever in the row. **The fingerprint covers the URL**: a hostname
 that changed after approval looks identical to one that did not, which is
 exactly why it is hashed. Cleartext to anywhere but this machine is refused.
 
+**OAuth, for hosted servers that want it.** `POST /api/v1/mcp-servers/{id}/oauth`
+starts the flow and answers with where to send the browser;
+`GET /api/v1/mcp-oauth/callback` completes it; `DELETE` on the first
+disconnects. Four checks make it safe and none is optional: **PKCE (S256)** on
+every flow, the **`resource` parameter** (RFC 8707) on both the authorization
+and token requests naming the MCP server the token is *for*, the callback's
+**`iss` validated** against the issuer recorded before the redirect (RFC 9207,
+by simple string comparison — no case folding, no trailing-slash normalisation),
+and a **`state`** generated with a CSPRNG and consumed exactly once.
+
+The callback is the one unauthenticated route in the API, of necessity: it
+arrives on a redirect from somebody else's authorization server, and the
+`state` is what stands in for a credential. Client registration is RFC 7591
+dynamic registration — deprecated by the spec in favour of Client ID Metadata
+Documents, and implemented because it is what deployed servers support.
+
+**Tokens are sealed** with the same AEAD as the secrets table, with the key id
+beside them so a rotated key refuses honestly rather than decrypting to
+nonsense. **An install with no `COGITORIUM_SECRET_KEY` is refused the flow**
+rather than storing a refresh token in the clear. A step-up asks for the
+**union** of what is held and what a 403 demanded, because a challenge names
+only what the failed operation needed and asking for that alone drops the rest.
+
 **The library** is the published registry at `registry.modelcontextprotocol.io`,
 read live. `GET /api/v1/mcp-catalog` returns it, admin-only like everything else
 here, because a list whose purpose is to be installed FROM is a list that spawns

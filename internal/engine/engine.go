@@ -21,6 +21,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
+	"github.com/orkcom-tech/cogitorium/internal/mcpoauth"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/metrics"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
@@ -85,6 +86,10 @@ type Event struct {
 }
 
 type Engine struct {
+	// mcpOAuth holds the grants for remote MCP servers signed in to. Nil is
+	// most installs.
+	mcpOAuth *mcpoauth.Store
+
 	// mcpPool keeps an MCP connection between calls, so a turn calling four
 	// tools pays one handshake rather than four. Always present; empty until
 	// something is dialled.

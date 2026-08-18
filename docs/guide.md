@@ -2031,6 +2031,24 @@ approving what you have just changed is approving something you have not seen.
 Two of the library's own entries need it: the filesystem and git servers ship a
 placeholder path that you point at the directory you actually mean.
 
+**Signing in, instead of pasting a token.** A hosted server usually wants OAuth
+rather than a token you can copy. Press **sign in** on its card and this install
+walks the whole flow: it asks the server, reads the refusal to find the
+authorization server, registers itself if it has never met one, and sends you
+there in a new tab. What comes back is a token this server holds — the one live
+credential in the whole product, sealed with the same key the secrets table
+uses.
+
+That is also why an install with **no `COGITORIUM_SECRET_KEY` is refused** the
+flow rather than given a worse version of it: holding somebody's refresh token
+in plaintext is worse than not supporting the feature. Name a header instead, or
+set a key and restart.
+
+It needs `public_url` unless you are on a laptop, because the authorization
+server sends the browser back to an address it has to be able to reach.
+**Signing in is not approving**: what lands is still a pending server that does
+nothing until an administrator reads what it calls.
+
 **A member sees less than an administrator.** They see that a server exists,
 what it is for and whether it is approved — which is why their agent has a tool.
 They do not see its command line or the names of the credentials it is handed:

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/mcpclient"
+	"github.com/orkcom-tech/cogitorium/internal/mcpoauth"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/metrics"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
@@ -155,6 +156,13 @@ func (e *Engine) mcpSpec(ctx context.Context, wsID int64, srv mcpstore.Server) (
 // operator gets a 401 that says nothing about the missing variable.
 func (e *Engine) mcpHeaders(ctx context.Context, wsID int64, srv mcpstore.Server) (map[string]string, error) {
 	if len(srv.HeaderNames) == 0 || e.mcpSecrets == nil {
+		// Still gives the sign-in a chance: a server reached purely through
+		// OAuth names no header at all.
+		if e.mcpOAuth != nil {
+			if token, err := e.mcpOAuth.Bearer(ctx, srv.ID); err == nil {
+				return map[string]string{"Authorization": "Bearer " + token}, nil
+			}
+		}
 		return map[string]string{}, nil
 	}
 	wanted := make([]string, 0, len(srv.HeaderNames))
@@ -170,6 +178,25 @@ func (e *Engine) mcpHeaders(ctx context.Context, wsID int64, srv mcpstore.Server
 		byName[v.Name] = v.Value
 	}
 	headers := map[string]string{}
+	// A SIGN-IN WINS over a header by name, and is applied first so a
+	// configured Authorization header can still override it deliberately. Most
+	// servers have one or the other; a server that has both is one somebody set
+	// up by hand and then signed in to, and their explicit header is the later
+	// decision.
+	if e.mcpOAuth != nil {
+		switch token, err := e.mcpOAuth.Bearer(ctx, srv.ID); {
+		case err == nil:
+			headers["Authorization"] = "Bearer " + token
+		case errors.Is(err, mcpoauth.ErrNoGrant):
+			// Ordinary: this server was never signed in to.
+		default:
+			// A grant that exists and cannot be used is worth failing on rather
+			// than falling through to an unauthenticated call that will be
+			// refused with less explanation.
+			return nil, fmt.Errorf("the MCP server %q is signed in but its token could not be used: %w",
+				srv.Name, err)
+		}
+	}
 	for header, named := range srv.HeaderNames {
 		if v, ok := byName[named]; ok && v != "" {
 			headers[header] = v
@@ -208,6 +235,10 @@ func (e *Engine) mcpEnv(ctx context.Context, wsID int64, srv mcpstore.Server) (m
 // SetMCP switches external MCP servers on. Called by the server only when the
 // operator configured it; nil is the default and means the whole path is
 // unreachable rather than merely unused.
+// SetMCPOAuth gives the engine the grants for remote MCP servers. Nil means no
+// server was ever signed in to, which is most installs.
+func (e *Engine) SetMCPOAuth(s *mcpoauth.Store) { e.mcpOAuth = s }
+
 // SetMetrics gives the engine somewhere to publish. Called by the server; nil
 // until then, so nothing here depends on it existing and every test and any
 // embedding gets an engine that measures nothing rather than one that panics.
