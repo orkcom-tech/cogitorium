@@ -84,9 +84,9 @@ func TestEveryImageReferenceResolves(t *testing.T) {
 // takes under a minute; the failure it replaces was thirteen screenshots of
 // deleted software surviving three releases.
 //
-// Only the numbered assets are checked. The logo, the icon and the exported
-// bundle beside them are not screenshots.
-var numbered = regexp.MustCompile(`^\d\d-.*\.png$`)
+// What is checked is the shooter's own stamp rather than the pictures — see the
+// body of the test for why comparing the PNGs is wrong in exactly the case that
+// matters most.
 
 func TestNoScreenshotPredatesTheInterface(t *testing.T) {
 	r := root(t)
@@ -102,32 +102,37 @@ func TestNoScreenshotPredatesTheInterface(t *testing.T) {
 		t.Skip("web/src has no commit yet")
 	}
 
-	entries, err := os.ReadDir(filepath.Join(r, "docs", "assets"))
-	if err != nil {
-		t.Fatalf("reading docs/assets: %v", err)
+	// WHAT IS COMPARED, and why it is not the pictures themselves.
+	//
+	// The first version of this test compared each PNG's last commit against
+	// web/src's. That is wrong in the one case that matters most: a re-shoot
+	// that produces a byte-identical picture — because that screen genuinely
+	// did not change — leaves git with nothing to commit, so the file's commit
+	// time stays where it was and the guard calls it stale. It named sixteen
+	// pictures that had been re-shot minutes earlier and were correct, which is
+	// how a guard teaches people to ignore it.
+	//
+	// An unchanged screenshot after a re-shoot is the PROOF that the screen did
+	// not change, not evidence against it. What actually needs to be newer than
+	// the interface is the ACT of shooting, so the shooter records when it ran
+	// and this compares that.
+	stamp := filepath.Join("docs", "assets", ".shot-at")
+	if _, err := os.Stat(filepath.Join(r, stamp)); err != nil {
+		t.Fatalf("docs/assets/.shot-at is missing — the screenshots have no record of when they were taken.\n" +
+			"Re-shoot them against a seeded install:\n" +
+			"  cd web && node scripts/shoot-docs.mjs http://127.0.0.1:8894")
 	}
-
-	var stale []string
-	for _, e := range entries {
-		if e.IsDir() || !numbered.MatchString(e.Name()) {
-			continue
-		}
-		shot := lastCommit(t, r, filepath.Join("docs", "assets", e.Name()))
-		// Never committed yet: it is being added in this change, which is the
-		// state a re-shoot leaves behind and the opposite of stale.
-		if shot.IsZero() {
-			continue
-		}
-		if shot.Before(ui) {
-			stale = append(stale, e.Name())
-		}
+	shot := lastCommit(t, r, stamp)
+	if shot.IsZero() {
+		// Being added in this change, which is what a re-shoot leaves behind.
+		return
 	}
-
-	if len(stale) > 0 {
-		t.Errorf("%d screenshot(s) were last committed before web/src was, so they picture an interface that has since changed: %s\n"+
+	if shot.Before(ui) {
+		t.Errorf("the screenshots were last taken on %s and web/src changed on %s, "+
+			"so they picture an interface that has since moved.\n"+
 			"Re-shoot them against a seeded install:\n"+
 			"  cd web && node scripts/shoot-docs.mjs http://127.0.0.1:8894",
-			len(stale), strings.Join(stale, ", "))
+			shot.Format(time.RFC3339), ui.Format(time.RFC3339))
 	}
 }
 
