@@ -17,6 +17,14 @@ ICONS="$PREFIX/share/icons/hicolor/512x512/apps"
 
 mkdir -p "$BIN" "$APPS" "$ICONS"
 install -m 0755 cogitorium-desktop "$BIN/cogitorium-desktop"
+# Contextverse, into the same directory. The app looks beside its own binary
+# when PATH has no contextd, so this is what keeps context working after the
+# files move out of the unpacked folder. Not overwritten: a contextd the person
+# installed themselves is theirs, and this one is only a copy of the same
+# release.
+if [ -f contextd ] && [ ! -e "$BIN/contextd" ]; then
+    install -m 0755 contextd "$BIN/contextd"
+fi
 install -m 0644 cogitorium.desktop "$APPS/cogitorium.desktop"
 install -m 0644 cogitorium.png "$ICONS/cogitorium.png"
 

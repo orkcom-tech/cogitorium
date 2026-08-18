@@ -48,30 +48,22 @@ if getent passwd "$SVC_USER" >/dev/null 2>&1; then
 fi
 chmod 0750 "$DATA_DIR"
 
-# Cogitorium delegates context storage to Contextverse's contextd, which is a
-# separate program from a separate repository. It cannot be a hard dependency:
-# contextd ships from its own GitHub releases rather than from a distribution
-# repository, so declaring Depends would make this package refuse to install on
-# a machine with no way to satisfy it.
+# Contextverse is IN this package, at /usr/libexec/cogitorium/contextd, and the
+# systemd unit points the server at it. Nothing to fetch, nothing to tell the
+# operator to go and do.
 #
-# So the package installs, and this says plainly what is missing. The server
-# says the same thing at runtime — GET /api/v1/context/status — and the
-# interface shows it, so nobody has to remember this message.
-if command -v contextd >/dev/null 2>&1; then
-    exit 0
+# It used to be a `Recommends` plus a paragraph printed here saying where to
+# find contextd — which left the person who had just installed a product with
+# an errand, and a server whose memory silently did nothing until they ran it.
+# The reasoning for not using `Depends` still stands (contextd is not in any
+# distribution repository, so a hard dependency would make this package
+# refuse to install); carrying the binary is what that reasoning was missing.
+#
+# The context SPACE is created by the server on first start rather than here:
+# it runs as the cogitorium user with HOME on the data directory, and doing it
+# from a postinstall running as root would create the space with the wrong
+# owner. See EnsureSpace in internal/contextstore.
+if [ ! -x /usr/libexec/cogitorium/contextd ]; then
+    echo "cogitorium: /usr/libexec/cogitorium/contextd is missing from this package — context will report unavailable" >&2
 fi
-
-cat <<'MSG'
-
-  Cogitorium is installed, but contextd was not found on this machine.
-
-  Context and memory — an agent's own notes, shared workspace documents,
-  everything it is given to read — are stored and versioned by Contextverse.
-  Without contextd the server still starts and says so; memory does not work.
-
-    Debian/Ubuntu:  see https://github.com/orkcom-tech/contextverse/releases
-    Homebrew:       brew install orkcom-tech/tap/contextd
-    From source:    https://github.com/orkcom-tech/contextverse
-
-MSG
 exit 0

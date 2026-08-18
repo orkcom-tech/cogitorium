@@ -12,7 +12,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -49,7 +52,47 @@ func New(bin string) *Store {
 	if bin == "" {
 		bin = "contextd"
 	}
-	return &Store{bin: bin}
+	return &Store{bin: findContextd(bin)}
+}
+
+// findContextd resolves a BARE command name against PATH first and then against
+// the directory this binary is in. A name with a separator in it is a path the
+// operator wrote down, and is used exactly as given.
+//
+// The neighbour lookup is what makes the release archive work. It carries both
+// programs, and somebody who unpacks a tarball into ~/bin or /opt has two files
+// in one directory and no reason to think either needs installing further.
+// PATH alone would report "contextd not found" with the file sitting next to
+// the binary saying it — the exact errand this product is trying not to send
+// people on.
+//
+// PATH still wins, so a contextd the operator installed themselves is the one
+// that runs, and this only answers when the lookup would otherwise have failed.
+func findContextd(bin string) string {
+	if strings.ContainsRune(bin, filepath.Separator) {
+		return bin
+	}
+	if _, err := exec.LookPath(bin); err == nil {
+		return bin
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return bin
+	}
+	if resolved, err := filepath.EvalSymlinks(self); err == nil {
+		self = resolved
+	}
+	beside := filepath.Join(filepath.Dir(self), bin)
+	if runtime.GOOS == "windows" {
+		beside += ".exe"
+	}
+	if info, err := os.Stat(beside); err == nil && !info.IsDir() {
+		return beside
+	}
+	// Unfound, and returned unchanged: every surface reports "contextd is not
+	// available" from the failure to run it, which is the truth and names the
+	// thing the operator was looking for.
+	return bin
 }
 
 func validPath(path string) error {

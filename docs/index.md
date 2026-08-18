@@ -30,23 +30,29 @@ Every route installs the same binary — one Go program with the interface
 embedded. What differs is who fetches it, and whether the channel can bring
 Contextverse along.
 
-**Contextverse is a real dependency.** Context and memory are stored and
-versioned by its `contextd`. Without it the server starts, says so at
-`GET /api/v1/context/status`, and memory does nothing. Homebrew, Scoop and the
-container image bring it; the Linux packages recommend it and print the
-command; an archive brings nothing and says as much.
+**Contextverse comes with it.** Context and memory are stored and versioned by
+its `contextd`, and installing Cogitorium installs that too — by declaring it
+where a package manager can act on the declaration, and by carrying the binary
+where nothing can. Nothing to fetch, nothing to run afterwards.
+
+The server also creates the context SPACE on first start when there is none. A
+binary is not a space: before that, an install with contextd present still
+answered "no context space initialized" on every context screen.
+
+Source is the one route that brings nothing, because a checkout is not an
+install: `scripts/ci/install-contextd.sh` fetches the matching one.
 
 | Route | Command | Brings contextd |
 |---|---|---|
 | Homebrew | `brew install orkcom-tech/tap/cogitorium` | yes |
 | Scoop | `scoop bucket add contextverse https://github.com/orkcom-tech/scoop-bucket` then `scoop install cogitorium` | yes |
 | Docker | `docker compose up --build` | yes, in the image |
-| deb / rpm | from the [releases page](https://github.com/orkcom-tech/cogitorium/releases) | recommends it |
-| winget | `winget install OrkcomTech.Cogitorium` | declared, not resolved |
-| Desktop app | attached to each release | no — install contextd separately |
-| Archive | download and unpack | no |
+| deb / rpm | from the [releases page](https://github.com/orkcom-tech/cogitorium/releases) | yes, in the package |
+| winget | `winget install OrkcomTech.Cogitorium` | declared; winget records dependencies without installing them |
+| Desktop app | attached to each release | yes, beside the app |
+| Archive | download and unpack | yes, beside the binary |
 | Kubernetes | `helm install` from `deploy/helm/cogitorium`; the image is public on ghcr.io | yes, in the image |
-| Source | `make build`, or `make desktop` for the window | no |
+| Source | `make build`, or `make desktop` for the window | no — run `scripts/ci/install-contextd.sh` |
 
 **Start here if you have never run it:** the [Guide](guide/) is a walkthrough
 from an empty install to agents with tools, with every command and every error

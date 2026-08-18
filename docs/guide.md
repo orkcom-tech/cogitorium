@@ -1649,10 +1649,15 @@ The page says the same thing in place of the file list, with the two ways out:
 run `contextd init solo`, or point Cogitorium at the binary with `contextd_path`
 in config.yaml (or `COGITORIUM_CONTEXTD`).
 
-Homebrew, Scoop and the container image bring `contextd` along. The container
-initialises the space on first start, which fetches a template from GitHub — so
-a first `docker compose up` on a machine with no outbound network comes up with
-memory unavailable and says why in the log.
+Every install route brings `contextd` along — Homebrew, Scoop and winget declare
+it, and the container image, the Linux packages and the release archive carry
+it. In the archive it sits beside `cogitorium`, and the server looks there
+before PATH, so unpacking a tarball into one directory is a working install.
+
+The server also creates the space on first start when there is none, which
+fetches a template from GitHub. A machine with no outbound network therefore
+comes up with memory unavailable and says why in the log — a space that was not
+created rather than one half-created.
 
 Each workspace gets its own branch plus a shared one, and each agent its own
 under that, so one workspace's memory does not leak into another's. Putting a

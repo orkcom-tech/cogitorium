@@ -417,3 +417,51 @@ func TestEnsureSpaceDoesNothingWithoutContextd(t *testing.T) {
 		t.Fatalf("something was created without a contextd to create it: %v", err)
 	}
 }
+
+// TestContextdIsFoundBesideTheBinary is what makes the release archive work.
+//
+// It carries cogitorium and contextd side by side, and somebody who unpacks a
+// tarball into ~/bin or /opt has two files in one directory and no reason to
+// think either needs installing further. Looking only at PATH would fail with
+// "contextd not installed" while the file sat next to the one reporting it.
+func TestContextdIsFoundBesideTheBinary(t *testing.T) {
+	body, err := os.ReadFile(contextdBinary(t))
+	if err != nil {
+		t.Skipf("cannot read contextd to copy it: %v", err)
+	}
+
+	// findContextd resolves symlinks before looking, because on macOS the
+	// temporary directory a test binary lives in is reached through one.
+	self, err := os.Executable()
+	if err != nil {
+		t.Skipf("no executable path on this platform: %v", err)
+	}
+	if self, err = filepath.EvalSymlinks(self); err != nil {
+		t.Skipf("cannot resolve %s: %v", self, err)
+	}
+	neighbour := filepath.Join(filepath.Dir(self), "contextd")
+	if _, err := os.Stat(neighbour); err == nil {
+		t.Skip("something is already called contextd beside the test binary")
+	}
+	if err := os.WriteFile(neighbour, body, 0o755); err != nil {
+		t.Skipf("cannot write beside the test binary: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(neighbour) })
+
+	// PATH swept, so only the neighbour can answer.
+	t.Setenv("PATH", filepath.Join(t.TempDir(), "nothing-here"))
+	if got := findContextd("contextd"); got != neighbour {
+		t.Fatalf("findContextd() = %q, want the neighbour %q", got, neighbour)
+	}
+
+	// A contextd ON PATH still wins, so this never overrides one the operator
+	// installed themselves.
+	onPath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(onPath, "contextd"), body, 0o755); err != nil {
+		t.Fatalf("write a contextd on PATH: %v", err)
+	}
+	t.Setenv("PATH", onPath)
+	if got := findContextd("contextd"); got != "contextd" {
+		t.Fatalf("findContextd() = %q, want the bare name so PATH resolves it", got)
+	}
+}

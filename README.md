@@ -231,9 +231,10 @@ is mixed towards it, so the ground and the surfaces carry a little of it too.
 
 ## Install
 
-Every route installs the same binary. Context and memory are stored by
-[Contextverse](https://github.com/orkcom-tech/contextverse), so the channels
-that can bring it do.
+Every route installs the same binary, and every route brings
+[Contextverse](https://github.com/orkcom-tech/contextverse) with it — declared
+as a dependency where a package manager can act on it, carried in the artifact
+where nothing can. The context space is created on first start.
 
 **macOS and Linux — Homebrew** (brings `contextd` with it):
 
@@ -249,8 +250,10 @@ scoop bucket add contextverse https://github.com/orkcom-tech/scoop-bucket
 scoop install cogitorium
 ```
 
-**Anywhere — the binary**, from [releases](https://github.com/orkcom-tech/cogitorium/releases).
-Install `contextd` separately; Cogitorium refuses to store context without it.
+**Anywhere — the archive**, from [releases](https://github.com/orkcom-tech/cogitorium/releases).
+It carries `contextd` beside `cogitorium`; unpack both into the same directory
+and the server finds it there. Debian and RPM packages from the same page carry
+it too.
 
 Then open `http://127.0.0.1:8688`. The first run asks you to choose a password
 for the `admin` account; after that, on your own machine, it remembers you.

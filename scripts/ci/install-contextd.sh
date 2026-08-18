@@ -28,6 +28,9 @@ fi
 case "$(uname -s)" in
     Linux)  OS=linux ;;
     Darwin) OS=darwin ;;
+    # Git Bash and MSYS on a Windows runner, where uname reports the emulation
+    # layer rather than the system. The asset is still the Windows one.
+    MINGW*|MSYS*|CYGWIN*) OS=windows ;;
     *)      echo "unsupported operating system: $(uname -s)" >&2; exit 1 ;;
 esac
 case "$(uname -m)" in
@@ -37,6 +40,11 @@ case "$(uname -m)" in
 esac
 
 ASSET="contextd_${VERSION}_${OS}_${ARCH}.tar.gz"
+EXE=""
+if [ "$OS" = windows ]; then
+    ASSET="contextd_${VERSION}_${OS}_${ARCH}.zip"
+    EXE=".exe"
+fi
 BASE="https://github.com/orkcom-tech/contextverse/releases/download/v${VERSION}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -63,7 +71,11 @@ if [ "$WANT" != "$GOT" ]; then
     exit 1
 fi
 
-tar -xzf "$WORK/$ASSET" -C "$WORK"
+if [ "$OS" = windows ]; then
+    unzip -q -o -d "$WORK" "$WORK/$ASSET" "contextd${EXE}"
+else
+    tar -xzf "$WORK/$ASSET" -C "$WORK" contextd
+fi
 mkdir -p "$DEST"
-install -m 0755 "$WORK/contextd" "$DEST/contextd"
-echo "installed $("$DEST/contextd" version) to $DEST/contextd"
+install -m 0755 "$WORK/contextd${EXE}" "$DEST/contextd${EXE}"
+echo "installed $("$DEST/contextd${EXE}" version) to $DEST/contextd${EXE}"

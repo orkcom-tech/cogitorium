@@ -11,17 +11,45 @@ everything it is given to read — are stored and versioned by
 Without it the server starts, reports context as unavailable at
 `GET /api/v1/context/status`, and memory does nothing.
 
-Requirement 15 says Cogitorium installs together with Contextverse. Each
-channel expresses that as strongly as it can, and no channel pretends:
+Requirement 15 says Cogitorium installs together with Contextverse, and every
+channel now satisfies it rather than describing it. Two mechanisms: DECLARE it
+where a package manager will act on the declaration, and CARRY it where nothing
+will.
 
 | Channel | How Contextverse arrives |
 |---|---|
 | Homebrew | `depends_on "orkcom-tech/tap/contextd"` — brew installs it |
 | Scoop | `"depends": "contextverse/contextd"` — scoop installs it |
-| Docker | the image carries `contextd` and initialises its space on first start |
-| deb / rpm | `Recommends: contextd`, and the postinstall prints the command. It cannot be `Depends`: contextd ships from GitHub releases, not from a distribution repository, so a hard dependency would make the package refuse to install |
-| winget | declared under `Dependencies`, which winget records but does not resolve — the locale manifest says what to run |
-| Archive / source | nothing fetches it for you; the server says so, and so does the documentation |
+| Docker | the image carries `contextd`, built from the pinned tag with its version stamped in |
+| deb / rpm | the package carries it at `/usr/libexec/cogitorium/contextd`, and the systemd unit points the server there |
+| winget | declared under `Dependencies`, which winget records but does not resolve — see below |
+| Archive | carried beside `cogitorium`; the server looks next to its own binary before PATH |
+| Source | nothing fetches it — a checkout is not an install. `scripts/ci/install-contextd.sh` gets the matching one |
+
+**Why the package carries it rather than depending on it.** `Depends: contextd`
+would make the package refuse to install on a machine with no way to satisfy it,
+because contextd ships from GitHub releases rather than a distribution
+repository. That argument rules out a hard dependency; it does not rule out
+bringing the binary. It goes under `/usr/libexec` rather than `/usr/bin` because
+dpkg refuses to unpack a package over a file another package owns, and two
+packages both claiming `/usr/bin/contextd` would be mutually uninstallable.
+
+**Why winget is still the weak one.** winget records `PackageDependencies` and
+does not install them, and there is nothing the manifest can do about that. The
+Windows archive carries contextd, so `scoop` and the `.zip` both work; `winget
+install` leaves the person with a server whose context is unavailable until they
+install contextd themselves.
+
+**A binary is not a space.** contextd needs an initialised space before context
+works, and the server creates one on first start when there is none — see
+`EnsureSpace` in `internal/contextstore`. That used to be the container
+entrypoint's job alone, which is why every other channel ended at a dead Context
+screen even with the dependency satisfied.
+
+**Which version.** `internal/update`'s `MinContextd` is the single declaration.
+The Dockerfile pin, `scripts/ci/install-contextd.sh` and
+`scripts/ci/fetch-contextd.sh` all read or match it; nothing else states a
+version.
 
 ## Artifacts
 
@@ -57,10 +85,13 @@ does not get past Gatekeeper; it is there so an arm64 build is not reported as
 says which click gets past each one. A signature that is not one would be worse
 than the paragraph.
 
-Contextverse is not bundled into the desktop builds. That is the one channel
-where requirement 15 is unmet and says so rather than pretending: the app
-reports context as unavailable and the documentation points at Homebrew, Scoop
-or the Contextverse releases.
+Contextverse IS bundled into the desktop builds — inside `Contents/MacOS` on
+macOS, beside the binary in the Linux tarball and the Windows zip. Somebody who
+drags a `.app` into Applications has installed one thing and has nowhere to put
+a second binary, so the bundle carries it and the server finds it there.
+
+`build-macos-app.sh` refuses to assemble a bundle with no contextd next to the
+input binary rather than producing one that is silently missing half of itself.
 
 ## Taps and buckets
 
