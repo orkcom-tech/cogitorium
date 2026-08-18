@@ -758,21 +758,35 @@ read every provider key in it.
 | isolation | a container; no network unless granted | none — a host process with this server's uid |
 | its secrets | stand-ins, substituted at the gate | resolved into its environment at spawn |
 
-**The library** is a static list compiled into the binary — Jira, GitHub, a
-Postgres database, a git repository — so an operator adds one by choosing it
-rather than by knowing an npm package name, its arguments and its environment
-variables. `GET /api/v1/mcp-catalog` returns it, admin-only like everything else
-here, because a list whose purpose is to be installed FROM is a list that spawns
-subprocesses on this server.
+**Three transports**, and `mcp_servers` carries the half its transport needs:
 
-It is deliberately **not fetched at runtime**. A catalogue that could change
-under an install between the day it was reviewed and the day somebody installs
-from it is a different security story, and this product does not make outbound
-requests nobody agreed to. If one is ever added it belongs behind the same
-switch as the update check. Each entry states its install prerequisite — most
-are an `npx` or a `uvx` away — and the credentials it needs **by name**, never a
-value. Picking an entry fills in the install form and skips no gate: what lands
-is a pending server that does nothing.
+| `transport` | carries | what approving it grants |
+|---|---|---|
+| `stdio` | `command`, `args`, `cwd`, `env_names` | a process on this host, as this server's user, outside the sandbox |
+| `streamable-http` | `url`, `header_names` | nothing runs here; a credential and every argument leave, over https |
+| `sse` | `url`, `header_names` | the same, over the deprecated 2024-11-05 shape |
+
+A row wearing both halves is refused by a CHECK and by the store. `header_names`
+maps a header to a **named value** — `{"Authorization": "JIRA_TOKEN"}` — resolved
+at connect time through the same resolver a gear's env names go through, so no
+credential is ever in the row. **The fingerprint covers the URL**: a hostname
+that changed after approval looks identical to one that did not, which is
+exactly why it is hashed. Cleartext to anywhere but this machine is refused.
+
+**The library** is the published registry at `registry.modelcontextprotocol.io`,
+read live. `GET /api/v1/mcp-catalog` returns it, admin-only like everything else
+here, because a list whose purpose is to be installed FROM is a list that spawns
+subprocesses on this server and sends credentials to hosts it names.
+
+**It is gated on the update-check consent.** With `update_check: off` it answers
+409 and says so: reading the registry is an outbound request, and an install
+that does not phone home should not acquire a catalogue that does. Adding by
+hand is untouched. Where a server publishes both a package and a hosted
+endpoint the **hosted one is offered**, because it runs no code here. An entry
+this install could not connect to — an unrunnable package registry, a cleartext
+URL — produces no entry at all rather than a button that always fails. Each
+states its prerequisite and the credentials it needs **by name**, never a value;
+picking one fills in the form and skips no gate.
 
 **`GET /api/v1/mcp-servers` is redacted for anybody but an administrator.** The
 row carries a full command line and the NAMES of every credential the server is

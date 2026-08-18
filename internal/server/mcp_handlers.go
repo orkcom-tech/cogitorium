@@ -9,6 +9,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/mcpcatalog"
 	"github.com/orkcom-tech/cogitorium/internal/mcpclient"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
+	"github.com/orkcom-tech/cogitorium/internal/update"
 )
 
 // The operator's side of external MCP servers.
@@ -87,11 +88,13 @@ func redactServer(srv mcpstore.Server) mcpstore.Server {
 // Admin-only, like everything else about MCP, and for the same reason the write
 // routes are: this list's whole purpose is to be installed FROM, and a
 // catalogue anybody can install from is a catalogue that spawns subprocesses on
-// this server.
+// this server and sends this install's credentials to hosts it names.
 //
-// It is a static list compiled into the binary. Nothing is fetched to render
-// it, so it works offline and cannot change under an install between the day it
-// was reviewed and the day somebody installs from it.
+// GATED ON THE UPDATE-CHECK CONSENT, which is the answer to the objection that
+// stopped this being built the first time. An install that has not agreed to
+// make outbound requests does not acquire a catalogue that does — it is told
+// there is no library and why, and `add by hand` is untouched because that
+// never left the machine.
 func (s *Server) handleMCPCatalog(w http.ResponseWriter, r *http.Request) {
 	if s.mcpOff(w) {
 		return
@@ -99,8 +102,21 @@ func (s *Server) handleMCPCatalog(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requireAdmin(w, r); !ok {
 		return
 	}
+	if s.updates.Mode() == update.ModeOff {
+		writeError(w, http.StatusConflict,
+			"the library is the published MCP registry, read live, and this install is configured not to make "+
+				"outbound requests (update_check: off). Add a server by hand instead — that reaches nothing.")
+		return
+	}
+	entries, err := s.mcpLibrary.Search(r.Context(), r.URL.Query().Get("q"))
+	if err != nil {
+		// 502, not 500: the failure is somebody else's host, and an operator
+		// reading "internal server error" would go looking in the wrong logs.
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"entries": mcpcatalog.Search(r.URL.Query().Get("q")),
+		"entries": entries,
 		// Said once, here, so the interface renders the same sentence the
 		// review screen does rather than inventing a softer one.
 		"fetched_at_spawn": mcpcatalog.FetchedAtSpawn,
@@ -120,8 +136,9 @@ func (s *Server) handleInstallMCPServer(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	srv, err := s.mcp.Install(r.Context(), mcpstore.Server{
-		Name: in.Name, Description: in.Description, Command: in.Command, Args: in.Args,
-		Dir: in.Dir, EnvNames: in.EnvNames, TimeoutSeconds: in.TimeoutSeconds,
+		Name: in.Name, Description: in.Description, Transport: in.Transport,
+		Command: in.Command, Args: in.Args, Dir: in.Dir, EnvNames: in.EnvNames,
+		URL: in.URL, HeaderNames: in.HeaderNames, TimeoutSeconds: in.TimeoutSeconds,
 	}, &caller.ID)
 	if err != nil {
 		fail(w, r, err)
@@ -146,9 +163,11 @@ func (s *Server) handleUpdateMCPServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Status == nil && in.Command == nil && in.Args == nil && in.EnvNames == nil &&
-		in.Description == nil && in.Dir == nil && in.TimeoutSeconds == nil {
+		in.Description == nil && in.Dir == nil && in.TimeoutSeconds == nil &&
+		in.Transport == nil && in.URL == nil && in.HeaderNames == nil {
 		writeError(w, http.StatusBadRequest,
-			"nothing to change: send status, or any of command, args, cwd, env_names, description, timeout_seconds")
+			"nothing to change: send status, or any of transport, command, args, cwd, env_names, "+
+				"url, header_names, description, timeout_seconds")
 		return
 	}
 
@@ -178,6 +197,15 @@ func (s *Server) handleUpdateMCPServer(w http.ResponseWriter, r *http.Request) {
 		}
 		if in.EnvNames != nil {
 			next.EnvNames = *in.EnvNames
+		}
+		if in.Transport != nil {
+			next.Transport = *in.Transport
+		}
+		if in.URL != nil {
+			next.URL = *in.URL
+		}
+		if in.HeaderNames != nil {
+			next.HeaderNames = *in.HeaderNames
 		}
 		if in.TimeoutSeconds != nil {
 			next.TimeoutSeconds = *in.TimeoutSeconds
@@ -239,15 +267,27 @@ func (s *Server) handleProbeMCPServer(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	slog.Warn("an operator is probing an external MCP server: it will run on this host, unapproved",
-		"server", srv.Name, "command", srv.Command)
-
-	conn, err := mcpclient.Dial(r.Context(), mcpclient.Spec{
-		Name: srv.Name, Command: srv.Command, Args: srv.Args, Dir: srv.Dir,
+	spec := mcpclient.Spec{
+		Name: srv.Name, Transport: srv.Transport, Timeout: 30 * time.Second,
+	}
+	if spec.Remote() {
+		slog.Warn("an operator is probing a remote MCP server: this install will contact it, unapproved",
+			"server", srv.Name, "url", srv.URL)
+		spec.URL = srv.URL
+		// Deliberately no headers: see above. A server that will not say what
+		// it offers without a credential is one to be suspicious of, and the
+		// answer to "what is this" must not cost a token before the operator
+		// has agreed to anything.
+		spec.Headers = map[string]string{}
+	} else {
+		slog.Warn("an operator is probing an external MCP server: it will run on this host, unapproved",
+			"server", srv.Name, "command", srv.Command)
+		spec.Command, spec.Args, spec.Dir = srv.Command, srv.Args, srv.Dir
 		// Deliberately nothing: see above.
-		Env:     map[string]string{"PATH": osPath(), "HOME": "/tmp"},
-		Timeout: 30 * time.Second,
-	})
+		spec.Env = map[string]string{"PATH": osPath(), "HOME": "/tmp"}
+	}
+
+	conn, err := mcpclient.Dial(r.Context(), spec)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return

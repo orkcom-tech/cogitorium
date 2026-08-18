@@ -121,24 +121,34 @@ type CreateMCPServerBody struct {
 	// Command and Args are separate, and never one string: one string means a
 	// shell, and a shell means the arguments are parsed by something with its
 	// own opinion about quoting.
-	Command        string   `json:"command"`
-	Args           []string `json:"args"`
-	Dir            string   `json:"cwd"`
-	EnvNames       []string `json:"env_names"`
-	TimeoutSeconds int      `json:"timeout_seconds"`
+	// Transport is "stdio", "streamable-http" or "sse". Empty means stdio, so
+	// every caller written before there was a choice still means what it said.
+	Transport string   `json:"transport"`
+	Command   string   `json:"command"`
+	Args      []string `json:"args"`
+	// URL and HeaderNames are the remote half. HeaderNames maps a header to a
+	// NAMED value, never a value: `{"Authorization": "JIRA_TOKEN"}`.
+	URL            string            `json:"url"`
+	HeaderNames    map[string]string `json:"header_names"`
+	Dir            string            `json:"cwd"`
+	EnvNames       []string          `json:"env_names"`
+	TimeoutSeconds int               `json:"timeout_seconds"`
 }
 
 // UpdateMCPServerBody edits one, or changes its status — never both in one
 // request, because approving what you just changed is approving something you
 // have not seen.
 type UpdateMCPServerBody struct {
-	Status         *string   `json:"status"`
-	Description    *string   `json:"description"`
-	Command        *string   `json:"command"`
-	Args           *[]string `json:"args"`
-	Dir            *string   `json:"cwd"`
-	EnvNames       *[]string `json:"env_names"`
-	TimeoutSeconds *int      `json:"timeout_seconds"`
+	Status         *string            `json:"status"`
+	Description    *string            `json:"description"`
+	Transport      *string            `json:"transport"`
+	URL            *string            `json:"url"`
+	HeaderNames    *map[string]string `json:"header_names"`
+	Command        *string            `json:"command"`
+	Args           *[]string          `json:"args"`
+	Dir            *string            `json:"cwd"`
+	EnvNames       *[]string          `json:"env_names"`
+	TimeoutSeconds *int               `json:"timeout_seconds"`
 }
 
 // ApproveMCPToolBody approves one tool, which is the granularity that matters:

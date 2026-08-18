@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type MCPCatalogEntry, type MCPServer, type MCPTool, type User } from '../api'
+import { api, type MCPCatalogEntry, type MCPServer, type MCPTool, type MCPTransport, type User } from '../api'
 import { PanelTitle } from '../deck/Drawer'
 import { dragging } from '../dnd'
 
@@ -136,9 +136,11 @@ export default function McpPage({ me }: { me: User }) {
               api.mcp.install({
                 name: e.name,
                 description: e.title,
-                command: e.command,
-                args: e.args,
-                env_names: e.env_names ?? [],
+                transport: e.transport,
+                // One half or the other; the server refuses a row wearing both.
+                ...(e.transport === 'stdio'
+                  ? { command: e.command, args: e.args, env_names: e.env_names ?? [] }
+                  : { url: e.url, header_names: e.header_names ?? {} }),
               }),
               () => {
                 setBrowsing(false)
@@ -262,6 +264,7 @@ function ServerCard({
         <button className="linkish mcp-name" onClick={onOpen}>
           <strong>🔌 {server.name}</strong>
         </button>
+        <span className="pill mcp-kind">{server.transport === 'stdio' ? 'runs here' : 'hosted'}</span>
         <span className={`pill mcp-status-${server.status}`}>{server.status}</span>
       </div>
       <span className="muted">{server.description || 'no description'}</span>
@@ -276,38 +279,73 @@ function ServerCard({
               would make the screen lie about what is being agreed to. */}
           <div className="card mcp-warning">
             <strong>What approving this grants</strong>
-            <ul>
-              <li>
-                <strong>It is not sandboxed.</strong> It runs on this host as this server’s user, outside the
-                container gears run in — so it can read this install’s database, and the provider keys in it.
-              </li>
-              <li>
-                <strong>It reaches the network by definition.</strong> That is what it is for, and the gate that
-                covers agent web search does not cover it at all.
-              </li>
-              <li>
-                <strong>Its code is fetched when it starts</strong>, every time it starts. What you approve is the
-                command line, not the bytes that command will fetch tomorrow.
-              </li>
-              <li>
-                <strong>It is handed real credentials</strong> — by name, resolved at spawn, belonging to a real
-                account with that account’s permissions.
-              </li>
-            </ul>
+            {server.transport === 'stdio' ? (
+              <ul>
+                <li>
+                  <strong>It is not sandboxed.</strong> It runs on this host as this server’s user, outside the
+                  container gears run in — so it can read this install’s database, and the provider keys in it.
+                </li>
+                <li>
+                  <strong>It reaches the network by definition.</strong> That is what it is for, and the gate that
+                  covers agent web search does not cover it at all.
+                </li>
+                <li>
+                  <strong>Its code is fetched when it starts</strong>, every time it starts. What you approve is
+                  the command line, not the bytes that command will fetch tomorrow.
+                </li>
+                <li>
+                  <strong>It is handed real credentials</strong> — by name, resolved at spawn, belonging to a real
+                  account with that account’s permissions.
+                </li>
+              </ul>
+            ) : (
+              /* A hosted server is a genuinely different risk, and saying the
+                 same four things would be false in two of them. Nothing runs
+                 here — which is safer — and what leaves is the part that
+                 matters. */
+              <ul>
+                <li>
+                  <strong>Nothing runs on this machine.</strong> There is no process, no file access and nothing
+                  to sandbox, which is the one way this is safer than a packaged server.
+                </li>
+                <li>
+                  <strong>Your agents’ words leave this install.</strong> Every argument of every call to it goes
+                  to a host somebody else operates, along with whatever the agent wrote to get there.
+                </li>
+                <li>
+                  <strong>It is sent a real credential</strong>, on every request, belonging to a real account
+                  with that account’s permissions.
+                </li>
+                <li>
+                  <strong>A URL can be repointed and look identical.</strong> That is why the address is part of
+                  what you approve here: change it and this server goes back to pending.
+                </li>
+              </ul>
+            )}
           </div>
 
           {admin ? (
             <>
-              <span className="field-label">what runs</span>
+              <span className="field-label">{server.transport === 'stdio' ? 'what runs' : 'what is called'}</span>
               <pre className="mcp-cmd">
                 <code>
-                  {server.command} {server.args.join(' ')}
+                  {server.transport === 'stdio'
+                    ? `${server.command} ${server.args.join(' ')}`
+                    : server.url}
                 </code>
               </pre>
-              {server.cwd && <span className="muted">in {server.cwd}</span>}
+              {server.transport === 'stdio' && server.cwd && <span className="muted">in {server.cwd}</span>}
               <span className="field-label">credentials it is given, by name</span>
               <span className="muted">
-                {server.env_names.length === 0 ? 'none' : server.env_names.join(', ')}
+                {server.transport === 'stdio'
+                  ? server.env_names.length === 0
+                    ? 'none'
+                    : server.env_names.join(', ')
+                  : Object.keys(server.header_names ?? {}).length === 0
+                    ? 'none'
+                    : Object.entries(server.header_names)
+                        .map(([h, v]) => `${h}: ${v}`)
+                        .join(', ')}
               </span>
             </>
           ) : (
@@ -324,10 +362,13 @@ function ServerCard({
               initial={{
                 name: server.name,
                 description: server.description,
+                transport: server.transport,
                 command: server.command,
                 args: server.args,
                 cwd: server.cwd,
                 env_names: server.env_names,
+                url: server.url,
+                header_names: server.header_names,
               }}
               onSubmit={(body) => {
                 setEditing(false)
@@ -451,11 +492,12 @@ function Library({ onPick, onError }: { onPick: (e: MCPCatalogEntry) => void; on
             <span className="spacer" />
             <button onClick={() => onPick(e)}>add it</button>
           </div>
-          <span className="muted">reaches {e.reaches}</span>
+          <span className="muted">
+            <span className="pill mcp-kind">{e.transport === 'stdio' ? 'runs here' : 'hosted'}</span>{' '}
+            {e.reaches}
+          </span>
           <pre className="mcp-cmd">
-            <code>
-              {e.command} {e.args.join(' ')}
-            </code>
+            <code>{e.transport === 'stdio' ? `${e.command} ${e.args.join(' ')}` : e.url}</code>
           </pre>
           {/* Stated rather than discovered: most of these are an npx or a uvx
               away, which means node or python on the machine, and an entry that
@@ -474,10 +516,13 @@ function Library({ onPick, onError }: { onPick: (e: MCPCatalogEntry) => void; on
 export type ServerFields = {
   name: string
   description?: string
-  command: string
+  transport: MCPTransport
+  command?: string
   args?: string[]
   cwd?: string
   env_names?: string[]
+  url?: string
+  header_names?: Record<string, string>
 }
 
 /**
@@ -506,15 +551,28 @@ function ServerForm({
 }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
+  const [transport, setTransport] = useState<MCPTransport>(initial?.transport ?? 'stdio')
   const [command, setCommand] = useState(initial?.command ?? '')
   const [args, setArgs] = useState((initial?.args ?? []).join('\n'))
   const [cwd, setCwd] = useState(initial?.cwd ?? '')
   const [envNames, setEnvNames] = useState((initial?.env_names ?? []).join('\n'))
+  const [url, setUrl] = useState(initial?.url ?? '')
+  const [headers, setHeaders] = useState(
+    Object.entries(initial?.header_names ?? {})
+      .map(([h, v]) => `${h}: ${v}`)
+      .join('\n'),
+  )
 
   // The store's own rule, checked here so an operator learns it while typing
   // rather than from a 400 after filling the rest in.
   const editingExisting = initial !== undefined
   const badName = name !== '' && !/^[a-z0-9][a-z0-9_-]{0,39}$/.test(name)
+  const remote = transport !== 'stdio'
+  // Cleartext to anywhere but this machine would send the credential and
+  // everything the agent says in clear, and the server refuses it. Said here so
+  // it is not a 400 after filling the form in.
+  const badURL =
+    remote && url !== '' && !/^https:\/\//.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1)([:/]|$)/.test(url)
 
   const lines = (v: string) =>
     v
@@ -522,17 +580,33 @@ function ServerForm({
       .map((x) => x.trim())
       .filter(Boolean)
 
+  // `Authorization: JIRA_TOKEN` per line — a header and the NAME of the value
+  // it should be given, never the value.
+  const headerMap = () => {
+    const out: Record<string, string> = {}
+    for (const line of lines(headers)) {
+      const at = line.indexOf(':')
+      if (at <= 0) continue
+      const header = line.slice(0, at).trim()
+      const named = line.slice(at + 1).trim()
+      if (header && named) out[header] = named
+    }
+    return out
+  }
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     onSubmit({
       name: name.trim(),
       description: description.trim(),
-      command: command.trim(),
-      args: lines(args),
-      cwd: cwd.trim(),
-      env_names: lines(envNames),
+      transport,
+      ...(remote
+        ? { url: url.trim(), header_names: headerMap() }
+        : { command: command.trim(), args: lines(args), cwd: cwd.trim(), env_names: lines(envNames) }),
     })
   }
+
+  const ready = name.trim() !== '' && !badName && (remote ? url.trim() !== '' && !badURL : command.trim() !== '')
 
   return (
     <form className="card mcp-form" onSubmit={submit}>
@@ -553,38 +627,105 @@ function ServerForm({
         <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="our tickets" />
       </label>
 
-      <label className="field">
-        <span className="muted">command — the executable alone, without its arguments</span>
-        <input required value={command} onChange={(e) => setCommand(e.target.value)} placeholder="npx" />
-      </label>
-
-      <label className="field">
-        <span className="muted">arguments, one per line</span>
-        <textarea
-          rows={4}
-          value={args}
-          onChange={(e) => setArgs(e.target.value)}
-          placeholder={'-y\n@acme/jira-mcp\n--site\nacme.atlassian.net'}
-        />
-      </label>
-
-      <label className="field">
-        <span className="muted">working directory — blank for this server’s own</span>
-        <input value={cwd} onChange={(e) => setCwd(e.target.value)} placeholder="/srv/shared" />
-      </label>
-
-      <label className="field">
-        <span className="muted">credentials it is given, by NAME, one per line</span>
-        <textarea
-          rows={2}
-          value={envNames}
-          onChange={(e) => setEnvNames(e.target.value)}
-          placeholder="JIRA_TOKEN"
-        />
-      </label>
+      {/* THE CHOICE THAT DECIDES WHAT IS BEING AGREED TO, so it is a control
+          rather than something inferred from which field was filled in. */}
+      <span className="field-label">how it is reached</span>
+      <div className="mode-row">
+        {(
+          [
+            ['stdio', 'a command here'],
+            ['streamable-http', 'a URL'],
+            ['sse', 'a URL (old)'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            data-own
+            className={`mode-option ${transport === id ? 'on' : ''}`}
+            aria-pressed={transport === id}
+            onClick={() => setTransport(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <span className="hint">
-        Names, never values. Each is resolved at spawn from this install’s variables and secrets, exactly as a
-        gear’s are, so the value never reaches a prompt, a schema or this screen. Set them under Variables.
+        {remote ? (
+          <>
+            <strong>Nothing runs on this machine.</strong> What leaves instead is the credential below and
+            whatever your agents say to it, over https to a host you name. Pick the old shape only if the server
+            told you to — it is deprecated, and its endpoint is chosen by the server rather than by you.
+          </>
+        ) : (
+          <>
+            <strong>This runs a process here</strong>, as this server’s user, outside the container gears run in.
+            It can read this install’s database and the provider keys in it.
+          </>
+        )}
+      </span>
+
+      {remote ? (
+        <>
+          <label className="field">
+            <span className="muted">endpoint — https, or http on this machine</span>
+            <input
+              required
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://mcp.example.com/mcp"
+            />
+          </label>
+          {badURL && (
+            <span className="hint danger">
+              a remote server must be https: its headers carry a credential and its body carries what your agents
+              say
+            </span>
+          )}
+          <label className="field">
+            <span className="muted">headers it is given — one per line, as `Header: NAME_OF_VALUE`</span>
+            <textarea
+              rows={2}
+              value={headers}
+              onChange={(e) => setHeaders(e.target.value)}
+              placeholder={'Authorization: JIRA_TOKEN'}
+            />
+          </label>
+        </>
+      ) : (
+        <>
+          <label className="field">
+            <span className="muted">command — the executable alone, without its arguments</span>
+            <input required value={command} onChange={(e) => setCommand(e.target.value)} placeholder="npx" />
+          </label>
+          <label className="field">
+            <span className="muted">arguments, one per line</span>
+            <textarea
+              rows={4}
+              value={args}
+              onChange={(e) => setArgs(e.target.value)}
+              placeholder={'-y\n@acme/jira-mcp\n--site\nacme.atlassian.net'}
+            />
+          </label>
+          <label className="field">
+            <span className="muted">working directory — blank for this server’s own</span>
+            <input value={cwd} onChange={(e) => setCwd(e.target.value)} placeholder="/srv/shared" />
+          </label>
+          <label className="field">
+            <span className="muted">credentials it is given, by NAME, one per line</span>
+            <textarea
+              rows={2}
+              value={envNames}
+              onChange={(e) => setEnvNames(e.target.value)}
+              placeholder="JIRA_TOKEN"
+            />
+          </label>
+        </>
+      )}
+      <span className="hint">
+        Names, never values. Each is resolved when this server is contacted, from this install’s variables and
+        secrets, exactly as a gear’s are — so the value never reaches a prompt, a schema or this screen. Set them
+        under Variables.
       </span>
 
       <div className="row spread">
@@ -593,7 +734,7 @@ function ServerForm({
             ? 'Saving returns this server to pending: everything here is inside what was approved.'
             : 'It arrives pending. Installing is not approving.'}
         </span>
-        <button className="primary" type="submit" disabled={busy || !name.trim() || !command.trim() || badName}>
+        <button className="primary" type="submit" disabled={busy || !ready}>
           {submitLabel}
         </button>
       </div>

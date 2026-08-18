@@ -53,19 +53,22 @@ func (e *Engine) runMCPTool(ctx context.Context, wsID int64, agent workspace.Age
 		return "", err
 	}
 
-	// 3. Only now does anything run.
-	env, err := e.mcpEnv(ctx, wsID, srv)
+	// 3. Only now does anything run, or anything leave.
+	spec, err := e.mcpSpec(ctx, wsID, srv)
 	if err != nil {
 		return "", err
 	}
-	slog.Warn("starting an external MCP server to answer a tool call",
-		"server", srv.Name, "tool", tool.RemoteName, "agent", agent.Name,
-		"workspace_id", wsID, "note", "it runs on this host with this server's file access")
+	if spec.Remote() {
+		slog.Warn("reaching an external MCP server to answer a tool call",
+			"server", srv.Name, "tool", tool.RemoteName, "agent", agent.Name, "workspace_id", wsID,
+			"url", srv.URL, "note", "this agent's arguments leave this machine, to a host the operator approved")
+	} else {
+		slog.Warn("starting an external MCP server to answer a tool call",
+			"server", srv.Name, "tool", tool.RemoteName, "agent", agent.Name,
+			"workspace_id", wsID, "note", "it runs on this host with this server's file access")
+	}
 
-	conn, err := mcpclient.Dial(ctx, mcpclient.Spec{
-		Name: srv.Name, Command: srv.Command, Args: srv.Args, Dir: srv.Dir, Env: env,
-		Timeout: time.Duration(srv.TimeoutSeconds) * time.Second,
-	})
+	conn, err := mcpclient.Dial(ctx, spec)
 	if err != nil {
 		return "", err
 	}
@@ -98,6 +101,72 @@ func (e *Engine) runMCPTool(ctx context.Context, wsID int64, agent workspace.Age
 //
 // Workspace-scoped for the same reason a gear's are: one workspace's
 // credentials must not answer another's turn.
+// mcpSpec turns a stored row into something to connect with, resolving the
+// NAMES it holds into values at the last possible moment.
+//
+// One function for both transports because the rule is the same on each: the
+// row names a credential and never holds one, and the value is fetched here,
+// used, and never written anywhere. Where it goes differs — a child's
+// environment or an HTTP header — and that is the only difference.
+func (e *Engine) mcpSpec(ctx context.Context, wsID int64, srv mcpstore.Server) (mcpclient.Spec, error) {
+	spec := mcpclient.Spec{
+		Name:      srv.Name,
+		Transport: srv.Transport,
+		Timeout:   time.Duration(srv.TimeoutSeconds) * time.Second,
+	}
+	switch srv.Transport {
+	case mcpstore.TransportStreamableHTTP, mcpstore.TransportSSE:
+		headers, err := e.mcpHeaders(ctx, wsID, srv)
+		if err != nil {
+			return mcpclient.Spec{}, err
+		}
+		spec.URL, spec.Headers = srv.URL, headers
+	default:
+		env, err := e.mcpEnv(ctx, wsID, srv)
+		if err != nil {
+			return mcpclient.Spec{}, err
+		}
+		spec.Command, spec.Args, spec.Dir, spec.Env = srv.Command, srv.Args, srv.Dir, env
+	}
+	return spec, nil
+}
+
+// mcpHeaders resolves the header NAMES a remote server was granted into the
+// headers it is actually sent.
+//
+// The map is header name -> named value, so `{"Authorization": "JIRA_TOKEN"}`
+// becomes `Authorization: <whatever JIRA_TOKEN resolves to>`. A name that
+// resolves to nothing is left out rather than sent empty: an Authorization
+// header with no value reads to the far end as a malformed request, and the
+// operator gets a 401 that says nothing about the missing variable.
+func (e *Engine) mcpHeaders(ctx context.Context, wsID int64, srv mcpstore.Server) (map[string]string, error) {
+	if len(srv.HeaderNames) == 0 || e.mcpSecrets == nil {
+		return map[string]string{}, nil
+	}
+	wanted := make([]string, 0, len(srv.HeaderNames))
+	for _, named := range srv.HeaderNames {
+		wanted = append(wanted, named)
+	}
+	values, err := e.mcpSecrets.Resolve(ctx, &wsID, wanted)
+	if err != nil {
+		return nil, fmt.Errorf("the MCP server %q cannot be given what it was granted: %w", srv.Name, err)
+	}
+	byName := map[string]string{}
+	for _, v := range values {
+		byName[v.Name] = v.Value
+	}
+	headers := map[string]string{}
+	for header, named := range srv.HeaderNames {
+		if v, ok := byName[named]; ok && v != "" {
+			headers[header] = v
+		} else {
+			return nil, fmt.Errorf("the MCP server %q needs %s for its %s header, and this install has no such value",
+				srv.Name, named, header)
+		}
+	}
+	return headers, nil
+}
+
 func (e *Engine) mcpEnv(ctx context.Context, wsID int64, srv mcpstore.Server) (map[string]string, error) {
 	env := map[string]string{
 		// Not inherited from this process, which holds provider keys. A child

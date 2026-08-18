@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/orkcom-tech/cogitorium/internal/config"
+	"github.com/orkcom-tech/cogitorium/internal/update"
 )
 
 // The operator's side of external MCP servers, over HTTP.
@@ -235,7 +236,7 @@ func TestAMemberSeesThatAServerExistsAndNotHowItIsSpawned(t *testing.T) {
 }
 
 // The library is installed FROM, so it is an administrator's, like every other
-// act that spawns a subprocess on this server.
+// act that spawns a subprocess on this server or sends a credential off it.
 func TestOnlyAnAdministratorMayReadTheLibrary(t *testing.T) {
 	d := newDoorWithMCP(t)
 
@@ -243,15 +244,31 @@ func TestOnlyAnAdministratorMayReadTheLibrary(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("a member read the library: %d %s", rec.Code, rec.Body.String())
 	}
+}
 
-	rec = d.request(t, http.MethodGet, "/api/v1/mcp-catalog", d.adminTok, "")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("an administrator could not read the library: %d %s", rec.Code, rec.Body.String())
+// THE ONE THAT ANSWERS THE OBJECTION. The library is the published registry read
+// live, so an install that has not agreed to make outbound requests does not get
+// one — and is told that, rather than shown an empty list that reads as "there
+// is nothing to install".
+func TestTheLibraryIsRefusedWhenThisInstallMayNotReachOut(t *testing.T) {
+	d := doorAround(t, newInstall(t, doorListen, func(c *config.Config) {
+		c.MCPClients = true
+		c.UpdateCheck = update.ModeOff
+	}))
+
+	rec := d.request(t, http.MethodGet, "/api/v1/mcp-catalog", d.adminTok, "")
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("the library answered %d on an install configured not to reach out: %s", rec.Code, rec.Body.String())
 	}
-	// The sentence that has to reach the review screen verbatim rather than
-	// being softened on the way.
-	if !strings.Contains(rec.Body.String(), "downloaded when it starts") {
-		t.Fatalf("the library does not carry the fetched-at-spawn warning: %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "update_check") {
+		t.Fatalf("the refusal does not name the setting: %s", rec.Body.String())
+	}
+
+	// And adding by hand is untouched, because it never left the machine.
+	rec = d.request(t, http.MethodPost, "/api/v1/mcp-servers", d.adminTok,
+		`{"name":"byhand","transport":"stdio","command":"/bin/true"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("adding by hand was refused on an offline install: %d %s", rec.Code, rec.Body.String())
 	}
 }
 

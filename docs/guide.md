@@ -1916,18 +1916,40 @@ four facts you are agreeing to, and a granted server is drawn on the blueprint
 as a node saying *not sandboxed · reaches the network*, so "what can this
 workspace reach" is answered by looking rather than by remembering.
 
+**A server is a command here, or a URL somewhere else**, and Cogitorium speaks
+both — `stdio`, `streamable-http` and the deprecated `sse` shape. The difference
+is not a technicality, it is what you are agreeing to:
+
+- **runs here** — a package, downloaded and executed on this machine as this
+  server's user, outside the container gears run in. It can read this install's
+  database and the provider keys in it.
+- **hosted** — nothing runs here at all, which is the one way it is safer. What
+  leaves instead is your credential, on every request, and every argument your
+  agents send it. Cleartext is refused outright: `https`, or `localhost`.
+
 **The library.** Adding your issue tracker is choosing it from a list, not
 knowing that its server is an npm package, what its binary is called, which
-arguments it takes and which environment variables it reads. Each entry names
-what it reaches, the command it will run, the credentials it needs **by name**,
-and the prerequisite — most are an `npx` or a `uvx` away, which means node or
-python on the machine, and an entry that did not say so would produce a spawn
-failure nobody can read.
+arguments it takes and which environment variables it reads. It is the
+**published MCP registry, read live**, so it holds what is actually out there
+rather than a handful somebody curated — and both shapes are installable,
+because two thirds of the registry is hosted services and a library that offered
+only the other third would be mostly buttons that do nothing.
 
-The list is compiled into the binary, so nothing is fetched to show it, it works
-offline, and it cannot change under an install between the day it was reviewed
-and the day somebody installs from it. Picking one **fills in the form and skips
-no gate**: what lands is a pending server that does nothing.
+Each entry names what it reaches, the command or the URL, the credentials it
+needs **by name**, and the prerequisite — a packaged server is usually an `npx`
+or a `uvx` away, which means node or python on the machine, and an entry that
+did not say so would produce a spawn failure nobody can read. Where a server
+publishes both shapes the **hosted one is offered**, because it runs no code
+here; edit the row before approving if you want the package instead.
+
+**The library is fetched, so it is behind the same consent as the update check.**
+An install where `update_check` is `off` has no library and is told why —
+reading the registry is an outbound request, and an install that does not phone
+home should not quietly acquire a catalogue that does. **`add by hand` is
+unaffected**, because it never reached anything to begin with.
+
+Picking an entry **fills in the form and skips no gate**: what lands is a
+pending server that does nothing.
 
 **Anything not in the list is `add by hand`** — a name, the command, its
 arguments one per line, an optional working directory, and the credentials it
@@ -1937,8 +1959,9 @@ means quoting, and quoting means an argument containing a space silently becomes
 two. The interesting MCP server is very often internal, so this is the ordinary
 path rather than the exception.
 
-**`edit what it runs`** changes any of that afterwards, and **saving returns the
-server to pending** — everything editable there is inside what was approved, and
+**`edit what it runs`** changes any of that afterwards — including switching a
+server between a local package and a hosted URL, which is an ordinary thing to
+want — and **saving returns the server to pending** — everything editable there is inside what was approved, and
 approving what you have just changed is approving something you have not seen.
 Two of the library's own entries need it: the filesystem and git servers ship a
 placeholder path that you point at the directory you actually mean.

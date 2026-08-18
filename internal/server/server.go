@@ -28,6 +28,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/inlet"
 	"github.com/orkcom-tech/cogitorium/internal/library"
+	"github.com/orkcom-tech/cogitorium/internal/mcpcatalog"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/schedule"
@@ -57,11 +58,14 @@ type Server struct {
 	// mcp is external MCP servers — somebody else's tools, granted to an agent.
 	// Nil unless the operator switched it on, because it is the one thing this
 	// product runs that it never saw the source of.
-	mcp      *mcpstore.Store
-	library  *library.Store
-	identity *identity.Store
-	inlets   *inlet.Store
-	engine   *engine.Engine
+	mcp *mcpstore.Store
+	// mcpLibrary reads the published MCP registry. Never nil; whether it may
+	// actually fetch is decided per request by the update-check consent.
+	mcpLibrary *mcpcatalog.Registry
+	library    *library.Store
+	identity   *identity.Store
+	inlets     *inlet.Store
+	engine     *engine.Engine
 	// queue is where a delivery waits when its workspace is busy, and pool is
 	// what runs it. queueMax bounds the waiting, because a queue with no bound
 	// is a way to run a server out of disk politely.
@@ -156,6 +160,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		env:        env,
 		gearNet:    gate,
 		mcp:        mcpStore,
+		mcpLibrary: mcpcatalog.NewRegistry(),
 		library:    lib,
 		identity:   identity.NewStore(db),
 		inlets:     inlet.NewStore(db),

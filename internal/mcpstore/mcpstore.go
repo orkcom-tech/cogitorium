@@ -33,7 +33,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -78,8 +81,14 @@ type Server struct {
 	Args        []string `json:"args"`
 	Dir         string   `json:"cwd"`
 	EnvNames    []string `json:"env_names"`
-	Transport   string   `json:"transport"`
-	Status      string   `json:"status"`
+	// URL is the endpoint of a remote server; empty on stdio. HeaderNames maps
+	// a header to a NAMED value — {"Authorization": "JIRA_TOKEN"} — resolved at
+	// connect time through the same resolver a gear's env names go through, so
+	// no credential is ever in this row.
+	URL         string            `json:"url"`
+	HeaderNames map[string]string `json:"header_names"`
+	Transport   string            `json:"transport"`
+	Status      string            `json:"status"`
 	// Fingerprint is what was approved. Never the thing that is checked — that
 	// is recomputed from the row at every spawn — but shown so an operator can
 	// see that one exists.
@@ -128,14 +137,27 @@ func (s *Store) Install(ctx context.Context, srv Server, byUser *int64) (Server,
 		return Server{}, fmt.Errorf("an MCP server's name must be lower-case letters, digits, "+
 			"underscore or hyphen, starting with a letter or digit (got %q)", srv.Name)
 	}
-	if strings.TrimSpace(srv.Command) == "" {
-		return Server{}, errors.New("an MCP server needs a command to run")
-	}
 	if srv.Transport == "" {
-		srv.Transport = "stdio"
+		// Every caller written before there was a choice meant stdio by saying
+		// nothing, and a bundle imported from an older install says the same.
+		srv.Transport = TransportStdio
 	}
-	if srv.Transport != "stdio" {
-		return Server{}, fmt.Errorf("this install speaks MCP over stdio only, not %q", srv.Transport)
+	// A FRESH install that carries both halves is refused rather than tidied.
+	// checkShape clears the half a transport does not use, which is right when
+	// an operator SWITCHES an existing server — they should not have to know
+	// the old URL is still in the row — and wrong here: a caller that sent a
+	// command and a URL in the same breath has made a mistake, and silently
+	// keeping one of them is how that mistake ships.
+	if srv.Transport != TransportStdio && strings.TrimSpace(srv.Command) != "" {
+		return Server{}, fmt.Errorf("this server is %s and also names a command (%q); "+
+			"a server is reached one way or the other", srv.Transport, srv.Command)
+	}
+	if srv.Transport == TransportStdio && strings.TrimSpace(srv.URL) != "" {
+		return Server{}, fmt.Errorf("this server is stdio and also names a URL (%q); "+
+			"a server is reached one way or the other", srv.URL)
+	}
+	if err := srv.checkShape(); err != nil {
+		return Server{}, err
 	}
 	if srv.TimeoutSeconds <= 0 {
 		srv.TimeoutSeconds = 60
@@ -148,32 +170,41 @@ func (s *Store) Install(ctx context.Context, srv Server, byUser *int64) (Server,
 	if err != nil {
 		return Server{}, err
 	}
+	if srv.HeaderNames == nil {
+		srv.HeaderNames = map[string]string{}
+	}
+	headerNames, err := json.Marshal(srv.HeaderNames)
+	if err != nil {
+		return Server{}, err
+	}
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO mcp_servers (name, description, command, args, cwd, env_names, transport,
+		`INSERT INTO mcp_servers (name, description, command, args, cwd, env_names, url, header_names, transport,
 		                          status, timeout_seconds, created_by_user_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		srv.Name, srv.Description, srv.Command, string(args), srv.Dir, string(envNames),
+		srv.URL, string(headerNames),
 		srv.Transport, StatusPending, srv.TimeoutSeconds, byUser, now(), now())
 	if err != nil {
 		return Server{}, asConflict(err, "mcp server "+srv.Name)
 	}
 	id, _ := res.LastInsertId()
-	slog.Warn("an external MCP server was installed; it is PENDING and runs on this host outside the sandbox",
-		"server", srv.Name, "command", srv.Command)
+	slog.Warn("an external MCP server was installed; it is PENDING",
+		"server", srv.Name, "transport", srv.Transport, "command", srv.Command, "url", srv.URL,
+		"note", "a stdio server runs on this host outside the sandbox; a remote one is sent this install's credential")
 	return s.Get(ctx, id)
 }
 
 const serverSelect = `
-	SELECT id, name, description, command, args, cwd, env_names, transport, status,
+	SELECT id, name, description, command, args, cwd, env_names, url, header_names, transport, status,
 	       approved_fingerprint, timeout_seconds, created_at, updated_at
 	FROM mcp_servers`
 
 func scanServer(row interface{ Scan(...any) error }) (Server, error) {
 	var srv Server
-	var args, envNames string
+	var args, envNames, headerNames string
 	if err := row.Scan(&srv.ID, &srv.Name, &srv.Description, &srv.Command, &args, &srv.Dir,
-		&envNames, &srv.Transport, &srv.Status, &srv.Fingerprint, &srv.TimeoutSeconds,
-		&srv.CreatedAt, &srv.UpdatedAt); err != nil {
+		&envNames, &srv.URL, &headerNames, &srv.Transport, &srv.Status, &srv.Fingerprint,
+		&srv.TimeoutSeconds, &srv.CreatedAt, &srv.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Server{}, catalog.ErrNotFound
 		}
@@ -181,6 +212,8 @@ func scanServer(row interface{ Scan(...any) error }) (Server, error) {
 	}
 	_ = json.Unmarshal([]byte(args), &srv.Args)
 	_ = json.Unmarshal([]byte(envNames), &srv.EnvNames)
+	srv.HeaderNames = map[string]string{}
+	_ = json.Unmarshal([]byte(headerNames), &srv.HeaderNames)
 	return srv, nil
 }
 
@@ -225,7 +258,72 @@ func Fingerprint(srv Server) string {
 		h.Write([]byte(n))
 		h.Write([]byte{0})
 	}
+	// THE URL IS PART OF WHAT WAS APPROVED, and it is the remote equivalent of
+	// the command: an operator read where this server is and agreed to send a
+	// credential there. A hostname that changed afterwards looks exactly like
+	// one that did not, which is precisely why it has to be hashed.
+	h.Write([]byte("url"))
+	h.Write([]byte(srv.URL))
+	h.Write([]byte{0})
+	// Sorted, because a map has no order and an unsorted walk would produce a
+	// different fingerprint for the same server on the next process — which
+	// would send every remote server back to pending at random.
+	h.Write([]byte("headers"))
+	for _, k := range slices.Sorted(maps.Keys(srv.HeaderNames)) {
+		h.Write([]byte(k))
+		h.Write([]byte{0})
+		h.Write([]byte(srv.HeaderNames[k]))
+		h.Write([]byte{0})
+	}
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// The transports an operator may install. A server is a command on this host or
+// a URL somewhere else, and the difference is what they are agreeing to: one
+// puts somebody else's code on this machine, the other sends this install's
+// credential and the agent's words to a host they do not control.
+const (
+	TransportStdio          = "stdio"
+	TransportStreamableHTTP = "streamable-http"
+	TransportSSE            = "sse"
+)
+
+// checkShape refuses a row that does not carry the half its transport needs,
+// and normalises the half it does not.
+//
+// The database has the same CHECK, deliberately — this is where an operator
+// gets a sentence, and that is where a bug in this function is caught before it
+// becomes a row the spawn path reads at three in the morning.
+func (srv *Server) checkShape() error {
+	switch srv.Transport {
+	case TransportStdio:
+		if strings.TrimSpace(srv.Command) == "" {
+			return errors.New("an MCP server on stdio needs a command to run")
+		}
+		// A stdio server has no URL and no headers, and clearing them here is
+		// what makes the CHECK below unfailable rather than a surprise: an
+		// operator who switched a server from remote to stdio should not have
+		// to know that the old URL is still in the row.
+		srv.URL, srv.HeaderNames = "", nil
+	case TransportStreamableHTTP, TransportSSE:
+		u, err := url.Parse(strings.TrimSpace(srv.URL))
+		if err != nil || u.Host == "" {
+			return fmt.Errorf("an MCP server on %s needs a URL to reach (got %q)", srv.Transport, srv.URL)
+		}
+		if u.Scheme != "https" && u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" {
+			// Refused rather than warned about. Its headers carry a credential
+			// and its body carries what the agents say, and neither is the
+			// operator's to spend in clear.
+			return fmt.Errorf("a remote MCP server must be https (got %q); its headers carry a credential "+
+				"and its body carries what your agents say", srv.URL)
+		}
+		srv.URL = u.String()
+		srv.Command, srv.Args, srv.Dir, srv.EnvNames = "", nil, "", nil
+	default:
+		return fmt.Errorf("transport is %q; it may be %s, %s or %s",
+			srv.Transport, TransportStdio, TransportStreamableHTTP, TransportSSE)
+	}
+	return nil
 }
 
 // SetStatus approves, disables or resets a server, stamping the fingerprint on
@@ -263,6 +361,16 @@ func (s *Store) Update(ctx context.Context, id int64, srv Server) (Server, error
 		return Server{}, err
 	}
 	srv.Name = existing.Name
+	if srv.Transport == "" {
+		srv.Transport = existing.Transport
+	}
+	// The same shape rules as an install, because an edit CAN change the
+	// transport — a server that moved from a local package to a hosted URL is
+	// an ordinary thing — and an edit that skipped the check would be the one
+	// way to get a row the install path refuses.
+	if err := srv.checkShape(); err != nil {
+		return Server{}, err
+	}
 	args, err := json.Marshal(nonNil(srv.Args))
 	if err != nil {
 		return Server{}, err
@@ -271,17 +379,23 @@ func (s *Store) Update(ctx context.Context, id int64, srv Server) (Server, error
 	if err != nil {
 		return Server{}, err
 	}
-	if strings.TrimSpace(srv.Command) == "" {
-		return Server{}, errors.New("an MCP server needs a command to run")
+	if srv.HeaderNames == nil {
+		srv.HeaderNames = map[string]string{}
+	}
+	headerNames, err := json.Marshal(srv.HeaderNames)
+	if err != nil {
+		return Server{}, err
 	}
 	if srv.TimeoutSeconds <= 0 {
 		srv.TimeoutSeconds = existing.TimeoutSeconds
 	}
 	if _, err := s.db.ExecContext(ctx,
-		`UPDATE mcp_servers SET description = ?, command = ?, args = ?, cwd = ?, env_names = ?,
+		`UPDATE mcp_servers SET description = ?, transport = ?, command = ?, args = ?, cwd = ?,
+		        env_names = ?, url = ?, header_names = ?,
 		        timeout_seconds = ?, status = ?, approved_fingerprint = '', updated_at = ?
 		 WHERE id = ?`,
-		srv.Description, srv.Command, string(args), srv.Dir, string(envNames),
+		srv.Description, srv.Transport, srv.Command, string(args), srv.Dir,
+		string(envNames), srv.URL, string(headerNames),
 		srv.TimeoutSeconds, StatusPending, now(), id); err != nil {
 		return Server{}, err
 	}
@@ -323,8 +437,8 @@ func (s *Store) Spawnable(ctx context.Context, id int64) (Server, error) {
 			StatusPending, now(), id); err != nil {
 			slog.Error("could not return a changed MCP server to pending", "server", srv.Name, "err", err)
 		}
-		slog.Warn("an MCP server's command changed after it was approved; it will not be started",
-			"server", srv.Name, "command", srv.Command)
+		slog.Warn("an MCP server changed after it was approved; it will not be started",
+			"server", srv.Name, "transport", srv.Transport, "command", srv.Command, "url", srv.URL)
 		return Server{}, fmt.Errorf("%w, so it was not started and is pending again: %s",
 			ErrChanged, srv.Name)
 	}

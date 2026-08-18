@@ -639,10 +639,17 @@ paths:
                   type: array
                   items:
                     type: string
+                "header_names":
+                  type: object
+                  additionalProperties: true
                 "name":
                   type: string
                 "timeout_seconds":
                   type: integer
+                "transport":
+                  type: string
+                "url":
+                  type: string
       responses:
         default:
           description: see the reference
@@ -682,10 +689,17 @@ paths:
                   type: array
                   items:
                     type: string
+                "header_names":
+                  type: object
+                  additionalProperties: true
                 "status":
                   type: string
                 "timeout_seconds":
                   type: integer
+                "transport":
+                  type: string
+                "url":
+                  type: string
       responses:
         default:
           description: see the reference

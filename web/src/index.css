@@ -1381,6 +1381,14 @@ th {
   text-align: left;
 }
 
+/* Which shape a server is, at a glance, beside its status. The two facts are
+   independent — a hosted server can be pending and a local one approved — so
+   they are two marks rather than one combined word. */
+.pill.mcp-kind {
+  color: var(--mcp);
+  border-color: color-mix(in srgb, var(--mcp) 45%, transparent);
+}
+
 .mcp-status-pending,
 .mcp-status-disabled {
   color: var(--warn);

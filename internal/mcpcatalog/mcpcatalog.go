@@ -1,182 +1,101 @@
-// Package mcpcatalog is the list of MCP servers an operator can install by
-// choosing one, rather than by knowing that Jira's server is an npm package,
-// what its binary is called, which arguments it takes and which environment
-// variables it reads.
+// Package mcpcatalog is the library an operator picks a server from, rather
+// than knowing that their issue tracker's server is an npm package, what its
+// binary is called, which arguments it takes and which environment variables it
+// reads.
 //
-// WHERE THE LIST COMES FROM, which was the decision worth making carefully.
-// Three sources were possible: shipped in the binary, fetched from a repository
-// we publish, or written by the operator. This is the first, and the third is
-// the mcp_servers table that already exists — an operator has always been able
-// to install anything by naming its command, and the interesting MCP server is
-// very often internal.
+// # Where the list comes from
 //
-// The second is deliberately NOT here. A catalogue fetched at runtime is a list
-// that can change under an install between the day it was reviewed and the day
-// somebody installs from it, and this product does not make outbound requests
-// nobody agreed to. If it is ever added it belongs behind the same switch as
-// the update check, because an install that does not phone home should not
-// acquire a catalogue that does.
+// The official registry at registry.modelcontextprotocol.io, read live — see
+// registry.go for the shape and for why this is fetched rather than compiled
+// in. The short version: it holds thousands of servers, two thirds of them
+// hosted services rather than packages, and a hand-written list is not a
+// smaller version of that but a different and much worse thing.
 //
-// WHAT AN ENTRY IS NOT. It is not an installer and not a one-click anything. It
-// fills in the fields of the form an operator would otherwise have typed, and
-// they still install, probe, read what it claims to offer, approve the server,
-// approve each tool, and grant it. Every one of those is unchanged: an entry
-// removes the need to look up an npm package name, not the need to decide.
+// # What the fetch is gated on
+//
+// The same switch the update check uses. An install that has not agreed to make
+// outbound requests has no library and is told so plainly; `add by hand` is
+// unaffected, because it never left the machine to begin with. That is the
+// whole answer to "an install that does not phone home should not acquire a
+// catalogue that does" — it does not acquire one.
+//
+// # What an entry is not
+//
+// It is not an installer and not a one-click anything. It fills in the fields
+// of the form an operator would otherwise have typed, and they still install,
+// probe, read what the server claims to offer, approve the server, approve each
+// tool, and grant it. Nothing here is executed and nothing here is trusted: a
+// registry entry is somebody else's description of somebody else's software.
 package mcpcatalog
 
-import "strings"
-
-// Entry is one known server.
+// Entry is one server the library offers.
+//
+// It carries the stdio half or the remote half, never both. Which one it got
+// was decided when the registry answer was read, and a remote is preferred
+// where a server publishes both — a hosted endpoint runs no code on this
+// machine, and a package is a download that executes here as this server's
+// user, outside the sandbox.
 type Entry struct {
-	// ID is stable and referenced by the interface; never reuse one.
-	ID string `json:"id"`
-	// Name is what the server will be called if installed as offered. It has to
-	// satisfy mcpstore's name rule: lowercase, digits, dash and underscore.
+	// ID is the registry's own name for the server, which is globally unique
+	// and stable. Name is what it will be called HERE, squeezed into the
+	// lower-case shape mcpstore accepts.
+	ID   string `json:"id"`
 	Name string `json:"name"`
-	// Title and Reaches are for a person: what this is, and what it touches,
-	// in a sentence somebody recognises rather than a package description.
+
+	// Title and Reaches are for a person: what this is, and what it touches.
 	Title   string `json:"title"`
 	Reaches string `json:"reaches"`
 
+	// Transport is "stdio", "streamable-http" or "sse".
+	Transport string `json:"transport"`
+
+	// The stdio half: a package to run on this machine.
 	Command string   `json:"command"`
 	Args    []string `json:"args"`
-
-	// EnvNames are the credentials this server needs, BY NAME. The value never
-	// appears here, is never sent to a model, and is resolved at spawn through
-	// the same secrets resolver a gear's names go through. An operator sets
-	// them under Variables before the server will work.
+	// EnvNames are the credentials it needs, BY NAME. The value never appears
+	// here, is never sent to a model, and is resolved at spawn through the same
+	// resolver a gear's names go through.
 	EnvNames []string `json:"env_names"`
 
-	// Needs is the install prerequisite, stated rather than discovered. Most
-	// MCP servers are an `npx` or a `uvx` away, which means node or python on
-	// the machine — and an entry that does not say so produces a spawn failure
+	// The remote half: a hosted service to call. HeaderNames maps a header to
+	// the NAMED value an operator will have to set — never a value.
+	URL         string            `json:"url"`
+	HeaderNames map[string]string `json:"header_names"`
+
+	// Needs is the prerequisite, stated rather than discovered. Most packaged
+	// servers are an `npx` or a `uvx` away, which means node or python on the
+	// machine, and an entry that did not say so would produce a spawn failure
 	// whose message nobody can read.
 	Needs string `json:"needs"`
 
-	// Docs is where to go to find out what the arguments mean and how to get
-	// the credential. Not fetched by this product; shown as a link.
+	// Docs is where to find out what the arguments mean and how to get the
+	// credential. Not fetched by this product; shown as a link.
 	Docs string `json:"docs"`
 }
 
-// Fetched at spawn is the fact that decides how an entry should be read, and it
-// is true of every one of these: `npx pkg@latest` downloads from a registry
-// every time it starts. The thing approved on Tuesday is not necessarily the
-// thing that runs on Friday, and no fingerprint over a command line can catch
-// it. That sentence belongs on the review screen, not in a footnote, so it
-// lives here where the interface can render it verbatim.
-const FetchedAtSpawn = "This server's code is downloaded when it starts, every time it starts. " +
-	"Approving it approves the command line, not the bytes that command will fetch tomorrow."
+// Installable reports whether this entry produced something this install can
+// actually connect to. An entry that did not is never returned at all — see
+// entryFrom — so this is the invariant rather than a filter.
+func (e Entry) Installable() bool {
+	switch e.Transport {
+	case "stdio":
+		return e.Command != ""
+	case "streamable-http", "sse":
+		return e.URL != ""
+	default:
+		return false
+	}
+}
 
-// The list.
+// FetchedAtSpawn is the fact that decides how an entry should be read, and it
+// differs by shape. A packaged server's code is downloaded every time it
+// starts, so what an operator approves is the command line and not the bytes
+// that command will fetch tomorrow — no fingerprint can catch that. A hosted
+// server runs nothing here at all; what leaves instead is a credential and
+// whatever the agents say.
 //
-// SHORT ON PURPOSE. Every entry is a claim this project makes about somebody
-// else's software — that this is the right package, that these are the
-// arguments, that this is the credential it wants — and a claim that is wrong
-// sends an operator to debug a spawn failure in a product that told them it
-// would work. So this holds servers whose command line is stable and
-// documented, and an operator who wants anything else installs it by name,
-// which has always worked and is one screen away.
-var entries = []Entry{
-	{
-		ID:      "filesystem",
-		Name:    "filesystem",
-		Title:   "Files in a directory",
-		Reaches: "whichever directory you name, on this machine, with this server's own file access",
-		Command: "npx",
-		Args:    []string{"-y", "@modelcontextprotocol/server-filesystem", "/path/to/expose"},
-		Needs:   "node (npx). Edit the last argument to the directory you mean before approving it.",
-		Docs:    "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
-	},
-	{
-		ID:      "git",
-		Name:    "git",
-		Title:   "A git repository",
-		Reaches: "the history, branches and diffs of one repository on this machine",
-		Command: "uvx",
-		Args:    []string{"mcp-server-git", "--repository", "/path/to/repo"},
-		Needs:   "python (uvx). Edit the repository path before approving it.",
-		Docs:    "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
-	},
-	{
-		ID:       "github",
-		Name:     "github",
-		Title:    "GitHub issues and pull requests",
-		Reaches:  "every repository the token can see — which is usually more than the one you had in mind",
-		Command:  "npx",
-		Args:     []string{"-y", "@modelcontextprotocol/server-github"},
-		EnvNames: []string{"GITHUB_PERSONAL_ACCESS_TOKEN"},
-		Needs:    "node (npx), and a personal access token set under Variables as GITHUB_PERSONAL_ACCESS_TOKEN.",
-		Docs:     "https://github.com/modelcontextprotocol/servers/tree/main/src/github",
-	},
-	{
-		ID:       "postgres",
-		Name:     "postgres",
-		Title:    "A PostgreSQL database, read-only",
-		Reaches:  "the schema and rows the connection string's role can read",
-		Command:  "npx",
-		Args:     []string{"-y", "@modelcontextprotocol/server-postgres"},
-		EnvNames: []string{"POSTGRES_CONNECTION_STRING"},
-		Needs: "node (npx), and a connection string under Variables as POSTGRES_CONNECTION_STRING. " +
-			"Point it at a read-only role: this grants an agent whatever that role has.",
-		Docs: "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres",
-	},
-	{
-		ID:       "slack",
-		Name:     "slack",
-		Title:    "Slack channels and messages",
-		Reaches:  "the channels the bot token is in, including their history",
-		Command:  "npx",
-		Args:     []string{"-y", "@modelcontextprotocol/server-slack"},
-		EnvNames: []string{"SLACK_BOT_TOKEN", "SLACK_TEAM_ID"},
-		Needs:    "node (npx), and SLACK_BOT_TOKEN plus SLACK_TEAM_ID under Variables.",
-		Docs:     "https://github.com/modelcontextprotocol/servers/tree/main/src/slack",
-	},
-	{
-		ID:       "sentry",
-		Name:     "sentry",
-		Title:    "Sentry issues",
-		Reaches:  "the issues and stack traces of the projects the token covers",
-		Command:  "uvx",
-		Args:     []string{"mcp-server-sentry", "--auth-token", "$SENTRY_TOKEN"},
-		EnvNames: []string{"SENTRY_TOKEN"},
-		Needs:    "python (uvx), and SENTRY_TOKEN under Variables.",
-		Docs:     "https://github.com/modelcontextprotocol/servers/tree/main/src/sentry",
-	},
-}
-
-// All returns the catalogue. A copy, because the caller marshals it and a
-// package-level slice handed out by reference is a slice somebody eventually
-// sorts in place.
-func All() []Entry {
-	out := make([]Entry, len(entries))
-	copy(out, entries)
-	return out
-}
-
-// Get returns one entry by id.
-func Get(id string) (Entry, bool) {
-	for _, e := range entries {
-		if e.ID == id {
-			return e, true
-		}
-	}
-	return Entry{}, false
-}
-
-// Search filters by a word an operator typed. Matching on the title and what it
-// reaches as well as the name, because somebody looking for their issue tracker
-// types "issues" or "tickets" rather than "sentry".
-func Search(q string) []Entry {
-	q = strings.ToLower(strings.TrimSpace(q))
-	if q == "" {
-		return All()
-	}
-	var out []Entry
-	for _, e := range entries {
-		hay := strings.ToLower(e.ID + " " + e.Name + " " + e.Title + " " + e.Reaches)
-		if strings.Contains(hay, q) {
-			out = append(out, e)
-		}
-	}
-	return out
-}
+// It lives here so the interface renders the same sentence the review screen
+// does rather than inventing a softer one.
+const FetchedAtSpawn = "A packaged server's code is downloaded when it starts, every time it starts. " +
+	"Approving it approves the command line, not the bytes that command will fetch tomorrow. " +
+	"A hosted server runs no code here at all — what leaves instead is your credential and whatever your agents say."

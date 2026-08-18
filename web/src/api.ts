@@ -492,10 +492,21 @@ export const auth = {
 // Somebody else's tools, granted to an agent the way a gear is — and worse than
 // a gear on every axis, which is why the card says so rather than making it feel
 // like installing a plugin.
+export type MCPTransport = 'stdio' | 'streamable-http' | 'sse'
+
 export type MCPServer = {
   id: number
   name: string
   description: string
+  /** A command on this host, or a URL somewhere else. The difference is what
+   *  an operator is agreeing to: one puts somebody else's code on this
+   *  machine, the other sends this install's credential to a host they do not
+   *  control. */
+  transport: MCPTransport
+  /** The remote half. header_names maps a header to a NAMED value — never a
+   *  value — resolved at connect time like a gear's env names. */
+  url: string
+  header_names: Record<string, string>
   /** Blank for a non-administrator: the command line and the credential NAMES
    *  are a map of this install's integrations, and a member needs to know that
    *  a server exists and is approved, not how it is spawned. */
@@ -503,12 +514,25 @@ export type MCPServer = {
   args: string[]
   cwd: string
   env_names: string[]
-  transport: 'stdio'
   status: 'pending' | 'approved' | 'disabled'
   approved_fingerprint: string
   timeout_seconds: number
   created_at: string
   updated_at: string
+}
+
+/** What an operator types to install or correct a server, either shape. */
+export type MCPServerInput = {
+  name: string
+  description?: string
+  transport?: MCPTransport
+  command?: string
+  args?: string[]
+  cwd?: string
+  env_names?: string[]
+  url?: string
+  header_names?: Record<string, string>
+  timeout_seconds?: number
 }
 
 export type MCPTool = {
@@ -541,13 +565,19 @@ export type MCPBinding = {
 /** One server in the shipped library: what an operator picks instead of knowing
  *  an npm package name. Nothing is fetched to render this. */
 export type MCPCatalogEntry = {
+  /** The registry's own name, globally unique; `name` is what it will be
+   *  called here, squeezed into the shape the store accepts. */
   id: string
   name: string
   title: string
   reaches: string
+  transport: MCPTransport
+  /** One half or the other, never both. */
   command: string
   args: string[]
   env_names?: string[]
+  url: string
+  header_names?: Record<string, string>
   needs: string
   docs: string
 }
@@ -771,18 +801,11 @@ export const api = {
       req<{ entries: MCPCatalogEntry[]; fetched_at_spawn: string }>(
         `/api/v1/mcp-catalog${q ? `?q=${encodeURIComponent(q)}` : ''}`,
       ),
-    install: (body: {
-      name: string
-      description?: string
-      command: string
-      args?: string[]
-      cwd?: string
-      env_names?: string[]
-      timeout_seconds?: number
-    }) => req<MCPServer>('/api/v1/mcp-servers', { method: 'POST', body: JSON.stringify(body) }),
+    install: (body: MCPServerInput) =>
+      req<MCPServer>('/api/v1/mcp-servers', { method: 'POST', body: JSON.stringify(body) }),
     // An edit and an approval are never the same request: approving what you
     // have just changed is approving something you have not seen.
-    edit: (id: number, body: Partial<{ description: string; command: string; args: string[]; cwd: string; env_names: string[]; timeout_seconds: number }>) =>
+    edit: (id: number, body: Partial<MCPServerInput>) =>
       req<MCPServer>(`/api/v1/mcp-servers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
     setStatus: (id: number, status: MCPServer['status']) =>
       req<MCPServer>(`/api/v1/mcp-servers/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),

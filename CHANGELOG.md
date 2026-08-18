@@ -2,6 +2,61 @@
 
 ## Unreleased
 
+### Any MCP server, not the third of them that happen to be packages
+
+The first cut of this spoke stdio only, and the library was six entries compiled
+into the binary. Both were wrong, and measurably: in a sample of the published
+registry, **two thirds of servers are hosted services** with no package to run
+at all. A product that could install the other third has a library that is
+mostly buttons doing nothing, and "we support MCP servers, except most of them"
+is not a sentence worth shipping.
+
+**All three transports.** `stdio` as before; `streamable-http`, which is one
+POST per message with the answer arriving as a JSON object or as an SSE stream
+scoped to that request; and the deprecated 2024-11-05 `sse` shape, where a GET
+opens a stream whose first event names where to POST. 0027's `CHECK (transport
+IN ('stdio'))` said in its own comment that widening it would cost a table
+rebuild — this is that rebuild.
+
+**The client was restructured rather than branched.** Message framing, the id
+table, notification-versus-request classification and the timeouts are protocol
+and are written once; a transport's whole job is to deliver one message and feed
+what comes back into the same dispatch. stdio keeps its reader goroutine; the
+HTTP one answers on the POST that asked.
+
+**What is being agreed to is different for each, so the card says different
+things.** A packaged server runs here as this server's user, outside the
+sandbox, refetched at every start. A hosted one runs nothing here — genuinely
+safer — and instead sends a credential on every request and every argument the
+agents write. Saying the same four warnings for both would have been false in
+two of them.
+
+**A URL is part of what is approved.** The fingerprint now covers it and the
+header names, because a hostname that was repointed after approval looks
+identical to one that was not. Cleartext to anywhere but this machine is refused
+outright rather than warned about, and a legacy server that names a POST
+endpoint on another host is refused too — that is the one place this transport
+lets a server redirect somebody else's credential.
+
+**Credentials stay names on both sides.** A remote server's headers are stored
+as header → NAMED VALUE and resolved at connect time, exactly as a child's
+environment is. The obvious design — a column holding what to send — would have
+put a live bearer token in plaintext in this database.
+
+**The library is the published registry, read live**, and the objection that
+stopped that the first time is answered rather than ignored: it is fetched only
+where an operator has agreed this install may make outbound requests, through
+the same switch the update check uses. An install that said no has no library
+and is told why; `add by hand` is untouched, because it never reached anything.
+Where a server publishes both shapes the hosted one is offered, because it runs
+no code here. An entry this install could not connect to produces no entry at
+all rather than a button that fails on first use.
+
+**Caught by its own test:** scoped npm packages start with `@`, so the check for
+a version separator matched the scope and left `@acme/thing` unpinned — which is
+most of the registry, and the difference between approving a version and
+approving whatever `latest` means tomorrow.
+
 ### MCP servers are a thing you pick, not a command line you type
 
 Consuming MCP was built and working, in the backend — the store, the client, the

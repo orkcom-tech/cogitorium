@@ -24,8 +24,14 @@ const (
 	CodeParse          = -32700
 	CodeInvalidRequest = -32600
 	CodeMethodNotFound = -32601
-	CodeInvalidParams  = -32602
-	CodeInternal       = -32603
+	// CodeInternalError is what this client reports when a transport failed
+	// before the server ever saw the message — an HTTP request that could not
+	// be made, a stream that ended. It is JSON-RPC's own code for "this side
+	// broke", and using it means a caller waiting on that id is answered
+	// instead of left to time out on a message nobody will ever reply to.
+	CodeInternalError = -32603
+	CodeInvalidParams = -32602
+	CodeInternal      = -32603
 )
 
 // Message is one line on the wire, in either direction.
