@@ -24,9 +24,11 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: session.headers({ 'Content-Type': 'application/json', ...(init?.headers as object) }),
   })
-  if (r.status === 401) throw new Unauthorized('sign in required')
   if (r.status === 204) return undefined as T
   const body = await r.json().catch(() => null)
+  // The server's own words, when it gave any. A 401 flattened to "sign in
+  // required" is why a mistyped password used to be reported as one.
+  if (r.status === 401) throw new Unauthorized(body?.error?.message ?? 'sign in required')
   if (!r.ok) {
     throw new Error(body?.error?.message ?? `${r.status} ${r.statusText}`)
   }
@@ -467,6 +469,22 @@ export type AgentUsage = {
   last_at?: string
 }
 export type Team = { id: number; name: string }
+
+// SetupState is what an unauthenticated client is allowed to learn about an
+// install before it can prove anything: whether anybody has claimed it yet,
+// and whether it is somebody's own machine or a server on a network.
+export type SetupState = { needs_setup: boolean; local: boolean }
+
+export const setup = {
+  state: () => req<SetupState>('/api/v1/setup'),
+  // token is ignored on a local install and required on a server, where an
+  // anonymous claim would be a takeover.
+  claim: (password: string, token?: string) =>
+    req<{ user: User; token: string }>('/api/v1/setup', {
+      method: 'POST',
+      body: JSON.stringify({ password, token: token ?? '' }),
+    }),
+}
 
 export const auth = {
   whoami: () => req<User>('/api/v1/whoami'),
