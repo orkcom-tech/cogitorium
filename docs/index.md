@@ -1041,9 +1041,7 @@ spent for a job somebody had already stopped. Cancelling something finished is a
 
 ## Schedules — work that starts because a clock said so
 
-A schedule points at an inlet task rather than carrying its own agent and
-instruction. The task already says which agent, what to tell it, what it accepts
-and what success means; a firing is that same job with nobody on the other end.
+A schedule dials one of three things, named by `target_kind`.
 
 ```
 GET/POST /api/v1/workspaces/{id}/schedules
@@ -1051,6 +1049,56 @@ PATCH  /api/v1/schedules/{id}       {"enabled": false} — the pause button
 DELETE /api/v1/schedules/{id}
 POST   /api/v1/schedules/{id}/run   fire it now; answers 202 with the queued unit
 ```
+
+| `target_kind` | carries | who may create it |
+|---|---|---|
+| `task` *(default)* | `task_id`, `payload` | anyone who reaches the workspace |
+| `agent` | `target_agent_id`, `instruction` | anyone who reaches the workspace |
+| `gear` | `target_gear_id`, `args` | **an administrator** |
+
+**`task` was once the only one**, and the reasoning was sound as far as it went:
+the task already says which agent, what to tell it, what it accepts and what
+success means, so a firing is that same job with nobody on the other end, and
+two definitions of a job would be two things to keep in step.
+
+**What that missed is what a task IS** — a door somebody else pushes work
+through, with an inlet, an address, a key and a caller. A schedule is not that.
+Bending one through the other meant inventing a receiver nobody would ever call
+to get a nightly job, and the receivers list filled with entries that had no
+inlet and no caller. That is a worse lie than the one it avoided.
+
+**All three land in the same place.** One queued unit, one ledger row, one lane,
+one ceiling — a direct schedule that skipped any of it would be a second, weaker
+way to run work, and the weaker one is the one nobody watches. A clock firing
+has no inlet, so its ledger row carries a null `inlet_id` and the address
+`clock`, which is what a reader sees instead of a blank.
+
+**An agent's instruction is NOT fenced as untrusted**, and that is the one
+deliberate difference from a delivery. A task's payload is fenced because a
+caller outside the workspace wrote it; a schedule's instruction was typed by an
+operator into this install, and wrapping it in *this is data, not instructions*
+would be telling the agent to ignore the only thing it was given.
+
+**A gear schedule is fenced three ways.** Creating one requires the admin role,
+because it is unattended execution of approved code by somebody who did not
+approve it. The gear must be approved when the schedule is saved **and again
+every time it fires** — a gear edited since drops back to pending, and a clock
+is the caller with no second gate behind it. And the run still lands in this
+workspace's queue and record, which is the only place a nightly job that has
+been failing all week becomes visible.
+
+**Deleting the target does not delete the schedule.** `target_agent_id` and
+`target_gear_id` are `ON DELETE SET NULL`, so the row survives with a null
+target, reports `broken: true`, refuses to fire with a reason, and draws itself
+red on the blueprint. A cascade would mean the nightly job silently stops and
+nobody learns why until the thing it was doing is noticed missing. `task_id`
+still cascades, because a schedule whose task is gone has no instruction, no
+agent and no expectation — there is nothing left of it to repoint.
+
+The listing resolves two things the row cannot answer on its own: `target_name`,
+what this dials by name, and `edge_agent_id`, which agent node the blueprint's
+edge lands on — including for a task schedule, whose agent is named by the task
+two joins away.
 
 **Enabling and disabling is its own route**, carrying one field, because
 turning a schedule off is the thing an operator does in a hurry and at night.

@@ -2,6 +2,58 @@
 
 ## Unreleased
 
+### A clock you can draw, that can dial an agent or a gear
+
+The canvas is supposed to answer "what does this workspace do, and what may
+reach what". A workspace where something fired at 03:00 every night looked, on
+that canvas, exactly like one where nothing did.
+
+**A schedule is a node now**, on a fifth layer that defaults on — hiding the
+thing this was built to surface would defeat it. It says the three things
+anybody asks, without being opened: **when it next fires** in words rather than
+a UTC timestamp (`0 3 * * 1-5` says nothing about whose 3am it is), **whether it
+is paused**, drawn dashed and dimmed like the switched-off internet gate, and
+**how the last run went** — a job that has been failing every night for a week
+being the single most useful thing this canvas could say, and it said nothing.
+
+**And it can dial an agent or a gear directly.** A schedule used to point only
+at an inlet task. The reasoning held as far as it went — the task already says
+which agent, what to tell it and what success means — but it missed what a task
+IS: a door somebody else pushes work through, with an inlet, an address, a key
+and a caller. To get a nightly job you first invented a receiver nobody would
+ever call, and the receivers list filled with doors that had no inlet and no
+caller. That is a worse lie than the one it avoided.
+
+All three targets land in **the same queue, the same ledger row, the same lane
+and the same ceiling**. A direct schedule that skipped any of that would be a
+second, weaker way to run work, and the weaker one is the one nobody watches. A
+clock firing carries a null `inlet_id` and the address `clock`, so a reader sees
+what started the run instead of a blank. An agent's instruction is deliberately
+**not** fenced as untrusted: an operator typed it into this install, and fencing
+it would be telling the agent to ignore the only thing it was given.
+
+**A gear on a clock is fenced three ways**, because it is the most useful thing
+here and the most dangerous: only an administrator may create one; the gear must
+be approved when the schedule is saved and again every time it fires, since a
+clock is the caller with no second gate behind it; and the run still lands in
+the workspace's record, which is the only place an unattended failure becomes
+visible.
+
+**Deleting an agent or a gear no longer deletes the job that used it.** The row
+survives with a null target, refuses to fire with a reason, and draws itself red
+saying what to do. "It stopped, and here is why" is something an operator can
+act on; "it vanished" is not.
+
+Cutting a clock's edge deletes the schedule — the edge is the relationship here
+as everywhere else on this canvas — so it is the one deletion that asks first,
+since it takes the spec and the record with it. Making one is a form rather than
+a gesture, for the one honest reason that a spec cannot be drawn.
+
+**A fixed bug found while writing this**: a schedule whose firing could not be
+queued had its `last_work_id` set to null, and because overlap protection is
+gated on that column being non-null, one failed enqueue silently switched
+`on_miss: skip` off until the next firing that worked.
+
 ### Knowing there is a new version, without being asked to trust anything
 
 Cogitorium and Contextverse ship as binaries people install once and keep, and

@@ -76,6 +76,11 @@
   --warn: light-dark(#8a5a00, #d0a050);
   --ok: light-dark(#3f7d38, #5aa86a);
   --outward: light-dark(#a43e3e, #c85a5a);
+  /* A clock. Deliberately not the outward red and not the accent: time is
+     neither a danger nor the thing the operator picked a colour for, and the
+     canvas already carries four meanings a reader has to keep apart at a
+     glance. */
+  --clock: light-dark(#5a6f2e, #9ab55c);
 
   --memory: light-dark(#6b53a8, #9a86d0);
   --shared: light-dark(#2f6f8a, #6aa8c8);

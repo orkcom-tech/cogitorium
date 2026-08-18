@@ -1417,6 +1417,35 @@ paths:
           description: see the reference
     post:
       summary: "Create workspaces/{id}/schedules"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "args":
+                  description: any JSON value
+                "instruction":
+                  type: string
+                "name":
+                  type: string
+                "on_miss":
+                  type: string
+                "payload":
+                  description: any JSON value
+                "spec":
+                  type: string
+                "target_agent_id":
+                  type: integer
+                "target_gear_id":
+                  type: integer
+                "target_kind":
+                  type: string
+                "task_id":
+                  type: integer
+                "tz":
+                  type: string
       responses:
         default:
           description: see the reference

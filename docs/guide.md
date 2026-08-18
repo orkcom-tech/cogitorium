@@ -380,9 +380,9 @@ and the capability is gone on the next turn — click the edge and press Delete.
 Wires are created and deleted, never edited; to change one, remove it and draw
 the new one.
 
-**Four layers, four buttons.** The legend at the top left is four independent
-toggles, not a picker: any combination is legal. Delegation, tools and outward
-start on; memory starts off.
+**Five layers, five buttons.** The legend at the top left is five independent
+toggles, not a picker: any combination is legal. Delegation, tools, outward and
+time start on; memory starts off.
 
 | Layer | An edge means |
 |---|---|
@@ -390,10 +390,39 @@ start on; memory starts off.
 | **tools** | this agent may call that gear |
 | **memory** | this is what the agent knows going into a turn |
 | **outward** | this agent may ask to reach the internet |
+| **time** | this clock starts that agent or that gear |
 
-Every one of them is a permission the runtime checks, not a note about
-intentions. To change what the system can do you change the graph; to know what
-it can do you look at it, rather than reading four prompts and hoping.
+Every one of them is a permission or a cause the runtime acts on, not a note
+about intentions. To change what the system can do you change the graph; to know
+what it can do you look at it, rather than reading five prompts and hoping.
+
+**Clocks on the canvas.** A workspace where something fires at 03:00 every night
+used to look, on this canvas, exactly like one where nothing did. Now it does
+not: a schedule is a node, wired to what it starts, and it says without being
+opened the three things anybody actually asks —
+
+- **when it next fires**, in words rather than a UTC timestamp: *in 18h*, beside
+  the spec and the zone. `0 3 * * 1-5` says nothing about whose 3am it is, and
+  on a shared install that is exactly what two people disagree about.
+- **whether it is paused**, drawn dashed and dimmed like the switched-off
+  internet gate, because a paused schedule that looks identical to a running one
+  is how somebody re-enables the wrong one.
+- **how the last run went**. A schedule that has been failing every night for a
+  week is the single most useful thing this canvas can tell you, and it used to
+  tell you nothing.
+
+**`+ clock`** makes one, and it is a form rather than a gesture for one honest
+reason: every other relationship here is fully described by its two ends, and a
+schedule is not — it carries a spec, and there is no way to draw *every weekday
+at 03:00*. The edge is still the relationship, so **selecting it and pressing
+Delete removes the job**, and because that takes the spec and the record with
+it, this is the one deletion on the canvas that asks first. Pause it instead if
+you only want it to stop for now.
+
+**A clock whose target was deleted stays.** It turns red, drops its edge, and
+says *its agent was deleted — repoint it or remove it*. Deleting an agent must
+not silently take the nightly job that used it: "it stopped, and here is why" is
+something you can act on, and "it vanished" is not.
 
 **Adding to the canvas.** **`+ agent`** takes a name, a model and a role. A model
 is required and not defaulted — an agent with nothing to think with cannot take
@@ -1047,15 +1076,47 @@ previous one is still going; by default it is skipped. Each schedule shows when
 it fires next, how many times it has fired and skipped, and its last outcome,
 with **Pause**, **Run now** (which does not move its clock) and **Delete**.
 
+**A clock can dial three things**, and which one you want is usually obvious:
+
+- **a receiver task** — the original, and still right when a job genuinely has a
+  door as well as a clock. The task already says which agent, what to tell it
+  and what counts as success, so a firing is that same job with nobody on the
+  other end.
+- **an agent**, with the sentence to give it. This is what most nightly jobs
+  actually are, and before it existed you had to invent a receiver nobody would
+  ever call to get one — which filled the receivers list with doors that had no
+  inlet and no caller. A firing with no instruction is refused when you save it,
+  because a turn with an empty prompt costs money and answers nothing.
+- **a gear**, with its arguments. A backup, a report, a sync — the jobs where a
+  model is a liability rather than a help. Read the warnings below before you
+  make one.
+
+Whatever it dials, a firing goes into **the same queue and the same record** a
+delivery does, so "did last night's job run" is answerable in the usual place,
+and the ceiling that bounds an unattended run still applies.
+
+### A gear on a clock
+
+This is the most useful thing here and the most dangerous, so it is fenced
+three ways rather than one:
+
+- **Only an administrator may make one.** A schedule that runs a gear is
+  unattended execution of approved code by somebody who did not approve it,
+  which is the same class of act as handing an agent an MCP server.
+- **The gear must be approved, and it is checked twice** — when you save the
+  schedule and again every time it fires. A gear edited since drops back to
+  pending, and a clock is the caller with no second gate behind it, so it
+  refuses rather than running code nobody read.
+- **Nobody is watching**, which is the point and also the risk. The blueprint
+  node showing the last outcome is the cheapest version of somewhere for a
+  failure to be seen.
+
 What it will not do:
 
-- **A schedule has no job of its own.** It fires a task that already says which
-  agent, what to tell it and what counts as success — a schedule with its own
-  copy of all that would be a second definition to keep in step. Until the
-  workspace has one inlet task, there is nothing to schedule and the button is
-  disabled.
 - **A scheduled run never gets web search.** Every search waits for a person to
   approve that exact query, and on a schedule there is nobody to ask.
+- **A file task cannot be scheduled.** A file task is given a path to bytes
+  somebody delivered, and a clock has no bytes to give it.
 
 ### The Variables drawer
 

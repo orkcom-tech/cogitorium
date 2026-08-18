@@ -42,6 +42,40 @@ type CreateGearBody = createGearInput
 // given on CreateGearBody.
 type RunGearBody = runGearInput
 
+// CreateScheduleBody writes a clock, and its shape is a union: which fields
+// matter depends on target_kind.
+//
+// One body for three targets rather than three routes, because they are one
+// noun — "a thing that fires on a spec" — and three creates would be three
+// places for the spec, the timezone and the miss rule to drift. Which fields
+// are required for which kind is checked in the handler, where the operator is
+// still on the other end of the error.
+type CreateScheduleBody struct {
+	// TargetKind is "task", "agent" or "gear". Empty means task, because every
+	// caller written before a clock could dial anything else says so by saying
+	// nothing.
+	TargetKind string `json:"target_kind"`
+	Name       string `json:"name"`
+	Spec       string `json:"spec"`
+	TZ         string `json:"tz"`
+	OnMiss     string `json:"on_miss"`
+
+	// A receiver task, and the body handed to it — exactly what an HTTP caller
+	// would have sent.
+	TaskID  *int64          `json:"task_id"`
+	Payload json.RawMessage `json:"payload"`
+
+	// An agent, and the sentence it is given. A clock wired to an agent with
+	// nothing to say produces a turn with an empty prompt.
+	TargetAgentID *int64 `json:"target_agent_id"`
+	Instruction   string `json:"instruction"`
+
+	// A gear, and the arguments it is called with, held against that gear's own
+	// schema when this is saved rather than at 03:00 every night.
+	TargetGearID *int64          `json:"target_gear_id"`
+	Args         json.RawMessage `json:"args"`
+}
+
 // UpdateModeBody is the answer to the one question this product asks on its
 // own behalf: may this install ask whether a newer release exists. "ask", "on"
 // or "off" — see internal/update for why the unanswered state is a value of its

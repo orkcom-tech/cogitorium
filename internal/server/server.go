@@ -370,7 +370,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "GET /api/v1/workspaces/{id}/queue", s.handleWorkspaceQueue)
 	s.route(mux, "GET /api/v1/workspaces/{id}/spend", s.handleWorkspaceSpend)
 	s.route(mux, "GET /api/v1/workspaces/{id}/schedules", s.handleListSchedules)
-	s.route(mux, "POST /api/v1/workspaces/{id}/schedules", s.handleCreateSchedule)
+	s.routeIn(mux, "POST /api/v1/workspaces/{id}/schedules", s.handleCreateSchedule, CreateScheduleBody{})
 	s.route(mux, "PATCH /api/v1/schedules/{id}", s.handleSetScheduleEnabled)
 	s.route(mux, "DELETE /api/v1/schedules/{id}", s.handleDeleteSchedule)
 	s.route(mux, "POST /api/v1/schedules/{id}/run", s.handleRunScheduleNow)

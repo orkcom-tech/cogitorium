@@ -1334,6 +1334,54 @@ th {
   --kind: var(--outward);
 }
 
+/* Clocks. Three states have to be legible without opening anything: a paused
+   schedule that looks like a running one is how somebody re-enables the wrong
+   one, and a schedule failing every night for a week is the most useful thing
+   this canvas can say. */
+.react-flow__node.bp-clock {
+  border-color: var(--clock);
+  border-width: 2px;
+  background: color-mix(in srgb, var(--clock) 12%, transparent);
+  max-width: 15rem;
+}
+
+/* Paused. Dashed and dimmed, the same vocabulary the switched-off internet gate
+   uses, so "this is not currently doing anything" reads the same way twice. */
+.react-flow__node.bp-clock-off {
+  border-style: dashed;
+  opacity: 0.55;
+}
+
+/* Its target was deleted. Not dimmed — a broken job is not a quiet one, and
+   dimming it would say the opposite of what it means. */
+.react-flow__node.bp-clock-broken {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.react-flow__node.bp-clock-failed {
+  border-color: var(--warn);
+}
+
+.react-flow__edge.bp-clock-edge .react-flow__edge-path {
+  stroke: var(--clock);
+  stroke-width: 2;
+  stroke-dasharray: 2 5;
+  stroke-linecap: round;
+}
+
+.react-flow__edge.bp-clock-edge.off .react-flow__edge-path {
+  opacity: 0.45;
+}
+
+.react-flow__edge.bp-clock-edge.failed .react-flow__edge-path {
+  stroke: var(--warn);
+}
+
+.legend-dot.layer-time {
+  --kind: var(--clock);
+}
+
 /* The approval dialog. Every rule here exists so that what the operator reads
    is provably the bytes that leave: no ligatures, no bidi reordering, no
    scroll container that could hide the tail of a query. */

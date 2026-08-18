@@ -132,7 +132,8 @@ func (s *Server) handleInletDelivery(w http.ResponseWriter, r *http.Request) {
 	// looked up: from here on everything that can go wrong is something an
 	// operator will want to find in the ledger, and a crash between this line
 	// and the answer must still leave evidence that something arrived.
-	runID, err := s.inlets.Accept(r.Context(), in.WorkspaceID, in.ID, in.Address, task.Name, task.AgentName)
+	inletID := in.ID
+	runID, err := s.inlets.Accept(r.Context(), in.WorkspaceID, &inletID, in.Address, task.Name, task.AgentName)
 	if err != nil {
 		fail(w, r, err)
 		return

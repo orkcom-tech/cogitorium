@@ -104,7 +104,7 @@ shoot('02-workspace-chat', 'the frame: rail on the bezel, chat in the cavity, ag
   await page.waitForTimeout(700)
 })
 
-shoot('03-blueprint', 'the blueprint: every wire is a capability, and the controls float on it', async (page) => {
+shoot('03-blueprint', 'the blueprint: every wire is a capability, the clock says when it next fires, and the controls float on it', async (page) => {
   await page.goto(`${base}/workspaces/1`)
   await ready(page)
   await rail(page, 'Blueprint').click()

@@ -342,10 +342,26 @@ export type QueueEntry = {
 
 export type QueueView = { queued: number; running: number; entries: QueueEntry[] }
 
+// What a clock dials. `task` is the original and is still right when a job has
+// a door as well as a clock; the other two exist because a task describes a
+// DOOR — an inlet, an address, a key, a caller — and a schedule is not that.
+export type ScheduleTarget = 'task' | 'agent' | 'gear'
+
 export type Schedule = {
   id: number
   workspace_id: number
-  task_id: number
+  target_kind: ScheduleTarget
+  /** Set only for a task schedule. */
+  task_id?: number
+  /** Null on a BROKEN schedule: deleting an agent or a gear nulls the target
+   *  rather than cascading the schedule away, so a nightly job that lost what
+   *  it dialled shows as broken instead of vanishing. */
+  target_agent_id?: number
+  target_gear_id?: number
+  /** The sentence an agent target is given; the arguments a gear is called
+   *  with, held against that gear's schema when the schedule is saved. */
+  instruction?: string
+  args?: string
   name: string
   spec: string
   tz: string
@@ -358,15 +374,29 @@ export type Schedule = {
   last_outcome?: 'fired' | 'skipped' | 'failed'
   fires: number
   skips: number
+  /** Resolved by the server, because the row cannot answer either on its own:
+   *  what this dials by name, and which agent node an edge should land on —
+   *  including for a task schedule, whose agent is named by the task. */
+  target_name?: string
+  edge_agent_id?: number
+  broken: boolean
 }
 
 export type NewSchedule = {
-  task_id: number
+  target_kind?: ScheduleTarget
   name: string
   spec: string
   tz?: string
-  payload?: unknown
   on_miss?: 'skip' | 'run'
+  /** task */
+  task_id?: number
+  payload?: unknown
+  /** agent */
+  target_agent_id?: number
+  instruction?: string
+  /** gear */
+  target_gear_id?: number
+  args?: unknown
 }
 
 // One delivery, whatever became of it. inlet_id and agent_id are nullable

@@ -327,7 +327,7 @@ func TestARunIsRecordedBeforeTheWorkAndSettledExactlyOnce(t *testing.T) {
 	s, wsID := newFixture(t)
 	ctx := context.Background()
 
-	runID, err := s.Accept(ctx, wsID, 7, "tickets", "triage", "orchestrator")
+	runID, err := s.Accept(ctx, wsID, ptr(7), "tickets", "triage", "orchestrator")
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
@@ -369,7 +369,7 @@ func TestARunIsRecordedBeforeTheWorkAndSettledExactlyOnce(t *testing.T) {
 
 	// A refused run never reached Begin, so Begin must not be able to revive
 	// it: a payload that was refused stays refused, whatever arrives late.
-	refusedID, err := s.Accept(ctx, wsID, 7, "tickets", "triage", "orchestrator")
+	refusedID, err := s.Accept(ctx, wsID, ptr(7), "tickets", "triage", "orchestrator")
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
@@ -386,7 +386,7 @@ func TestARunIsRecordedBeforeTheWorkAndSettledExactlyOnce(t *testing.T) {
 	// Startup reconciliation: a run lives in one process's memory, so anything
 	// still live after a restart can never finish. Terminal rows are history
 	// and must not be touched.
-	liveID, err := s.Accept(ctx, wsID, 7, "tickets", "triage", "orchestrator")
+	liveID, err := s.Accept(ctx, wsID, ptr(7), "tickets", "triage", "orchestrator")
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
