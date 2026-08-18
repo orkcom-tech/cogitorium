@@ -13,6 +13,7 @@ import (
 
 	"github.com/orkcom-tech/cogitorium/internal/engine"
 	"github.com/orkcom-tech/cogitorium/internal/inlet"
+	"github.com/orkcom-tech/cogitorium/internal/metrics"
 	"github.com/orkcom-tech/cogitorium/internal/work"
 )
 
@@ -166,6 +167,17 @@ func (s *Server) failedRun(ctx context.Context, runID int64, cause error, did en
 // otherwise settle successfully having done nothing, which is the exact shape
 // of failure this whole ledger exists to make impossible.
 func (s *Server) runWork(ctx context.Context, u work.Unit) error {
+	// Counted around the whole unit rather than inside each runner, so a kind
+	// that grows a third runner is measured without anybody remembering to.
+	s.metrics.WorkRunning.Add(map[string]string{"kind": u.Kind}, 1)
+	defer s.metrics.WorkRunning.Add(map[string]string{"kind": u.Kind}, -1)
+
+	err := s.runWorkOf(ctx, u)
+	s.metrics.WorkUnits.Inc(map[string]string{"kind": u.Kind, "outcome": metrics.Outcome(err)})
+	return err
+}
+
+func (s *Server) runWorkOf(ctx context.Context, u work.Unit) error {
 	switch u.Kind {
 	case work.KindDelivery:
 		return s.runDelivery(ctx, u)
@@ -213,6 +225,7 @@ func (s *Server) runScheduledGear(ctx, ledgerCtx context.Context, runID int64, a
 	started := time.Now()
 	res, runErr := s.gearExec.Run(ctx, g, body, gear.Caller{})
 	elapsed := time.Since(started).Milliseconds()
+	s.metrics.GearSeconds.Observe(nil, time.Since(started).Seconds())
 
 	// The record is built from the executor's own result rather than from
 	// anything the gear said about itself, exactly as a delegated tool call is.
@@ -228,6 +241,8 @@ func (s *Server) runScheduledGear(ctx, ledgerCtx context.Context, runID int64, a
 	for _, f := range res.Produced {
 		did.Files = append(did.Files, engine.FileMade{Path: f.Path, Bytes: f.Bytes})
 	}
+
+	s.metrics.GearRuns.Inc(map[string]string{"outcome": gearOutcome(runErr, res)})
 
 	switch {
 	case errors.Is(runErr, gear.ErrNotApproved):
@@ -258,4 +273,23 @@ func (s *Server) runScheduledGear(ctx, ledgerCtx context.Context, runID int64, a
 		s.settle(ledgerCtx, runID, inlet.StateCompleted, res.Stdout, "", did)
 	}
 	return nil
+}
+
+// gearOutcome is the one label a dashboard reads, and it keeps "refused" apart
+// from "broke" for the same reason the ledger states do: a gear that was not
+// approved is a decision somebody has to make, and a gear that exited 1 is a
+// bug somebody has to fix. Alerting on them together pages the wrong person.
+func gearOutcome(err error, res gear.Result) string {
+	switch {
+	case errors.Is(err, gear.ErrNotApproved):
+		return "refused"
+	case err != nil:
+		return "failed"
+	case res.TimedOut:
+		return "timed_out"
+	case res.ExitCode != 0:
+		return "nonzero_exit"
+	default:
+		return "ok"
+	}
 }

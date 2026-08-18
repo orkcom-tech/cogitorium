@@ -4,6 +4,7 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -102,6 +103,26 @@ type Config struct {
 	// also requires a sandbox — without one the request is refused rather
 	// than served with the server's own file access.
 	Terminal bool `yaml:"terminal"`
+
+	// MetricsListen is where the Prometheus endpoint listens, e.g.
+	// "127.0.0.1:9090". EMPTY MEANS OFF, and off is the default.
+	//
+	// Its own address rather than a route on the API, deliberately. The API is
+	// authenticated and a scrape is not, so an unauthenticated path on the
+	// authenticated surface would be a way in; a separate port is something an
+	// operator can bind to a private interface or firewall, which is what they
+	// already do for every other exporter they run.
+	MetricsListen string `yaml:"metrics_listen"`
+
+	// LogFormat is "text" or "json". Text is the default and is for a person
+	// reading a terminal; json is one object per line with stable field names,
+	// which is what Elastic, Loki, Datadog and every other collector want.
+	//
+	// Cogitorium ships logs NOWHERE. That is what Vector, Fluent Bit, Alloy and
+	// the vendor agents are for, and a product that grew its own exporter would
+	// be a product maintaining four of them. What it owes a collector is a
+	// format, and this is it.
+	LogFormat string `yaml:"log_format"`
 
 	// UpdateCheck decides whether this install may ask GitHub whether a newer
 	// Cogitorium or Contextverse has been released: "ask", "on" or "off".
@@ -263,6 +284,7 @@ func Defaults() Config {
 		ContextdPath:    "contextd",
 		Sandbox:         "auto",
 		UpdateCheck:     update.ModeAsk,
+		LogFormat:       "text",
 		BrowserImage:    DefaultBrowserImage,
 		GearProxyListen: gearnet.DefaultListen,
 		QueueWorkers:    4,
@@ -367,6 +389,12 @@ func Load(path, dataDirOverride string) (Config, error) {
 	if v := os.Getenv("COGITORIUM_TERMINAL"); v != "" {
 		cfg.Terminal = v == "1" || strings.EqualFold(v, "true")
 	}
+	if v := os.Getenv("COGITORIUM_METRICS_LISTEN"); v != "" {
+		cfg.MetricsListen = v
+	}
+	if v := os.Getenv("COGITORIUM_LOG_FORMAT"); v != "" {
+		cfg.LogFormat = strings.ToLower(strings.TrimSpace(v))
+	}
 	// Not a bool: "ask" is a real value and spelling it as a third state of a
 	// flag would make an unanswered question look like a refusal.
 	if v := os.Getenv("COGITORIUM_UPDATE_CHECK"); v != "" {
@@ -418,6 +446,25 @@ func Load(path, dataDirOverride string) (Config, error) {
 // MinAdminTokenLen is the floor for a seeded admin token. Generated tokens are
 // far longer; this exists so that a seeded one cannot be trivially guessable.
 const MinAdminTokenLen = 24
+
+// SlogHandler builds the log handler this install asked for.
+//
+// Text for a person at a terminal; JSON for a collector. The LEVEL is the same
+// either way — the format decides who can read a line, not which lines exist —
+// and an unknown format falls back to text with a word rather than to silence.
+func (c Config) SlogHandler(w io.Writer) slog.Handler {
+	opts := &slog.HandlerOptions{Level: c.SlogLevel()}
+	switch c.LogFormat {
+	case "json":
+		return slog.NewJSONHandler(w, opts)
+	case "", "text":
+		return slog.NewTextHandler(w, opts)
+	default:
+		h := slog.NewTextHandler(w, opts)
+		slog.New(h).Warn("unknown log_format, using text", "log_format", c.LogFormat)
+		return h
+	}
+}
 
 // SlogLevel maps LogLevel to a slog.Level, defaulting to info on garbage.
 func (c Config) SlogLevel() slog.Level {

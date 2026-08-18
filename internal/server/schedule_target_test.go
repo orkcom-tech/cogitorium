@@ -260,3 +260,121 @@ func TestTheTaskPathIsUnchanged(t *testing.T) {
 		return n == 1
 	}, "the task schedule to run")
 }
+
+// ── editing a clock, which used to mean deleting and redrawing it ─────────
+
+// A schedule you cannot correct is one people replace, and a replaced schedule
+// has no history. The counters are the point of this test.
+func TestEditingAScheduleKeepsWhatItHasDone(t *testing.T) {
+	d := newDoor(t)
+	ctx := context.Background()
+	agent := d.agent(t, workspace.OrchestratorName)
+	d.provider.answers(func(n int, c modelCall) modelReply { return says("swept") })
+
+	sc, err := d.srv.schedules.Create(ctx, schedule.Schedule{
+		WorkspaceID: d.wsID, TargetKind: schedule.TargetAgent, TargetAgentID: &agent.ID,
+		Instruction: "sweep", Name: "nightly", Spec: "every 1m",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	// Give it a history worth keeping.
+	d.due(t, sc.ID)
+	d.srv.tick(ctx)
+	waitFor(t, func() bool {
+		after, _ := d.srv.schedules.Get(ctx, sc.ID)
+		return after.Fires == 1
+	}, "the schedule to fire once")
+
+	rec := d.request(t, http.MethodPut, "/api/v1/schedules/"+id(sc.ID), d.adminTok,
+		`{"spec":"0 3 * * 1-5","tz":"Europe/Berlin","instruction":"sweep harder"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("edit: %d %s", rec.Code, rec.Body.String())
+	}
+
+	after, err := d.srv.schedules.Get(ctx, sc.ID)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if after.Spec != "0 3 * * 1-5" || after.TZ != "Europe/Berlin" || after.Instruction != "sweep harder" {
+		t.Fatalf("the edit did not land: %+v", after)
+	}
+	if after.Fires != 1 {
+		t.Fatalf("editing lost the counters: fires=%d", after.Fires)
+	}
+	if after.ID != sc.ID {
+		t.Fatal("editing produced a different schedule")
+	}
+	// The next firing is recomputed rather than carried over, or a schedule
+	// edited from every-minute to nightly fires once more on the old rule.
+	if !after.NextAt.After(time.Now().UTC().Add(time.Hour)) {
+		t.Fatalf("next_at was not recomputed from the new spec: %s", after.NextAt)
+	}
+}
+
+// An omitted field is left alone. An edit that blanked what it did not mention
+// would make a partial body dangerous.
+func TestAnOmittedFieldSurvivesAnEdit(t *testing.T) {
+	d := newDoor(t)
+	agent := d.agent(t, workspace.OrchestratorName)
+	sc, err := d.srv.schedules.Create(t.Context(), schedule.Schedule{
+		WorkspaceID: d.wsID, TargetKind: schedule.TargetAgent, TargetAgentID: &agent.ID,
+		Instruction: "sweep", Name: "nightly", Spec: "every 1m", OnMiss: "run",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	rec := d.request(t, http.MethodPut, "/api/v1/schedules/"+id(sc.ID), d.adminTok, `{"spec":"every 5m"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("edit: %d %s", rec.Code, rec.Body.String())
+	}
+	after, _ := d.srv.schedules.Get(t.Context(), sc.ID)
+	if after.Instruction != "sweep" || after.Name != "nightly" || after.OnMiss != "run" {
+		t.Fatalf("an omitted field was blanked: %+v", after)
+	}
+}
+
+// A gear schedule stays an administrator's to change, for the same reason it
+// was theirs to create: an edit that moves its spec decides when unattended
+// code runs.
+func TestOnlyAnAdministratorMayEditAGearSchedule(t *testing.T) {
+	d := newDoor(t)
+	ctx := t.Context()
+	orch := d.agent(t, workspace.OrchestratorName)
+	g, err := d.srv.gears.Forge(ctx, "backup", "", nil, "python", "main.py",
+		`{"type":"object","properties":{}}`, nil,
+		[]gear.File{{Path: "main.py", Content: "print(1)\n"}}, d.wsID, orch.ID)
+	if err != nil {
+		t.Fatalf("forge: %v", err)
+	}
+	if _, err := d.srv.gears.SetStatus(ctx, g.ID, gear.StatusApproved, gear.Actor{Name: "the test"}); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	sc, err := d.srv.schedules.Create(ctx, schedule.Schedule{
+		WorkspaceID: d.wsID, TargetKind: schedule.TargetGear, TargetGearID: &g.ID,
+		Name: "nightly-backup", Spec: "every 1m",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	member, memberTok, err := d.users.CreateUser(ctx, "member-"+t.Name(), "member", "")
+	if err != nil {
+		t.Fatalf("member: %v", err)
+	}
+	team, err := d.users.CreateTeam(ctx, "t-"+t.Name())
+	if err != nil {
+		t.Fatalf("team: %v", err)
+	}
+	if err := d.users.AddTeamMember(ctx, team.ID, member.ID); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if _, err := d.srv.workspaces.ShareWith(ctx, d.wsID, team.ID); err != nil {
+		t.Fatalf("share: %v", err)
+	}
+
+	rec := d.request(t, http.MethodPut, "/api/v1/schedules/"+id(sc.ID), memberTok, `{"spec":"every 5m"}`)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("a member moved a gear schedule's clock: %d %s", rec.Code, rec.Body.String())
+	}
+}

@@ -307,6 +307,81 @@ func (s *Server) handleSetScheduleEnabled(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, s.viewOf(r.Context(), sc.WorkspaceID, updated))
 }
 
+// handleEditSchedule is the other half of the pause button.
+//
+// PUT rather than another PATCH on the same path, because PATCH already means
+// "turn this off" and an operator in a hurry must keep the shortest route to
+// that. A gear schedule stays an administrator's to change, for the same reason
+// it was theirs to create: it is unattended execution of approved code, and an
+// edit that could move its spec is an edit that decides when that happens.
+func (s *Server) handleEditSchedule(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.scheduleScoped(w, r)
+	if !ok {
+		return
+	}
+	if sc.TargetKind == schedule.TargetGear {
+		if _, ok := requireAdmin(w, r); !ok {
+			return
+		}
+	}
+	var in EditScheduleBody
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+
+	want := schedule.Schedule{
+		Name: in.Name, Spec: in.Spec, TZ: in.TZ, OnMiss: in.OnMiss, Instruction: in.Instruction,
+	}
+	// A payload and arguments are checked against the same schema they were
+	// checked against when the schedule was written — now, while the operator
+	// is looking at it, rather than at 03:00 every night forever.
+	if len(in.Payload) > 0 {
+		if sc.TaskID == nil {
+			writeError(w, http.StatusBadRequest, "this schedule has no task, so it takes no payload")
+			return
+		}
+		task, err := s.inlets.GetTask(r.Context(), *sc.TaskID)
+		if err != nil {
+			fail(w, r, err)
+			return
+		}
+		if err := inlet.ValidatePayload(task.Schema, in.Payload); err != nil {
+			writeError(w, http.StatusBadRequest,
+				"this payload does not match what the task accepts, so every firing would be refused: "+err.Error())
+			return
+		}
+		want.Payload = string(in.Payload)
+	}
+	if len(in.Args) > 0 {
+		if sc.TargetGearID == nil {
+			writeError(w, http.StatusBadRequest, "this schedule does not run a gear, so it takes no arguments")
+			return
+		}
+		g, err := s.gears.Get(r.Context(), *sc.TargetGearID)
+		if err != nil {
+			fail(w, r, err)
+			return
+		}
+		if err := inlet.ValidatePayload(g.ArgsSchema, in.Args); err != nil {
+			writeError(w, http.StatusBadRequest,
+				"these arguments do not fit what "+g.Name+" takes, so every firing would be refused: "+err.Error())
+			return
+		}
+		want.Args = string(in.Args)
+	}
+
+	updated, err := s.schedules.Update(r.Context(), sc.ID, want)
+	switch {
+	case errors.Is(err, schedule.ErrConflict):
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	case err != nil:
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, s.viewOf(r.Context(), sc.WorkspaceID, updated))
+}
+
 func (s *Server) handleDeleteSchedule(w http.ResponseWriter, r *http.Request) {
 	sc, ok := s.scheduleScoped(w, r)
 	if !ok {

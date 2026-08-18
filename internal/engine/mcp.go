@@ -11,6 +11,7 @@ import (
 
 	"github.com/orkcom-tech/cogitorium/internal/mcpclient"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
+	"github.com/orkcom-tech/cogitorium/internal/metrics"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
@@ -78,7 +79,19 @@ func (e *Engine) runMCPTool(ctx context.Context, wsID int64, agent workspace.Age
 	// optimisation.
 	defer conn.Close()
 
+	started := time.Now()
 	res, err := conn.CallTool(ctx, tool.RemoteName, json.RawMessage(argsJSON))
+	if e.metrics != nil {
+		// The TRANSPORT is a label and the server's name is not: which kind of
+		// thing was reached is a closed set this codebase defines, and which
+		// one is an integration an operator named.
+		labels := map[string]string{"transport": spec.Transport, "outcome": metrics.Outcome(err)}
+		if labels["transport"] == "" {
+			labels["transport"] = mcpstore.TransportStdio
+		}
+		e.metrics.MCPCalls.Inc(labels)
+		e.metrics.MCPSeconds.Observe(map[string]string{"transport": labels["transport"]}, time.Since(started).Seconds())
+	}
 	if err != nil {
 		return "", err
 	}
@@ -194,6 +207,11 @@ func (e *Engine) mcpEnv(ctx context.Context, wsID int64, srv mcpstore.Server) (m
 // SetMCP switches external MCP servers on. Called by the server only when the
 // operator configured it; nil is the default and means the whole path is
 // unreachable rather than merely unused.
+// SetMetrics gives the engine somewhere to publish. Called by the server; nil
+// until then, so nothing here depends on it existing and every test and any
+// embedding gets an engine that measures nothing rather than one that panics.
+func (e *Engine) SetMetrics(m *metrics.Set) { e.metrics = m }
+
 func (e *Engine) SetMCP(store *mcpstore.Store, resolver *secrets.Resolver) {
 	e.mcp = store
 	e.mcpSecrets = resolver

@@ -30,6 +30,11 @@ func TestDangerousCapabilitiesAreOffByDefault(t *testing.T) {
 	// its own behalf, and the README promises the product fetches nothing at
 	// runtime. "ask" keeps that promise true until somebody says otherwise;
 	// "on" would quietly make it false.
+	// A scrape port is a new thing listening on somebody's machine. Starting
+	// one without being asked is a decision that is not ours to make.
+	if d.MetricsListen != "" {
+		t.Errorf("metrics_listen defaults to %q; the endpoint must be asked for", d.MetricsListen)
+	}
 	if d.UpdateCheck != update.ModeAsk {
 		t.Errorf("update_check defaults to %q; it must be %q, or a fresh install talks to GitHub "+
 			"without anybody having agreed to it", d.UpdateCheck, update.ModeAsk)

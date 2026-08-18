@@ -61,6 +61,12 @@ spent it.
   at — which is the argument for granting the network to anything that carries a
   credential.
   [→](https://orkcom-tech.github.io/cogitorium/#named-values)
+- 📊 **Watchable when it is somebody's job to watch it** — a Prometheus endpoint
+  on its own port (off by default), JSON logs for whatever collects them, and a
+  Helm chart that wires both up. No workspace, agent or model name is ever a
+  label: a scrape has a different audience from a screen, and a label per
+  workspace is how a metrics database runs out of memory.
+  [→](https://orkcom-tech.github.io/cogitorium/#metrics--what-an-operator-can-alert-on)
 - 📐 **A described API** — `docs/openapi.yaml` is generated from the server's own
   route table by a test that fails when the two disagree — **97 paths, 130
   operations** — so a route cannot exist without appearing in it.
@@ -267,6 +273,8 @@ Everything this binary does reach, in full:
   fixed at build time rather than settings, so no agent can name where its words
   go and nobody can be talked into repointing them;
 - the **cluster API**, in Kubernetes mode, to create the Job a gear runs as;
+- **whatever scrapes `/metrics`**, if you switched it on — inbound rather than
+  outbound, on its own port, carrying no name you chose;
 - **`api.github.com`, only if you say yes** — see below.
 
 ### The one question this product asks

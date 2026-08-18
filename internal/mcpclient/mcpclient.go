@@ -142,10 +142,34 @@ type Conn struct {
 	closed   bool
 	serverIn string // what the server called itself, for the log
 
+	// mirrors is, per tool, the parameters its schema asked to have copied into
+	// HTTP headers. Populated by Tools; empty for almost every server, and read
+	// only by CallTool.
+	mirrors map[string][]paramHeader
+	// paramHeaders is what the NEXT outbound request should carry. Set around
+	// one call, because it belongs to that call's arguments and to nothing
+	// else; stdio ignores it entirely.
+	paramHeaders map[string]string
+
 	// deadOnce guards close(dead): a remote transport can discover it is
 	// finished on more than one goroutine, and closing a closed channel is a
 	// panic rather than an error.
 	deadOnce sync.Once
+}
+
+// setParamHeaders holds the headers one call should mirror. A pointer-free
+// swap under the same lock everything else uses.
+func (c *Conn) setParamHeaders(h map[string]string) {
+	c.mu.Lock()
+	c.paramHeaders = h
+	c.mu.Unlock()
+}
+
+// takeParamHeaders is what a transport asks for when building a request.
+func (c *Conn) takeParamHeaders() map[string]string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.paramHeaders
 }
 
 // die marks the connection finished and releases every waiter, exactly once.
@@ -235,6 +259,7 @@ func dialStdio(ctx context.Context, spec Spec) (*Conn, error) {
 		spec:    spec,
 		be:      be,
 		pending: map[string]chan mcpwire.Message{},
+		mirrors: map[string][]paramHeader{},
 		dead:    make(chan struct{}),
 	}
 	be.conn = c
@@ -304,7 +329,24 @@ func (c *Conn) Tools(ctx context.Context, cap int) ([]mcpwire.Tool, bool, error)
 			return nil, false, fmt.Errorf("the MCP server %q answered tools/list with something this "+
 				"cannot read: %w", c.spec.Name, err)
 		}
-		all = append(all, page.Tools...)
+		for _, t := range page.Tools {
+			mirror, err := headerParams(t.InputSchema)
+			if err != nil {
+				// The spec's rule, and the reason for it: an annotation this
+				// client cannot construct a header from is a tool whose every
+				// call the server would refuse. Dropping the one definition
+				// keeps the server's other tools usable.
+				slog.Warn("an MCP tool was dropped: its schema annotates x-mcp-header illegally",
+					"server", c.spec.Name, "tool", t.Name, "err", err)
+				continue
+			}
+			if len(mirror) > 0 {
+				c.mu.Lock()
+				c.mirrors[t.Name] = mirror
+				c.mu.Unlock()
+			}
+			all = append(all, t)
+		}
 		if len(all) >= cap {
 			return all[:cap], true, nil
 		}
@@ -333,6 +375,15 @@ func (c *Conn) CallTool(ctx context.Context, name string, args json.RawMessage) 
 	if len(args) == 0 {
 		args = json.RawMessage("{}")
 	}
+	// The schema the server published for this tool, if it was listed on this
+	// connection. It is needed only to know whether any parameter asked to be
+	// mirrored into a header — see paramheaders.go.
+	c.mu.Lock()
+	mirror := c.mirrors[name]
+	c.mu.Unlock()
+	c.setParamHeaders(paramHeaderValues(mirror, args))
+	defer c.setParamHeaders(nil)
+
 	raw, err := c.Call(ctx, "tools/call", map[string]any{"name": name, "arguments": args})
 	if err != nil {
 		return CallResult{}, err

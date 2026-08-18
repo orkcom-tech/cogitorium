@@ -2,6 +2,86 @@
 
 ## Unreleased
 
+### It can be watched now, which it could not be at all
+
+An install on a server or in a cluster had **no metrics of any kind** — no
+`/metrics`, no Prometheus, no OpenTelemetry — and wrote logs only as prose to
+stderr. Every operation, error and state change was already logged, and none of
+it was machine-readable, so Loki, Elastic and the vendor agents were handed
+paragraphs to regex. This product runs agents that spend money, gears that
+execute code and schedules that fire unattended: it is exactly the class of
+thing an operator wants an alert on, and it could not be alerted on at all.
+
+**A Prometheus endpoint, on its own port, off by default.** Its own listener
+and never a route on the API — the API is authenticated and a scrape is not, so
+an unauthenticated path on the authenticated surface would be a way in. Off by
+default in the binary because starting a listener on somebody's laptop is not
+our decision; **on** by default in the Helm chart, because somebody applying a
+chart is running a cluster that has a scraper in it.
+
+**No name anybody chose is ever a label** — not a workspace, agent, model, tool
+or user. A scrape reaches a monitoring system that is usually less guarded than
+the product, and a label whose values are unbounded turns a time series database
+into a memory leak. The route label is the TEMPLATE, `/api/v1/workspaces/{id}`,
+never the id — which was got wrong first: reading `r.Pattern` in middleware that
+wraps the mux from outside gets an empty string every time, and every route was
+silently labelled `other`, which looks exactly like a working metric.
+
+**What is measured is what somebody would be paged on**: the schedule that has
+been failing every night, the tokens (with providers that report no usage
+counted separately, so a zero is never mistaken for free), the queue depth, gear
+outcomes split into refused / failed / timed-out / non-zero exit because they
+page different people, MCP calls by transport, and the outward gate. A metric
+nobody has touched is not published, because a zero cannot be told apart from
+"this is not wired up".
+
+**Written by hand, no dependency.** `client_golang` pulls a tree for counters in
+a map and a few hundred bytes of text, and it carries a global registry that
+collects the runtime whether or not anybody asked. The precedent is `openapi.go`
+— same reasoning, already in this repository. Its histogram bug was caught by
+its own test: buckets are cumulative, and an implementation that tallies into
+every matching bucket AND cumulates on write produces a histogram where every
+quantile is the maximum.
+
+**`log_format: json`**, and nothing more. Cogitorium ships logs nowhere; that is
+what Vector, Fluent Bit, Alloy and the agents are for. What it owed them was a
+format.
+
+**Helm**: the port on the Service, a guarded `ServiceMonitor` (applying a
+manifest whose kind does not exist fails the whole release), and a NetworkPolicy
+rule of its own — which was found by reading the existing policy, where an
+enabled policy would have silently blocked every scrape and looked precisely
+like a broken exporter.
+
+### Three protocol and interface debts, paid
+
+**`Mcp-Name` was not being sent.** The spec requires it on `tools/call`,
+`resources/read` and `prompts/get`, and a conformant server answers 400 with
+`-32020 HeaderMismatch` without it. Now sent, with the base64 sentinel encoding
+for a name that is not header-safe, and sent on those three alone — there is no
+body field for anything else to be validated against.
+
+**`x-mcp-header` is implemented**, which the spec says a client MUST support: a
+tool may ask for annotated parameters to be mirrored into `Mcp-Param-*` headers,
+and a tool whose annotation breaks the rules is excluded from the list rather
+than called — one malformed definition must not take a server's other tools with
+it.
+
+**The registry was read one page deep.** `nextCursor` was parsed and never
+followed, so a search saw the first fifty and called it the library — and most
+of a page collapses, because every published version of a server comes back
+separately. Now followed, bounded, and a later page that fails keeps what the
+earlier ones found.
+
+**A schedule's spec could not be edited.** `PATCH` took `enabled` and nothing
+else, so changing a clock meant deleting and redrawing it, losing its counters —
+and a schedule you cannot correct is one people replace, which is how a job ends
+up with no history. `PUT` is the fuller edit, beside the pause rather than
+replacing it: turning a job off in a hurry at night must stay the shortest
+route. An omitted field is left alone, the next firing is recomputed from the
+new spec, and the target is deliberately not editable — re-pointing a clock is a
+different act with a different approval.
+
 ### Any MCP server, not the third of them that happen to be packages
 
 The first cut of this spoke stdio only, and the library was six entries compiled

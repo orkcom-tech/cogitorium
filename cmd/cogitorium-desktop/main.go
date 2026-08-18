@@ -66,7 +66,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("configuration: %w", err)
 	}
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: cfg.SlogLevel()})))
+	slog.SetDefault(slog.New(cfg.SlogHandler(os.Stderr)))
 	slog.Info("starting cogitorium desktop", "data_dir", cfg.DataDir, "version", version.Version)
 
 	db, err := store.Open(cfg.DataDir)

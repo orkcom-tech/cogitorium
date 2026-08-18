@@ -1,0 +1,23 @@
+{{- if and .Values.metrics.enabled .Values.metrics.serviceMonitor.enabled }}
+# Guarded twice on purpose. A ServiceMonitor is a custom resource that exists
+# only where the Prometheus Operator installed its CRD, and applying a manifest
+# whose kind is unknown fails the ENTIRE release — so an operator who does not
+# run it would otherwise discover this by having their upgrade rejected.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "cogitorium.fullname" . }}
+  labels:
+    {{- include "cogitorium.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "cogitorium.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+{{- end }}

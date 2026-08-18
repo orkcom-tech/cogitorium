@@ -76,6 +76,23 @@ type CreateScheduleBody struct {
 	Args         json.RawMessage `json:"args"`
 }
 
+// EditScheduleBody changes what a clock does, keeping what it has done.
+//
+// Every field is optional and an omitted one is left alone — an edit that
+// blanked what it did not mention would make a partial body dangerous. The
+// TARGET is deliberately absent: re-pointing a clock is a different act with a
+// different approval, and folding it in here would be the one path that changes
+// what runs without passing the check that guards it.
+type EditScheduleBody struct {
+	Name        string          `json:"name"`
+	Spec        string          `json:"spec"`
+	TZ          string          `json:"tz"`
+	OnMiss      string          `json:"on_miss"`
+	Instruction string          `json:"instruction"`
+	Payload     json.RawMessage `json:"payload"`
+	Args        json.RawMessage `json:"args"`
+}
+
 // UpdateModeBody is the answer to the one question this product asks on its
 // own behalf: may this install ask whether a newer release exists. "ask", "on"
 // or "off" — see internal/update for why the unanswered state is a value of its

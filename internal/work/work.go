@@ -331,6 +331,24 @@ func (s *Store) Depth(ctx context.Context, lane string) (queued, claimed int, er
 	return queued, claimed, nil
 }
 
+// TotalDepth is Depth across every lane.
+//
+// Separate from Depth rather than a special case of it: Depth's whole job is to
+// answer "is this workspace busy", which is a per-lane question the queue is
+// built around, and an empty lane there means the lane called "" rather than
+// all of them. A caller that wanted the install-wide number and passed "" would
+// silently read zero — which is exactly what a metrics gauge would then publish
+// as "nothing is waiting".
+func (s *Store) TotalDepth(ctx context.Context) (queued, claimed int, err error) {
+	err = s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FILTER (WHERE state = ?), COUNT(*) FILTER (WHERE state = ?) FROM work`,
+		StateQueued, StateClaimed).Scan(&queued, &claimed)
+	if err != nil {
+		return 0, 0, fmt.Errorf("read total queue depth: %w", err)
+	}
+	return queued, claimed, nil
+}
+
 // Waiting lists a lane's queue, oldest first, so an operator can see position
 // rather than only depth.
 func (s *Store) Waiting(ctx context.Context, lane string, limit int) ([]Unit, error) {

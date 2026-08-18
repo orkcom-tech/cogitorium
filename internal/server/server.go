@@ -14,6 +14,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/mcpcatalog"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
+	"github.com/orkcom-tech/cogitorium/internal/metrics"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/schedule"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
@@ -103,6 +105,10 @@ type Server struct {
 	egressBearer   bool
 	egressKilledBy string
 	egressKilledAt string
+
+	// metrics is what an operator can alert on. Never nil; whether anything
+	// scrapes it is decided by metrics_listen.
+	metrics *metrics.Set
 
 	// updates answers "is there a newer release", and holds the setting that
 	// decides whether it may ask. Never nil: an install with the check off
@@ -183,6 +189,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		// The contextd version is fetched at check time, not here: an install
 		// with no contextd should not pay a subprocess on every boot to
 		// discover that, and the check runs at most once a day.
+		metrics: metrics.NewSet(version.Version),
 		updates: update.New(cfg.UpdateCheck, version.Version, func(ctx context.Context) string {
 			return cs.CheckStatus(ctx).Version
 		}),
@@ -207,6 +214,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	if mcpStore != nil {
 		s.engine.SetMCP(mcpStore, env)
 	}
+	s.engine.SetMetrics(s.metrics)
 
 	s.startScheduler(poolCtx)
 
@@ -222,6 +230,10 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// slow or unreachable GitHub is never part of this server's boot. Under
 	// "ask" and "off" it schedules nothing at all.
 	s.updates.Start(poolCtx)
+
+	// The metrics listener, on the same lifetime as everything else the server
+	// owns. Empty address is off, which is the default.
+	s.metrics.Serve(poolCtx, cfg.MetricsListen)
 
 	// A terminal is only offered when the sandbox can host one: without it
 	// the shell would hold the server's own file access.
@@ -378,6 +390,9 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "GET /api/v1/workspaces/{id}/schedules", s.handleListSchedules)
 	s.routeIn(mux, "POST /api/v1/workspaces/{id}/schedules", s.handleCreateSchedule, CreateScheduleBody{})
 	s.route(mux, "PATCH /api/v1/schedules/{id}", s.handleSetScheduleEnabled)
+	// PUT rather than another PATCH on the same path: PATCH already means
+	// "turn this off", and the shortest route to that stays the shortest.
+	s.routeIn(mux, "PUT /api/v1/schedules/{id}", s.handleEditSchedule, EditScheduleBody{})
 	s.route(mux, "DELETE /api/v1/schedules/{id}", s.handleDeleteSchedule)
 	s.route(mux, "POST /api/v1/schedules/{id}/run", s.handleRunScheduleNow)
 	s.route(mux, "DELETE /api/v1/queue/{id}", s.handleCancelQueued)
@@ -415,7 +430,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 
 	s.http = &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           logRequests(s.authenticate(mux)),
+		Handler:           s.logRequests(mux, s.authenticate(mux)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	return s
@@ -637,17 +652,57 @@ func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return h.Hijack()
 }
 
-func logRequests(next http.Handler) http.Handler {
+func (s *Server) logRequests(mux *http.ServeMux, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
+		took := time.Since(start)
 		slog.Info("http request",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", rec.status,
-			"duration_ms", time.Since(start).Milliseconds(),
+			"duration_ms", took.Milliseconds(),
 			"remote", r.RemoteAddr,
 		)
+		// THE TEMPLATE, NEVER THE PATH. `/api/v1/workspaces/41` as a label is
+		// one time series per workspace forever, which is the textbook way to
+		// make a metrics database run out of memory — and it publishes how many
+		// workspaces exist and which ids are live to whoever can scrape.
+		route := s.templateFor(mux, r)
+		labels := map[string]string{
+			"method": r.Method,
+			"route":  route,
+			"status": strconv.Itoa(rec.status),
+		}
+		s.metrics.HTTPRequests.Inc(labels)
+		// Without the route, because a latency histogram per route per method
+		// per status is the cardinality problem again in a shape that looks
+		// reasonable.
+		s.metrics.HTTPSeconds.Observe(map[string]string{"method": r.Method}, took.Seconds())
 	})
+}
+
+// templateFor turns a request into the route pattern it matched, so a label is
+// bounded by the number of endpoints rather than by the number of rows.
+//
+// THE MUX IS ASKED, rather than reading r.Pattern. The obvious version of this
+// reads that field and gets an empty string every time: the mux sets it on the
+// request it passes DOWN to the handler, and this middleware wraps the mux from
+// the outside, so the request it holds never has it. The symptom is quiet —
+// every route labelled "other", which looks like a working metric.
+//
+// Handler() does the routing without serving, which is exactly the question
+// being asked. A path that matched nothing is bucketed rather than passed
+// through: an unmatched path is usually somebody probing, and one series per
+// probe is what a label must never allow.
+func (s *Server) templateFor(mux *http.ServeMux, r *http.Request) string {
+	_, pattern := mux.Handler(r)
+	if pattern == "" {
+		return "other"
+	}
+	if _, path, ok := strings.Cut(pattern, " "); ok {
+		return path
+	}
+	return pattern
 }

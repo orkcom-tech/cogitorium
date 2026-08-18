@@ -1077,6 +1077,66 @@ spent for a job somebody had already stopped. Cancelling something finished is a
 
 ---
 
+## Metrics — what an operator can alert on
+
+`GET /metrics` on the `metrics_listen` address, in the Prometheus text format.
+**Empty address means off**, and off is the default.
+
+**Its own listener, never a route on the API.** The API is authenticated and a
+scrape is not, so an unauthenticated path on the authenticated surface would be
+a way in. A separate port is something that can be bound to a private
+interface, firewalled, or reached only from inside a cluster — which is what an
+operator already does for every other exporter they run.
+
+**No name a person chose appears in any label.** Not a workspace, an agent, a
+model, a tool or a user. Two reasons and both are sufficient: a label value is
+published to whoever can scrape, and a monitoring system is usually less
+guarded than the product; and a label whose values are unbounded turns a time
+series database into a memory leak. `route` is the route **template** —
+`/api/v1/workspaces/{id}` and never the id — and `provider` is the provider
+*type*, a closed set this codebase defines. Per-workspace spend is already in
+the database and on the People map, which are authenticated screens with an
+audience.
+
+| metric | what it answers |
+|---|---|
+| `cogitorium_build_info{version}` | which build is answering |
+| `cogitorium_http_requests_total{method,route,status}` | the API's traffic and its failures |
+| `cogitorium_http_request_seconds{method}` | how long it took |
+| `cogitorium_work_queued`, `cogitorium_work_running{kind}` | how far behind the queue is |
+| `cogitorium_work_units_total{kind,outcome}` | what finished, and whether it worked |
+| `cogitorium_schedule_fires_total{outcome}` | **the nightly job that has been failing all week** |
+| `cogitorium_gear_runs_total{outcome}`, `cogitorium_gear_run_seconds` | code execution, kept apart into `ok`, `failed`, `refused`, `timed_out` and `nonzero_exit` because they page different people |
+| `cogitorium_model_calls_total{outcome,reported}`, `cogitorium_model_tokens_total{direction}` | **the money.** `reported=false` counts providers that return no usage, so a zero is never mistaken for free |
+| `cogitorium_mcp_calls_total{transport,outcome}`, `cogitorium_mcp_call_seconds` | somebody else's host |
+| `cogitorium_egress_requests_total{state}` | the outward gate |
+
+**A metric nobody has touched is not published**, deliberately: a zero cannot be
+told apart from "this is not wired up", and the second is the one worth
+noticing.
+
+**Written by hand, no dependency.** `client_golang` pulls a tree for what is
+counters in a map and a few hundred bytes of text, and it carries a global
+registry that collects the Go runtime and the process whether or not anybody
+asked. Here what is exposed is a list in one file that somebody chose. The
+precedent is `openapi.go`, which renders OpenAPI the same way and for the same
+reason.
+
+**Logs are a format, not a shipper.** `log_format: json` gives one object per
+line with stable field names; Vector, Fluent Bit, Alloy and the vendor agents
+do the shipping. A product that grew its own exporter would be a product
+maintaining four of them.
+
+**On Kubernetes** the chart turns metrics on, binds them to the pod's own
+interfaces, adds the port to the Service, and will render a `ServiceMonitor`
+when `metrics.serviceMonitor.enabled` says the Prometheus Operator's CRD is
+there — guarded, because applying a manifest whose kind does not exist fails
+the whole release. If `networkPolicy.enabled` is on, the scrape gets its own
+ingress rule: narrow `networkPolicy.scrapeFrom` to your monitoring namespace,
+or leave it open to the cluster and know that you did.
+
+---
+
 ## Schedules — work that starts because a clock said so
 
 A schedule dials one of three things, named by `target_kind`.
@@ -1800,6 +1860,8 @@ then defaults.
 | `sandbox_image` | `COGITORIUM_SANDBOX_IMAGE` | `python:3.12-alpine` | The image gears run in. Fetched once at startup so the first gear does not pay for the pull inside its own timeout. |
 | `sandbox_runtime` | `COGITORIUM_SANDBOX_RUNTIME` | — | The OCI runtime the daemon uses for gear containers: `runsc` for gVisor, `kata-runtime` for Kata. Empty means the daemon's own default. Checked against `docker info` at startup and **refused** if the daemon does not have it. |
 | `terminal` | `COGITORIUM_TERMINAL` | off | Enables the in-UI shell. Requires a sandbox. |
+| `metrics_listen` | `COGITORIUM_METRICS_LISTEN` | — | Where the Prometheus endpoint listens, e.g. `127.0.0.1:9090`. **Empty is off**, and off is the default. Its own port and never a route on the API: the API is authenticated and a scrape is not. |
+| `log_format` | `COGITORIUM_LOG_FORMAT` | `text` | `text` for a person at a terminal, `json` for a collector — one object per line with stable field names. Cogitorium ships logs nowhere; this is the format it owes whatever does. |
 | `update_check` | `COGITORIUM_UPDATE_CHECK` | `ask` | Whether this install may ask GitHub if a newer Cogitorium or Contextverse exists: `ask`, `on` or `off`. Under `ask` nothing leaves the machine until an operator answers the question the interface puts on the rail; the answer is remembered across restarts. `off` never asks and never checks — including for *check now* — and the interface cannot lift it. |
 | `egress` | `COGITORIUM_EGRESS` | off | Master switch for agents reaching the web. |
 | `egress_key` | `COGITORIUM_EGRESS_KEY` | — | Credential for the search service. Required when egress is on. |

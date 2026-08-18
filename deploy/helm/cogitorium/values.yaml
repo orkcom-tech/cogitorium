@@ -128,6 +128,16 @@ config:
   # count. See the guide's Updates section.
   updateCheck: "off"
 
+  # How logs are written: "text" for a person at a terminal, "json" for a
+  # collector. JSON HERE, unlike the binary's own default, because a cluster
+  # install is being read by Loki, Elastic or a vendor agent rather than by
+  # somebody watching a console — and every one of them would otherwise be
+  # handed prose to regex.
+  #
+  # Cogitorium ships logs nowhere. That is what Vector, Fluent Bit, Alloy and
+  # the vendor agents are for; what this owes them is a format.
+  logFormat: json
+
   # Agents reaching the internet. Off by default, and it needs a sandbox: an
   # unsandboxed gear can rewrite the configuration and the grants table, which
   # would make the gate decorative.
@@ -200,9 +210,49 @@ securityContext:
 # Egress is left alone: the server has to reach the model providers you
 # configured, and this chart cannot know their addresses.
 networkPolicy:
+  scrapeFrom: []
   enabled: false
   # Namespaces and pods allowed to reach the service.
   allowFrom: []
+
+# Who may scrape /metrics, when both networkPolicy and metrics are on.
+#
+# Empty allows it from anywhere in the cluster, which is the lesser evil: a
+# policy that silently blocks every scrape looks exactly like a broken exporter.
+# Narrow it to the namespace your Prometheus runs in:
+#
+#   scrapeFrom:
+#     - namespaceSelector:
+#         matchLabels:
+#           kubernetes.io/metadata.name: monitoring
+#
+# It lives under networkPolicy rather than under metrics because it is a
+# statement about the network, and that is where somebody looks for it.
+
+# The Prometheus endpoint.
+#
+# Its own port, never a route on the API: the API is authenticated and a scrape
+# is not, so an unauthenticated path on the authenticated surface would be a way
+# in. A separate port is something a NetworkPolicy can bound, which is how every
+# other exporter in a cluster is treated.
+#
+# ON by default here and off in the binary, and the difference is the audience:
+# somebody applying a chart is running a cluster that has a scraper in it, while
+# somebody running the binary on a laptop is not — and starting a listener
+# nobody asked for on their machine is a decision that is not ours.
+metrics:
+  enabled: true
+  port: 9090
+  # A ServiceMonitor needs the Prometheus Operator's CRD, so it is off unless
+  # you say you have one: applying a manifest whose kind does not exist fails
+  # the whole release, which is a bad way to learn that.
+  serviceMonitor:
+    enabled: false
+    # Blank means the release's own namespace and the operator's default
+    # selectors, which is right on most clusters and wrong on the ones that
+    # scope Prometheus by label.
+    interval: 30s
+    labels: {}
 
 # Cuts egress for gear Jobs the operator did not grant the network. Enabled by
 # default because "no network unless granted" is what the product promises

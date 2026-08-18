@@ -26,6 +26,15 @@ data:
     {{- end }}
     terminal: {{ .Values.config.terminal }}
     update_check: {{ .Values.config.updateCheck | quote }}
+    {{- if .Values.metrics.enabled }}
+    # All interfaces INSIDE THE POD, which is not the same as all interfaces on
+    # a machine: nothing reaches this but the cluster network, and the
+    # NetworkPolicy decides who on it may. A loopback bind here would be
+    # unscrapable, which is the mistake that makes people give up and put
+    # /metrics on the API.
+    metrics_listen: "0.0.0.0:{{ .Values.metrics.port }}"
+    {{- end }}
+    log_format: {{ .Values.config.logFormat | quote }}
     egress: {{ .Values.config.egress }}
     {{- if .Values.config.variablesConfigMap }}
     variables_dir: /etc/cogitorium/variables

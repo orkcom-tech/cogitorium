@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
+	"github.com/orkcom-tech/cogitorium/internal/metrics"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/websearch"
 	"github.com/orkcom-tech/cogitorium/internal/work"
@@ -83,6 +85,10 @@ type Event struct {
 }
 
 type Engine struct {
+	// metrics is what an operator alerts on. Nil is a working engine that
+	// publishes nothing, which is what every test and any embedding gets.
+	metrics *metrics.Set
+
 	ws       *workspace.Store
 	cat      *catalog.Store
 	ctx      *contextstore.Store
@@ -453,6 +459,25 @@ func (e *Engine) recordUsage(ctx context.Context, wsID int64, agent workspace.Ag
 	// this line, and what happened to that attempt is in the run's error rather
 	// than dressed up as work.
 	e.noteModelCall(wsID, u)
+	// The money, published where an operator can alert on it. NO AGENT, NO
+	// MODEL, NO WORKSPACE in a label: per-agent spend is already on the agent's
+	// own card and in the database, which are authenticated screens with an
+	// audience, and a label here would put the whole roster on a dashboard.
+	//
+	// `reported` is kept as a label because it is the one distinction that
+	// makes the number honest: not every OpenAI-compatible server returns
+	// usage, and a confident zero for one that does not is a lie an operator
+	// discovers from a bill.
+	if e.metrics != nil {
+		e.metrics.ModelCalls.Inc(map[string]string{
+			"outcome":  "ok",
+			"reported": strconv.FormatBool(u.Reported),
+		})
+		if u.Reported {
+			e.metrics.ModelTokens.Add(map[string]string{"direction": "in"}, float64(u.InputTokens))
+			e.metrics.ModelTokens.Add(map[string]string{"direction": "out"}, float64(u.OutputTokens))
+		}
+	}
 	if err := e.ws.RecordTurn(context.WithoutCancel(ctx), wsID, agent.ID, agent.ModelLabel,
 		u.InputTokens, u.OutputTokens, u.Reported, e.workOf(wsID)); err != nil {
 		slog.Warn("could not record token usage", "workspace_id", wsID, "agent", agent.Name, "err", err)

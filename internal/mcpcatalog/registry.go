@@ -47,6 +47,12 @@ const (
 	maxPage = 50
 	// maxBody bounds the answer. It is somebody else's host.
 	maxBody = 4 << 20
+	// wantEntries is enough to fill a drawer. A library is browsed and
+	// searched, not read end to end.
+	wantEntries = 60
+	// maxPages bounds the browse regardless: a registry that answered a cursor
+	// forever would otherwise be an infinite loop with a network on it.
+	maxPages = 8
 )
 
 // Registry reads the published catalogue.
@@ -110,23 +116,58 @@ type registryVar struct {
 	IsSecret    bool   `json:"isSecret"`
 }
 
-// Search reads one page of the registry, turned into entries this product can
-// install.
+// Search reads the registry, following its cursor, turned into entries this
+// product can install.
+//
+// PAGINATED, and bounded. The registry answers 100 at a time and holds
+// thousands; reading one page silently showed a slice and called it the
+// library. Reading ALL of them would be a browse that costs thirty requests, so
+// it follows the cursor until it has enough to fill a drawer — and the pages
+// are worth following rather than merely deep, because most entries collapse:
+// every published VERSION of a server comes back separately, and a page of 100
+// can be a dozen distinct servers.
 func (r *Registry) Search(ctx context.Context, q string) ([]Entry, error) {
+	out := make([]Entry, 0, wantEntries)
+	seen := map[string]bool{}
+	cursor := ""
+	for page := 0; page < maxPages; page++ {
+		next, err := r.page(ctx, q, cursor, &out, seen)
+		if err != nil {
+			// A later page failing is not a reason to throw away the earlier
+			// ones: a short library beats an error where there was a list.
+			if len(out) > 0 {
+				return out, nil
+			}
+			return nil, err
+		}
+		if next == "" || len(out) >= wantEntries {
+			break
+		}
+		cursor = next
+	}
+	return out, nil
+}
+
+// page reads one, appends what it can install, and returns the cursor to the
+// next.
+func (r *Registry) page(ctx context.Context, q, cursor string, out *[]Entry, seen map[string]bool) (string, error) {
 	u, err := url.Parse(r.base + "/v0/servers")
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	query := u.Query()
 	query.Set("limit", fmt.Sprint(maxPage))
 	if s := strings.TrimSpace(q); s != "" {
 		query.Set("search", s)
 	}
+	if cursor != "" {
+		query.Set("cursor", cursor)
+	}
 	u.RawQuery = query.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	req.Header.Set("Accept", "application/json")
 	// Names the product asking and nothing else — no version, no install id.
@@ -134,23 +175,21 @@ func (r *Registry) Search(ctx context.Context, q string) ([]Entry, error) {
 
 	res, err := r.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("could not reach the MCP registry: %w", err)
+		return "", fmt.Errorf("could not reach the MCP registry: %w", err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("the MCP registry answered %s", res.Status)
+		return "", fmt.Errorf("the MCP registry answered %s", res.Status)
 	}
 	raw, err := io.ReadAll(io.LimitReader(res.Body, maxBody))
 	if err != nil {
-		return nil, fmt.Errorf("could not read the MCP registry's answer: %w", err)
+		return "", fmt.Errorf("could not read the MCP registry's answer: %w", err)
 	}
 	var answer registryAnswer
 	if err := json.Unmarshal(raw, &answer); err != nil {
-		return nil, fmt.Errorf("the MCP registry answered something this server could not read: %w", err)
+		return "", fmt.Errorf("the MCP registry answered something this server could not read: %w", err)
 	}
 
-	out := make([]Entry, 0, len(answer.Servers))
-	seen := map[string]bool{}
 	for _, s := range answer.Servers {
 		e, ok := entryFrom(s.Server.Name, s.Server.Title, s.Server.Description,
 			s.Server.Repository.URL, s.Server.Packages, s.Server.Remotes)
@@ -163,9 +202,9 @@ func (r *Registry) Search(ctx context.Context, q string) ([]Entry, error) {
 			continue
 		}
 		seen[e.ID] = true
-		out = append(out, e)
+		*out = append(*out, e)
 	}
-	return out, nil
+	return answer.Metadata.NextCursor, nil
 }
 
 // entryFrom turns one registry server into something installable, preferring

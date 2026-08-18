@@ -866,6 +866,32 @@ paths:
       responses:
         default:
           description: see the reference
+    put:
+      summary: "Replace schedules/{id}"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "args":
+                  description: any JSON value
+                "instruction":
+                  type: string
+                "name":
+                  type: string
+                "on_miss":
+                  type: string
+                "payload":
+                  description: any JSON value
+                "spec":
+                  type: string
+                "tz":
+                  type: string
+      responses:
+        default:
+          description: see the reference
   "/api/v1/schedules/{id}/run":
     parameters:
       - name: "id"

@@ -14,7 +14,29 @@ spec:
       ports:
         - port: http
           protocol: TCP
-    {{- else }}
+    {{- end }}
+    {{- if and .Values.metrics.enabled .Values.networkPolicy.enabled }}
+    # The scrape, as its own rule with its own `from`.
+    #
+    # SEPARATE FROM THE HTTP RULE because the two have different audiences: the
+    # API is reached by people through an ingress, and /metrics is reached by
+    # one scraper in the monitoring namespace. Folding them together would mean
+    # either letting the scraper at the API or letting everyone at the metrics.
+    #
+    # Empty `scrapeFrom` allows the scrape from anywhere in the cluster. That is
+    # deliberate and it is the lesser evil: the alternative is a policy that
+    # silently blocks every scrape, which looks exactly like a broken exporter
+    # and is the thing people spend an afternoon on. Narrow it to your
+    # Prometheus namespace and it stops being a question.
+    - from: {{- if .Values.networkPolicy.scrapeFrom }}{{- toYaml .Values.networkPolicy.scrapeFrom | nindent 8 }}
+      {{- else }}
+        - namespaceSelector: {}
+      {{- end }}
+      ports:
+        - port: metrics
+          protocol: TCP
+    {{- end }}
+    {{- if not (or .Values.networkPolicy.allowFrom .Values.metrics.enabled) }}
     # Nothing listed: nothing may reach it. An empty ingress rule set denies
     # all inbound traffic, which is the safe reading of "enabled but not
     # configured" — the alternative silently allows everything.

@@ -355,3 +355,146 @@ func TestAnUnknownTransportIsRefused(t *testing.T) {
 		t.Fatalf("an unknown transport produced %v", err)
 	}
 }
+
+// ── the two headers the spec requires and this client used not to send ────
+
+// Mcp-Name is REQUIRED on tools/call, resources/read and prompts/get, and a
+// server that validates headers against the body answers 400 with -32020 when
+// it is missing. It must NOT appear on anything else, because there is no body
+// field for the server to compare it with.
+func TestMcpNameIsSentExactlyWhereItBelongs(t *testing.T) {
+	seen := map[string]string{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		m := rpc(t, r)
+		method, _ := m["method"].(string)
+		if method != "" {
+			seen[method] = r.Header.Get("Mcp-Name")
+		}
+		if m["id"] == nil {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		switch method {
+		case "initialize":
+			var res any
+			_ = json.Unmarshal([]byte(initResult), &res)
+			answerJSON(w, idOf(m), res)
+		case "tools/list":
+			answerJSON(w, idOf(m), map[string]any{"tools": []any{map[string]any{
+				"name": "search", "inputSchema": map[string]any{"type": "object"},
+			}}})
+		default:
+			answerJSON(w, idOf(m), map[string]any{"content": []any{}})
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c, err := Dial(t.Context(), Spec{Name: "r", Transport: TransportStreamableHTTP, URL: srv.URL, Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+	if _, _, err := c.Tools(t.Context(), 10); err != nil {
+		t.Fatalf("tools: %v", err)
+	}
+	if _, err := c.CallTool(t.Context(), "search", json.RawMessage(`{}`)); err != nil {
+		t.Fatalf("call: %v", err)
+	}
+
+	if seen["tools/call"] != "search" {
+		t.Fatalf("tools/call carried Mcp-Name %q; a validating server would refuse it", seen["tools/call"])
+	}
+	// Nothing else may carry it: there would be no body field to match.
+	for _, m := range []string{"initialize", "tools/list"} {
+		if seen[m] != "" {
+			t.Fatalf("%s carried Mcp-Name %q, which the body has nothing to match", m, seen[m])
+		}
+	}
+}
+
+// A name outside the header-safe set travels base64-encoded in the sentinel
+// format, which servers decode before comparing against the body.
+func TestAnUnsafeNameTravelsEncoded(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"search", "search"},
+		{"Hello, 世界", "=?base64?SGVsbG8sIOS4lueVjA==?="},
+		{" padded ", "=?base64?IHBhZGRlZCA=?="},
+		{"=?base64?literal?=", "=?base64?PT9iYXNlNjQ/bGl0ZXJhbD89?="},
+	} {
+		if got := headerSafe(c.in); got != c.want {
+			t.Errorf("headerSafe(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// x-mcp-header: a conforming client MUST mirror annotated parameters, and MUST
+// exclude a tool whose annotation breaks the rules rather than calling it.
+func TestAnnotatedParametersAreMirroredIntoHeaders(t *testing.T) {
+	var region, missing string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		m := rpc(t, r)
+		switch m["method"] {
+		case "initialize":
+			var res any
+			_ = json.Unmarshal([]byte(initResult), &res)
+			answerJSON(w, idOf(m), res)
+		case "tools/list":
+			answerJSON(w, idOf(m), map[string]any{"tools": []any{
+				map[string]any{"name": "run_sql", "inputSchema": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"region": map[string]any{"type": "string", "x-mcp-header": "Region"},
+						"query":  map[string]any{"type": "string"},
+						"page":   map[string]any{"type": "integer", "x-mcp-header": "Page"},
+					},
+				}},
+				// Illegal: `number` may not be mirrored. The whole tool goes.
+				map[string]any{"name": "bad_tool", "inputSchema": map[string]any{
+					"type":       "object",
+					"properties": map[string]any{"n": map[string]any{"type": "number", "x-mcp-header": "N"}},
+				}},
+			}})
+		default:
+			region = r.Header.Get("Mcp-Param-Region")
+			missing = r.Header.Get("Mcp-Param-Page")
+			answerJSON(w, idOf(m), map[string]any{"content": []any{}})
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c, err := Dial(t.Context(), Spec{Name: "r", Transport: TransportStreamableHTTP, URL: srv.URL, Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+
+	tools, _, err := c.Tools(t.Context(), 10)
+	if err != nil {
+		t.Fatalf("tools: %v", err)
+	}
+	// One malformed definition must not take the server's other tools with it,
+	// and must not be offered either.
+	if len(tools) != 1 || tools[0].Name != "run_sql" {
+		t.Fatalf("a tool with an illegal annotation was not dropped cleanly: %+v", tools)
+	}
+
+	// `page` is deliberately absent from the arguments: the client MUST omit
+	// the header rather than send an empty one the body cannot match.
+	if _, err := c.CallTool(t.Context(), "run_sql", json.RawMessage(`{"region":"us-west1","query":"select 1"}`)); err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	if region != "us-west1" {
+		t.Fatalf("Mcp-Param-Region was %q", region)
+	}
+	if missing != "" {
+		t.Fatalf("Mcp-Param-Page was sent as %q for an argument that was not supplied", missing)
+	}
+}

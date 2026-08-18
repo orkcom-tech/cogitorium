@@ -1841,6 +1841,63 @@ on it. A slow or unreachable GitHub is not a reason for a workspace to be slow.
 
 ---
 
+## Watching it
+
+Nothing here is a screen — it is what an install looks like to Prometheus,
+Grafana, Loki, Elastic or whatever you already run.
+
+**Metrics are off until you name a port.** `metrics_listen: 127.0.0.1:9090`
+and `GET /metrics` answers in the Prometheus text format. Its **own** listener,
+never a route on the API: the API is authenticated and a scrape is not, so an
+unauthenticated path on the authenticated surface would be a way in. A separate
+port is something you bind to a private interface or firewall, exactly as you
+already do for every other exporter.
+
+**Nothing you named is ever a label** — not a workspace, an agent, a model, a
+tool or a user. A scrape reaches a monitoring system that is usually less
+guarded than the product, and a dashboard has a wider audience than a screen.
+It is also how a metrics database runs out of memory: one series per workspace
+per agent is unbounded by construction. The route label is the *template*,
+`/api/v1/workspaces/{id}`, never the id.
+
+The three worth building an alert on first:
+
+- **`cogitorium_schedule_fires_total{outcome="failed"}`** — the nightly job that
+  has been failing every night for a week, which nothing in this product could
+  tell anybody until now.
+- **`cogitorium_model_tokens_total`** — the money. `cogitorium_model_calls_total`
+  carries `reported`, so a provider that returns no usage is counted separately
+  rather than as free.
+- **`cogitorium_work_queued`** — how far behind the queue is, which is where an
+  install silently falls over rather than failing.
+
+Gear outcomes are kept apart into `ok`, `failed`, `refused`, `timed_out` and
+`nonzero_exit` on purpose: a gear nobody approved is a decision somebody has to
+make, and a gear that exited 1 is a bug somebody has to fix. Alerting on them
+together pages the wrong person.
+
+**A metric nobody has touched is not published.** A zero cannot be told apart
+from "this is not wired up", and the second is the one worth noticing.
+
+**Logs get a format, not a destination.** `log_format: json` writes one object
+per line with stable field names, which is what Loki, Elastic and the vendor
+agents want. Cogitorium ships logs **nowhere** — that is what Vector, Fluent
+Bit, Alloy and the agents are for, and a product that grew its own exporter
+would be a product maintaining four of them. Every operation, error and state
+change already logs; the format is the only thing that was missing.
+
+**On Kubernetes** the chart does it for you: metrics on, the port on the
+Service, `log_format: json` (unlike the binary's own default, because a cluster
+is read by a collector rather than by somebody at a console), and a
+`ServiceMonitor` when `metrics.serviceMonitor.enabled` tells it the Prometheus
+Operator is there — guarded, because applying a manifest whose kind does not
+exist fails the whole release. With `networkPolicy.enabled` on, the scrape gets
+its own ingress rule; set `networkPolicy.scrapeFrom` to your monitoring
+namespace, or leave it open to the cluster deliberately rather than discovering
+a blocked scrape that looks exactly like a broken exporter.
+
+---
+
 ## Beyond the interface
 
 The rest is not a screen. It is what the same install looks like from a client,

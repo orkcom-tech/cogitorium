@@ -311,6 +311,87 @@ func (s *Store) Advance(ctx context.Context, sc Schedule, next time.Time, outcom
 	return n == 1, nil
 }
 
+// Update changes what a schedule does, keeping what it has done.
+//
+// SEPARATE FROM SetEnabled on purpose, and the pause button is the reason:
+// turning a job off is what an operator does in a hurry, at night, and it must
+// not require sending back the fields they are not changing. This is the other
+// half — the one that was missing, so that changing a spec meant deleting the
+// schedule and drawing a new one, losing its counters and its record of what
+// happened. A schedule you cannot correct is one people replace, and a replaced
+// schedule has no history.
+//
+// The TARGET is not editable here. Re-pointing a clock at a different agent or
+// a different gear is a different act with a different approval — a gear target
+// is an administrator's — and folding it into an edit would be the one path
+// that changes what runs without passing the check that guards it.
+func (s *Store) Update(ctx context.Context, id int64, in Schedule) (Schedule, error) {
+	existing, err := s.Get(ctx, id)
+	if err != nil {
+		return Schedule{}, err
+	}
+	spec, err := Parse(firstSet(in.Spec, existing.Spec))
+	if err != nil {
+		return Schedule{}, err
+	}
+	tz := in.TZ
+	loc, err := Location(tz)
+	if err != nil {
+		return Schedule{}, err
+	}
+	name := strings.TrimSpace(firstSet(in.Name, existing.Name))
+	if name == "" {
+		return Schedule{}, errors.New("a schedule needs a name, so an operator can say which one they mean")
+	}
+	onMiss := firstSet(in.OnMiss, existing.OnMiss)
+	if onMiss != "skip" && onMiss != "run" {
+		return Schedule{}, fmt.Errorf("on_miss is %q; it may be `skip` or `run`", onMiss)
+	}
+	instruction := existing.Instruction
+	if existing.TargetKind == TargetAgent {
+		instruction = firstSet(in.Instruction, existing.Instruction)
+		if strings.TrimSpace(instruction) == "" {
+			return Schedule{}, errors.New("a schedule on an agent needs something to tell it: " +
+				"a firing with no instruction is a turn with an empty prompt")
+		}
+	}
+	payload := firstSet(strings.TrimSpace(in.Payload), existing.Payload)
+	args := firstSet(strings.TrimSpace(in.Args), existing.Args)
+
+	// The next firing is recomputed from the new spec, not carried over: a
+	// schedule edited from hourly to nightly whose next_at still said "in four
+	// minutes" would fire once on the old rule, which is exactly the surprise
+	// an edit is supposed to prevent.
+	next, ok := spec.Next(time.Now(), loc)
+	if !ok {
+		return Schedule{}, fmt.Errorf("%q never comes round — check the day and month", spec.String())
+	}
+
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE schedules SET name = ?, spec = ?, tz = ?, payload = ?, args = ?, instruction = ?,
+		        on_miss = ?, next_at = ?, updated_at = ?
+		  WHERE id = ?`,
+		name, spec.String(), tz, payload, args, instruction, onMiss, stamp(next), now(), id); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return Schedule{}, ErrConflict
+		}
+		return Schedule{}, fmt.Errorf("update schedule %d: %w", id, err)
+	}
+	slog.Info("schedule updated", "id", id, "name", name, "spec", spec.String(), "tz", tz,
+		"on_miss", onMiss, "next_at", stamp(next))
+	return s.Get(ctx, id)
+}
+
+// firstSet is "what was sent, or what was there". An edit that omits a field
+// leaves it alone rather than blanking it, which is what makes this safe to
+// call with a partial body.
+func firstSet(sent, existing string) string {
+	if strings.TrimSpace(sent) != "" {
+		return sent
+	}
+	return existing
+}
+
 // SetEnabled turns a schedule on or off, and re-bases its next firing when it
 // comes back — a schedule switched on after a fortnight should run next at its
 // next proper time, not fire immediately for every tick it was off for.

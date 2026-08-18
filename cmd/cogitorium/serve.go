@@ -44,10 +44,9 @@ func newServeCmd() *cobra.Command {
 				cfg.LogLevel = logLevel
 			}
 
-			slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-				Level: cfg.SlogLevel(),
-			})))
-			slog.Info("starting cogitorium", "listen", cfg.Listen, "data_dir", cfg.DataDir, "log_level", cfg.LogLevel)
+			slog.SetDefault(slog.New(cfg.SlogHandler(os.Stderr)))
+			slog.Info("starting cogitorium", "listen", cfg.Listen, "data_dir", cfg.DataDir,
+				"log_level", cfg.LogLevel, "log_format", cfg.LogFormat, "metrics_listen", cfg.MetricsListen)
 
 			db, err := store.Open(cfg.DataDir)
 			if err != nil {

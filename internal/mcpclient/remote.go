@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -84,6 +85,7 @@ func dialRemote(ctx context.Context, spec Spec) (*Conn, error) {
 		spec:    spec,
 		be:      be,
 		pending: map[string]chan mcpwire.Message{},
+		mirrors: map[string][]paramHeader{},
 		dead:    make(chan struct{}),
 	}
 	be.conn = c
@@ -197,6 +199,19 @@ func (b *remoteBackend) post(m mcpwire.Message, body []byte) error {
 		// spec requires it, and a gateway in front of the server may reject the
 		// request without it.
 		req.Header.Set("Mcp-Method", m.Method)
+	}
+	// And the NAME the method acts on, which is required for exactly these
+	// three and forbidden to be wrong: a server that validates headers against
+	// the body answers 400 with -32020 when it is missing.
+	if name := subjectOf(m); name != "" {
+		req.Header.Set("Mcp-Name", headerSafe(name))
+	}
+	// Whatever this call's tool asked to have mirrored. Only ever set around a
+	// tools/call, and empty for almost every server.
+	if m.Method == "tools/call" {
+		for k, v := range b.conn.takeParamHeaders() {
+			req.Header.Set(k, v)
+		}
 	}
 	b.apply(req)
 
@@ -457,4 +472,62 @@ func oneMessage(raw []byte) (mcpwire.Message, bool) {
 		return mcpwire.Message{}, false
 	}
 	return m, m.JSONRPC != ""
+}
+
+// subjectOf is the value the Mcp-Name header mirrors: the tool, prompt or
+// resource a request names.
+//
+// Only these three methods carry one. Sending the header on anything else is
+// not merely useless — a server that validates headers against the body has to
+// reject a header whose source field is not there.
+func subjectOf(m mcpwire.Message) string {
+	switch m.Method {
+	case "tools/call", "prompts/get":
+		var p struct {
+			Name string `json:"name"`
+		}
+		_ = json.Unmarshal(m.Params, &p)
+		return p.Name
+	case "resources/read":
+		var p struct {
+			URI string `json:"uri"`
+		}
+		_ = json.Unmarshal(m.Params, &p)
+		return p.URI
+	}
+	return ""
+}
+
+// headerSafe encodes a value that cannot travel as a plain HTTP header field.
+//
+// Header values are visible ASCII, space and tab. A tool name is only
+// SHOULD-constrained to that set and a resource URI is not constrained at all,
+// so anything outside it — or anything that would be mistaken for the sentinel
+// itself — is carried base64-encoded in the format the spec defines, which
+// servers decode before comparing against the body.
+func headerSafe(v string) string {
+	if plainASCII(v) && !strings.HasPrefix(v, sentinelOpen) {
+		return v
+	}
+	return sentinelOpen + base64.StdEncoding.EncodeToString([]byte(v)) + sentinelClose
+}
+
+// The markers are case-sensitive and must appear exactly like this.
+const (
+	sentinelOpen  = "=?base64?"
+	sentinelClose = "?="
+)
+
+func plainASCII(v string) bool {
+	if v != strings.TrimSpace(v) {
+		// Leading or trailing whitespace is stripped by intermediaries, so a
+		// value carrying it would stop matching the body.
+		return false
+	}
+	for _, r := range v {
+		if r < 0x20 || r > 0x7e {
+			return false
+		}
+	}
+	return true
 }

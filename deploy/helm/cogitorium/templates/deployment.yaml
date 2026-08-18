@@ -82,6 +82,10 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+            {{- end }}
               protocol: TCP
           # /health answers only once the database is open and migrated, so it
           # is a real readiness signal rather than "the process started".

@@ -73,6 +73,29 @@ func (s *Server) tick(ctx context.Context) {
 	if len(due) > 0 {
 		s.pool.Wake()
 	}
+	s.sampleQueue(ctx)
+}
+
+// sampleQueue publishes how much work is waiting, on the clock that already
+// runs.
+//
+// A GAUGE IS SAMPLED, which is what makes this the right place rather than a
+// hook on Enqueue: the question is "how deep is the queue right now", and
+// counting increments would answer "how many were ever added" — the counter
+// that already exists. Ten seconds is finer than any useful alert window.
+//
+// Install-wide, with no workspace in a label, because a label per workspace
+// publishes the roster to whoever can scrape and is unbounded besides.
+func (s *Server) sampleQueue(ctx context.Context) {
+	queued, claimed, err := s.queue.TotalDepth(ctx)
+	if err != nil {
+		slog.Debug("could not sample the queue depth", "err", err)
+		return
+	}
+	s.metrics.WorkQueued.Set(nil, float64(queued))
+	// Set rather than left to the per-unit gauge: a process that was killed
+	// mid-run would otherwise leave its increment behind forever.
+	s.metrics.WorkRunning.Set(map[string]string{"kind": "claimed"}, float64(claimed))
 }
 
 // fire decides what one due schedule should do, and records it either way.
@@ -118,6 +141,7 @@ func (s *Server) fire(ctx context.Context, sc schedule.Schedule) {
 			} else if won {
 				slog.Info("schedule skipped: its previous run has not finished",
 					"schedule", sc.ID, "name", sc.Name, "previous_unit", *sc.LastWorkID)
+				s.metrics.ScheduleFires.Inc(map[string]string{"outcome": schedule.OutcomeSkipped})
 			}
 			return
 		case err != nil && !errors.Is(err, work.ErrNotFound):
@@ -152,9 +176,13 @@ func (s *Server) fire(ctx context.Context, sc schedule.Schedule) {
 			schedule.Schedule{ID: sc.ID, NextAt: next}, next, schedule.OutcomeFailed, sc.LastWorkID); aErr != nil {
 			slog.Error("could not record a failed firing", "schedule", sc.ID, "err", aErr)
 		}
+		// The one this whole metric exists for: a nightly job that has been
+		// failing every night for a week, which nothing could tell anybody.
+		s.metrics.ScheduleFires.Inc(map[string]string{"outcome": schedule.OutcomeFailed})
 		return
 	}
 	slog.Info("schedule fired", "schedule", sc.ID, "name", sc.Name, "unit", unitID, "next_at", next.UTC())
+	s.metrics.ScheduleFires.Inc(map[string]string{"outcome": schedule.OutcomeFired})
 }
 
 // enqueueScheduled turns a firing into the same unit an HTTP delivery produces.

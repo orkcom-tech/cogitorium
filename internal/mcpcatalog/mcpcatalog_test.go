@@ -216,3 +216,83 @@ func TestTheSearchTermReachesTheRegistry(t *testing.T) {
 		t.Fatalf("the registry was asked for %q", asked)
 	}
 }
+
+// The registry answers a page at a time and holds thousands. Reading one page
+// showed a slice and called it the library — and worse, most of a page can
+// collapse to nothing, because every published VERSION comes back separately.
+func TestTheCursorIsFollowed(t *testing.T) {
+	var asked []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cursor := r.URL.Query().Get("cursor")
+		asked = append(asked, cursor)
+		switch cursor {
+		case "":
+			_, _ = w.Write([]byte(`{"servers":[` + srvJSON(`{"name":"a/one",
+				"packages":[{"registryType":"npm","identifier":"one","version":"1"}]}`) +
+				`],"metadata":{"nextCursor":"page2"}}`))
+		case "page2":
+			_, _ = w.Write([]byte(`{"servers":[` + srvJSON(`{"name":"a/two",
+				"packages":[{"registryType":"npm","identifier":"two","version":"1"}]}`) +
+				`],"metadata":{}}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	r := NewRegistry()
+	r.base = srv.URL
+
+	got, err := r.Search(context.Background(), "")
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("%d entries; the second page was not read", len(got))
+	}
+	if len(asked) != 2 || asked[1] != "page2" {
+		t.Fatalf("cursors asked for: %q", asked)
+	}
+}
+
+// A registry that answers a cursor forever must not be an infinite loop with a
+// network on it.
+func TestAnEndlessCursorIsBounded(t *testing.T) {
+	pages := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pages++
+		_, _ = w.Write([]byte(`{"servers":[],"metadata":{"nextCursor":"more"}}`))
+	}))
+	t.Cleanup(srv.Close)
+	r := NewRegistry()
+	r.base = srv.URL
+
+	if _, err := r.Search(context.Background(), ""); err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if pages > maxPages {
+		t.Fatalf("read %d pages, which is past the bound", pages)
+	}
+}
+
+// A later page failing must not throw away the earlier ones: a short library
+// beats an error where there was a list.
+func TestAFailedLaterPageKeepsWhatWasFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("cursor") != "" {
+			http.Error(w, "gone", http.StatusBadGateway)
+			return
+		}
+		_, _ = w.Write([]byte(`{"servers":[` + srvJSON(`{"name":"a/one",
+			"packages":[{"registryType":"npm","identifier":"one","version":"1"}]}`) +
+			`],"metadata":{"nextCursor":"page2"}}`))
+	}))
+	t.Cleanup(srv.Close)
+	r := NewRegistry()
+	r.base = srv.URL
+
+	got, err := r.Search(context.Background(), "")
+	if err != nil {
+		t.Fatalf("a failing second page lost the first: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("%d entries", len(got))
+	}
+}
