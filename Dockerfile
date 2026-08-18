@@ -58,8 +58,22 @@ ARG TARGETARCH
 # cross-compile outright ("cannot install cross-compiled binaries when GOBIN is
 # set"), which is how that attempt failed rather than silently producing the
 # wrong thing. So it is found and put somewhere fixed.
+#
+# THE VERSION IS STAMPED IN, and that is not cosmetic. contextd takes its
+# version from an ldflag its own release sets; a plain `go install` leaves the
+# default, so the binary reports "0.0.0-dev" whatever tag it was built from.
+# Cogitorium reads that string to decide whether the contextd it found is old
+# enough to warn about, and treats an unparseable one as a development build
+# somebody made deliberately — correctly, because it cannot know.
+#
+# So an unstamped install made this image INVISIBLE to its own compatibility
+# check: it carried v0.30.0, which is genuinely too old, and reported a version
+# that meant "do not judge me". Stamped, the container tells the truth about
+# itself and the check does its job here like anywhere else.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-        go install github.com/orkcom-tech/contextverse/cmd/contextd@${CONTEXTD_VERSION} \
+        go install \
+            -ldflags "-X github.com/orkcom-tech/contextverse/internal/version.Version=${CONTEXTD_VERSION#v}" \
+            github.com/orkcom-tech/contextverse/cmd/contextd@${CONTEXTD_VERSION} \
     && mkdir -p /out \
     && cp "$(find /go/bin -type f -name contextd | head -1)" /out/contextd
 
