@@ -242,6 +242,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "GET /api/v1/context/file", s.handleContextGet)
 	s.route(mux, "PUT /api/v1/context/file", s.handleContextPut)
 	s.route(mux, "GET /api/v1/context/search", s.handleContextSearch)
+	s.route(mux, "DELETE /api/v1/context/file", s.handleContextDelete)
 	s.route(mux, "GET /api/v1/workspaces/{id}/context", s.handleListContextBindings)
 	s.route(mux, "POST /api/v1/workspaces/{id}/context", s.handleCreateContextBinding)
 	s.route(mux, "DELETE /api/v1/context-bindings/{id}", s.handleDeleteContextBinding)

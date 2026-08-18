@@ -1514,19 +1514,19 @@ find a memory was to already know its path.
 ![Searching the space, and opening a hit at its line](assets/21-context-search.png)
 
 **A save that would overwrite somebody is refused.** The editor remembers the
-version it opened; if the file has moved on since, the save comes back naming
-both versions so you can reopen and reapply rather than discovering the loss
-later. This is a read-to-write guard and not a compare-and-swap — `contextd file
-put` takes no expected-version argument, so a third party writing in the
-instant between the check and the write still wins.
+version it opened; if the file has moved on since, the save comes back saying
+so, and you reopen and reapply rather than discovering the loss later. contextd
+does the refusing, inside one call against its own storage, so there is no
+instant between the check and the write for somebody else to land in.
 
-**Forgetting is clearing, because Contextverse has no delete.** `contextd`
-offers `file destroy` for one historical version and `file undelete` to restore
-a soft-deleted file, and nothing that deletes or soft-deletes one; its storage
-layer knows the operation and no command reaches it. Clearing a document is a
-real forgetting rather than a workaround: an empty document is skipped when a
-prompt is assembled, so the agent stops being told it. The file and its history
-stay where versioning belongs.
+**Forget removes the document.** No agent is told it again, because it is not
+there to be read. It is a soft delete — Contextverse keeps every version and
+`contextd file undelete <path>` brings it back — and the confirmation says so
+rather than promising an erasure that did not happen.
+
+Both need **Contextverse v0.31.0 or newer**. Until that release `contextd` had
+no delete at all and no way to state the version you had read, so forgetting
+meant emptying a document and a save could only be guarded from outside.
 
 Without `contextd` the server starts, says so at `GET /api/v1/context/status`,
 and memory does nothing:

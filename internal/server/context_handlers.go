@@ -50,6 +50,26 @@ func (s *Server) handleContextGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"path": path, "content": content, "version": version})
 }
 
+// handleContextDelete removes a document from the space.
+//
+// Behind the same admin rule as writing one, and it is a SOFT delete —
+// contextd keeps every version and `contextd file undelete` brings it back. The
+// interface says so rather than implying an erasure that did not happen.
+func (s *Server) handleContextDelete(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+	q := r.URL.Query()
+	path := q.Get("path")
+	// The version the caller read, so removing a document somebody has just
+	// rewritten is refused for the same reason overwriting it is.
+	if err := s.context.Delete(r.Context(), path, q.Get("version")); err != nil {
+		failContext(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"path": path, "status": "deleted"})
+}
+
 // handleContextSearch looks INSIDE the space's files.
 //
 // Before this the only way to find a memory was to already know its path, in a

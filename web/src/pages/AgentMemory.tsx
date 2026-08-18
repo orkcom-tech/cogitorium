@@ -69,12 +69,23 @@ export default function AgentMemory({
         .catch((e: Error) => onError(e.message))
       return
     }
-    // Contextverse's CLI has no delete, so emptying is how a memory is
-    // dropped — and an empty document is skipped when the prompt is built,
-    // so the effect is the same as forgetting it.
-    if (!confirm(`Clear ${item.source}? Its previous versions stay in Contextverse.`)) return
+    // A real delete now. It used to be an empty write, because contextd had no
+    // delete command at all and an emptied document is at least skipped when a
+    // prompt is assembled — the effect was right and the space still held the
+    // file. Contextverse v0.31.0 added `file delete`, so the document goes.
+    //
+    // Soft, and the wording says so instead of promising an erasure that did
+    // not happen: contextd keeps every version and `contextd file undelete`
+    // brings it back.
+    if (
+      !confirm(
+        `Forget ${item.source}?\n\nIt is removed from the space, so no agent is told it again. ` +
+          `Contextverse keeps its history and can restore it.`,
+      )
+    )
+      return
     api.context
-      .put(item.source, '')
+      .remove(item.source)
       .then(() => {
         reload()
         onChanged()

@@ -99,12 +99,21 @@ is a read-to-write guard and not a compare-and-swap: `contextd file put` takes
 no expected-version argument, so the instant between the check and the write is
 still open. Stated rather than papered over.
 
-**Forgetting is still clearing, and here is exactly why.** `contextd` offers
-`file destroy` for one historical version and `file undelete` to restore a
-soft-deleted file, and nothing that deletes or soft-deletes one — its storage
-layer knows the operation ("cannot destroy current live version — soft-delete
-first") and no command reaches it. A Cogitorium-side "delete" that only hid the
-file would be a lie told about somebody else's storage.
+**Forget now removes the document**, rather than emptying it. It stopped being
+possible to do properly and started being possible: `contextd` had no delete
+command at all — its storage layer had the operation and nothing reached it —
+so the honest thing available was to clear the file, which does take it out of
+every prompt while leaving it in the space. Instead of documenting that hole
+indefinitely, the command was added upstream in **Contextverse v0.31.0**, along
+with `--if-version`, which turns the save guard above from a read-to-write
+check into a real compare-and-swap made by contextd inside one call.
+
+Both are soft: Contextverse keeps every version and `contextd file undelete`
+brings a document back. The interface says that rather than promising an
+erasure that did not happen. **This release needs Contextverse v0.31.0 or
+newer** for either; an older `contextd` refuses the flag rather than ignoring
+it, so a save is loudly unavailable instead of quietly going back to
+last-write-wins.
 
 ### Documentation
 

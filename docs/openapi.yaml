@@ -113,6 +113,11 @@ paths:
         default:
           description: see the reference
   "/api/v1/context/file":
+    delete:
+      summary: "Delete context/file"
+      responses:
+        default:
+          description: see the reference
     get:
       summary: "Read context/file"
       responses:

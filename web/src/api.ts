@@ -737,6 +737,15 @@ export const api = {
       req<{ path: string; content: string; version: string }>(
         `/api/v1/context/file?path=${encodeURIComponent(path)}`,
       ),
+    // A soft delete: contextd keeps every version and can restore it. The
+    // version is the one the editor read, so removing a document somebody has
+    // just rewritten is refused the same way overwriting it is.
+    remove: (path: string, version = '') =>
+      req<{ path: string; status: string }>(
+        `/api/v1/context/file?path=${encodeURIComponent(path)}` +
+          (version ? `&version=${encodeURIComponent(version)}` : ''),
+        { method: 'DELETE' },
+      ),
     search: (q: string, pathGlob = '', limit = 100) => {
       const p = new URLSearchParams({ q })
       if (pathGlob) p.set('path', pathGlob)

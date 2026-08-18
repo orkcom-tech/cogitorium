@@ -1278,27 +1278,38 @@ first person's work is gone with nothing anywhere saying so. The editor carries
 the version it opened and hands it back; a save whose version has moved is
 refused, naming both versions, so you can reopen and reapply.
 
-**What this is not:** a compare-and-swap. `contextd file put` takes no
-expected-version argument, so the check and the write are two calls and a third
-party writing between them still wins. Closing that needs an upstream flag.
-Until it exists this is what is honestly available, and it turns the common
-case — where the other edit happened minutes or hours ago — from silent loss
-into a refusal somebody can act on.
+It is a real compare-and-swap: `contextd file put --if-version v4` is refused
+by contextd itself, inside one call against its own storage, so there is no
+window between the check and the write for a third party to slip into. This was
+a read-to-write guard with exactly that window until the flag was added
+upstream in Contextverse v0.31.0 — the hole was documented here for one release
+rather than left to be discovered, and then closed rather than documented
+forever.
 
 ### Forgetting
 
-**Contextverse has no delete, and this is why forgetting is clearing.** The
-`contextd` CLI offers `file destroy` for one historical version and `file
-undelete` to restore a soft-deleted file, and nothing at all that deletes or
-soft-deletes one. Its own storage layer knows the operation — try to destroy a
-live version and it answers *"cannot destroy current live version — soft-delete
-first"* — but no command reaches it.
+**Forget removes the document from the space.** No agent is told it again,
+because it is not there to be read — which is the difference between forgetting
+and hiding.
 
-So clearing a document is how a memory is dropped, and it is a real operation
-rather than a workaround dressed up as one: an emptied document is skipped when
-a prompt is assembled, so the agent genuinely stops being told it. What stays
-is the file and its history, in Contextverse, which is where versioning belongs.
-When `contextd` grows a delete, this becomes one.
+It is a **soft** delete, and the interface says so rather than promising an
+erasure that did not happen: Contextverse keeps every version and
+`contextd file undelete <path>` brings it back. Removing a version for good is
+its own deliberate act, `contextd file destroy <path> -v N`.
+
+A forget is refused if somebody has rewritten the document since you opened it,
+for the same reason a save is: removing a document somebody just changed is
+exactly as destructive as overwriting it.
+
+**This used to be clearing, and the reason is worth keeping.** `contextd` had no
+delete command at all — its storage layer had the operation and nothing reached
+it, so `file undelete` could restore a soft-deleted file and nothing could
+soft-delete one. Emptying a document was what was honestly available: an empty
+document is skipped when a prompt is assembled, so the agent did stop being told
+it, and the file stayed in the space. Rather than document that hole
+indefinitely, the command was added upstream. **This needs Contextverse
+v0.31.0 or newer**; against an older `contextd` the delete is refused with the
+version's own error rather than silently going back to clearing.
 
 ---
 
@@ -1793,15 +1804,6 @@ directory. This is deliberate rather than broken, and it is why the shell is
 behind a button that says so: starting one automatically would spawn a
 container on every page load and then show an empty session as though it were
 the one you left.
-
-**A memory cannot be deleted, only cleared.** `contextd` exposes no command
-that deletes or soft-deletes a file — its storage layer has the operation and
-its CLI offers only `destroy` for a historical version and `undelete` to come
-back from a soft-delete nothing can enter. Clearing a document removes it from
-every prompt, which is the effect that matters, and the file and its history
-stay in Contextverse. Blocked on upstream, not worked around: a Cogitorium-side
-"delete" that only hid the file would be a lie told by this product about
-somebody else's storage.
 
 **The shell works on a copy, and nothing is carried back.** A workspace's files
 are streamed into the container when the session opens; the shell can read and

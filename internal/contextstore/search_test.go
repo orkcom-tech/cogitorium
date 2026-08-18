@@ -15,11 +15,9 @@ import (
 // second implementation of rules that live upstream.
 func realSpace(t *testing.T) *Store {
 	t.Helper()
-	if _, err := exec.LookPath("contextd"); err != nil {
-		t.Skip("contextd not installed")
-	}
+	bin := contextdBinary(t)
 	dir := filepath.Join(t.TempDir(), "space")
-	cmd := exec.Command("contextd", "--dir", dir, "init", "solo")
+	cmd := exec.Command(bin, "--dir", dir, "init", "solo", "--name", "test", "--role", "test")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Skipf("contextd init solo failed here: %v\n%s", err, out)
 	}
@@ -27,10 +25,46 @@ func realSpace(t *testing.T) *Store {
 	// pointed at by wrapping the binary rather than by an option it does not
 	// have.
 	shim := filepath.Join(t.TempDir(), "contextd")
-	if err := os.WriteFile(shim, []byte("#!/bin/sh\nexec contextd --dir "+dir+" \"$@\"\n"), 0o755); err != nil {
+	if err := os.WriteFile(shim, []byte("#!/bin/sh\nexec "+bin+" --dir "+dir+" \"$@\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return New(shim)
+}
+
+// contextdBinary is the contextd these tests run against.
+//
+// COGITORIUM_CONTEXTD wins, so a developer can point this at a build of
+// Contextverse they are working on — which is how `file delete` and
+// `--if-version` were tested before either had been released. Otherwise the one
+// on PATH. Skipped, never failed, when there is none: contextd is a separate
+// product and its absence is a fact about the machine, not a defect here.
+func contextdBinary(t *testing.T) string {
+	t.Helper()
+	if bin := os.Getenv("COGITORIUM_CONTEXTD"); bin != "" {
+		return bin
+	}
+	bin, err := exec.LookPath("contextd")
+	if err != nil {
+		t.Skip("contextd not installed and COGITORIUM_CONTEXTD not set")
+	}
+	return bin
+}
+
+// requireDelete skips a test on a contextd that predates `file delete`.
+//
+// Named rather than inferred from a version string: a build from a branch has
+// no useful version, and what matters is whether the command is there.
+func requireDelete(t *testing.T) {
+	t.Helper()
+	// An old cobra prints the PARENT's help and exits 0 for an unknown
+	// subcommand, so neither the exit code nor a string from the command's
+	// summary tells the two apart — the first cut matched on the summary,
+	// which never appears in --help output, and every test here skipped
+	// silently while claiming to prove the feature.
+	out, err := exec.Command(contextdBinary(t), "file", "delete", "--help").CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "Remove the live copy") {
+		t.Skip("this contextd has no `file delete` — needs Contextverse v0.31.0 or newer")
+	}
 }
 
 func TestSearchFindsWhatIsInsideAFile(t *testing.T) {
@@ -198,5 +232,108 @@ func TestASaveGoesThroughWhenNobodyElseTouchedIt(t *testing.T) {
 	// A new file has no version to have moved, and must still be writable.
 	if err := s.PutIfUnchanged(ctx, "team/fresh.md", "new\n", ""); err != nil {
 		t.Fatalf("writing a file that does not exist yet was refused: %v", err)
+	}
+}
+
+// Forgetting used to mean emptying a document, because contextd had no delete
+// and its storage layer's SoftDelete was unreachable. It has one now.
+func TestForgettingActuallyRemovesTheDocument(t *testing.T) {
+	requireDelete(t)
+	s := realSpace(t)
+	ctx := context.Background()
+	if err := s.Put(ctx, "team/policy.md", "Retries stop after three attempts.\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.Delete(ctx, "team/policy.md", ""); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	// Gone from the space, so gone from every prompt assembled from it — which
+	// is the difference between forgetting and hiding.
+	files, err := s.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if f.Path == "team/policy.md" {
+			t.Fatalf("the document is still in the space after being forgotten")
+		}
+	}
+
+	// And searching no longer finds what it said, which is the other half: a
+	// memory that is gone from the listing and still turns up in a search is
+	// not gone.
+	res, err := s.Search(ctx, "three attempts", "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range res.Hits {
+		if h.Path == "team/policy.md" {
+			t.Fatalf("a forgotten document is still searchable: %+v", h)
+		}
+	}
+}
+
+func TestForgettingIsRefusedWhenSomebodyJustRewroteIt(t *testing.T) {
+	requireDelete(t)
+	s := realSpace(t)
+	ctx := context.Background()
+	if err := s.Put(ctx, "team/policy.md", "one\n"); err != nil {
+		t.Fatal(err)
+	}
+	opened, _, err := s.Version(ctx, "team/policy.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Somebody else saves while the operator is deciding.
+	if err := s.Put(ctx, "team/policy.md", "two, and this matters\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.Delete(ctx, "team/policy.md", opened); !errors.Is(err, ErrStale) {
+		t.Fatalf("a stale delete was accepted (err %v) — their work is gone", err)
+	}
+	body, err := s.Get(ctx, "team/policy.md")
+	if err != nil {
+		t.Fatalf("the document was removed anyway: %v", err)
+	}
+	if !strings.Contains(body, "this matters") {
+		t.Fatalf("the refused delete changed the document: %q", body)
+	}
+}
+
+// The save guard is a real compare-and-swap now: contextd itself refuses,
+// inside one call, rather than this package checking and then writing.
+func TestTheSaveGuardIsContextdsOwnRefusal(t *testing.T) {
+	requireDelete(t) // the same release added --if-version
+	s := realSpace(t)
+	ctx := context.Background()
+	if err := s.Put(ctx, "team/policy.md", "one\n"); err != nil {
+		t.Fatal(err)
+	}
+	opened, _, _ := s.Version(ctx, "team/policy.md")
+	if err := s.Put(ctx, "team/policy.md", "two\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	err := s.PutIfUnchanged(ctx, "team/policy.md", "one, edited\n", opened)
+	if !errors.Is(err, ErrStale) {
+		t.Fatalf("the stale save was accepted (err %v)", err)
+	}
+	body, _ := s.Get(ctx, "team/policy.md")
+	if strings.TrimSpace(body) != "two" {
+		t.Fatalf("the refused save wrote anyway: %q", body)
+	}
+
+	// And a save with the right expectation still lands.
+	cur, _, _ := s.Version(ctx, "team/policy.md")
+	if err := s.PutIfUnchanged(ctx, "team/policy.md", "two, edited\n", cur); err != nil {
+		t.Fatalf("an ordinary save was refused: %v", err)
+	}
+	body, _ = s.Get(ctx, "team/policy.md")
+	if strings.TrimSpace(body) != "two, edited" {
+		t.Fatalf("the save did not land: %q", body)
 	}
 }

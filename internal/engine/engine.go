@@ -533,9 +533,12 @@ func (e *Engine) systemPrompt(ctx context.Context, wsID int64, agent workspace.A
 			if err != nil {
 				return "", fmt.Errorf("context doc %q bound to agent %q cannot be read: %w — restore the file in Contextverse or unbind it from the agent", p, agent.Name, err)
 			}
-			// An emptied document is forgotten. Contextverse's CLI has no
-			// delete, so clearing a memory is how an operator removes it —
-			// and a blank section in the prompt would be worse than absent.
+			// An emptied document contributes nothing. Forgetting is a real
+			// delete now — contextd grew `file delete` in v0.31.0 — so this is
+			// no longer how a memory is dropped. It stays because a document
+			// CAN be empty for other reasons, and a heading over nothing reads
+			// to a model as "there are no rules here", which is worse than the
+			// section being absent.
 			if strings.TrimSpace(content) == "" {
 				continue
 			}
