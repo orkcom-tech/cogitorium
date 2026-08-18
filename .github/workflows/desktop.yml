@@ -110,7 +110,11 @@ jobs:
           codesign --force --deep --sign - dist/Cogitorium.app
           ditto -c -k --sequesterRsrc --keepParent dist/Cogitorium.app \
             "dist/Cogitorium-desktop_${{ steps.v.outputs.version }}_${{ matrix.artifact }}.zip"
-          rm -rf dist/Cogitorium.app
+          # The staged contextd goes too. It was copied INTO the bundle, and
+          # the upload below takes dist/* — so leaving it here attaches a bare
+          # 37MB contextd to the release as a top-level asset, which is what
+          # happened on v2.0.0. The Linux and Windows steps already remove it.
+          rm -rf dist/Cogitorium.app dist/contextd
 
       - name: Assemble the Linux tarball
         if: runner.os == 'Linux'
