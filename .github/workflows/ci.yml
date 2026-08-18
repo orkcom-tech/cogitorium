@@ -309,6 +309,27 @@ jobs:
           fi
           echo "ok: the password is not in the pod log"
 
+          # Nor a token INSTEAD of it. The chart declines to print the password
+          # in its own output on the grounds that install output reaches CI
+          # logs; a bootstrap token in the pod log would be the same credential
+          # somewhere worse, and would make that refusal theatre.
+          if kubectl -n cogitorium logs deploy/cogitorium | grep -q 'admin token created'; then
+            echo "FAIL: a bootstrap admin token was logged even though a password was supplied"; exit 1
+          fi
+          echo "ok: no admin token was logged either"
+
+          # And the admin cannot put the install back to unclaimed, which is
+          # what an empty password used to do: it is the same state NeedsSetup
+          # reads as "nobody has taken this yet".
+          T=$(curl -fsS -X POST http://127.0.0.1:8688/api/v1/login \
+            -H 'Content-Type: application/json' \
+            -d "{\"name\":\"admin\",\"password\":\"$PW\"}" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:8688/api/v1/users/1/password \
+            -H "Authorization: Bearer $T" -H 'Content-Type: application/json' -d '{"password":""}')
+          [ "$CODE" = "400" ] || { echo "FAIL: clearing the admin password returned $CODE, want 400"; exit 1; }
+          curl -fsS http://127.0.0.1:8688/api/v1/setup | grep -q '"needs_setup":false'
+          echo "ok: the install cannot be pushed back to unclaimed"
+
       - name: An upgrade keeps the password rather than minting a new one
         run: |
           set -e

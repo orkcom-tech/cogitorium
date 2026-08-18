@@ -1924,7 +1924,21 @@ one on its next start rather than sitting unreachable, and an operator who has
 since changed theirs keeps it through every restart, rollout and eviction. The
 cost is that a forgotten password cannot be recovered by redeploying with a new
 one — the same trade this product already makes for tokens, where only the hash
-is kept.
+is kept. A supplied password that is ignored says so in the log rather than
+looking applied.
+
+Supplying it also stops the first start from generating an admin token and
+printing it. That line exists because an install with no password would
+otherwise have no way in at all; one with a password does, and a generated token
+in a pod log is a permanent admin credential readable by anyone who can read
+logs there. Mint tokens from the password with `cogitorium login` instead.
+
+Two bounds, both refused at startup rather than at first use: at least 8
+characters, and at most 72 bytes — the second is bcrypt's limit rather than a
+policy, and it refuses instead of truncating, so a longer one would fail on
+every start. A trailing newline is stripped, because
+`kubectl create secret --from-file` puts one there and a password with an
+invisible newline in it fails exactly like a typo.
 
 The Helm chart generates one when you do not supply it; see
 `deploy/helm/cogitorium/README.md`.

@@ -105,9 +105,8 @@ func newToken(userName string) (string, error) {
 // the same value today, a rule enforced by a comment is one waiting to be
 // broken by the next caller.
 func (s *Store) adoptSeededPassword(ctx context.Context, id int64, password string) error {
-	if len(password) < MinPasswordLen {
-		return fmt.Errorf("the seeded admin password is %d characters; at least %d are required",
-			len(password), MinPasswordLen)
+	if err := checkPassword(password); err != nil {
+		return fmt.Errorf("the seeded admin password is unusable: %w", err)
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -121,6 +120,12 @@ func (s *Store) adoptSeededPassword(ctx context.Context, id int64, password stri
 	}
 	if n, _ := res.RowsAffected(); n > 0 {
 		slog.Info("the admin had no password and the deployment supplied one", "user_id", id)
+	} else {
+		// Said out loud, because the operator who just changed the Secret is
+		// about to wonder why the new value does not work. Silence here reads
+		// as "applied".
+		slog.Info("a password was supplied for the admin and ignored: this account already has one, "+
+			"and nothing outside the interface may replace it", "user_id", id)
 	}
 	return nil
 }
@@ -129,6 +134,31 @@ func (s *Store) adoptSeededPassword(ctx context.Context, id int64, password stri
 // so a credential supplied by a deployment cannot be weaker than one a person
 // is allowed to choose.
 const MinPasswordLen = 8
+
+// MaxPasswordLen is bcrypt's, not a policy.
+//
+// bcrypt hashes at most 72 bytes and, since golang.org/x/crypto stopped
+// silently truncating, REFUSES anything longer. A deployment that set a long
+// passphrase would not get a weak password — it would get a pod that fails to
+// start, on every start, with a hashing error in its log and no clue that the
+// value it was handed is the cause. Refusing it where the value is read says so
+// while somebody is still looking.
+//
+// Bytes rather than characters: it is a byte limit, and a 40-character
+// passphrase with accents in it is over 72 bytes.
+const MaxPasswordLen = 72
+
+// checkPassword is the one place either bound is stated.
+func checkPassword(password string) error {
+	if len(password) < MinPasswordLen {
+		return fmt.Errorf("password must be at least %d characters", MinPasswordLen)
+	}
+	if len(password) > MaxPasswordLen {
+		return fmt.Errorf("password is %d bytes; bcrypt hashes at most %d, and refuses rather than truncates",
+			len(password), MaxPasswordLen)
+	}
+	return nil
+}
 
 // Seeds are credentials an operator supplied for the first admin instead of
 // letting this package generate them. A struct rather than two strings because
@@ -190,9 +220,8 @@ func (s *Store) Bootstrap(ctx context.Context, seed Seeds) (admin User, token st
 	// it.
 	hash := ""
 	if seed.Password != "" {
-		if len(seed.Password) < MinPasswordLen {
-			return User{}, "", fmt.Errorf("the seeded admin password is %d characters; at least %d are required",
-				len(seed.Password), MinPasswordLen)
+		if err := checkPassword(seed.Password); err != nil {
+			return User{}, "", fmt.Errorf("the seeded admin password is unusable: %w", err)
 		}
 		h, err := bcrypt.GenerateFromPassword([]byte(seed.Password), bcrypt.DefaultCost)
 		if err != nil {
@@ -215,19 +244,38 @@ func (s *Store) Bootstrap(ctx context.Context, seed Seeds) (admin User, token st
 	}
 	id, _ := res.LastInsertId()
 
-	printable := true
-	if seed.Token != "" {
-		token, printable = seed.Token, false
-	} else {
+	// WHETHER A TOKEN IS PRINTED AT ALL.
+	//
+	// A supplied token is never echoed: the operator has it, and printing it
+	// would only put it somewhere new — which on Kubernetes is the pod log.
+	//
+	// A supplied PASSWORD suppresses it for a stronger reason. That is the
+	// deployment case, and a generated token written to the log is a permanent
+	// admin credential readable by anyone who can read logs in the namespace,
+	// for as long as the log is kept. The chart refuses to print the password
+	// in its own install output on exactly that reasoning; leaving an equally
+	// privileged token in a worse place would make that refusal theatre. The
+	// operator signs in with the password and mints tokens with `cogitorium
+	// login`, so nothing is lost by not having one at first start.
+	printable := false
+	switch {
+	case seed.Token != "":
+		token = seed.Token
+	case hash == "":
+		// The laptop: no password either, so this token is the only way in and
+		// the operator has to be shown it.
 		token, err = newToken(AdminName)
 		if err != nil {
 			return User{}, "", err
 		}
+		printable = true
 	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO tokens (user_id, name, token_hash, created_at) VALUES (?, 'bootstrap', ?, ?)`,
-		id, hashToken(token), now()); err != nil {
-		return User{}, "", fmt.Errorf("bootstrap: store token: %w", err)
+	if token != "" {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO tokens (user_id, name, token_hash, created_at) VALUES (?, 'bootstrap', ?, ?)`,
+			id, hashToken(token), now()); err != nil {
+			return User{}, "", fmt.Errorf("bootstrap: store token: %w", err)
+		}
 	}
 
 	// Workspaces created before there were users belong to the admin.
@@ -315,20 +363,30 @@ func (s *Store) NeedsSetup(ctx context.Context) (bool, error) {
 	return hash == "", nil
 }
 
-// SetPassword sets or clears a user's password. Clearing it leaves the account
-// reachable only by token.
+// SetPassword replaces a user's password. It cannot clear one.
+//
+// It could once, leaving an account reachable only by token, and nothing in the
+// product used that — but the route behind it did, because an absent JSON field
+// is an empty string. That was a way to UNCLAIM AN INSTALL: "the admin has no
+// password" is exactly how NeedsSetup recognises one nobody has taken, so an
+// admin clearing their own password reopened the unauthenticated first-run
+// route on a live install. On a local one that is anybody with a socket to the
+// port; on a server it is anybody holding the admin token, which is a lower bar
+// than the password they just erased.
+//
+// So an empty password is refused rather than read as a command.
 func (s *Store) SetPassword(ctx context.Context, id int64, password string) error {
-	hash := ""
-	if password != "" {
-		if len(password) < 8 {
-			return errors.New("password must be at least 8 characters")
-		}
-		h, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		if err != nil {
-			return fmt.Errorf("hash password: %w", err)
-		}
-		hash = string(h)
+	if password == "" {
+		return errors.New("a password cannot be empty: an account with no password is one this install treats as unclaimed")
 	}
+	if err := checkPassword(password); err != nil {
+		return err
+	}
+	h, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+	hash := string(h)
 	res, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`, hash, now(), id)
 	if err != nil {
 		return fmt.Errorf("set password for user %d: %w", id, err)
@@ -336,7 +394,7 @@ func (s *Store) SetPassword(ctx context.Context, id int64, password string) erro
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("user %d: %w", id, ErrNotFound)
 	}
-	slog.Info("password changed", "user_id", id, "cleared", password == "")
+	slog.Info("password changed", "user_id", id)
 	return nil
 }
 
@@ -451,10 +509,13 @@ func (s *Store) CreateUser(ctx context.Context, name, role, password string) (Us
 	}
 	defer tx.Rollback()
 
+	// Empty is allowed here and nowhere else: creating somebody without a
+	// password is how an admin hands out an account reached by its token, and
+	// it is a NEW user rather than the admin whose empty hash means unclaimed.
 	hash := ""
 	if password != "" {
-		if len(password) < 8 {
-			return User{}, "", errors.New("password must be at least 8 characters")
+		if err := checkPassword(password); err != nil {
+			return User{}, "", err
 		}
 		h, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 		if err != nil {

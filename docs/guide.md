@@ -2371,7 +2371,8 @@ So that you do not go looking:
 - No control for the gear browser environment in the interface; it is API-only.
 - No upload, download, rename or delete for workspace files.
 - No token management: tokens cannot be listed, named, rotated or expired individually.
-- No self-service signup, and no password-change screen.
+- No self-service signup. Changing your OWN password has a screen; changing
+  somebody else's does not, and neither does resetting a forgotten one.
 - No screen for the search audit log, though the route exists.
 - No workspace-wide prohibitions; they are per agent, and a created agent inherits its creator's.
 - A bundle carries the conversation nowhere, and no colour — it is a template, not a transcript.

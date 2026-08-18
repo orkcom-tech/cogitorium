@@ -79,10 +79,22 @@ auth:
   # string — and a credential in `helm install` output is a credential in CI
   # logs and shell scratchpads.
   #
-  # It survives `helm upgrade`: the chart reads back what is already deployed
-  # rather than minting a new one. It reaches the server only while the admin
-  # has NO password, so once you change it in the interface — which you should —
-  # nothing here can overwrite it, and nothing here can recover it either.
+  # It survives `helm upgrade`, because the chart reads the deployed Secret back
+  # with `lookup` before generating. THAT ONLY WORKS WHEN HELM IS TALKING TO A
+  # CLUSTER — `helm install`, `helm upgrade`, and Flux's helm-controller, which
+  # drives the same SDK. Under `helm template` and `--dry-run` there is nothing
+  # to look up, so a NEW password is minted on every render.
+  #
+  # Which matters for one popular tool: Argo CD renders charts with a
+  # client-side `helm template` by default, so leaving this empty there gives
+  # you a Secret that is permanently OutOfSync and, with auto-sync on, is
+  # rewritten every reconciliation with a value the server will not adopt. Set
+  # existingSecret and manage the credential yourself if you deploy that way.
+  # (`ignoreDifferences` hides the diff; it does not fix it.)
+  #
+  # It reaches the server only while the admin has NO password, so once you
+  # change it in the interface — which you should — nothing here can overwrite
+  # it, and nothing here can recover it either.
   #
   # At least 8 characters; the server refuses to start otherwise.
   adminPassword: ""

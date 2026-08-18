@@ -456,9 +456,26 @@ func Load(path, dataDirOverride string) (Config, error) {
 		cfg.AdminToken = v
 	}
 	if v := os.Getenv("COGITORIUM_ADMIN_PASSWORD"); v != "" {
+		// A TRAILING NEWLINE IS NOT PART OF THE PASSWORD, and this is where it
+		// gets in: `kubectl create secret generic --from-file=admin-password=pw`
+		// stores the file, and a file written by an editor ends in a newline.
+		// Kept, it is hashed into the credential — and the failure is silent,
+		// because the operator then types the password they chose and gets the
+		// same 401 a typo produces. It even helps the length check pass.
+		//
+		// Line endings only. Trimming all whitespace would quietly change a
+		// password somebody deliberately ended with a space.
+		v = strings.TrimRight(v, "\r\n")
 		if len(v) < identity.MinPasswordLen {
 			return Config{}, fmt.Errorf("COGITORIUM_ADMIN_PASSWORD is %d characters; it is what the admin signs in with, so at least %d are required",
 				len(v), identity.MinPasswordLen)
+		}
+		if len(v) > identity.MaxPasswordLen {
+			// Refused here rather than at the hashing call, which is inside
+			// Bootstrap and therefore inside a pod that would crash-loop with
+			// a message about bcrypt rather than about this variable.
+			return Config{}, fmt.Errorf("COGITORIUM_ADMIN_PASSWORD is %d bytes; bcrypt hashes at most %d and refuses rather than truncates, so a longer one would fail at every start",
+				len(v), identity.MaxPasswordLen)
 		}
 		cfg.AdminPassword = v
 	}

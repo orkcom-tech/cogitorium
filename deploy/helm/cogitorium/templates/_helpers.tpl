@@ -72,4 +72,7 @@ anything is applied.
 {{- if and .Values.auth.adminPassword (lt (len .Values.auth.adminPassword) 8) -}}
 {{- fail "auth.adminPassword must be at least 8 characters: it is what the admin signs in with, and the server refuses a shorter one at startup. Leave it empty and the chart generates one." -}}
 {{- end -}}
+{{- if gt (len .Values.auth.adminPassword) 72 -}}
+{{- fail "auth.adminPassword is over 72 bytes. That is bcrypt's limit, not a policy: it refuses rather than truncates, so the server would fail to start on every start. Use a shorter one." -}}
+{{- end -}}
 {{- end -}}

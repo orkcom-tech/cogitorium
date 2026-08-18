@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/orkcom-tech/cogitorium/internal/update"
@@ -98,5 +99,58 @@ func TestTheSeededAdminPasswordCannotComeFromTheConfigFile(t *testing.T) {
 	if cfg.AdminPassword != "" {
 		t.Errorf("a password in the config file was read as %q; it must come from the environment or not at all",
 			cfg.AdminPassword)
+	}
+}
+
+// TestATrailingNewlineIsNotPartOfTheAdminPassword is the mistake that locks an
+// operator out of their own cluster in silence.
+//
+// `kubectl create secret generic --from-file=admin-password=pw` stores the
+// file, and a file an editor wrote ends in a newline. Kept, it is hashed into
+// the credential — and then the operator types the password they chose and gets
+// the same 401 a typo produces, with nothing anywhere saying why.
+func TestATrailingNewlineIsNotPartOfTheAdminPassword(t *testing.T) {
+	for _, ending := range []string{"\n", "\r\n", "\n\n"} {
+		t.Setenv("COGITORIUM_ADMIN_PASSWORD", "correct-horse-battery"+ending)
+		cfg, err := Load("", "")
+		if err != nil {
+			t.Fatalf("password ending in %q was refused: %v", ending, err)
+		}
+		if cfg.AdminPassword != "correct-horse-battery" {
+			t.Errorf("password ending in %q was read as %q", ending, cfg.AdminPassword)
+		}
+	}
+
+	// Only line endings. A trailing space could be somebody's actual choice,
+	// and quietly changing it would be the same silent failure in reverse.
+	t.Setenv("COGITORIUM_ADMIN_PASSWORD", "correct-horse-battery ")
+	cfg, err := Load("", "")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.AdminPassword != "correct-horse-battery " {
+		t.Errorf("a trailing space was trimmed: %q", cfg.AdminPassword)
+	}
+}
+
+// TestALongSeededAdminPasswordIsRefusedAtStartup: bcrypt hashes at most 72
+// bytes and refuses rather than truncates, so a longer one is not a weak
+// password — it is a pod that fails to start, on every start, reporting a
+// hashing error rather than the variable that caused it.
+func TestALongSeededAdminPasswordIsRefusedAtStartup(t *testing.T) {
+	t.Setenv("COGITORIUM_ADMIN_PASSWORD", strings.Repeat("a", 73))
+	if _, err := Load("", ""); err == nil {
+		t.Fatal("a 73-byte admin password was accepted; the pod would crash-loop instead")
+	}
+
+	// Bytes, not characters: this is 30 characters and 90 bytes.
+	t.Setenv("COGITORIUM_ADMIN_PASSWORD", strings.Repeat("パ", 30))
+	if _, err := Load("", ""); err == nil {
+		t.Fatal("a 30-character, 90-byte password was accepted")
+	}
+
+	t.Setenv("COGITORIUM_ADMIN_PASSWORD", strings.Repeat("a", 72))
+	if _, err := Load("", ""); err != nil {
+		t.Fatalf("exactly 72 bytes was refused: %v", err)
 	}
 }

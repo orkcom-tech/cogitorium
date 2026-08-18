@@ -88,13 +88,32 @@ string.)
 
 Three things about it that are not preferences:
 
-- **`helm upgrade` keeps it.** The chart reads back what is already deployed
-  instead of minting a new one, so the Secret never starts advertising a value
-  the server does not have.
+- **`helm upgrade` keeps it**, because the chart reads the deployed Secret back
+  with `lookup` before generating — so the Secret never starts advertising a
+  value the server does not have. That works when Helm is talking to a cluster:
+  `helm install`, `helm upgrade`, and Flux's helm-controller. It does NOT work
+  under `helm template` or `--dry-run`, where there is nothing to look up and a
+  new password is minted every render. **Argo CD renders with a client-side
+  `helm template` by default**, so set `auth.existingSecret` there and manage the
+  credential yourself; otherwise the Secret is permanently OutOfSync and
+  auto-sync rewrites it with a value the server will not adopt.
 - **It only reaches an admin that has none.** Change it in the interface —
   account button, then *change password* — and nothing in this chart can
   overwrite what you chose. Nothing can recover it either; a forgotten one means
   a fresh volume.
+
+  Once you have, the value in the Secret is a stale string rather than a live
+  credential, and that is the point at which to remove it:
+
+  ```
+  kubectl -n <ns> patch secret <release>-cogitorium-auth \
+    --type=json -p '[{"op":"remove","path":"/data/admin-password"}]'
+  ```
+
+  In that order — removing it while it is still the password locks you out. The
+  Deployment reads the key as optional, so once it is gone the pod still starts;
+  it simply has no password to seed, and the one you chose is already in the
+  database.
 - **Upgrading an install that already has an admin password** leaves it alone.
   An install that has an admin with NO password — one made before this existed —
   is given the value from the Secret on its next start, so it stops needing a

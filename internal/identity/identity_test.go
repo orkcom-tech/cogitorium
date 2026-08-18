@@ -758,20 +758,59 @@ func TestClearingAPasswordBlocksLoginButLeavesTokensAlone(t *testing.T) {
 		t.Fatalf("login before clearing: %v", err)
 	}
 
-	if err := s.SetPassword(ctx, alice.ID, ""); err != nil {
-		t.Fatalf("clear password: %v", err)
-	}
-	for _, attempt := range []string{"hunter2hunter2", "", " "} {
-		u, tok, err := s.Login(ctx, "alice", attempt)
-		assertNobody(t, u, err, "login after the password was cleared, with "+strconv.Quote(attempt))
-		if tok != "" {
-			t.Errorf("a cleared account issued token %q", tok)
-		}
+	// Clearing is REFUSED now. It used to be how an account was left reachable
+	// by token alone, and nothing in the product asked for that — while the
+	// route behind it turned an absent JSON field into the command. An admin
+	// with no password is how this install recognises one nobody has claimed,
+	// so clearing the admin's reopened the unauthenticated first-run route on a
+	// live install. One rule covers every account rather than a special case
+	// for the one it was dangerous on.
+	if err := s.SetPassword(ctx, alice.ID, ""); err == nil {
+		t.Fatal("an empty password was accepted, which is how a claimed install gets unclaimed")
 	}
 
+	// Refused, and nothing moved: the password still works and so does the
+	// token. A half-applied clear would be worse than either outcome.
+	if _, _, err := s.Login(ctx, "alice", "hunter2hunter2"); err != nil {
+		t.Fatalf("the password stopped working after a refused clear: %v", err)
+	}
+	for _, attempt := range []string{"", " ", "wrong-one-entirely"} {
+		u, tok, err := s.Login(ctx, "alice", attempt)
+		assertNobody(t, u, err, "login with "+strconv.Quote(attempt))
+		if tok != "" {
+			t.Errorf("login with %q issued token %q", attempt, tok)
+		}
+	}
 	got, err := s.Authenticate(ctx, aliceToken)
 	if err != nil || got.ID != alice.ID {
-		t.Fatalf("clearing the password locked the account out of its token too: %+v, %v", got, err)
+		t.Fatalf("the account lost its token: %+v, %v", got, err)
+	}
+}
+
+// TestClearingTheAdminPasswordCannotUnclaimTheInstall is the reason the rule
+// above exists, stated on the account it mattered on.
+func TestClearingTheAdminPasswordCannotUnclaimTheInstall(t *testing.T) {
+	t.Parallel()
+	s, _, _ := newStore(t)
+	ctx := context.Background()
+
+	admin, _, err := s.Bootstrap(ctx, identity.Seeds{Password: "correct-horse-battery"})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	if needs, _ := s.NeedsSetup(ctx); needs {
+		t.Fatal("the fixture is wrong: a seeded install already asks to be claimed")
+	}
+
+	if err := s.SetPassword(ctx, admin.ID, ""); err == nil {
+		t.Fatal("the admin cleared their own password")
+	}
+	needs, err := s.NeedsSetup(ctx)
+	if err != nil {
+		t.Fatalf("needs setup: %v", err)
+	}
+	if needs {
+		t.Fatal("the install went back to asking to be claimed, so whoever reaches it next can take it")
 	}
 }
 
@@ -1286,51 +1325,96 @@ func TestAWeakSeededPasswordRefusesToBootstrap(t *testing.T) {
 	}
 	// And it did not half-create the admin: the next bootstrap is still a first
 	// one, rather than leaving an account nobody can sign in to.
-	admin, token, err := s.Bootstrap(ctx, identity.Seeds{Password: "correct-horse-battery"})
+	admin, _, err := s.Bootstrap(ctx, identity.Seeds{Password: "correct-horse-battery"})
 	if err != nil {
 		t.Fatalf("bootstrap after a refused one: %v", err)
 	}
-	if token == "" || admin.ID == 0 {
+	if admin.ID == 0 {
 		t.Fatalf("the refused bootstrap left the install in a state a good one cannot fix: %+v", admin)
+	}
+	if _, _, err := s.Login(ctx, "admin", "correct-horse-battery"); err != nil {
+		t.Fatalf("the admin created after a refused bootstrap cannot sign in: %v", err)
 	}
 }
 
-// The two seeds are independent: a deployment can supply either, both, or
-// neither, and supplying a password must not stop a generated token coming back
-// for the operator to see.
-func TestSeedingAPasswordStillReturnsAGeneratedToken(t *testing.T) {
+// TestSeedingAPasswordPrintsNoToken: a deployment that supplied a password gets
+// NO bootstrap token, and none is written to the log.
+//
+// This test used to assert the opposite, on the reasoning that an install with
+// a seeded password would otherwise have no credential for its API. That stopped
+// being true when `cogitorium login` arrived: the password mints tokens on
+// demand. What remained was a permanent admin credential in the pod log,
+// readable by anyone who can read logs in that namespace for as long as the log
+// is kept — while the chart, one directory away, refuses to print the password
+// in its own install output on exactly that reasoning.
+func TestSeedingAPasswordPrintsNoToken(t *testing.T) {
+	t.Parallel()
+	s, db, _ := newStore(t)
+	ctx := context.Background()
+
+	admin, token, err := s.Bootstrap(ctx, identity.Seeds{Password: "correct-horse-battery"})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	if token != "" {
+		t.Errorf("a token came back to be printed (%q); on Kubernetes that is a permanent admin "+
+			"credential in the pod log", token)
+	}
+	// Not merely unprinted — not minted. A stored token nobody was shown is an
+	// admin credential with no owner.
+	var tokens int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM tokens WHERE user_id = ?`, admin.ID).Scan(&tokens); err != nil {
+		t.Fatalf("count tokens: %v", err)
+	}
+	if tokens != 0 {
+		t.Errorf("%d token(s) were stored for an admin nobody was given one for", tokens)
+	}
+
+	// And the operator is not stranded: the password mints one.
+	if _, minted, err := s.Login(ctx, "admin", "correct-horse-battery"); err != nil || minted == "" {
+		t.Fatalf("signing in did not produce a token: %q %v", minted, err)
+	}
+}
+
+// With NEITHER seed there is nothing but a token, so it is still returned and
+// still printed — that is the laptop, where it is the only way in.
+func TestWithNoSeedsTheTokenIsStillTheWayIn(t *testing.T) {
 	t.Parallel()
 	s, _, _ := newStore(t)
 	ctx := context.Background()
 
-	_, token, err := s.Bootstrap(ctx, identity.Seeds{Password: "correct-horse-battery"})
+	_, token, err := s.Bootstrap(ctx, identity.Seeds{})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
 	if token == "" {
-		t.Fatal("no token came back, so an install with a seeded password has no credential for its API")
+		t.Fatal("no password and no token: there would be no way into this install at all")
 	}
 	if _, err := s.Authenticate(ctx, token); err != nil {
 		t.Fatalf("the returned token does not authenticate: %v", err)
 	}
+}
 
-	// Both seeded: the token is the operator's own, so nothing is returned to
-	// be printed, and the password still works.
-	s2, _, _ := newStore(t)
-	_, token2, err := s2.Bootstrap(ctx, identity.Seeds{
+// A supplied token is never echoed, with or without a password beside it.
+func TestASuppliedTokenIsNeverEchoedAlongsideAPassword(t *testing.T) {
+	t.Parallel()
+	s, _, _ := newStore(t)
+	ctx := context.Background()
+
+	_, token, err := s.Bootstrap(ctx, identity.Seeds{
 		Token:    "cg-admin-supplied-by-the-operator-not-generated",
 		Password: "correct-horse-battery",
 	})
 	if err != nil {
 		t.Fatalf("bootstrap with both seeds: %v", err)
 	}
-	if token2 != "" {
-		t.Errorf("a supplied token was echoed back as %q, putting it somewhere it was not before", token2)
+	if token != "" {
+		t.Errorf("a supplied token was echoed back as %q, putting it somewhere it was not before", token)
 	}
-	if _, err := s2.Authenticate(ctx, "cg-admin-supplied-by-the-operator-not-generated"); err != nil {
+	if _, err := s.Authenticate(ctx, "cg-admin-supplied-by-the-operator-not-generated"); err != nil {
 		t.Fatalf("the supplied token does not authenticate: %v", err)
 	}
-	if _, _, err := s2.Login(ctx, "admin", "correct-horse-battery"); err != nil {
+	if _, _, err := s.Login(ctx, "admin", "correct-horse-battery"); err != nil {
 		t.Fatalf("the seeded password does not work alongside a seeded token: %v", err)
 	}
 }
