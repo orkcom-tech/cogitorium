@@ -14,27 +14,36 @@
 
 .dk-track {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 100%;
+  /* One COLUMN of full-height cells. It was a row of full-width ones, slid
+     sideways — which is a fine gesture on its own and the wrong one here: the
+     control that moves it is a vertical rail, so the work travels the way the
+     hand does. */
+  grid-auto-flow: row;
+  grid-auto-rows: 100%;
   width: 100%;
   height: 100%;
   min-height: 0;
-  transition: transform 320ms cubic-bezier(0.32, 0.72, 0, 1);
+  /* The expressive spatial curve: it overshoots slightly and settles, which is
+     what makes the arrival feel like an object landing rather than a value
+     reaching its target. */
+  transition: transform var(--sp-default-d) var(--sp-default);
   will-change: transform;
 }
 
-/* A slide is what a panel used to be: surface, edge, radius. The difference is
-   that it is always exactly one viewport wide and never shares the row. */
+/* A slide fills the cavity and draws NO box of its own.
+   It used to carry a surface, a 1px border, a radius and a margin — a second
+   rounded rectangle inside the hole, so the operator saw two frames nested one
+   inside the other with a hairline between them. The cavity is the window; a
+   view is what is behind it. */
 .dk-slide {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  margin: 0 var(--s2) var(--s2);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r3);
+  margin: 0;
+  background: transparent;
+  border: 0;
   /* Views adapt to THEIR OWN width rather than the window's, which is what
      stopped a message being three words wide in a narrow panel. */
   container-type: inline-size;
@@ -56,11 +65,10 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-areas:
-    'files centre'
-    'term  term';
+  /* Two areas, not three: the shell is a drawer now. */
+  grid-template-areas: 'files centre';
   grid-template-columns: var(--dk-files) minmax(0, 1fr);
-  grid-template-rows: minmax(120px, 1fr) var(--dk-term);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 /* margin and gap are reset explicitly, not inherited away: these are <section>
@@ -157,7 +165,7 @@
 
 .dk-seam-x {
   top: 0;
-  bottom: var(--dk-term);
+  bottom: 0;
   left: calc(var(--dk-files) - 4px);
   width: 8px;
   cursor: col-resize;

@@ -40,7 +40,7 @@ func TestAPaddedGearNameCannotSupersedeAnApprovedGear(t *testing.T) {
 			if err != nil {
 				t.Fatalf("forge the local gear: %v", err)
 			}
-			if _, err := i.stores.Gears.SetStatus(ctx, local.ID, gear.StatusApproved); err != nil {
+			if _, err := i.stores.Gears.SetStatus(ctx, local.ID, gear.StatusApproved, gear.Actor{Name: "test-operator"}); err != nil {
 				t.Fatalf("approve the local gear: %v", err)
 			}
 

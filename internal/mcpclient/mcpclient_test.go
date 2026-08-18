@@ -279,6 +279,27 @@ func TestANotificationIsNeverAnsweredAndDoesNotStealAnAnswer(t *testing.T) {
 	}
 }
 
+// awaitReport polls the counterpart's report until it says want, or gives up.
+//
+// A deadline rather than a sleep: a sleep long enough for the slowest runner is
+// a second added to every fast one, and a sleep short enough not to notice is
+// the flake this replaces.
+func awaitReport(t *testing.T, c *Conn, want string) string {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	var report string
+	for time.Now().Before(deadline) {
+		report = ask(t, c, "report")
+		if strings.Contains(report, want) {
+			return report
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("a request from the server went unanswered within 5s: %s — a server waiting on an "+
+		"answer it will never get is a server that stops serving", report)
+	return report
+}
+
 // ask calls a tool with no arguments and returns its text.
 func ask(t *testing.T, c *Conn, tool string) string {
 	t.Helper()
@@ -297,11 +318,16 @@ func TestAServerRequestIsRefusedRatherThanIgnored(t *testing.T) {
 	// records whether it was ever answered. A server left waiting for an answer
 	// stops serving, so silence is not the safe option — the answer has to be
 	// an explicit refusal.
-	report := ask(t, c, "report")
-	if !strings.Contains(report, "sampling_answered=true") {
-		t.Fatalf("a request from the server went unanswered: %s — a server waiting on an answer it "+
-			"will never get is a server that stops serving", report)
-	}
+	// WAITED FOR, not assumed. The server sends its request during the
+	// handshake and this side answers it from the reader goroutine, so nothing
+	// makes the answer have happened by the time the first tool call returns.
+	// It always had on a developer's machine — forty runs in a row, at one, two
+	// and four CPUs — and failed on a loaded CI runner, which is the shape of
+	// every test that reads a result it never waited for.
+	//
+	// The assertion is unchanged: a client that never answers still fails, it
+	// just takes a second to say so instead of a millisecond.
+	report := awaitReport(t, c, "sampling_answered=true")
 	if !strings.Contains(report, "unsolicited=0") {
 		t.Fatalf("the client wrote something else back as well: %s", report)
 	}

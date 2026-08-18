@@ -75,8 +75,11 @@ type Gear struct {
 
 // Run is one recorded execution of a gear.
 type Run struct {
-	ID          int64  `json:"id"`
+	ID int64 `json:"id"`
+	// GearID is 0 once the gear has been deleted. GearName is what is left,
+	// and it is why the run is still readable: see migration 0029.
 	GearID      int64  `json:"gear_id"`
+	GearName    string `json:"gear_name"`
 	Version     int    `json:"version"`
 	AgentID     *int64 `json:"agent_id"` // nil = the operator (dry run)
 	AgentName   string `json:"agent_name"`
@@ -433,7 +436,14 @@ func (s *Store) Files(ctx context.Context, gearID int64, version int) ([]File, e
 
 // SetStatus approves or disables a gear. Approval is the operator's act —
 // nothing else may call it.
-func (s *Store) SetStatus(ctx context.Context, id int64, status string) (Gear, error) {
+// SetStatus changes a gear's status AND writes the trail row for it.
+//
+// The two are one function on purpose. A separate "record the approval" call
+// beside this one is a call somebody forgets at the next call site, and the
+// gap it leaves is invisible — the gear is approved, the trail simply has no
+// row for it, and nobody notices until the day the trail is what matters. See
+// approvals.go for what the trail answers and why a status column cannot.
+func (s *Store) SetStatus(ctx context.Context, id int64, status string, by Actor) (Gear, error) {
 	if status != StatusApproved && status != StatusDisabled && status != StatusPending {
 		return Gear{}, fmt.Errorf("unknown gear status %q", status)
 	}
@@ -444,7 +454,9 @@ func (s *Store) SetStatus(ctx context.Context, id int64, status string) (Gear, e
 	if n, _ := res.RowsAffected(); n == 0 {
 		return Gear{}, fmt.Errorf("gear %d: %w", id, ErrNotFound)
 	}
-	slog.Info("gear status changed by operator", "gear_id", id, "status", status)
+	// After the change, so the row states the grants that are in force under
+	// the new status rather than the ones that were in force before it.
+	s.recordApproval(ctx, id, status, by)
 	return s.Get(ctx, id)
 }
 
@@ -558,11 +570,14 @@ func (s *Store) RecordRun(ctx context.Context, r Run) error {
 	if r.TimedOut {
 		timedOut = 1
 	}
+	// The name is copied onto the row rather than joined to later: after the
+	// gear is deleted there is nothing to join to, and a run that cannot say
+	// which gear it was is not a record of anything.
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO gear_runs (gear_id, version, agent_id, workspace_id, args, exit_code,
+		INSERT INTO gear_runs (gear_id, gear_name, version, agent_id, workspace_id, args, exit_code,
 		                       timed_out, duration_ms, stdout, stderr, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.GearID, r.Version, agentID, wsID, r.Args, r.ExitCode, timedOut, r.DurationMs,
+		VALUES (?, COALESCE((SELECT name FROM gears WHERE id = ?), ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.GearID, r.GearID, r.Version, agentID, wsID, r.Args, r.ExitCode, timedOut, r.DurationMs,
 		truncateForLog(r.Stdout), truncateForLog(r.Stderr), now())
 	if err != nil {
 		return fmt.Errorf("record gear run: %w", err)
@@ -584,8 +599,8 @@ func (s *Store) ListRuns(ctx context.Context, gearID int64, limit int) ([]Run, e
 		limit = 20
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT r.id, r.gear_id, r.version, r.agent_id, COALESCE(a.name, ''), r.workspace_id,
-		       r.args, r.exit_code, r.timed_out, r.duration_ms, r.stdout, r.stderr, r.created_at
+		SELECT r.id, COALESCE(r.gear_id, 0), r.gear_name, r.version, r.agent_id, COALESCE(a.name, ''),
+		       r.workspace_id, r.args, r.exit_code, r.timed_out, r.duration_ms, r.stdout, r.stderr, r.created_at
 		FROM gear_runs r LEFT JOIN agents a ON a.id = r.agent_id
 		WHERE r.gear_id = ? ORDER BY r.id DESC LIMIT ?`, gearID, limit)
 	if err != nil {
@@ -596,7 +611,7 @@ func (s *Store) ListRuns(ctx context.Context, gearID int64, limit int) ([]Run, e
 	for rows.Next() {
 		var r Run
 		var timedOut int
-		if err := rows.Scan(&r.ID, &r.GearID, &r.Version, &r.AgentID, &r.AgentName, &r.WorkspaceID,
+		if err := rows.Scan(&r.ID, &r.GearID, &r.GearName, &r.Version, &r.AgentID, &r.AgentName, &r.WorkspaceID,
 			&r.Args, &r.ExitCode, &timedOut, &r.DurationMs, &r.Stdout, &r.Stderr, &r.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan gear run: %w", err)
 		}

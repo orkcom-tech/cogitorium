@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { Select } from './Select'
+import { DropMenu } from './DropMenu'
 import {
   Background,
   Controls,
@@ -21,9 +22,11 @@ import {
   type GraphData,
   type GraphNode,
   type EgressGrant,
+  type ContextBinding,
   type Model,
   type Wire,
 } from '../api'
+import { draggedKind, readDragged, type Dragged } from '../dnd'
 import { KINDS } from './GraphCanvas'
 import WireEdge from './WireEdge'
 import { layered, positionsFor } from './layout'
@@ -76,6 +79,7 @@ export default function BlueprintEditor({
   statuses,
   onChanged,
   onSelectAgent,
+  onReviewGear,
   onError,
 }: {
   wsId: number
@@ -85,6 +89,9 @@ export default function BlueprintEditor({
   statuses: Map<number, AgentStatus>
   onChanged: () => void
   onSelectAgent: (a: Agent) => void
+  /** Open a gear's review, wherever gears are shown. Used by the note a drop
+   *  leaves behind when the gear that landed is not approved. */
+  onReviewGear: (gearId: number) => void
   onError: (msg: string) => void
 }) {
   const [adding, setAdding] = useState(false)
@@ -101,6 +108,28 @@ export default function BlueprintEditor({
   const [egress, setEgress] = useState<{ enabled: boolean; destination: string; grants: EgressGrant[]; reach: Record<string, string[]> } | null>(null)
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<NodeData>>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
+  // What the canvas already knows, so a drop can say "it already has that"
+  // rather than asking the server and reporting a constraint violation.
+  const [context, setContext] = useState<ContextBinding[]>([])
+  // A drag is over the canvas. `over` is the agent under the pointer, or null
+  // for the empty canvas — which is a real target, not the absence of one: it
+  // means the whole workspace.
+  const [drag, setDrag] = useState<{ kind: Dragged['kind']; over: number | null } | null>(null)
+  // What the last drop did. It says the sentence the operator just performed,
+  // because a node quietly appearing in a graph of twenty is not feedback.
+  const [landed, setLanded] = useState<{ text: string; warn?: string; gearId?: number } | null>(null)
+  // Narrowed to the one method used. The full ReactFlowInstance is generic in
+  // the node type, and the nodes handed to <ReactFlow> are a mapped copy with
+  // a rendered label in them — a different type from ours, so the instance
+  // handed back does not match a ref declared with ours.
+  const flow = useRef<{
+    fitView: (o?: { padding?: number }) => void
+    getNodes: () => { measured?: { width?: number } }[]
+  } | null>(null)
+  // The operator has panned, zoomed or moved a node: from then on the view is
+  // theirs and nothing refits it under them.
+  const owned = useRef(false)
+  const lastFit = useRef('')
 
   const reloadGraph = useCallback(
     () =>
@@ -110,13 +139,15 @@ export default function BlueprintEditor({
         api.gears.list(),
         api.graph.workspace(wsId),
         api.egress.grants(wsId),
+        api.context.bindings(wsId),
       ])
-        .then(([w, b, c, g, e]) => {
+        .then(([w, b, c, g, e, cb]) => {
           setWires(w)
           setBindings(b)
           setCatalog(c)
           setGraph(g)
           setEgress(e)
+          setContext(cb)
         })
         .catch((e: Error) => onError(e.message)),
     [wsId, onError],
@@ -388,11 +419,170 @@ export default function BlueprintEditor({
       .catch((e: Error) => onError(e.message))
   }, [agents, wires, onChanged, onError])
 
+  // Where every node is, as one string. The fit has to react to POSITIONS, not
+  // just to how many nodes there are — see below.
+  const shape = nodes.map((n) => `${n.id}@${Math.round(n.position.x)},${Math.round(n.position.y)}`).join('|')
+
+  /**
+   * Fit the view until the operator takes it.
+   *
+   * THREE separate reasons the `fitView` prop was not enough, and each one on
+   * its own left agents off the bottom of the canvas with no scrollbar to find
+   * them with, because a pane you pan is not a page you scroll.
+   *
+   *   It fits at mount, and at mount this canvas is empty — the deck mounts
+   *   every view at once and the graph arrives a request later.
+   *
+   *   fitView measures. It computes its bounding box from the RENDERED size of
+   *   each node, so calling it on the tick the nodes arrive, before React Flow
+   *   has laid any of them out, does nothing at all, in silence. Hence the
+   *   wait for `measured`.
+   *
+   *   The layout moves AFTER the first fit. Agents land at a fallback position
+   *   until the wires arrive, and then positionsFor spreads them by who
+   *   delegates to whom — so a fit that ran once, on the first arrangement,
+   *   was framing an arrangement that no longer existed a moment later.
+   *
+   * So it refits whenever the arrangement changes, and stops the first time
+   * the operator pans, zooms or drags a node: after that the view is theirs.
+   */
+  useEffect(() => {
+    if (owned.current || nodes.length === 0 || shape === lastFit.current) return
+    let raf = 0
+    let tries = 0
+    const attempt = () => {
+      const i = flow.current
+      const live = i?.getNodes() ?? []
+      if (i && live.length === nodes.length && live.every((n) => n.measured?.width)) {
+        lastFit.current = shape
+        i.fitView({ padding: 0.18 })
+        return
+      }
+      // A second of frames, then give up rather than spin forever: a node that
+      // never measures means something else is wrong, and an endless loop
+      // would hide it.
+      if (tries++ < 60) raf = requestAnimationFrame(attempt)
+    }
+    raf = requestAnimationFrame(attempt)
+    return () => cancelAnimationFrame(raf)
+  }, [shape, nodes.length])
+
+  // ── Dropping a gear or an instruction on the canvas ────────────────────────
+  //
+  // WHERE IT LANDS IS THE SENTENCE. On an agent: that agent gets it. On empty
+  // canvas: the whole workspace gets it — which is a real target, not the
+  // absence of one, and is exactly what the "+ gear" control above does. That
+  // control stays: a drag is not reachable from a keyboard.
+
+  const agentUnder = useCallback(
+    (x: number, y: number): Agent | null => {
+      // The pointer position, not the drag image: elementFromPoint is the only
+      // thing that knows what is under the cursor mid-drag, because React Flow
+      // nodes are absolutely positioned inside a transformed pane and their
+      // screen rectangles are not their layout rectangles.
+      const node = document.elementFromPoint(x, y)?.closest('.react-flow__node')
+      const id = node?.getAttribute('data-id')
+      if (!id || !id.startsWith('a-')) return null
+      return agents.find((a) => a.id === idOf(id)) ?? null
+    },
+    [agents],
+  )
+
+  const onCanvasDragOver = useCallback(
+    (e: DragEvent) => {
+      const kind = draggedKind(e)
+      // Anything else — a file from the desktop, a link from another tab — is
+      // refused by NOT preventing default, which is how the platform spells
+      // refusal.
+      if (!kind) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+      const over = agentUnder(e.clientX, e.clientY)?.id ?? null
+      setLanded(null)
+      // Same state, same object: this fires continuously while the pointer
+      // moves, and a new object every frame re-renders every node.
+      setDrag((p) => (p && p.kind === kind && p.over === over ? p : { kind, over }))
+    },
+    [agentUnder],
+  )
+
+  const onCanvasDrop = useCallback(
+    (e: DragEvent) => {
+      setDrag(null)
+      const d = readDragged(e)
+      if (!d) return
+      e.preventDefault()
+      const target = agentUnder(e.clientX, e.clientY)
+      const where = target ? target.name : 'every agent here'
+
+      if (d.kind === 'gear') {
+        if (bindings.some((b) => b.gear_id === d.id && b.agent_id === (target?.id ?? null))) {
+          setLanded({ text: `${where} already has ${d.name}.` })
+          return
+        }
+        api.gears
+          .bind(wsId, d.id, target?.id ?? null)
+          .then(() => {
+            // Landing something on a layer that is switched off would be a
+            // drop with no visible result.
+            setLayers((p) => (p.tools ? p : { ...p, tools: true }))
+            return reloadGraph()
+          })
+          .then(() =>
+            setLanded({
+              text: `${d.name} → ${where}.`,
+              // Binding an unapproved gear is allowed, and says nothing about
+              // whether it may run — ForAgent only ever hands out approved
+              // ones. So the link is drawn and the truth is stated, rather
+              // than the drop being refused for a rule it does not enforce.
+              warn:
+                d.status === 'approved'
+                  ? undefined
+                  : `Nobody has approved ${d.name}. The link is drawn and it does nothing — no agent can call it until someone reads the source and says yes.`,
+              gearId: d.status === 'approved' ? undefined : d.id,
+            }),
+          )
+          .catch((err: Error) => onError(err.message))
+        return
+      }
+
+      if (context.some((c) => c.path === d.path && c.agent_id === (target?.id ?? null))) {
+        setLanded({ text: `${where} already reads ${d.name}.` })
+        return
+      }
+      api.context
+        .bind(wsId, d.path, target?.id ?? null)
+        .then(() => {
+          setLayers((p) => (p.memory ? p : { ...p, memory: true }))
+          return reloadGraph()
+        })
+        .then(() => setLanded({ text: `${d.name} → ${where}.` }))
+        .catch((err: Error) => onError(err.message))
+    },
+    [agentUnder, bindings, context, wsId, reloadGraph, onError],
+  )
+
+  // A plain confirmation goes on its own; one carrying a decision waits to be
+  // dismissed, because a button that disappears while you reach for it is
+  // worse than no button.
+  useEffect(() => {
+    if (!landed || landed.warn) return
+    const t = setTimeout(() => setLanded(null), 4000)
+    return () => clearTimeout(t)
+  }, [landed])
+
   const inWorkspace = new Set(bindings.map((b) => b.gear_id))
   const addable = catalog.filter((g) => !inWorkspace.has(g.id))
 
   return (
     <div className="blueprint">
+      {/* THE CONTROLS FLOAT ON THE WORK, they are not a strip above it.
+          They used to stack two rows deep across the top of the cavity, with
+          the canvas as a bordered box beneath — a toolbar and a document,
+          which is a web page. Everywhere else in this product a control is a
+          capsule standing on something; here it stands on the canvas, in the
+          corner, and the canvas is the whole stage. */}
+      <div className="bp-tools">
       {showHelp && (
         <p className="hint bp-help">
           Drag between nodes to connect — a wire IS the capability, not a picture of one. Select a link and press
@@ -406,7 +596,7 @@ export default function BlueprintEditor({
         {(['delegation', 'tools', 'memory', 'outward'] as const).map((layer) => (
           <button
             key={layer}
-            className={`legend-item ${layers[layer] ? '' : 'off'}`}
+            className={`legend-item round ${layers[layer] ? '' : 'off'}`}
             onClick={() => setLayers((p) => ({ ...p, [layer]: !p[layer] }))}
             title={LAYER_HINT[layer]}
           >
@@ -424,7 +614,7 @@ export default function BlueprintEditor({
             this one screen holds. Dragging is still the last word: it writes a
             position too, and a stored one always wins. */}
         <button
-          className="legend-item bp-tidy"
+          className="legend-item bp-tidy round"
           onClick={tidy}
           title="Arrange every agent by the wires between them, and keep it. Drag any of them afterwards."
         >
@@ -440,25 +630,31 @@ export default function BlueprintEditor({
           whole subject is the graph, "add a node" is the one verb that has to
           be visible. */}
       <div className="row bp-add">
-        <button onClick={() => setAdding((v) => !v)} title="Put a new agent on this canvas">
+        <button className="bp-act round" onClick={() => setAdding((v) => !v)} title="Put a new agent on this canvas">
           {adding ? 'cancel' : '+ agent'}
         </button>
-        <Select
-          value=""
-          aria-label="Add a gear to this workspace"
-          placeholder={
-            addable.length === 0
-              ? 'every forged gear is already in this workspace'
-              : '+ gear — add one to this workspace (all agents)…'
-          }
-          options={addable.map((g) => ({ value: String(g.id), label: `${g.name} (${g.status})` }))}
-          onChange={(v) => {
-            if (!v) return
+        {/* An ACTION, not a value.
+            
+            This was a <Select> — the control for holding a value you change —
+            carrying the whole sentence "+ gear — add one to this workspace
+            (all agents)…" as its placeholder. Measured: 391px wide against a
+            78px button beside it, looking exactly like a text field, showing a
+            sentence it never stopped showing because there was never a value
+            to show instead. It read as a filter. The sentence is the button's
+            title now, which is where a sentence goes. */}
+        <DropMenu
+          className="bp-act round"
+          label="+ gear"
+          title="Add a forged gear to this workspace — every agent in it can then call it"
+          heading="add to every agent here"
+          empty="Every forged gear is already in this workspace."
+          items={addable.map((g) => ({ value: String(g.id), label: g.name, sub: g.status }))}
+          onPick={(v) =>
             api.gears
               .bind(wsId, Number(v), null)
               .then(reloadGraph)
               .catch((err: Error) => onError(err.message))
-          }}
+          }
         />
       </div>
 
@@ -475,9 +671,46 @@ export default function BlueprintEditor({
           onError={onError}
         />
       )}
-      <div className="canvas">
+      </div>
+      <div
+        className={`canvas ${drag ? 'bp-catching' : ''}`}
+        onDragOver={onCanvasDragOver}
+        onDragLeave={(e) => {
+          // dragleave fires for every child crossed on the way in, so the only
+          // one that means "gone" is the one whose destination is outside.
+          if (!e.currentTarget.contains(e.relatedTarget as globalThis.Node | null)) setDrag(null)
+        }}
+        onDrop={onCanvasDrop}
+      >
+        {drag && (
+          <p className="bp-catch-hint">
+            {drag.over !== null
+              ? `give it to ${agents.find((a) => a.id === drag.over)?.name ?? 'this agent'}`
+              : drag.kind === 'gear'
+                ? 'drop on an agent to give it there — or here, for every agent in this workspace'
+                : 'drop on an agent for that agent alone — or here, for all of them'}
+          </p>
+        )}
+        {landed && (
+          <div className={`bp-landed ${landed.warn ? 'warned' : ''}`}>
+            <strong>{landed.text}</strong>
+            {landed.warn && <span>{landed.warn}</span>}
+            <span className="row bp-landed-acts">
+              {landed.gearId !== undefined && (
+                <button className="primary" onClick={() => onReviewGear(landed.gearId as number)}>
+                  review &amp; approve
+                </button>
+              )}
+              <button onClick={() => setLanded(null)}>dismiss</button>
+            </span>
+          </div>
+        )}
         <ReactFlow
-          nodes={nodes.map((n) => ({ ...n, data: { ...n.data, label: nodeLabel(n.data) } }))}
+          nodes={nodes.map((n) => ({
+            ...n,
+            className: `${n.className ?? ''}${drag && drag.over !== null && n.id === agentNode(drag.over) ? ' bp-catch' : ''}`,
+            data: { ...n.data, label: nodeLabel(n.data) },
+          }))}
           edges={edges}
           onNodesChange={handleNodesChange}
           onEdgesChange={onEdgesChange}
@@ -488,6 +721,17 @@ export default function BlueprintEditor({
             if (d.kind === 'agent' && d.agent) onSelectAgent(d.agent)
           }}
           edgeTypes={edgeTypes}
+          onInit={(i) => {
+            flow.current = i
+          }}
+          // A programmatic move passes a null event — that is the documented
+          // way to tell our own fitView apart from the operator's hand.
+          onMoveStart={(e) => {
+            if (e) owned.current = true
+          }}
+          onNodeDragStart={() => {
+            owned.current = true
+          }}
           fitView
           proOptions={{ hideAttribution: true }}
         >

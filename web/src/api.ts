@@ -328,6 +328,19 @@ export type NewSchedule = {
 // because the row outlives both: a ledger that disappeared when the door was
 // deleted could not answer "did job 4471 happen", which is the only reason it
 // exists.
+// What to ask the record. Every field is optional; an empty query is the plain
+// listing. tool matches a tool the run CALLED (a gear appears under its tool
+// name), agent matches any agent that worked in it anywhere in the delegation
+// tree, context a document it read, file a file it produced.
+export type RunQuery = {
+  tool?: string
+  agent?: string
+  context?: string
+  file?: string
+  state?: string
+  failed?: boolean
+}
+
 export type InletRun = {
   id: number
   workspace_id: number
@@ -552,6 +565,7 @@ export const api = {
       req<GearRunResult>(`/api/v1/gears/${id}/run`, { method: 'POST', body: JSON.stringify({ args, network }) }),
     runs: (id: number) => req<GearRun[]>(`/api/v1/gears/${id}/runs`),
     connections: (id: number) => req<GearConnection[]>(`/api/v1/gears/${id}/connections`),
+    approvals: (id: number) => req<GearApproval[]>(`/api/v1/gears/${id}/approvals`),
     remove: (id: number) => req<void>(`/api/v1/gears/${id}`, { method: 'DELETE' }),
     bindings: (wsId: number) => req<GearBinding[]>(`/api/v1/workspaces/${wsId}/gears`),
     bind: (wsId: number, gearId: number, agentId: number | null) =>
@@ -681,7 +695,13 @@ export const api = {
     updateTask: (id: number, t: InletTaskInput) =>
       req<InletTask>(`/api/v1/inlet-tasks/${id}`, { method: 'PUT', body: JSON.stringify(t) }),
     removeTask: (id: number) => req<void>(`/api/v1/inlet-tasks/${id}`, { method: 'DELETE' }),
-    runs: (wsId: number, limit = 50) => req<InletRun[]>(`/api/v1/workspaces/${wsId}/inlet-runs?limit=${limit}`),
+    // The same endpoint answers the plain listing and the questions the record
+    // exists for. With no filter it IS the listing.
+    runs: (wsId: number, limit = 50, q: RunQuery = {}) => {
+      const p = new URLSearchParams({ limit: String(limit) })
+      for (const [k, v] of Object.entries(q)) if (v) p.set(k, String(v))
+      return req<InletRun[]>(`/api/v1/workspaces/${wsId}/inlet-runs?${p.toString()}`)
+    },
     // One run by number. The list only reaches back so far, and the number a
     // caller quotes is often older than that.
     run: (id: number) => req<InletRun>(`/api/v1/inlet-runs/${id}`),
@@ -709,9 +729,34 @@ export const api = {
   context: {
     status: () => req<ContextStatus>('/api/v1/context/status'),
     files: () => req<ContextFile[]>('/api/v1/context/files'),
-    get: (path: string) => req<{ path: string; content: string }>(`/api/v1/context/file?path=${encodeURIComponent(path)}`),
-    put: (path: string, content: string) =>
-      fetch(session.url(`/api/v1/context/file?path=${encodeURIComponent(path)}`), {
+    // version travels with the body: the editor hands it back on save, which
+    // is what lets a save be refused instead of quietly overwriting somebody
+    // else's work. Empty means the version could not be determined, and an
+    // empty version saves unguarded rather than pretending to be guarded.
+    get: (path: string) =>
+      req<{ path: string; content: string; version: string }>(
+        `/api/v1/context/file?path=${encodeURIComponent(path)}`,
+      ),
+    // A soft delete: contextd keeps every version and can restore it. The
+    // version is the one the editor read, so removing a document somebody has
+    // just rewritten is refused the same way overwriting it is.
+    remove: (path: string, version = '') =>
+      req<{ path: string; status: string }>(
+        `/api/v1/context/file?path=${encodeURIComponent(path)}` +
+          (version ? `&version=${encodeURIComponent(version)}` : ''),
+        { method: 'DELETE' },
+      ),
+    search: (q: string, pathGlob = '', limit = 100) => {
+      const p = new URLSearchParams({ q })
+      if (pathGlob) p.set('path', pathGlob)
+      p.set('limit', String(limit))
+      return req<ContextSearch>(`/api/v1/context/search?${p.toString()}`)
+    },
+    put: (path: string, content: string, version = '') =>
+      fetch(session.url(
+        `/api/v1/context/file?path=${encodeURIComponent(path)}` +
+          (version ? `&version=${encodeURIComponent(version)}` : ''),
+      ), {
         method: 'PUT',
         headers: session.headers({ 'Content-Type': 'text/plain' }),
         body: content,
@@ -880,6 +925,33 @@ export type ContextStatus = {
 }
 
 export type ContextBinding = { id: number; workspace_id: number; path: string; agent_id: number | null }
+
+// What a search found. `truncated` matters: a cut answer that does not say it
+// was cut reads as "there is nothing else", which is the one wrong answer a
+// search can give.
+export type ContextSearch = {
+  query: string
+  matches: { path: string; line: number; text: string }[]
+  files_matched: number
+  files_scanned: number
+  truncated: boolean
+}
+
+// One decision about one gear: who said this code may run, when, to which
+// version, and what they granted it in the same breath. The status column says
+// what a gear IS; this says how it got that way.
+export type GearApproval = {
+  id: number
+  gear_id: number
+  gear_name: string
+  version: number
+  status: 'approved' | 'disabled' | 'pending'
+  user_id: number | null
+  user_name: string
+  env_names: string
+  network: string
+  created_at: string
+}
 
 export type Gear = {
   id: number

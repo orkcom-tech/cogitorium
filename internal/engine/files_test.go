@@ -566,7 +566,7 @@ func TestAGearHandedADeliveredFileLatchesTheTurnAndReportsWhatItMade(t *testing.
 	if err != nil {
 		t.Fatalf("forge: %v", err)
 	}
-	if _, err := f.gears.SetStatus(ctx, g.ID, gear.StatusApproved); err != nil {
+	if _, err := f.gears.SetStatus(ctx, g.ID, gear.StatusApproved, gear.Actor{Name: "test-operator"}); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
 

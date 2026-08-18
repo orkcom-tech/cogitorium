@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { usePublishShell } from '../shell'
+import { STAGE_ICON } from '../shell-icons'
 import { PALETTE, hueOf, isChosen } from './hue'
 import { Select } from './Select'
 import {
@@ -14,6 +16,27 @@ import {
 } from '../api'
 
 export default function WorkspacesPage({ me }: { me: User }) {
+  // The map belongs HERE, beside the list of everything, because that is what
+  // it is for: seeing the whole install at once. Inside a single workspace it
+  // was one stage among five, answering a question that screen does not ask.
+  const nav = useNavigate()
+  usePublishShell(
+    () => ({
+      here: { label: 'Workspaces' },
+      stages: {
+        items: [
+          { id: 'list', title: 'Workspaces', icon: STAGE_ICON.workspaces },
+          { id: 'map', title: 'Map', icon: STAGE_ICON.map },
+        ],
+        current: 'list',
+        go: (id: string) => {
+          if (id === 'map') nav('/map')
+        },
+      },
+    }),
+    [],
+  )
+
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [models, setModels] = useState<Model[]>([])
   const [teams, setTeams] = useState<Team[]>([])
@@ -120,6 +143,7 @@ function WorkspaceCard({
   onChanged: () => void
   onError: (m: string) => void
 }) {
+  const nav = useNavigate()
   const mine = w.owner_id === me.id
   const mayShare = me.role === 'admin'
   const shared = teams.filter((t) => w.team_ids?.includes(t.id))
@@ -130,7 +154,26 @@ function WorkspaceCard({
   return (
     // The colour is carried as a variable rather than baked into each rule, so
     // the card, its spine and the picker below all read the one value.
-    <div className="card ws-card" style={{ '--ws-hue': hue } as React.CSSProperties}>
+    /* THE WHOLE CARD OPENS THE WORKSPACE. Only the name did, which is a
+       four-word target on a row nine hundred pixels wide — everywhere else the
+       pointer said "not here". The controls inside it stop the click before it
+       gets out: clone and delete, the team picker, and removing a team all sit
+       on their own and are excluded by name below, so the card is a door
+       everywhere except where it is a control. */
+    <div
+      className="card ws-card"
+      style={{ '--ws-hue': hue } as React.CSSProperties}
+      role="link"
+      tabIndex={0}
+      onClick={(e) => {
+        const t = e.target as HTMLElement
+        if (t.closest('button, a, input, select, label, .sel, .hue-picker')) return
+        nav(`/workspaces/${w.id}`)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && e.target === e.currentTarget) nav(`/workspaces/${w.id}`)
+      }}
+    >
       {/* The spine IS the picker.
           Ten saturated dots on every card meant thirty of them on a page whose
           whole rule is that green means running and red means broken. The
@@ -139,9 +182,9 @@ function WorkspaceCard({
           it. */}
       <HuePicker w={w} onChanged={onChanged} onError={onError} />
       <div className="card-head">
-        <Link to={`/workspaces/${w.id}`} className="ws-title">
+        <span className="ws-title">
           <strong>{w.name}</strong>
-        </Link>
+        </span>
         <span className="muted">{w.description}</span>
         {!mine && <span className="badge">shared with you</span>}
         <span className="spacer" />

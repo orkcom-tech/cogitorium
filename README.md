@@ -24,7 +24,7 @@ every wire a capability somebody granted, every gear a piece of code you read
 before it was allowed to run, every token spent attributed to the agent that
 spent it.
 
-![The workspace: three views and four overlays](docs/assets/02-workspace-deck.png)
+![The workspace: the stages on the rail, the drawers beside them](docs/assets/02-workspace-chat.png)
 
 ## Features
 
@@ -37,9 +37,10 @@ spent it.
   alone.
 - 🎛 **Two hands on the same controls** — build it by telling the orchestrator, or
   by drawing it yourself. Both write the same objects, so there is no conversion
-  between them and no "advanced mode" holding the real controls. Two things stay
-  one-handed on purpose: only you grant the outward gate, and context is bound in
-  the agent panel rather than on the canvas.
+  between them and no "advanced mode" holding the real controls. Drag a gear or
+  an instruction out of its drawer onto an agent on the blueprint and it is
+  granted there; drop it on empty canvas and every agent has it. One thing
+  stays one-handed on purpose: only you grant the outward gate.
 - 🧠 **A model per agent** — an expensive frontier model reasons while free local
   ones write docs and run checks, in one topology, with what each agent spent
   recorded against it. Two provider kinds: Anthropic, and anything
@@ -172,8 +173,17 @@ is a task and an answer.
 
 ## A look at it
 
+**A frame, and a hole in it.** Everything you operate lives on the frame — the
+rail down its left edge — and the hole holds only the work. A panel does not
+fly in over the work: the frame grows inward on that edge and the hole shrinks
+to make room, so the whole thing stays one object.
+
+![The frame: the rail on the bezel, the chat in the cavity, the agents crawled out](docs/assets/02-workspace-chat.png)
+
 **The blueprint.** Drag between two agents to draw a wire; the wire IS the
-permission, not a picture of one.
+permission, not a picture of one. Drag a gear or an instruction out of its
+drawer and onto an agent to give it there — or onto empty canvas, for every
+agent in the workspace.
 
 ![The blueprint](docs/assets/03-blueprint.png)
 
@@ -181,20 +191,31 @@ permission, not a picture of one.
 
 ![What approving a gear grants](docs/assets/08-gear-review.png)
 
+**And who approved it** — when, to which version, and with what. A gear
+approved at v3 and edited since is not an approved gear, and the trail is where
+that shows.
+
+![The approval trail](docs/assets/20-gear-approvals.png)
+
 **One workspace opened on the map** — its agents, and their memory.
 
 ![One workspace opened on the map](docs/assets/10-map-open.png)
 
 **Files, an editor and a shell**, in the workspace the agents are working in.
 
-![The Editor view](docs/assets/05-editor.png)
+![The Editor stage](docs/assets/05-editor.png)
 
 **Who can reach what**, drawn rather than inferred from three settings screens.
 
 ![People and the access map](docs/assets/06-people.png)
 
-**Eleven looks, light and dark.** Appearance is two choices — a look and a mode
-— and nothing else. Air is the default and a fresh install opens light.
+**Search inside the memory**, rather than needing to know a path already.
+
+![Searching the context space](docs/assets/21-context-search.png)
+
+**Light or dark, in a colour that is yours.** Appearance is two choices and
+nothing else. The colour is not just the accent: every neutral in the palette
+is mixed towards it, so the ground and the surfaces carry a little of it too.
 
 ![Appearance](docs/assets/04-appearance.png)
 

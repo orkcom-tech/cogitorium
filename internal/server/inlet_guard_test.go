@@ -322,12 +322,13 @@ func TestWebSearchIsNotOfferedOnAnInletRun(t *testing.T) {
 	// And exactly these went, no more. An unattended run that quietly lost half
 	// its tools would pass the assertion above while being a different bug.
 	//
-	// web_search waits for a person nobody is. The other three read across the
-	// whole install — list_gears and list_instructions are not workspace-scoped
-	// and read_instruction returns a body by name — and an inlet run's answer
-	// goes back to whoever holds the key, so they are a way out of the
-	// building. save_instruction is deliberately NOT in this list: it is still
-	// offered and refused at dispatch by the taint latch, because a rule
+	// web_search waits for a person nobody is. The others read across the whole
+	// install — list_gears and list_instructions are not workspace-scoped,
+	// read_instruction returns a body by name, and context_search returns the
+	// TEXT of files from the whole context space line by line — and an inlet
+	// run's answer goes back to whoever holds the key, so they are a way out of
+	// the building. save_instruction is deliberately NOT in this list: it is
+	// still offered and refused at dispatch by the taint latch, because a rule
 	// enforced where it can be watched being enforced is worth more than a tool
 	// missing from a list.
 	withdrawn := map[string]bool{
@@ -335,6 +336,7 @@ func TestWebSearchIsNotOfferedOnAnInletRun(t *testing.T) {
 		"list_gears":        true,
 		"list_instructions": true,
 		"read_instruction":  true,
+		"context_search":    true,
 	}
 	for _, name := range onlyIn(attended.Tools, unattended.Tools) {
 		if !withdrawn[name] {

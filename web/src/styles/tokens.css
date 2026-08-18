@@ -16,16 +16,45 @@
 :root {
   color-scheme: light dark;
 
-  --bg: light-dark(#fbfbfa, #191918);
-  --surface: light-dark(#ffffff, #212120); /* panel bodies, cards, floats */
-  --surface-2: light-dark(#f4f4f2, #2a2a28); /* tab strips, rails, hover */
-  --text: light-dark(#1a1a19, #ededeb);
-  --text-dim: color-mix(in srgb, var(--text) 58%, transparent);
+  /* The operator's colour, written from JavaScript and nothing else. Every
+     neutral below is mixed TOWARDS it rather than being pure grey, which is
+     what keeps a chosen accent from looking pasted onto somebody else's
+     design: the ground, the surfaces and the borders all carry a little of it. */
+  --accent-chosen: #0a8624;
+  --accent: var(--accent-chosen);
+
+  /* The bezel and the hole in it. Measured, the dark pair separated by 1.08:1
+     — two fields the size of the window, all but the same colour, with only
+     the cavity's hairline ring telling you where one ended. The frame is the
+     object this whole interface is; it cannot be the thing you have to squint
+     to find. Widened to about 1.3, which is where the light pair already sat
+     and what a sidebar-against-editor separation reads like in every editor. */
+  --bg: light-dark(
+    color-mix(in srgb, var(--accent-chosen) 7%, #e6e3d9),
+    color-mix(in srgb, var(--accent-chosen) 7%, #090b08)
+  );
+  --surface: light-dark(
+    color-mix(in srgb, var(--accent-chosen) 3%, #fdfcf8),
+    color-mix(in srgb, var(--accent-chosen) 5%, #1a1e19)
+  );
+  --surface-2: light-dark(
+    color-mix(in srgb, var(--accent-chosen) 5%, #f3f1ea),
+    color-mix(in srgb, var(--accent-chosen) 6%, #1f231e)
+  );
+  --text: light-dark(
+    color-mix(in srgb, var(--accent-chosen) 8%, #1a1c17),
+    color-mix(in srgb, var(--accent-chosen) 8%, #eaece6)
+  );
+  /* 58% measured between 3.6:1 and 4.2:1 on every surface in both modes and
+     under all eight accents — under the 4.5:1 that ordinary text needs, which
+     is most of the secondary text in the product: every description, every
+     model name, every hint, every placeholder. 72% clears it with a margin and
+     is still visibly quieter than the body text it sits beside. */
+  --text-dim: color-mix(in srgb, var(--text) 72%, transparent);
 
   --border: color-mix(in srgb, var(--text) 14%, transparent);
   --border-strong: color-mix(in srgb, var(--text) 30%, transparent);
 
-  --accent: #6c8cff;
   /* Every one of these was a single hex chosen against a near-black ground,
      which is fine until the ground is not near-black. Measured on the light
      side they land between 2:1 and 3.2:1 — the amber worst of all, and it is
@@ -50,12 +79,36 @@
      build gate is tsc, which knows nothing about CSS. */
   --selected: color-mix(in srgb, var(--accent) 18%, transparent);
   --focus: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
-  --shadow: light-dark(0 8px 28px rgb(0 0 0 / 0.16), 0 8px 28px rgb(0 0 0 / 0.55));
+
+  /* ELEVATION. --lift and --lift-2 were referenced eighteen times across three
+     stylesheets and DEFINED NOWHERE — they went with the looks, and every rule
+     that named them has been dropping its whole box-shadow declaration ever
+     since, in silence, because that is what an invalid var() does. Nothing in
+     this product has cast a shadow since: not a card, not a dialog, not a
+     drawer over the work. It is why the frame read as flat and why a panel
+     floating over the cavity looked pasted onto it.
+     (--shadow was dead too, and for a sillier reason: light-dark() is a COLOUR
+     function, and it was wrapping two whole shadow values.)
+
+     The ink travels in the colour, which is the only way to make a shadow
+     mode-aware — on paper it is the text's own tinted near-black, so it reads
+     as shade rather than as dirt on a coloured ground; in the dark it is real
+     black, because a shadow mixed towards a pale text colour is a glow. */
+  --sh-1: light-dark(rgb(26 28 23 / 0.07), rgb(0 0 0 / 0.38));
+  --sh-2: light-dark(rgb(26 28 23 / 0.11), rgb(0 0 0 / 0.52));
+  --lift: 0 1px 2px var(--sh-1), 0 2px 6px var(--sh-1);
+  --lift-2: 0 2px 6px var(--sh-1), 0 12px 30px var(--sh-2);
+  --shadow: var(--lift-2);
 
   /* Space and type. Chrome is in px and content in rem: dock chrome must not
      grow with content zoom, and the existing rem-based rules must keep meaning
      what they mean. Prose goes UP and chrome goes DOWN — that asymmetry is
      what reads as a modern client rather than a control panel. */
+  /* The gap between the cavity's edge and whatever sits flush inside it.
+     Ten, not eight, because 26 − 10 = 16 and 16 is the radius those inner
+     boxes already carry — which is what makes the two corners concentric
+     instead of merely close. */
+  --inset: 10px;
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
@@ -70,9 +123,54 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --t-mono: 12.5px;
 
-  --r1: 6px;
-  --r2: 10px;
-  --r3: 14px;
+  /* ONE ladder, and everything uses it.
+     There were nine different hardcoded radii across the stylesheets — 2, 3, 4,
+     6, 8, 9, 10, 11 — so a chip inside a card inside a drawer could be rounder
+     than the thing containing it, which is what makes an interface look
+     assembled rather than designed. The rule is that a child is never rounder
+     than its parent: 4 → 10 → 16 → 22 → 26 for the cavity, and a pill for
+     anything that is a lozenge on purpose. */
+  --r0: 4px;
+  --r1: 10px;
+  --r2: 16px;
+  --r3: 22px;
+
+  /* The shape ladder the frame shell uses. Material 3's, which is where the
+     reference shell takes its geometry from, and deliberately larger at the
+     top end than --r1..--r3: a 26px cavity and a 999px capsule are what make
+     this read as a shell rather than as a page with rounded boxes. */
+  --r-cavity: 26px;
+  --r-panel: 26px;
+  --r-pill: 999px;
+
+  /* The frame itself. The bezel is ground showing around everything; the rail
+     stands on it, and the cavity is the hole it surrounds. */
+  --bezel: 14px;
+  --rail-w: 56px;
+  --rail-gap: 10px;
+
+  /* Motion.
+   *
+   * Read out of the reference shell's own token definitions. The SPATIAL
+   * curves overshoot — the second control point sits above 1, so a thing
+   * sails past its target and settles back — and that springiness is most of
+   * why the reference feels alive rather than merely animated.
+   *
+   * The split is not decorative: anything that MOVES or RESIZES takes a
+   * spatial curve, and anything that only changes COLOUR or OPACITY takes an
+   * effects curve. Mixing them is what makes motion read as noise. */
+  --sp-fast: cubic-bezier(0.42, 1.67, 0.21, 0.9);
+  --sp-fast-d: 350ms;
+  --sp-default: cubic-bezier(0.38, 1.21, 0.22, 1);
+  --sp-default-d: 500ms;
+  --sp-slow: cubic-bezier(0.39, 1.29, 0.35, 0.98);
+  --sp-slow-d: 650ms;
+  --ef-fast: cubic-bezier(0.31, 0.94, 0.34, 1);
+  --ef-fast-d: 150ms;
+  --ef-default: cubic-bezier(0.34, 0.8, 0.34, 1);
+  --ef-default-d: 200ms;
+  --ef-slow: cubic-bezier(0.34, 0.88, 0.34, 1);
+  --ef-slow-d: 300ms;
 
   --h-topbar: 32px;
   --h-tabs: 38px;
@@ -129,14 +227,61 @@ button.primary:hover:not(:disabled) {
   border-color: transparent;
 }
 
+/* Motion, across the product rather than at two call sites.
+ *
+ * What stood here was a comment reading "exactly two motions in the whole
+ * product" and two rules to match — a 140ms ease on the overlay and a 90ms
+ * opacity on a tab. That is why the interface read as static no matter what
+ * was moved around in it: nothing else in the app animated at all.
+ *
+ * The rules below are deliberately broad and deliberately CHEAP. Only
+ * properties the compositor can handle without laying the page out again are
+ * listed — background, colour, border colour, box-shadow, opacity, transform —
+ * so this is not a licence for anything to animate its width.
+ *
+ * The split is the one the tokens describe: things that MOVE take a spatial
+ * curve and overshoot; things that only change COLOUR take an effects curve
+ * and do not. Anything being dragged opts out by carrying `.dragging`, because
+ * a transition on something following the pointer reads as lag. */
 @media (prefers-reduced-motion: no-preference) {
-  /* Exactly two motions in the whole product. A transition on anything
-     dragged reads as lag, so seams are deliberately excluded. */
-  .dk-overlay {
-    transition: transform 140ms ease;
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  summary,
+  [role='tab'],
+  [role='option'],
+  [role='button'],
+  .card,
+  .chip,
+  .pill,
+  .ws-card,
+  .agent-card,
+  .gear-card,
+  .look-option {
+    transition:
+      background-color var(--ef-fast-d) var(--ef-fast),
+      border-color var(--ef-fast-d) var(--ef-fast),
+      color var(--ef-fast-d) var(--ef-fast),
+      box-shadow var(--ef-default-d) var(--ef-default),
+      opacity var(--ef-fast-d) var(--ef-fast),
+      transform var(--sp-fast-d) var(--sp-fast);
   }
-  .dk-view-tab {
-    transition: opacity 90ms ease;
+
+  /* A press is felt, not just seen. 1.5% is enough to register and small
+     enough that a row of them does not look like it is breathing. */
+  button:active:not(:disabled),
+  .card:active,
+  .ws-card:active,
+  .agent-card:active {
+    transform: scale(0.985);
+    transition-duration: var(--ef-fast-d);
+  }
+
+  .dragging,
+  .dragging * {
+    transition: none !important;
   }
 }
 
@@ -168,8 +313,14 @@ button.primary:hover:not(:disabled) {
  * on a laptop is a fan spinning for a effect nobody asked for. The look owns
  * the fill now, so the dials had nothing left to decide. */
 :root {
-  --surface: var(--surface-base);
-  --surface-2: var(--surface-2-base);
+  /* --surface and --surface-2 are defined at the top of this file and NOT
+     redefined here. They used to be aliased to --surface-base and
+     --surface-2-base, which every look set; the looks are gone, the bases went
+     with them, and this rule went on overriding both with an invalid value.
+     Two symptoms, one cause: every surface fell back to the ground so the whole
+     interface became one flat colour, and the Appearance dialog — whose fill is
+     --surface — became transparent, with the cards behind it reading through
+     its own text. */
   --pane-blur: none;
 }
 
@@ -365,8 +516,11 @@ button.primary:hover:not(:disabled) {
 /* A view gets the reference's generosity: more corner and more air. There is
    no padding-top here any more — a slide had 38px reserved for a tab strip
    that sat on top of it, and the deck has no strip to reserve for. */
+/* No radius: the cavity is the rounded window and a slide is what is behind
+   it. Rounding both drew two frames, one inside the other, with a hairline
+   between them. */
 .dk-slide {
-  border-radius: var(--r3);
+  border-radius: 0;
 }
 
 .dk-part-head {
@@ -549,276 +703,6 @@ button.primary:hover:not(:disabled) {
  * theirs. A look that only works dark is half a look.
  */
 
-/* 1. Calm — most of the time nothing needs attention, so nothing asks for it.
-      Rounded, borderless, one soft shadow, colour held back for state. */
-[data-look='calm'] {
-  --text: light-dark(#3b3945, #e6e4ec);
-  --muted: light-dark(#6f6c7d, #9d9aab);
-  --bg: light-dark(#f5f4f8, #191a1f);
-  --surface-base: light-dark(#ffffff, #22242b);
-  --surface-2-base: light-dark(#eeedf3, #2a2c34);
-  --border: light-dark(rgba(59,57,69,.10), rgba(230,228,236,.12));
-  --border-strong: light-dark(rgba(59,57,69,.18), rgba(230,228,236,.20));
-  --accent: light-dark(#4f46e5, #8b93ff);
-  --r1: 10px; --r2: 14px; --r3: 18px;
-  --t-prose: 15px;
-  --lift: light-dark(0 1px 2px rgba(59,57,69,.06), inset 0 1px 0 rgba(255,255,255,.045));
-  --lift-2: light-dark(
-    0 1px 3px rgba(59,57,69,.08), 0 10px 24px -8px rgba(59,57,69,.12),
-    inset 0 1px 0 rgba(255,255,255,.06)
-  );
-  --ground: var(--bg);
-}
-
-/* 2. Paper — a light look first and a dark one second. Warm stock, thin rules
-      instead of shadows, ink for the accent. Nothing floats. */
-[data-look='paper'] {
-  --text: light-dark(#26231e, #e8e3d9);
-  --muted: light-dark(#6b6459, #a09889);
-  --bg: light-dark(#f7f4ec, #1c1a17);
-  --surface-base: light-dark(#fffdf7, #23211d);
-  --surface-2-base: light-dark(#f0ece1, #2a2723);
-  --border: light-dark(rgba(38,35,30,.16), rgba(232,227,217,.14));
-  --border-strong: light-dark(rgba(38,35,30,.32), rgba(232,227,217,.28));
-  --accent: light-dark(#8a5a2b, #c99a5b);
-  --r1: 3px; --r2: 4px; --r3: 6px;
-  --t-prose: 16px;
-  --lift: none;
-  --lift-2: none;
-  --ground: var(--bg);
-}
-
-/* 3. Terminal — phosphor on carbon. Square, monospaced chrome, hairlines, and
-      one green that means "this is live". */
-[data-look='terminal'] {
-  --text: light-dark(#14210f, #cfe8c2);
-  --muted: light-dark(#5c6b52, #7d9470);
-  --bg: light-dark(#f2f5ef, #0c0f0b);
-  --surface-base: light-dark(#ffffff, #11150f);
-  --surface-2-base: light-dark(#e7ece2, #171c14);
-  --border: light-dark(rgba(20,33,15,.20), rgba(207,232,194,.18));
-  --border-strong: light-dark(rgba(20,33,15,.42), rgba(207,232,194,.38));
-  --accent: light-dark(#2f7d32, #7bd66a);
-  --r1: 0px; --r2: 0px; --r3: 0px;
-  --t-prose: 14px;
-  --lift: none;
-  --lift-2: none;
-  --ground: var(--bg);
-}
-
-/* 4. Blueprint — drafting table. Deep indigo ground, cyan for anything drawn
-      on it, and a faint grid you notice only when you look for it. */
-[data-look='blueprint'] {
-  --text: light-dark(#16283d, #d6e6f5);
-  --muted: light-dark(#5a748f, #8ba6c2);
-  --bg: light-dark(#eef3f9, #0e1826);
-  --surface-base: light-dark(#ffffff, #14202f);
-  --surface-2-base: light-dark(#e3ebf4, #1a2839);
-  --border: light-dark(rgba(22,40,61,.16), rgba(214,230,245,.16));
-  --border-strong: light-dark(rgba(22,40,61,.30), rgba(214,230,245,.30));
-  --accent: light-dark(#0f6f9e, #5cc4ee);
-  --r1: 2px; --r2: 4px; --r3: 6px;
-  --t-prose: 15px;
-  --lift: none;
-  --lift-2: light-dark(0 1px 0 rgba(22,40,61,.10), 0 1px 0 rgba(0,0,0,.4));
-  --ground: var(--bg);
-}
-
-/* 5. Ember — a warm room. Charcoal that leans red, orange for state, and the
-      generous corners of something you sit in front of all evening. */
-[data-look='ember'] {
-  --text: light-dark(#2c2320, #efe3dc);
-  --muted: light-dark(#77655d, #ab958a);
-  --bg: light-dark(#faf5f2, #1a1615);
-  --surface-base: light-dark(#ffffff, #241e1c);
-  --surface-2-base: light-dark(#f3eae5, #2d2523);
-  --border: light-dark(rgba(44,35,32,.10), rgba(239,227,220,.10));
-  --border-strong: light-dark(rgba(44,35,32,.20), rgba(239,227,220,.22));
-  --accent: light-dark(#b4531c, #ee8b4d);
-  --r1: 12px; --r2: 16px; --r3: 22px;
-  --t-prose: 15px;
-  --lift: light-dark(0 1px 2px rgba(44,35,32,.07), inset 0 1px 0 rgba(255,255,255,.04));
-  --lift-2: light-dark(
-    0 2px 6px rgba(44,35,32,.10), 0 16px 32px -14px rgba(44,35,32,.20),
-    inset 0 1px 0 rgba(255,255,255,.06)
-  );
-  --ground: var(--bg);
-}
-
-/* 6. Mono — no hue anywhere. The accent IS the text colour, so the only thing
-      that can stand out is weight and edge. Square, ruled, unapologetic. */
-[data-look='mono'] {
-  --text: light-dark(#111111, #f2f2f2);
-  --muted: light-dark(#666666, #999999);
-  --bg: light-dark(#ffffff, #0d0d0d);
-  --surface-base: light-dark(#ffffff, #141414);
-  --surface-2-base: light-dark(#f0f0f0, #1e1e1e);
-  --border: light-dark(rgba(17,17,17,.28), rgba(242,242,242,.24));
-  --border-strong: light-dark(#111111, #f2f2f2);
-  --accent: light-dark(#111111, #f2f2f2);
-  --r1: 0px; --r2: 0px; --r3: 0px;
-  --t-prose: 15px;
-  --lift: none;
-  --lift-2: none;
-  --ground: var(--bg);
-}
-
-/* 7. Nord — cool, desaturated, low contrast on purpose. The one to pick for a
-      long session in a dim room. */
-[data-look='nord'] {
-  --text: light-dark(#2e3440, #e0e4ec);
-  --muted: light-dark(#4c566a, #9aa3b4);
-  --bg: light-dark(#eceff4, #232830);
-  --surface-base: light-dark(#f7f9fc, #2b313b);
-  --surface-2-base: light-dark(#e2e7ef, #333a46);
-  --border: light-dark(rgba(46,52,64,.12), rgba(224,228,236,.12));
-  --border-strong: light-dark(rgba(46,52,64,.24), rgba(224,228,236,.24));
-  --accent: light-dark(#3f7a91, #8fbcbb);
-  --r1: 6px; --r2: 9px; --r3: 12px;
-  --t-prose: 15px;
-  --lift: light-dark(0 1px 2px rgba(46,52,64,.06), inset 0 1px 0 rgba(255,255,255,.03));
-  --lift-2: light-dark(0 4px 14px -6px rgba(46,52,64,.18), 0 8px 22px -12px rgba(0,0,0,.5));
-  --ground: var(--bg);
-}
-
-/* 8. Bloom — light, airy, violet. The most decorative of the ten, and the
-      only one where the ground is graded rather than flat. */
-[data-look='bloom'] {
-  --text: light-dark(#2a2438, #ece7f5);
-  --muted: light-dark(#6d6484, #a89fc0);
-  --bg: light-dark(#faf8ff, #1b1726);
-  --surface-base: light-dark(#ffffff, #241f33);
-  --surface-2-base: light-dark(#f2eefc, #2d273e);
-  --border: light-dark(rgba(42,36,56,.08), rgba(236,231,245,.10));
-  --border-strong: light-dark(rgba(42,36,56,.18), rgba(236,231,245,.20));
-  --accent: light-dark(#7c3aed, #b892ff);
-  --r1: 14px; --r2: 18px; --r3: 26px;
-  --t-prose: 15.5px;
-  --lift: light-dark(0 1px 2px rgba(42,36,56,.05), inset 0 1px 0 rgba(255,255,255,.05));
-  --lift-2: light-dark(
-    0 2px 8px rgba(124,58,237,.10), 0 18px 40px -20px rgba(124,58,237,.30),
-    0 18px 40px -22px rgba(0,0,0,.6)
-  );
-  --ground: light-dark(
-    linear-gradient(160deg, #faf8ff 0%, #f3eefd 55%, #fbf7ff 100%),
-    linear-gradient(160deg, #1b1726 0%, #221b33 55%, #191524 100%)
-  );
-}
-
-/* 9. Slate — the neutral one. No character to get tired of, which is the
-      character. Cool grey, one blue, medium everything. */
-[data-look='slate'] {
-  --text: light-dark(#1f2937, #e5e7eb);
-  --muted: light-dark(#6b7280, #9ca3af);
-  --bg: light-dark(#f8fafc, #16181d);
-  --surface-base: light-dark(#ffffff, #1e2126);
-  --surface-2-base: light-dark(#f1f5f9, #262a31);
-  --border: light-dark(rgba(31,41,55,.12), rgba(229,231,235,.12));
-  --border-strong: light-dark(rgba(31,41,55,.24), rgba(229,231,235,.24));
-  --accent: light-dark(#2563eb, #7aa2f7);
-  --r1: 6px; --r2: 8px; --r3: 12px;
-  --t-prose: 15px;
-  --lift: light-dark(0 1px 2px rgba(31,41,55,.06), inset 0 1px 0 rgba(255,255,255,.04));
-  --lift-2: light-dark(0 4px 12px -4px rgba(31,41,55,.14), 0 8px 20px -10px rgba(0,0,0,.55));
-  --ground: var(--bg);
-}
-
-/* 10. Contrast — built for legibility and nothing else. Pure grounds, real
-       borders on everything, no shadow to muddy an edge, and an accent that
-       clears its ratio on both. Pick this one if any of the others fight you. */
-[data-look='contrast'] {
-  --text: light-dark(#000000, #ffffff);
-  --muted: light-dark(#3a3a3a, #c8c8c8);
-  --bg: light-dark(#ffffff, #000000);
-  --surface-base: light-dark(#ffffff, #000000);
-  --surface-2-base: light-dark(#ededed, #1a1a1a);
-  --border: light-dark(#000000, #ffffff);
-  --border-strong: light-dark(#000000, #ffffff);
-  --accent: light-dark(#0000cc, #ffd400);
-  --r1: 2px; --r2: 2px; --r3: 2px;
-  --t-prose: 16px;
-  --lift: none;
-  --lift-2: none;
-  --ground: var(--bg);
-}
-
-
-/* 11. Air — the one this product is being re-cut around.
- *
- * Light, floating, and almost colourless. The app is a white sheet resting on
- * a grey ground; panels float over it rather than sitting in a grid; and the
- * ONLY colours in the system are a green that means healthy and a red that
- * means broken. There is no third accent, no brand tint on a surface, no
- * gradient. Everything else is the ground, the sheet, and ink.
- *
- * The palette is taken from the reference sheet exactly:
- *   #0AAB2A green · #FF3D3D red · #1E1E1E ink · #FFFFFF sheet
- *
- * The discipline that makes it work is subtraction: with only two hues
- * available, colour cannot be used for decoration, so anything coloured on
- * screen is a state somebody has to act on. A quiet install is grey. */
-[data-look='air'] {
-  --text: light-dark(#1e1e1e, #f2f3f4);
-  --muted: light-dark(#7a7f85, #9aa0a6);
-  /* The ground is a real grey, not an off-white: the white sheet has to read
-     as lifted off it, and a 2% difference is a printing error rather than a
-     design. */
-  --bg: light-dark(#dfe3e6, #141517);
-  --surface-base: light-dark(#ffffff, #1e2022);
-  --surface-2-base: light-dark(#f3f5f6, #26282b);
-
-  /* Borders barely exist. Separation is done with the shadow and the ground,
-     because a light interface with rules on everything reads as a form. */
-  --border: light-dark(rgba(30, 30, 30, 0.07), rgba(242, 243, 244, 0.09));
-  --border-strong: light-dark(rgba(30, 30, 30, 0.16), rgba(242, 243, 244, 0.2));
-
-  --accent: #0aab2a;
-  --ok: #0aab2a;
-  --danger: #ff3d3d;
-  /* There is no amber in the reference and inventing one would break the
-     two-colour rule, so a warning is the red at half weight — it is the same
-     family of "look at this", one step down. */
-  --warn: light-dark(#c9302c, #ff7a6b);
-  --outward: #ff3d3d;
-
-  --memory: light-dark(#6b7280, #9aa0a6);
-  --shared: light-dark(#6b7280, #9aa0a6);
-  --instruction: light-dark(#6b7280, #9aa0a6);
-
-  /* Generous, and generous consistently. The reference's whole character is
-     air, and air is a spacing scale rather than a colour. */
-  --s1: 6px;
-  --s2: 10px;
-  --s3: 14px;
-  --s4: 20px;
-  --s5: 30px;
-  --s6: 44px;
-
-  --r1: 10px;
-  --r2: 14px;
-  --r3: 20px;
-  /* The sheet itself is rounder than anything on it. */
-  --r-sheet: 26px;
-
-  --t-micro: 11px;
-  --t-chrome: 12.5px;
-  --t-ui: 13.5px;
-  --t-prose: 15px;
-  --h-tabs: 40px;
-
-  /* Two shadows and no more: one for a thing resting on the sheet, one for a
-     thing floating above it. A third would start a hierarchy nobody can
-     read. */
-  --lift: light-dark(
-    0 1px 2px rgba(30, 30, 30, 0.04),
-    0 1px 2px rgba(0, 0, 0, 0.4)
-  );
-  --lift-2: light-dark(
-    0 2px 6px rgba(30, 30, 30, 0.05), 0 14px 34px -14px rgba(30, 30, 30, 0.14),
-    0 2px 6px rgba(0, 0, 0, 0.45), 0 14px 34px -14px rgba(0, 0, 0, 0.7)
-  );
-  --ground: var(--bg);
-}
 
 /* The typeface.
  *
@@ -846,7 +730,6 @@ textarea {
 
 /* The parts of the contract every look shares, written once. */
 :root {
-  --shadow: var(--lift-2);
   --focus: 0 0 0 3px color-mix(in srgb, var(--accent) 34%, transparent);
 }
 

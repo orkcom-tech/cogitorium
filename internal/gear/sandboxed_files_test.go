@@ -173,7 +173,7 @@ func (s *sandboxed) approveBinaryWithEnv(name, entrypoint, source string, envNam
 	if err != nil {
 		s.t.Fatalf("forge %q: %v", name, err)
 	}
-	g, err = s.gears.SetStatus(ctx, g.ID, StatusApproved)
+	g, err = s.gears.SetStatus(ctx, g.ID, StatusApproved, Actor{Name: "test-operator"})
 	if err != nil {
 		s.t.Fatalf("approve %q: %v", name, err)
 	}

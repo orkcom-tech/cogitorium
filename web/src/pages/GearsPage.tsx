@@ -8,13 +8,16 @@ import {
   type GearConnection,
   type GearFile,
   type GearRun,
+  type GearApproval,
   type GearRunResult,
   type User,
   gearRunStream,
 } from '../api'
 import { collapse, diff, stat, tooBig } from './diff'
+import { PanelTitle } from '../deck/Drawer'
+import { dragging } from '../dnd'
 
-export default function GearsPage({ me }: { me: User }) {
+export default function GearsPage({ me, review }: { me: User; review?: number | null }) {
   const [gears, setGears] = useState<Gear[]>([])
   const [query, setQuery] = useState('')
   const [tag, setTag] = useState('')
@@ -43,6 +46,23 @@ export default function GearsPage({ me }: { me: User }) {
   }, [query, tag])
 
   useEffect(reload, [reload])
+
+  // Opened from somewhere else — a gear dropped on the blueprint before anyone
+  // approved it, and the note on the canvas offered to bring the operator
+  // here. It opens the card rather than approving anything: approval still
+  // happens beside the source and the grants, which is the whole point of this
+  // screen.
+  useEffect(() => {
+    if (!review) return
+    setOpenId(review)
+    api.gears
+      .get(review)
+      .then((r) => {
+        setSource(r.files)
+        setEnv(r.env)
+      })
+      .catch((e: Error) => setError(e.message))
+  }, [review])
 
   // Whether this server can actually isolate a gear. The terminal endpoint
   // already reports the backend, and it is the same backend gears run in.
@@ -73,7 +93,7 @@ export default function GearsPage({ me }: { me: User }) {
 
   return (
     <div className="page">
-      <h2>Gears</h2>
+      <PanelTitle>Gears</PanelTitle>
       {/* This paragraph is a security claim, so it states what is actually
           true of THIS server rather than a general sentence. It said "runs as
           a subprocess with your own privileges" long after the sandbox landed,
@@ -171,6 +191,7 @@ function GearCard({
   const abort = useRef<AbortController | null>(null)
   const [runs, setRuns] = useState<GearRun[] | null>(null)
   const [conns, setConns] = useState<GearConnection[] | null>(null)
+  const [trail, setTrail] = useState<GearApproval[] | null>(null)
   // The grant as this screen currently states it. It starts as what the gear
   // holds and becomes what the operator is about to decide — the dry run below
   // uses it too, so what they judge is what they are about to allow.
@@ -273,7 +294,15 @@ function GearCard({
   useEffect(() => () => abort.current?.abort(), [])
 
   return (
-    <div className="card">
+    <div
+      className="card gear-card-drag"
+      // Draggable only while collapsed. Open, this card contains a textarea of
+      // source and a JSON field for the dry run, and a draggable ancestor
+      // turns selecting text in them into dragging the card.
+      draggable={!open}
+      onDragStart={dragging({ kind: 'gear', id: g.id, name: g.name, status: g.status })}
+      title={open ? undefined : 'Drag onto the blueprint to give this gear to an agent'}
+    >
       <div className="card-head">
         <strong>{g.name}</strong>
         <span className={`status ${g.status}`}>{g.status}</span>
@@ -571,7 +600,59 @@ function GearCard({
             >
               {conns === null ? 'connections' : 'hide connections'}
             </button>
+            {/* And who let it. A status column answers "is it approved"; it
+                cannot answer who, when, to which version, or with what — and
+                those are the questions asked after something goes wrong. */}
+            <button
+              onClick={() =>
+                trail === null
+                  ? api.gears.approvals(g.id).then(setTrail).catch((e: Error) => onError(e.message))
+                  : setTrail(null)
+              }
+            >
+              {trail === null ? 'who approved it' : 'hide approvals'}
+            </button>
           </div>
+
+          {trail !== null &&
+            (trail.length === 0 ? (
+              <p className="hint">
+                No decision has been recorded for this gear. Every approval, disable and reset from now on is written
+                down here — including which version it covered.
+              </p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>when</th>
+                    <th>who</th>
+                    <th>decided</th>
+                    <th>version</th>
+                    <th>credentials</th>
+                    <th>network</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trail.map((a) => (
+                    <tr key={a.id}>
+                      <td className="muted">{a.created_at}</td>
+                      <td>{a.user_name || 'unattributed'}</td>
+                      <td>
+                        <span className={`status ${a.status}`}>{a.status}</span>
+                      </td>
+                      {/* A gear approved at v3 and edited to v7 is not an
+                          approved gear, and this column is where that shows. */}
+                      <td className={a.version === g.version ? '' : 'warn'}>
+                        v{a.version}
+                        {a.version !== g.version && a.status === 'approved' ? ` — now v${g.version}` : ''}
+                      </td>
+                      <td className="muted">{envList(a.env_names)}</td>
+                      <td className="muted">{a.network}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ))}
 
           {conns !== null &&
             (conns.length === 0 ? (
@@ -871,4 +952,16 @@ function GearFileDiff({ before, after }: { before: string; after: string }) {
       </pre>
     </>
   )
+}
+
+// envList reads the stored credential names, which are JSON on the row so that
+// the row is readable on its own after the gear is gone.
+function envList(raw: string): string {
+  if (!raw) return 'none'
+  try {
+    const names = JSON.parse(raw) as string[]
+    return names.length > 0 ? names.join(', ') : 'none'
+  } catch {
+    return raw
+  }
 }

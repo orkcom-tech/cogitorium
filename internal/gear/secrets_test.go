@@ -113,7 +113,7 @@ func (n *named) naming(name, code string, envNames ...string) Gear {
 	if err != nil {
 		n.t.Fatalf("forge %q: %v", name, err)
 	}
-	g, err = n.gears.SetStatus(ctx, g.ID, StatusApproved)
+	g, err = n.gears.SetStatus(ctx, g.ID, StatusApproved, Actor{Name: "test-operator"})
 	if err != nil {
 		n.t.Fatalf("approve %q: %v", name, err)
 	}

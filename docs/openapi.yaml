@@ -113,6 +113,11 @@ paths:
         default:
           description: see the reference
   "/api/v1/context/file":
+    delete:
+      summary: "Delete context/file"
+      responses:
+        default:
+          description: see the reference
     get:
       summary: "Read context/file"
       responses:
@@ -126,6 +131,12 @@ paths:
   "/api/v1/context/files":
     get:
       summary: "Read context/files"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/context/search":
+    get:
+      summary: "Read context/search"
       responses:
         default:
           description: see the reference
@@ -299,6 +310,19 @@ paths:
                   type: string
                 "timeout_seconds":
                   type: integer
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/gears/{id}/approvals":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read gears/{id}/approvals"
       responses:
         default:
           description: see the reference

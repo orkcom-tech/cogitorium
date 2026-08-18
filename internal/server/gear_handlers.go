@@ -360,6 +360,26 @@ func (s *Server) handleListGearRuns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, runs)
 }
 
+// handleListGearApprovals is the decision history: who said this code may run,
+// when, to which version, and what they granted it in the same breath.
+//
+// Behind the same rule as the run history — an operator who may see what a
+// gear DID may see who let it — rather than an admin-only rule, because the
+// person most likely to need this is the one who found something odd in the
+// runs and is following it back.
+func (s *Server) handleListGearApprovals(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	trail, err := s.gears.Approvals(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, trail)
+}
+
 // networkInput is the operator's answer to "may this code reach out, and
 // where". An empty Hosts with Granted true is anywhere, and that is a choice
 // the operator is allowed to make — the list is what makes the connection log
@@ -430,7 +450,15 @@ func (s *Server) handleSetGearStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if in.Status != nil {
-		if g, err = s.gears.SetStatus(r.Context(), id, *in.Status); err != nil {
+		// Who is doing this travels with the change, not beside it. The trail
+		// is written inside SetStatus for the same reason — see approvals.go.
+		caller := callerFrom(r.Context())
+		by := gear.Actor{Name: caller.Name}
+		if caller.ID != 0 {
+			id := caller.ID
+			by.ID = &id
+		}
+		if g, err = s.gears.SetStatus(r.Context(), id, *in.Status, by); err != nil {
 			fail(w, r, err)
 			return
 		}

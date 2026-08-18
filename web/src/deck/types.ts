@@ -23,10 +23,31 @@
 // worth naming or saving.
 
 export type ViewId = 'chat' | 'blueprint' | 'workbench'
-export type OverlayId = 'agents' | 'agent' | 'inlets' | 'queue' | 'env'
+export type OverlayId =
+  | 'agents'
+  | 'agent'
+  | 'gears'
+  | 'instructions'
+  | 'memory'
+  | 'inlets'
+  | 'queue'
+  | 'env'
+  | 'terminal'
 
+// The order is the rail's order, and the track slides in it: going down the
+// capsule sends the work down. Changing one without the other makes a
+// button in the middle of the column jump the content past two views.
 export const VIEW_ORDER: ViewId[] = ['chat', 'blueprint', 'workbench']
-export const OVERLAY_ORDER: OverlayId[] = ['agents', 'inlets', 'queue', 'env']
+export const OVERLAY_ORDER: OverlayId[] = [
+  'agents',
+  'gears',
+  'instructions',
+  'memory',
+  'inlets',
+  'queue',
+  'env',
+  'terminal',
+]
 
 export type Deck = {
   v: 2

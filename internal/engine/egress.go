@@ -66,6 +66,12 @@ type turnState struct {
 	did     Record
 	gearOut string
 
+	// context is this run's frozen view of the context space: one read per
+	// document for the whole delegation tree, and the version each came from.
+	// Same reason as everything else in this struct — one run, one context.
+	// See contextcache.go.
+	context *contextSnapshot
+
 	// workID is the queued unit this turn belongs to, or 0 for a turn that has
 	// none. It is carried here for the same reason everything else in this
 	// struct is: the whole delegation tree is one turn, so a gear a worker four
@@ -580,10 +586,23 @@ func egressJSON(v any) string {
 // task — deliver a file, have an agent work on it — unable to do the one thing
 // it exists to do, while the workspace's files stayed just as reachable through
 // a gear.
+// context_search belongs here for exactly the boundary reason above, and more
+// sharply than any of them: it returns the TEXT of files from the whole
+// context space, line by line. A keyholder delivering into one workspace could
+// ask it for every line in the install that mentions a word and read the
+// answer. That is not a door into a workspace, it is a grep of the company's
+// memory.
+//
+// context_list is its narrower sibling — it returns the space's PATHS, which
+// cross the same boundary while carrying no content — and it is deliberately
+// left open here rather than closed in passing: closing it changes what
+// existing deliveries can do, and a change like that belongs to its own piece
+// of work with its own reasoning, not to a line added while building search.
 var unattendedClosedTools = map[string]bool{
 	"list_gears":        true,
 	"list_instructions": true,
 	"read_instruction":  true,
+	"context_search":    true,
 }
 
 // workOf is the queued unit this workspace's turn belongs to, or 0.

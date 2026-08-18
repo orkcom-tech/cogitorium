@@ -143,7 +143,7 @@ func (f *fixture) approve(name, code string) Gear {
 	if err != nil {
 		f.t.Fatalf("forge %q: %v", name, err)
 	}
-	g, err = f.gears.SetStatus(ctx, g.ID, StatusApproved)
+	g, err = f.gears.SetStatus(ctx, g.ID, StatusApproved, Actor{Name: "test-operator"})
 	if err != nil {
 		f.t.Fatalf("approve %q: %v", name, err)
 	}

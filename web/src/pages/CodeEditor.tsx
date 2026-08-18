@@ -110,7 +110,7 @@ export default function CodeEditor({
   if (!path) {
     return (
       <div className="dk-body editor-empty">
-        <p className="hint">Pick a file in the tree to open it here.</p>
+        <p className="hint empty-note">Pick a file in the tree to open it here.</p>
       </div>
     )
   }

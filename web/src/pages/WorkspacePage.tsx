@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import BlueprintEditor from './BlueprintEditor'
 import TerminalPage from './TerminalPage'
 import AgentMemory from './AgentMemory'
@@ -10,9 +10,14 @@ import InletsPanel from './InletsPanel'
 import QueuePanel from './QueuePanel'
 import EnvPanel from './EnvPanel'
 import { Select } from './Select'
-import { Deck, DeckBar, OverlayHost, ShellGate, Workbench } from '../deck/Deck'
+import { Deck, ShellGate, Workbench } from '../deck/Deck'
+import GearsPage from './GearsPage'
+import LibraryPage from './LibraryPage'
+import { Drawer, type Edge } from '../deck/Drawer'
 import { useDeck } from '../deck/store'
-import type { OverlayId } from '../deck/types'
+import type { OverlayId, ViewId } from '../deck/types'
+import { usePublishShell } from '../shell'
+import { STAGE_ICON, DRAWER_ICON } from '../shell-icons'
 import {
   api,
   wsChatStream,
@@ -26,11 +31,12 @@ import {
   type Gear,
   type GearBinding,
   type Model,
+  type User,
   type WSMessage,
   type Workspace,
 } from '../api'
 
-export default function WorkspacePage() {
+export default function WorkspacePage({ me }: { me: User }) {
   const { id } = useParams()
   const wsId = Number(id)
 
@@ -214,6 +220,10 @@ export default function WorkspacePage() {
   // workspace is arranged, and restoring one on load would put a panel over
   // the operator's work for a question they already had answered.
   const [overlay, setOverlay] = useState<OverlayId | null>(null)
+  // A gear the operator asked to see the source of, from somewhere that is not
+  // the gear list — today, the note a blueprint drop leaves when the gear that
+  // landed has never been approved. It opens the card; it approves nothing.
+  const [reviewGear, setReviewGear] = useState<number | null>(null)
   // Whether the operator has asked for a shell IN THIS SESSION. Never
   // persisted: see ShellGate.
   const [shell, setShell] = useState(false)
@@ -242,6 +252,81 @@ export default function WorkspacePage() {
   // Escape is deliberately bound nowhere: the approval dialog owns it, so one
   // keypress can never both dismiss chrome and silently refuse a pending web
   // search. An overlay closes by clicking away from it, or on its own button.
+
+
+  // What the frame should offer while this workspace is in the cavity: the
+  // three views become stages on the rail, the four overlays become drawers,
+  // the name becomes the rotated text, and export becomes the one action.
+  //
+  // It sits ABOVE the early return for a workspace that has not loaded, because
+  // a hook after a conditional return is called on some renders and not others
+  // — React notices, and the rail ended up with nothing on it. Publishing null
+  // until there is something to publish is the same statement without the bug.
+  // Which edge each drawer comes out of unless the operator has moved it.
+  // One sentence explains the whole table: you take FROM the right, and what
+  // happens over TIME arrives at the bottom.
+  const DRAWER_EDGE: Record<string, Edge> = {
+    agents: 'right',
+    gears: 'right',
+    instructions: 'right',
+    memory: 'right',
+    env: 'right',
+    agent: 'right',
+    inlets: 'bottom',
+    queue: 'bottom',
+    terminal: 'bottom',
+  }
+  // Capsule 3, in the agreed order: the roster, the two catalogues an agent
+  // draws on, what it remembers, the door in, the work waiting, and the names
+  // a gear is given. Gears and Instructions used to be destinations that
+  // replaced the whole screen; they are things you consult while working, so
+  // they crawl out over the work instead of taking it away.
+  const OVERLAY_ITEMS: { id: OverlayId; title: string }[] = [
+    { id: 'agents', title: 'Agents' },
+    { id: 'gears', title: 'Gears' },
+    { id: 'instructions', title: 'Instructions' },
+    { id: 'memory', title: 'Memory' },
+    { id: 'inlets', title: 'Receivers' },
+    { id: 'queue', title: 'Queue' },
+    { id: 'env', title: 'Variables' },
+    // A terminal is pulled out and pushed back, not lived in — so it crawls
+    // out of the bottom edge like the other things that happen over time,
+    // rather than taking the cavity from the work it is being run against.
+    { id: 'terminal', title: 'Terminal' },
+  ]
+  usePublishShell(
+    () =>
+      workspace
+        ? {
+            here: {
+              label: workspace.name,
+              note: workspace.description,
+              state: busy ? 'running' : undefined,
+            },
+            back: '/workspaces',
+            stages: {
+              items: [
+                { id: 'chat', title: 'Chat', icon: STAGE_ICON.chat },
+                { id: 'blueprint', title: 'Blueprint', icon: STAGE_ICON.blueprint },
+                { id: 'workbench', title: 'Editor', icon: STAGE_ICON.workbench },
+              ],
+              current: deck.deck.view,
+              go: (id: string) => deck.go(id as ViewId),
+            },
+            drawers: {
+              items: OVERLAY_ITEMS.map((o) => ({ id: o.id, title: o.title, icon: DRAWER_ICON[o.id] })),
+              open: overlay,
+              toggle: (id: string | null) => setOverlay(id as OverlayId | null),
+            },
+            action: {
+              label: 'export',
+              title: 'Download this workspace as a bundle another install can rebuild it from',
+              run: () => setExporting(true),
+            },
+          }
+        : null,
+    [workspace?.name, workspace?.description, busy, deck.deck.view, overlay],
+  )
 
   if (!workspace) {
     return (
@@ -289,14 +374,22 @@ export default function WorkspacePage() {
               <span className="agent-name">{a.name}</span>
               {a.is_orchestrator && <span className="star" title="the workspace entry point">★</span>}
             </span>
-            <span className="agent-spend-big" title={spendTitle(u)}>
+            <span className={`agent-spend-big ${total > 0 ? '' : 'idle'}`} title={spendTitle(u)}>
               {spendLabel(u)}
             </span>
             <span className="agent-model muted">{a.model_label || 'no model'}</span>
-            <span className="share-bar" aria-hidden>
-              <span style={{ width: `${share}%` }} />
-            </span>
-            <span className="muted share-label">{total > 0 ? `${share}% of this workspace` : 'no spend yet'}</span>
+            {/* No meter before there is anything to meter. An empty track
+                across a card is a hairline rule that means nothing, and every
+                card in a fresh workspace carried one. */}
+            {total > 0 && (
+              <>
+                <span className="share-bar" aria-hidden>
+                  <span style={{ width: `${share}%` }} />
+                </span>
+                <span className="muted share-label">{share}% of this workspace</span>
+              </>
+            )}
+            {total === 0 && <span className="muted share-label">no spend yet</span>}
           </button>
         )
       })}
@@ -306,46 +399,21 @@ export default function WorkspacePage() {
   // An overlay that is shut does not load and does not poll. The receivers
   // cost two queries, the queue runs a timer, and a workspace using neither
   // should pay for neither.
-  const OVERLAYS: { id: OverlayId; title: string }[] = [
-    { id: 'agents', title: 'Agents' },
-    { id: 'inlets', title: 'Receivers' },
-    { id: 'queue', title: 'Queue' },
-    { id: 'env', title: 'Variables' },
-  ]
+  const OVERLAYS = OVERLAY_ITEMS
   const overlayTitle =
     overlay === 'agent'
       ? (selectedAgent?.name ?? 'Agent')
       : (OVERLAYS.find((o) => o.id === overlay)?.title ?? '')
 
+
   return (
     <div className="ws-shell">
       {approval && <ApprovalDialog request={approval} onAnswer={answerApproval} busy={answering} />}
       {exporting && <ExportDialog wsId={wsId} name={workspace.name} onClose={() => setExporting(false)} />}
-      <div className="ws-head">
-        {/* The way out of a workspace is a real control, not a glyph.
-            It was a bare arrow in muted grey, hard against the left edge and
-            the same size as body text — the operator had to hunt for the
-            button that leaves the screen they are on. */}
-        <Link to="/workspaces" className="ws-back round" title="Back to all workspaces" aria-label="Back to all workspaces">
-          <span aria-hidden>←</span>
-        </Link>
-        <h2>{workspace.name}</h2>
-        <span className="muted">{workspace.description}</span>
-        <span className="spacer" />
-        <DeckBar
-          view={deck.deck.view}
-          onGo={deck.go}
-          overlay={overlay}
-          onOverlay={setOverlay}
-          overlays={OVERLAYS}
-        />
-        <button
-          onClick={() => setExporting(true)}
-          title="Download this workspace as a bundle another install can rebuild it from"
-        >
-          export
-        </button>
-      </div>
+      {/* No header. The three views, the four drawers, the name, the way out
+          and export all live on the rail now — published from here, drawn
+          there. See shell.tsx: the cavity holds content and nothing else, and
+          a workspace's own toolbar was the last thing breaking that. */}
       {error && (
         <p className="error" onClick={() => setError(null)} title="dismiss">
           {error}
@@ -383,6 +451,10 @@ export default function WorkspacePage() {
                     setSelectedAgent(a)
                     setOverlay('agent')
                   }}
+                  onReviewGear={(id) => {
+                    setReviewGear(id)
+                    setOverlay('gears')
+                  }}
                   onError={setError}
                 />
               </div>
@@ -393,16 +465,19 @@ export default function WorkspacePage() {
             node: (
               <Workbench
                 deck={deck}
+                /* No padded, scrolling wrapper. It inset the tree eight pixels
+                   from the cavity's own rounded corner — two edges in the one
+                   corner where a doubled edge is impossible to miss — and its
+                   scrollbar was a second one beside the tree's own. The tree
+                   reaches the edge and scrolls its rows itself. */
                 files={
-                  <div className="dk-body dk-scroll">
-                    <FilesPage
-                      wsId={wsId}
-                      openPath={openPath}
-                      savedTick={savedTick}
-                      onOpen={openFile}
-                      onError={setError}
-                    />
-                  </div>
+                  <FilesPage
+                    wsId={wsId}
+                    openPath={openPath}
+                    savedTick={savedTick}
+                    onOpen={openFile}
+                    onError={setError}
+                  />
                 }
                 editor={
                   <CodeEditor
@@ -413,24 +488,46 @@ export default function WorkspacePage() {
                     onError={setError}
                   />
                 }
-                terminal={
-                  <ShellGate started={shell} onStart={() => setShell(true)}>
-                    <div className="dk-body">
-                      <TerminalPage workspaceId={wsId} />
-                    </div>
-                  </ShellGate>
-                }
               />
             ),
           },
         ]}
       />
 
-      <OverlayHost open={overlay} title={overlayTitle} deck={deck} onClose={() => setOverlay(null)}>
+      {/* Right for the things you take from, bottom for the things that happen
+          over time — and any of the four by choice, remembered per drawer. */}
+      <Drawer
+        id={overlay ?? 'none'}
+        open={overlay !== null}
+        title={overlayTitle}
+        defaultEdge={DRAWER_EDGE[overlay ?? 'agents'] ?? 'right'}
+        defaultSize={overlay === 'queue' ? 320 : 400}
+        onClose={() => {
+          setOverlay(null)
+          setReviewGear(null)
+        }}
+      >
         {overlay === 'agents' && roster}
         {overlay === 'inlets' && <InletsPanel wsId={wsId} agents={agents} shown onError={setError} />}
         {overlay === 'queue' && <QueuePanel wsId={wsId} shown onError={setError} />}
         {overlay === 'env' && <EnvPanel wsId={wsId} shown onError={setError} />}
+        {overlay === 'terminal' && (
+          <ShellGate started={shell} onStart={() => setShell(true)}>
+            <div className="dk-body">
+              <TerminalPage workspaceId={wsId} />
+            </div>
+          </ShellGate>
+        )}
+        {overlay === 'gears' && <GearsPage me={me} review={reviewGear} />}
+        {overlay === 'instructions' && <LibraryPage />}
+        {overlay === 'memory' &&
+          (selectedAgent ? (
+            <AgentMemory agent={selectedAgent} onChanged={() => void reloadAgents()} onError={setError} />
+          ) : (
+            <p className="hint">
+              Memory belongs to one agent. Pick one in Agents, and it opens here.
+            </p>
+          ))}
         {overlay === 'agent' &&
           (selectedAgent ? (
             <AgentPanel
@@ -448,7 +545,7 @@ export default function WorkspacePage() {
           ) : (
             <p className="hint">Pick an agent from the roster to inspect it.</p>
           ))}
-      </OverlayHost>
+      </Drawer>
     </div>
   )
 }
@@ -591,7 +688,10 @@ function compact(n: number) {
 }
 
 function spendLabel(u?: AgentUsage) {
-  if (!u || u.turns === 0) return '—'
+  // Nothing, not an em dash. Set at the size of a number, a dash reads as a
+  // broken element — five of them down a fresh roster looked like five failed
+  // fields — and the line under it already says "no spend yet".
+  if (!u || u.turns === 0) return ''
   const total = u.input_tokens + u.output_tokens
   // A provider that reports nothing would otherwise show a confident 0.
   if (total === 0 && u.unreported_turns === u.turns) return 'n/a'
@@ -639,7 +739,10 @@ function Timeline({
   return (
     <div className="transcript">
       {messages.length === 0 && !busy && (
-        <p className="hint">
+        /* Centred, because an empty transcript is a whole screen and a line of
+           grey text jammed into its top-left corner reads as something left
+           behind rather than as an invitation. */
+        <p className="hint empty-note">
           This is the workspace entry point: talk to the orchestrator. It can create agents, configure them, and
           delegate work.
         </p>
@@ -993,7 +1096,9 @@ function AgentPanel({
   return (
     <div className="agent-panel">
       <div className="card-head">
-        <strong>{agent.name}</strong>
+        {/* No name here. The drawer head above already prints it, forty pixels
+            up, and this printed it a second time — the same defect the file
+            tree and every other panel had. */}
         {agent.is_orchestrator && <span className="muted">orchestrator — the workspace entry point</span>}
         <span className="muted">
           {status && status.state !== 'idle' ? `${status.state}${status.detail ? `: ${status.detail}` : ''}` : 'idle'}

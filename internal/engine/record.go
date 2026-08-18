@@ -36,10 +36,30 @@ import (
 // engine's own bookkeeping; nothing in it is written by a model, and nothing in
 // it can be.
 type Record struct {
-	Tools      []ToolRun  `json:"tools"`
-	Files      []FileMade `json:"files"`
-	ModelCalls int        `json:"model_calls"`
-	Tokens     Tokens     `json:"tokens"`
+	Tools []ToolRun  `json:"tools"`
+	Files []FileMade `json:"files"`
+	// Context is which documents fed this run, at which versions.
+	//
+	// It is the input most likely to have changed between a run that worked
+	// and one that did not, and the record was silent about it: an operator
+	// reading a bad delivery a week later could see which agent ran, which
+	// tools it called and what it cost, and had no way to learn that somebody
+	// had rewritten the house-style document that morning. A version is what
+	// makes that answerable, and it costs one listing per run.
+	Context    []ContextRead `json:"context"`
+	ModelCalls int           `json:"model_calls"`
+	Tokens     Tokens        `json:"tokens"`
+}
+
+// ContextRead is one document this run read, and the version it read.
+//
+// Version is empty when contextd could not be asked for the listing. That is
+// deliberately distinguishable from a version: "we read this and cannot say
+// which version" is a different fact from "we read version 4", and a record
+// that guessed would be worse than one that admits it.
+type ContextRead struct {
+	Path    string `json:"path"`
+	Version string `json:"version,omitempty"`
 }
 
 // ToolRun is one tool call, who made it, and how it ended. A gear appears here
@@ -65,6 +85,87 @@ type ToolRun struct {
 	Depth int    `json:"depth"`
 	OK    bool   `json:"ok"`
 	Ms    int64  `json:"ms"`
+	// Args is what the tool was called WITH, abridged. See abridgeArgs.
+	//
+	// Without it the record says a gear ran and stays silent on what it ran
+	// on, which is the first thing anybody asks. "gear_deploy succeeded" and
+	// "gear_deploy succeeded against production" are the same line here
+	// otherwise, and the difference is the whole reason somebody opens the
+	// record at all.
+	Args json.RawMessage `json:"args,omitempty"`
+}
+
+// How much of a call's arguments the record keeps.
+//
+// A cap is not tidiness. write_file's arguments contain the entire body of the
+// file, and a run that writes four files would put four documents in a record
+// that is stored as one JSON column on every run row forever — the record would
+// outgrow the thing it describes. So each string is cut and the whole object is
+// cut, and both cuts SAY they happened rather than quietly returning a prefix
+// that reads like the real value.
+const (
+	argValueMax = 200
+	argTotalMax = 2000
+)
+
+// abridgeArgs shortens a tool call's arguments for the record.
+//
+// It keeps the shape — every key survives — and shortens the values, because
+// which keys were passed is most of what a reader wants and is cheap, while the
+// values are where a whole file can hide. A cut value ends in "… (N bytes)" so
+// that nobody mistakes an abridgement for the argument.
+//
+// Anything that is not a JSON object is kept whole up to the total cap: a gear
+// declares its own schema and may take an array or a bare string, and a record
+// that dropped those would be silent about exactly the calls whose arguments
+// are least predictable.
+//
+// NOTE ON SECRETS. Arguments are what a MODEL sent, and the model never holds a
+// variable's value — those are injected into a gear's environment server-side
+// and never appear in a schema, a prompt or a call. So there is nothing here to
+// redact that was not already in the transcript the operator can read. If that
+// ever stops being true, this is the funnel to redact at.
+func abridgeArgs(raw string) json.RawMessage {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &obj); err != nil {
+		// Not an object. Keep it whole if it fits, and say so if it does not.
+		if len(raw) <= argTotalMax {
+			if json.Valid([]byte(raw)) {
+				return json.RawMessage(raw)
+			}
+			return nil
+		}
+		return mustJSON(fmt.Sprintf("… (%d bytes, not recorded)", len(raw)))
+	}
+	for k, v := range obj {
+		var str string
+		if err := json.Unmarshal(v, &str); err == nil {
+			if len(str) > argValueMax {
+				obj[k] = mustJSON(str[:argValueMax] + fmt.Sprintf("… (%d bytes)", len(str)))
+			}
+			continue
+		}
+		if len(v) > argValueMax {
+			obj[k] = mustJSON(fmt.Sprintf("… (%d bytes)", len(v)))
+		}
+	}
+	out, err := json.Marshal(obj)
+	if err != nil || len(out) > argTotalMax {
+		return mustJSON(fmt.Sprintf("%d arguments, too large to record", len(obj)))
+	}
+	return out
+}
+
+// mustJSON encodes a string that cannot fail to encode.
+func mustJSON(s string) json.RawMessage {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return json.RawMessage(`""`)
+	}
+	return b
 }
 
 // FileMade is one file that appeared in the workspace during the run, in the
@@ -97,6 +198,9 @@ func (r Record) MarshalJSON() ([]byte, error) {
 	}
 	if r.Files == nil {
 		r.Files = []FileMade{}
+	}
+	if r.Context == nil {
+		r.Context = []ContextRead{}
 	}
 	return json.Marshal(shape(r))
 }
@@ -166,10 +270,11 @@ func (e *Engine) note(wsID int64, f func(*Record)) {
 	}
 }
 
-func (e *Engine) noteTool(wsID int64, name, agent string, depth int, ok bool, took time.Duration) {
+func (e *Engine) noteTool(wsID int64, name, agent string, depth int, ok bool, took time.Duration, args string) {
 	e.note(wsID, func(r *Record) {
 		r.Tools = append(r.Tools, ToolRun{
 			Name: name, Agent: agent, Depth: depth, OK: ok, Ms: took.Milliseconds(),
+			Args: abridgeArgs(args),
 		})
 	})
 }
@@ -258,6 +363,7 @@ func (e *Engine) outcome(wsID int64, answer string) Outcome {
 	out.Did = ts.did
 	out.Did.Tools = append([]ToolRun(nil), ts.did.Tools...)
 	out.Did.Files = append([]FileMade(nil), ts.did.Files...)
+	out.Did.Context = append([]ContextRead(nil), ts.did.Context...)
 	out.GearOutput = ts.gearOut
 	return out
 }

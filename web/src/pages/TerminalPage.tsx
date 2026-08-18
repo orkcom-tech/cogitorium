@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { api, type TerminalStatus } from '../api'
 import { session } from '../session'
+import { PanelTitle } from '../deck/Drawer'
 
 // A shell, running in the same sandbox gears run in — not on the server.
 // The server refuses to open one without that sandbox, so what you get here
@@ -148,7 +149,7 @@ export default function TerminalPage({ workspaceId }: { workspaceId?: number }) 
   if (status && !allowed) {
     return (
       <div className="page">
-        <h2>Terminal</h2>
+        <PanelTitle>Terminal</PanelTitle>
         <div className="card">
           <p>A terminal is not available here.</p>
           <p className="error">{blockedReason}</p>
@@ -164,7 +165,7 @@ export default function TerminalPage({ workspaceId }: { workspaceId?: number }) 
   return (
     <div className={workspaceId ? 'terminal-embedded' : 'page terminal-page'}>
       <div className="row">
-        {!workspaceId && <h2>Terminal</h2>}
+        {!workspaceId && <PanelTitle>Terminal</PanelTitle>}
         <span className="muted">
           {connected ? 'connected' : 'connecting…'} · sandboxed, no network, nothing of the server's mounted
           {/* "a copy of", not "this workspace's files". The container gets a

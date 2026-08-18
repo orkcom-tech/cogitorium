@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Select } from './Select'
 import { Field, Fields } from './Field'
 import { api, type Instruction } from '../api'
+import { dragging } from '../dnd'
+import { PanelTitle } from '../deck/Drawer'
 
 // The instruction library: guidance written once and reused, so nobody
 // retypes house style into every agent's role. It mirrors the gear
@@ -50,7 +52,7 @@ export default function LibraryPage() {
 
   return (
     <div className="page">
-      <h2>Instructions</h2>
+      <PanelTitle>Instructions</PanelTitle>
       <p className="hint">
         Guidance worth keeping: house style, procedures, checklists. Bind one to a workspace or a single agent from
         the agent panel. The text lives in Contextverse, which versions it — this is the catalogue that makes it
@@ -90,7 +92,15 @@ export default function LibraryPage() {
         </p>
       ) : (
         items.map((i) => (
-          <div key={i.id} className="card">
+          <div
+            key={i.id}
+            className="card gear-card-drag"
+            // Same rule as a gear: collapsed it is a thing you can pick up,
+            // open it is a wall of text you are reading.
+            draggable={openId !== i.id}
+            onDragStart={dragging({ kind: 'instruction', id: i.id, name: i.name, path: i.path })}
+            title={openId === i.id ? undefined : 'Drag onto the blueprint to give this to an agent'}
+          >
             <div className="card-head">
               <strong>{i.name}</strong>
               <span className="muted">

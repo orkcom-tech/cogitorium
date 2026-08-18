@@ -163,6 +163,33 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 		}, "name", "description", "runtime", "code"),
 	})
 
+	// Searching the space itself: the orchestrator's, and not on an unattended
+	// run.
+	//
+	// TWO conditions, because it fails two different rules. It reads the whole
+	// context space, which is a workspace-management concern like context_list
+	// beside it — so, the orchestrator's. And it returns the TEXT of those
+	// files, line by line, which on an inlet run goes back to whoever holds the
+	// key: not a door into one workspace but a grep of the company's memory.
+	//
+	// Offered under exactly the conditions dispatchTool will accept it under,
+	// which is the point of putting the two clauses here rather than one. A
+	// tool that is offered and always refused costs a paid round-trip on every
+	// iteration of every run, which is what the block below says in its own
+	// last paragraph.
+	if agent.IsOrchestrator && !unattended {
+		tools = append(tools, llm.Tool{
+			Name: "context_search",
+			Description: "Search inside the Contextverse space — the text of the files, not only their names. " +
+				"Use it to find which document holds a fact before binding or reading it. " +
+				"Returns the path, line number and matching line for each hit.",
+			InputSchema: obj(map[string]any{
+				"query": str("text to look for; case-insensitive"),
+				"path":  str("optional glob to narrow the search, e.g. 'team/*'"),
+			}, "query"),
+		})
+	}
+
 	// Every agent can search the catalogues — except on an unattended run.
 	//
 	// Both catalogues are install-wide, not workspace-scoped: list_gears and
@@ -435,7 +462,7 @@ func (e *Engine) execToolAs(ctx context.Context, wsID int64, agent workspace.Age
 	// whose record shows no tools made no tool calls, full stop. A refusal
 	// counts as a call: the model asked for it, and "it tried and was refused"
 	// is a different thing to read at 3am than "it never tried".
-	e.noteTool(wsID, call.Name, agent.Name, len(chain), err == nil, time.Since(started))
+	e.noteTool(wsID, call.Name, agent.Name, len(chain), err == nil, time.Since(started), call.InputJSON)
 	if err != nil {
 		slog.Warn("tool call failed", "workspace_id", wsID, "agent", agent.Name, "tool", call.Name, "err", err)
 		return err.Error(), true
@@ -670,6 +697,25 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 			return "", err
 		}
 		return marshal(map[string]any{"space_files": files, "bindings": bindings})
+
+	case "context_search":
+		query, err := args.reqStr("query")
+		if err != nil {
+			return "", err
+		}
+		glob, err := args.str("path")
+		if err != nil {
+			return "", err
+		}
+		// The limit is this package's, not the model's: a tool result is
+		// replayed into every later turn of the conversation, so a model that
+		// asked for five hundred lines would be paying for them for the rest
+		// of the run.
+		res, err := e.ctx.Search(ctx, query, glob, 40)
+		if err != nil {
+			return "", err
+		}
+		return marshal(res)
 
 	case "context_bind":
 		path, err := args.reqStr("path")

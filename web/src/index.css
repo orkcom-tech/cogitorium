@@ -1,4 +1,5 @@
 @import './styles/tokens.css';
+@import './styles/frame.css';
 @import './styles/deck.css';
 
 :root {
@@ -87,12 +88,15 @@ body {
 
 
 
+/* A link inside a sentence. Through the dim role, not through opacity: at 0.8
+   it measured 3.79:1, and an underlined thing you are meant to click is the
+   last text on a screen that should be hard to read. */
 .linkish {
   border: none;
   padding: 0;
   text-align: left;
   text-decoration: underline;
-  opacity: 0.8;
+  color: var(--text-dim);
   font-size: 0.75rem;
 }
 
@@ -124,7 +128,7 @@ body {
   flex: 1;
   min-height: 20rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r1);
   padding: 0.5rem;
   overflow: hidden;
 }
@@ -155,10 +159,17 @@ body {
 }
 
 .page {
-  max-width: 900px;
+  /* A measure, CENTRED, with room off the cavity's edges. It was max-width
+     alone, which pins the content to the left edge of a 1300px hole and leaves
+     four hundred pixels of nothing beside it — the list looked glued to the
+     frame rather than placed in the window. */
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--s6) var(--s6) var(--s5);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--s4);
 }
 
 h2,
@@ -196,7 +207,7 @@ textarea {
   font: inherit;
   padding: 0.4rem 0.6rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r1);
   background: transparent;
   color: inherit;
 }
@@ -209,8 +220,10 @@ button:hover:not(:disabled) {
   border-color: var(--accent);
 }
 
+/* 0.5 measured 2.96:1 — "send" beside an empty composer was unreadable rather
+   than unavailable, and an operator cannot act on a label they cannot read. */
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.68;
   cursor: default;
 }
 
@@ -221,7 +234,7 @@ button.danger:hover:not(:disabled) {
 
 .card {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r1);
   padding: 0.75rem;
   display: flex;
   flex-direction: column;
@@ -258,9 +271,12 @@ td {
   border-bottom: 1px solid var(--border);
 }
 
+/* A column header is a label, not decoration. At 0.7 opacity it measured
+   2.4:1 in light and 3.2:1 in dark — fainter than the muted text under it. */
 th {
   font-size: 0.8rem;
-  opacity: 0.7;
+  color: var(--text-dim);
+  font-weight: 600;
 }
 
 .muted {
@@ -268,8 +284,11 @@ th {
   font-size: 0.85em;
 }
 
+/* Through the dim role rather than through opacity: opacity fades the WHOLE
+   element, so a hint containing a <code> or a <strong> faded those too, and
+   it measured 4.18:1 — under the line for ordinary text. */
 .hint {
-  opacity: 0.6;
+  color: var(--text-dim);
   font-size: 0.9rem;
   margin: 0;
 }
@@ -288,9 +307,11 @@ th {
 .transcript {
   flex: 1;
   overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.75rem;
+  /* No border and no radius. The cavity is already a rounded window; a bordered
+     box inside it drew a second frame around the conversation, one hairline in
+     from the first. */
+  border: 0;
+  padding: var(--s5) var(--s6);
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
@@ -335,7 +356,7 @@ th {
   gap: 0.35rem;
   font-size: 0.8rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r1);
   padding: 0.1rem 0.4rem;
 }
 
@@ -428,7 +449,7 @@ th {
   text-align: left;
   border: none;
   padding: 0.4rem 0.5rem;
-  border-radius: 6px;
+  border-radius: var(--r1);
   margin-bottom: 0.15rem;
 }
 
@@ -482,7 +503,7 @@ th {
 .chip {
   font-size: 0.75rem;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--r0);
   padding: 0.05rem 0.35rem;
   opacity: 0.8;
 }
@@ -501,7 +522,7 @@ th {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r1);
   padding: 0.5rem;
   max-height: 16rem;
   overflow-y: auto;
@@ -587,7 +608,7 @@ th {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--r0);
   padding: 0.05rem 0.35rem;
 }
 
@@ -652,11 +673,16 @@ th {
   min-height: 0;
 }
 
+/* A CANVAS IS A WELL, NOT AN OUTLINED BOX. It carried a 1px border and a 10px
+   radius inside a cavity with a 26px one — a second frame, in a different
+   shape, a few pixels in from the first, on the blueprint and on the access
+   map. A recessed surface separates it from the page without drawing another
+   edge, and 16 is the radius that nests inside 26 across a 10px gap. */
 .canvas {
   flex: 1;
   min-height: 20rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 0;
+  border-radius: var(--r2);
   overflow: hidden;
 }
 
@@ -664,7 +690,7 @@ th {
 .react-flow__node.bp-node {
   background: color-mix(in srgb, currentColor 6%, transparent);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r1);
   color: inherit;
   font-size: 0.8rem;
   padding: 0.4rem 0.6rem;
@@ -688,15 +714,19 @@ th {
   text-align: left;
 }
 
+/* The accent as TEXT, on a surface — which is a harder job than the accent as
+   a fill. Raw it measured 1.97:1 in dark, where the accents are chosen to work
+   as fills on a near-black ground. Mixed towards the text colour it keeps the
+   hue and clears the line under every one of the eight. */
 .bp-state {
   font-size: 0.7rem;
-  color: var(--accent);
+  color: color-mix(in srgb, var(--accent) 55%, var(--text));
 }
 
 /* Gears are visually distinct from agents: a tool, not an actor. */
 .react-flow__node.bp-gear {
   border-style: dashed;
-  border-radius: 4px;
+  border-radius: var(--r0);
 }
 
 .react-flow__node.bp-gear-approved {
@@ -825,20 +855,23 @@ th {
   padding: 0.2rem 0.5rem;
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   color: inherit;
   cursor: pointer;
 }
 
+/* An off toggle still has to be readable — it is the control you click to
+   turn the layer back on. At 0.4 it measured 2.35:1, which is not "quiet", it
+   is gone. The strike-through is what says off; the fade only supports it. */
 .legend-item.off {
-  opacity: 0.4;
+  opacity: 0.72;
   text-decoration: line-through;
 }
 
 .legend-dot {
   width: 0.6rem;
   height: 0.6rem;
-  border-radius: 3px;
+  border-radius: var(--r0);
   background: var(--kind, var(--border));
 }
 
@@ -919,7 +952,7 @@ th {
   padding: 0.15rem 0.4rem;
   background: transparent;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--r0);
   color: inherit;
   font-size: 0.8rem;
   text-align: left;
@@ -1192,7 +1225,7 @@ th {
   position: absolute;
   pointer-events: none;
   padding: 0.05rem 0.3rem;
-  border-radius: 2px;
+  border-radius: var(--r0);
   font-size: 0.68rem;
   line-height: 1.3;
   white-space: nowrap;
@@ -1216,7 +1249,7 @@ th {
 .context-files {
   overflow-y: auto;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r1);
   padding: 0.4rem;
 }
 
@@ -1228,7 +1261,7 @@ th {
   text-align: left;
   border: none;
   padding: 0.3rem 0.4rem;
-  border-radius: 6px;
+  border-radius: var(--r1);
   font-size: 0.85rem;
 }
 
@@ -1265,7 +1298,7 @@ th {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r1);
   padding: 0.6rem;
   max-height: 24rem;
   overflow-y: auto;
@@ -1320,7 +1353,7 @@ th {
 .modal.approval {
   background: var(--bg);
   border: 2px solid var(--outward);
-  border-radius: 10px;
+  border-radius: var(--r1);
   padding: 1rem 1.25rem;
   max-width: 44rem;
   width: 100%;
@@ -1364,7 +1397,7 @@ th {
   overflow: visible;
   background: color-mix(in srgb, currentColor 8%, transparent);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r1);
   padding: 0.5rem 0.6rem;
   font-size: 0.82rem;
 }
@@ -1465,12 +1498,17 @@ th {
 
 /* A view body fills its slide and owns its own scrolling. Nothing here ever
    inherits the page's viewport maths — that is what the deck replaced. */
+/* CORNERS THAT NEST. A rounded box inside a rounded one only looks right when
+   the two are concentric: inner radius = outer radius − the gap between them.
+   The cavity is 26 and this gap was 8, so everything flush against it — the
+   composer, the canvas, the panels — wanted an 18px corner and carried 16.
+   Ten makes 16 exactly right, which is what they already had. */
 .dk-body {
   display: flex;
   flex-direction: column;
   min-height: 0;
   flex: 1;
-  padding: var(--s2);
+  padding: var(--inset);
 }
 
 .dk-scroll {
@@ -1576,7 +1614,7 @@ th {
 .swatch {
   width: 14px;
   height: 14px;
-  border-radius: 4px;
+  border-radius: var(--r0);
   border: 1px solid var(--border);
   display: inline-block;
 }
@@ -1819,7 +1857,7 @@ button.big {
   font-size: var(--t-micro);
   padding: 0.1rem 0.4rem;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   color: var(--text-dim);
 }
 
@@ -1836,7 +1874,7 @@ button.big {
   gap: var(--s1);
   padding: 0.1rem 0.2rem 0.1rem 0.5rem;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface-2);
 }
 
@@ -1941,14 +1979,14 @@ button.big {
   background: light-dark(#faf7f0, #23262a);
   border-width: 2px;
   border-color: color-mix(in srgb, var(--text) 55%, transparent);
-  border-radius: 10px 3px 11px 4px / 4px 11px 3px 10px;
+  border-radius: var(--r1) 3px 11px 4px / 4px 11px 3px 10px;
 }
 
 .look-sketch::before,
 .look-sketch::after {
   border: 1.5px solid color-mix(in srgb, light-dark(#2a2622, #e8e3d8) 55%, transparent);
   background: transparent;
-  border-radius: 8px 3px 9px 3px / 3px 9px 3px 8px;
+  border-radius: var(--r1) 3px 9px 3px / 3px 9px 3px 8px;
 }
 
 .look-sketch::after {
@@ -2229,7 +2267,7 @@ button.big {
 
 .grants {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r1);
   padding: 0.6rem 0.75rem;
   margin: 0.6rem 0;
   display: flex;
@@ -2319,7 +2357,7 @@ button.big {
 .swatch {
   width: 16px;
   height: 16px;
-  border-radius: 4px;
+  border-radius: var(--r0);
   border: 1px solid var(--border-strong);
   display: inline-block;
   background: linear-gradient(135deg, var(--ground, var(--bg)) 0 55%, var(--accent) 55% 100%);
@@ -2446,7 +2484,7 @@ button.big {
   padding: var(--s2);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   box-shadow: var(--lift-2);
 }
 
@@ -2549,14 +2587,14 @@ button.big {
   align-items: center;
   gap: 2px;
   padding: 3px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface-2);
 }
 
 .pill-nav a {
   display: block;
   padding: 7px 15px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-size: var(--t-chrome);
   color: var(--muted, var(--text-dim));
   text-decoration: none;
@@ -2594,7 +2632,7 @@ button.big {
   height: 32px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface);
   color: var(--text);
   font-size: var(--t-chrome);
@@ -2707,7 +2745,7 @@ button.big {
   height: 32px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   /* A bead of the accent, lit from the top left.
    *
    * The first cut split the circle diagonally with a hard colour stop, which
@@ -3192,7 +3230,7 @@ button.big {
   flex: 0 0 auto;
   margin-left: var(--s1);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surface);
   color: var(--text);
   font-size: 15px;

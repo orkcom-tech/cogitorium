@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type GraphData, type Workspace } from '../api'
 import { hueOf } from './hue'
+import { useNavigate } from 'react-router-dom'
+import { usePublishShell } from '../shell'
+import { STAGE_ICON } from '../shell-icons'
 
 /**
  * The install, as a map.
@@ -56,6 +59,27 @@ type Link = { a: string; b: string; hue: number; kind: string; inside?: string; 
 const TAU = Math.PI * 2
 
 export default function InstallMap() {
+  // The other half of the pair on the Workspaces screen: a list of everything,
+  // and a picture of everything. Published from here too so both sides agree
+  // about which of the two is current.
+  const navTo = useNavigate()
+  usePublishShell(
+    () => ({
+      here: { label: 'Map' },
+      stages: {
+        items: [
+          { id: 'list', title: 'Workspaces', icon: STAGE_ICON.workspaces },
+          { id: 'map', title: 'Map', icon: STAGE_ICON.map },
+        ],
+        current: 'map',
+        go: (id: string) => {
+          if (id === 'list') navTo('/workspaces')
+        },
+      },
+    }),
+    [],
+  )
+
   const [data, setData] = useState<MapData | null>(null)
   const [spaces, setSpaces] = useState<Workspace[]>([])
   const [error, setError] = useState<string | null>(null)

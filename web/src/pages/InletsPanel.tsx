@@ -8,6 +8,7 @@ import {
   type Inlet,
   type InletExpect,
   type InletRun,
+  type RunQuery,
   type InletRunRecord,
   type InletRunState,
   type InletTask,
@@ -96,16 +97,18 @@ export default function InletsPanel({
   // the operator's only chance to copy it off the screen.
   const [issued, setIssued] = useState<(IssuedInletKey & { address: string }) | null>(null)
   const [looked, setLooked] = useState<InletRun | null>(null)
+  // What the record is being asked. Empty is the plain listing.
+  const [ask, setAsk] = useState<RunQuery>({})
 
   const reload = useCallback(
     () =>
-      Promise.all([api.inlets.list(wsId), api.inlets.runs(wsId)])
+      Promise.all([api.inlets.list(wsId), api.inlets.runs(wsId, 50, ask)])
         .then(([i, r]) => {
           setInlets(i)
           setRuns(r)
         })
         .catch((e: Error) => onError(e.message)),
-    [wsId, onError],
+    [wsId, ask, onError],
   )
 
   // Every panel on the bench stays mounted whether or not it is on screen, so
@@ -198,8 +201,46 @@ export default function InletsPanel({
           <RunRow run={looked} />
         </>
       )}
+      {/* Asking the record questions.
+          
+          Every run carries a record of what it did — which tools ran, which
+          documents fed it, which files it left — and until now the only way to
+          use it was to open runs one at a time and read the JSON. "Which runs
+          called the gear I have just decided was wrong" is the question
+          somebody actually has, and it is one filter. */}
+      <div className="row run-ask">
+        <input
+          placeholder="called this tool… e.g. gear_deploy"
+          value={ask.tool ?? ''}
+          onChange={(e) => setAsk((a) => ({ ...a, tool: e.target.value }))}
+        />
+        <input
+          placeholder="worked in by this agent…"
+          value={ask.agent ?? ''}
+          onChange={(e) => setAsk((a) => ({ ...a, agent: e.target.value }))}
+        />
+        <input
+          placeholder="read this document…"
+          value={ask.context ?? ''}
+          onChange={(e) => setAsk((a) => ({ ...a, context: e.target.value }))}
+        />
+        <button
+          className={ask.failed ? 'chip on' : 'chip'}
+          aria-pressed={!!ask.failed}
+          title="Every way the work did not land: failed, interrupted, and both refusals."
+          onClick={() => setAsk((a) => ({ ...a, failed: !a.failed }))}
+        >
+          did not land
+        </button>
+        {Object.values(ask).some(Boolean) && <button onClick={() => setAsk({})}>clear</button>}
+      </div>
+
       {runs.length === 0 ? (
-        <p className="hint">Nothing has come through a receiver in this workspace.</p>
+        <p className="hint">
+          {Object.values(ask).some(Boolean)
+            ? 'No run in this workspace matches that. A run recorded before records were kept matches nothing, because it cannot say what it did.'
+            : 'Nothing has come through a receiver in this workspace.'}
+        </p>
       ) : (
         runs.map((r) => <RunRow key={r.id} run={r} />)
       )}

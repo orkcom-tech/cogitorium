@@ -1,0 +1,1299 @@
+/* The frame shell.
+ *
+ * One rule holds this file together, and breaking it is what made every
+ * earlier attempt read as an ordinary web page with rounded corners:
+ *
+ *   EVERY CONTROL LIVES ON THE FRAME. THE CAVITY HOLDS ONLY CONTENT.
+ *
+ * Not stage tabs, not drawer buttons, not the workspace name, not counts, not
+ * a status pill, not the account button. If it is a control, or a label about
+ * the workspace rather than part of the work, it belongs on the rail. What may
+ * be inside the cavity is the transcript, the canvas, the file, the terminal,
+ * the map — and nothing else.
+ *
+ * The geometry, taken from the reference shell's own config: a bezel of ground
+ * around everything, a cavity with a 26px radius, and a rail of floating
+ * capsule groups standing on the bezel's left.
+ */
+
+.frame {
+  position: fixed;
+  inset: 0;
+  padding: var(--bezel);
+  padding-left: calc(var(--rail-w) + var(--bezel) + var(--rail-gap));
+  background: var(--bg);
+  /* An open drawer takes its room OUT OF THE HOLE rather than covering it.
+     The drawer is the frame growing inward; a frame that grew inward and left
+     the work where it was would simply be sitting on top of it, which is what
+     it did — the composer ended up half underneath. The padding moves on a
+     spatial curve so the cavity travels with the drawer instead of snapping
+     once it has arrived. */
+  transition: padding var(--sp-default-d) var(--sp-default);
+}
+
+:root[style*='--drawer-edge: right'] .frame {
+  padding-right: calc(var(--drawer-size) + var(--s2));
+}
+
+:root[style*='--drawer-edge: left'] .frame {
+  padding-left: calc(var(--rail-w) + var(--bezel) + var(--drawer-size) + var(--s2));
+}
+
+:root[style*='--drawer-edge: top'] .frame {
+  padding-top: calc(var(--drawer-size) + var(--s2));
+}
+
+:root[style*='--drawer-edge: bottom'] .frame {
+  padding-bottom: calc(var(--drawer-size) + var(--s2));
+}
+
+/* ── The rail ───────────────────────────────────────────────────────────────
+   Not a strip: several floating capsules with gaps between them, so the eye
+   reads them as separate answers to separate questions — where am I, what is
+   the cavity showing, what can crawl out, and the install-wide rest. */
+
+.rail {
+  position: fixed;
+  /* On a short window the column scrolls rather than the bottom group being
+     pushed out of the viewport where it cannot be reached. */
+  overflow-y: auto;
+  scrollbar-width: none;
+  /* THE RAIL IS A CONTINUOUS STRIP OF THE FRAME'S MATERIAL, flush to the left
+     edge of the window, and it is what a menu or a drawer joins onto.
+     It was icons floating on the bezel with no surface of their own, which is
+     why a menu could not merge with it: there were two different materials
+     meeting at the seam, and the join read as a card parked next to a column.
+     Nothing can grow out of a thing that is not there.
+
+     Its material is --bg, the bezel's own, because the frame is ONE substance.
+     It was a step lighter for a while and the result read as a light strip
+     glued to a darker border — two materials meeting, which is exactly what
+     this whole model exists to avoid. */
+  left: 0;
+  top: var(--bezel);
+  bottom: var(--bezel);
+  width: calc(var(--rail-w) + var(--bezel));
+  padding-left: var(--bezel);
+  background: var(--bg);
+  border-radius: 0 var(--r-panel) var(--r-panel) 0;
+  z-index: var(--z-menu);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s3);
+  /* The column itself catches nothing; only the capsules do, so the bezel
+     around them stays dead space rather than an invisible click target. */
+  pointer-events: none;
+}
+
+.rail-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--s1) 0;
+  pointer-events: auto;
+  /* No pill behind it. A capsule floating on the bezel made every button read
+     as a separate object sitting ON the frame; the buttons ARE the frame, and
+     a group is a gap above and below rather than a container drawn round it.
+     The hairline is the whole separator. */
+  position: relative;
+}
+
+.rail-group + .rail-group::before {
+  content: '';
+  position: absolute;
+  top: calc(var(--s3) * -0.5);
+  left: 22%;
+  right: 22%;
+  height: 1px;
+  background: var(--border);
+}
+
+/* The gap that pushes the bottom capsule to the floor, and carries the
+   workspace's name as rotated text on its way past. */
+.rail-spacer {
+  flex: 1 1 auto;
+  min-height: var(--s3);
+}
+
+
+/* A rail button. The radius morph from pill to rounded square on selection is
+   part of the language, not decoration: it is how the reference marks "this
+   one is current" without a second colour. */
+.rail-btn {
+  position: relative;
+  width: 40px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition:
+    background var(--ef-fast-d) var(--ef-fast),
+    color var(--ef-fast-d) var(--ef-fast);
+}
+
+/* A state layer, not a fill: the foreground colour at low opacity laid over
+   whatever is beneath, so it reads the same on every look. */
+.rail-btn:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+
+.rail-btn:active {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+/* Current is a tint and a bar, not a solid green lozenge. A filled circle for
+   every selected thing turned the rail into a row of buttons stuck on the
+   frame; this says "here" without shouting it. */
+.rail-btn.on {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.rail-btn.on::after {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  width: 3px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  transform: translateY(-50%);
+}
+
+.rail-btn .swatch {
+  width: 17px;
+  height: 17px;
+  border-radius: var(--r1);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+.rail-btn svg {
+  width: 19px;
+  height: 19px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Counts ride the button, the way a tray icon carries a dot — never as a
+   header strip over the work. */
+.rail-badge {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--r-pill);
+  background: var(--danger, #ff3d3d);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--surface-2);
+}
+
+.rail-badge.quiet {
+  background: color-mix(in srgb, var(--text) 45%, transparent);
+}
+
+/* The brand: the app's mark, and beneath it the maker's.
+   It is the one thing on the rail that is not a control, so it has its own
+   capsule and no hover state.
+
+   The two marks are given room rather than stacked tight. Crammed into a 38px
+   button the medallion became a dark square and "BY ORK" collapsed into an
+   illegible smudge — at this size the lockup needs the height more than the
+   rail needs the pixels. */
+.rail-brand {
+  display: grid;
+  place-items: center;
+  gap: var(--s2);
+  padding: var(--s3) var(--s2);
+  border-radius: var(--r-pill);
+  pointer-events: auto;
+  text-decoration: none;
+}
+
+.rail-brand img {
+  width: 30px;
+  height: 30px;
+  display: block;
+  border-radius: var(--r1);
+}
+
+.rail-brand .by {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-dim);
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+/* The maker's mark carries no colour of its own — alpha over currentColor — so
+   it belongs to whichever look is in force. */
+.rail-brand .ork {
+  width: 32px;
+  height: 16px;
+  background: currentColor;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+
+/* ── The cavity ─────────────────────────────────────────────────────────────
+   The hole the frame surrounds. Content only. */
+
+.cavity {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface);
+  border-radius: var(--r-cavity);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 7%, transparent);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── A menu that springs from the rail button that opened it ────────────────
+   Anchored beside its button rather than dropped in a corner, so the thing you
+   pressed and the thing that appeared are visibly the same gesture. */
+
+.rail-menu {
+  position: fixed;
+  /* FLUSH TO THE RAIL, not floating beside it. A menu with a gap and a drop
+     shadow is a card that happens to be near the frame; this one grows out of
+     it — same material, joined edge, and rounded only on the three sides
+     facing away. Third time this correction has been needed: the drawer, the
+     rail buttons, and now this. */
+  left: calc(var(--rail-w) + var(--bezel));
+  z-index: calc(var(--z-menu) + 1);
+  min-width: 248px;
+  max-width: 340px;
+  padding: var(--s2);
+  border-radius: 0 var(--r-panel) var(--r-panel) 0;
+  background: var(--bg);
+  transform-origin: left center;
+  padding-left: var(--s2);
+  /* The rail sets pointer-events: none so the bezel around its buttons is not
+     an invisible click target, and only the capsules take it back. A menu is a
+     child of the rail and inherited that none: it was drawn, it looked right,
+     and every click went straight through it into the chat behind. */
+  pointer-events: auto;
+  animation: rail-menu-in var(--sp-fast-d) var(--sp-fast);
+}
+
+/* It comes OUT of the rail: from zero width at the rail's edge, not from a
+   point in space. scaleX with the origin at the joined edge is the frame
+   extending, which is the same gesture a drawer makes. */
+@keyframes rail-menu-in {
+  from {
+    opacity: 0;
+    transform: scaleX(0.86) translateX(-10px);
+  }
+}
+
+.rail-menu-label {
+  display: block;
+  padding: var(--s2) var(--s3) var(--s1);
+  font-size: var(--t-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.rail-menu a,
+.rail-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--s2) var(--s3);
+  border: 0;
+  border-radius: var(--r2);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--t-ui);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--ef-fast-d) var(--ef-fast);
+}
+
+.rail-menu a:hover,
+.rail-menu button:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.rail-menu .sub {
+  display: block;
+  color: var(--text-dim);
+  font-size: var(--t-micro);
+  margin-top: 1px;
+}
+
+.rail-menu hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: var(--s2) var(--s2);
+}
+
+/* Somebody who asked not to be moved is not moved. The mockups carried a
+   switch that overrode this, because their whole subject was the motion; the
+   product has no such excuse. */
+@media (prefers-reduced-motion: reduce) {
+  .rail-btn,
+  .rail-here,
+  .rail-menu,
+  .rail-menu a,
+  .rail-menu button {
+    transition-duration: 1ms;
+    animation-duration: 1ms;
+  }
+}
+
+/* ── Drawers ────────────────────────────────────────────────────────────────
+   A drawer is THE FRAME GROWING INWARD, not a card that flies in over the
+   work. That distinction is the whole reason the reference shell reads as one
+   object: a panel coming out of an edge is made of the same material as the
+   bezel, touches the window edge exactly as the bezel does, and is rounded
+   only on the side facing the cavity — so what you see is the frame becoming
+   thicker on that side, with the hole shrinking to make room.
+
+   The first cut had it inset from every edge with a drop shadow, which is a
+   dialog. It even looked fine on its own; it just belonged to nothing. */
+
+.drawer {
+  position: fixed;
+  z-index: var(--z-float);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* The frame's one material, because that is what this is. */
+  background: var(--bg);
+  transition: transform var(--sp-default-d) var(--sp-default);
+  will-change: transform;
+}
+
+/* Flush to its own edge of the window; the bezel on the other three sides is
+   still there, so the cavity keeps its inset. Rounded only where it meets the
+   cavity. */
+.drawer-right {
+  top: var(--bezel);
+  bottom: var(--bezel);
+  right: 0;
+  border-radius: var(--r-cavity) 0 0 var(--r-cavity);
+  transform: translateX(100%);
+}
+
+.drawer-left {
+  top: var(--bezel);
+  bottom: var(--bezel);
+  left: calc(var(--rail-w) + var(--bezel));
+  border-radius: 0 var(--r-cavity) var(--r-cavity) 0;
+  transform: translateX(calc(-100% - var(--rail-w) - var(--bezel)));
+}
+
+.drawer-top {
+  left: calc(var(--bezel) + var(--rail-w) + var(--rail-gap));
+  right: var(--bezel);
+  top: 0;
+  border-radius: 0 0 var(--r-cavity) var(--r-cavity);
+  transform: translateY(-100%);
+}
+
+.drawer-bottom {
+  left: calc(var(--bezel) + var(--rail-w) + var(--rail-gap));
+  right: var(--bezel);
+  bottom: 0;
+  border-radius: var(--r-cavity) var(--r-cavity) 0 0;
+  transform: translateY(100%);
+}
+
+/* Declared AFTER the edges on purpose: they set the hidden transform at equal
+   specificity, and a rule written earlier loses the cascade. That exact
+   mistake made a drawer open invisibly once already. */
+.drawer.open {
+  transform: none;
+}
+
+/* A drawer following the pointer must not also be easing towards where the
+   pointer was. */
+.drawer.dragging {
+  transition: none;
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex: 0 0 auto;
+  padding: var(--s4) var(--s3) var(--s2) var(--s5);
+  font-size: var(--t-ui);
+}
+
+.drawer-head strong {
+  font-size: var(--t-prose);
+  letter-spacing: -0.01em;
+}
+
+.drawer-spacer {
+  flex: 1;
+}
+
+.drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 var(--s5) var(--s5);
+  container-type: inline-size;
+  container-name: panel;
+}
+
+.drawer-body > * {
+  max-width: 100%;
+}
+
+.drawer-body .row {
+  flex-wrap: wrap;
+}
+
+/* The four edge marks: a square with one thick side, which is the side the
+   drawer would come out of — the answer drawn rather than named. */
+.drawer-edges {
+  display: flex;
+  gap: 2px;
+}
+
+.drawer-edge {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--ef-fast-d) var(--ef-fast);
+}
+
+.drawer-edge:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.drawer-edge.on {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.edge-mark {
+  width: 12px;
+  height: 12px;
+  border: 1px solid color-mix(in srgb, var(--text) 40%, transparent);
+  border-radius: var(--r0);
+}
+
+.edge-left { border-left-width: 4px; border-left-color: currentColor; }
+.edge-right { border-right-width: 4px; border-right-color: currentColor; }
+.edge-top { border-top-width: 4px; border-top-color: currentColor; }
+.edge-bottom { border-bottom-width: 4px; border-bottom-color: currentColor; }
+
+.drawer-x {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.drawer-x:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+/* 1px of ink is impossible to grab; 10px of hit area is not. */
+.drawer-grip {
+  position: absolute;
+  background: transparent;
+  transition: background var(--ef-fast-d) var(--ef-fast);
+}
+
+.drawer-grip:hover {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.drawer-left .drawer-grip,
+.drawer-right .drawer-grip {
+  top: var(--s5);
+  bottom: var(--s5);
+  width: 10px;
+  cursor: col-resize;
+  border-radius: var(--r-pill);
+}
+
+.drawer-right .drawer-grip { left: -5px; }
+.drawer-left .drawer-grip { right: -5px; }
+
+.drawer-top .drawer-grip,
+.drawer-bottom .drawer-grip {
+  left: var(--s5);
+  right: var(--s5);
+  height: 10px;
+  cursor: row-resize;
+  border-radius: var(--r-pill);
+}
+
+.drawer-bottom .drawer-grip { top: -5px; }
+.drawer-top .drawer-grip { bottom: -5px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer { transition-duration: 1ms; }
+}
+
+/* ── The name of a button, on hover ─────────────────────────────────────────
+   The rail is icons, so every one of them has to be able to say what it is.
+   It appears BESIDE the button rather than below it — the rail is a column and
+   a tooltip under an icon would cover the next icon — and it is a plain label
+   on the frame's own material rather than the operating system's yellow box,
+   which is the one piece of chrome in any interface that belongs to nobody. */
+.rail-tip {
+  position: fixed;
+  z-index: calc(var(--z-menu) + 2);
+  padding: 7px 12px;
+  /* Joined to the rail like everything else that comes off it. */
+  border-radius: 0 var(--r1) var(--r1) 0;
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--t-chrome);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: rail-tip-in var(--ef-fast-d) var(--ef-fast);
+}
+
+@keyframes rail-tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) scaleX(0.8);
+  }
+}
+
+/* The drawer's header already names it. A panel written for a full page keeps
+   its own <h3> at the top, so the operator read "Queue" twice, one line apart,
+   in two different sizes. The first heading inside a drawer is redundant by
+   construction — the frame put the name there. */
+.drawer-body > *:first-child > h3:first-child,
+.drawer-body > h3:first-child,
+.drawer-body > *:first-child > header:first-child > h3:first-child {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── Appearance ─────────────────────────────────────────────────────────────
+   Two rows of controls where there used to be a grid of eleven paint jobs. */
+
+.mode-row {
+  display: flex;
+  gap: var(--s1);
+  padding: var(--s1);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  margin: var(--s2) 0 var(--s3);
+}
+
+.mode-option {
+  flex: 1;
+  border: 0;
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: var(--t-ui);
+  cursor: pointer;
+}
+
+.mode-option.on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--lift, none);
+}
+
+.accent-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin: var(--s2) 0 var(--s3);
+}
+
+.accent-option {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  /* The ring is outside the colour rather than over it, so a dark accent and a
+     light one are marked the same way. */
+  box-shadow: 0 0 0 2px var(--surface);
+  transition:
+    box-shadow var(--ef-fast-d) var(--ef-fast),
+    transform var(--sp-fast-d) var(--sp-fast);
+}
+
+.accent-option:hover {
+  transform: scale(1.08);
+}
+
+.accent-option.on {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--text);
+}
+
+.accent-own {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--border-strong);
+  background:
+    conic-gradient(from 0deg, #e04b4b, #e0c34b, #4be070, #4bc8e0, #7c4be0, #e04b9e, #e04b4b);
+}
+
+.accent-own input {
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  border: 0;
+  padding: 0;
+}
+
+/* ── The Editor ─────────────────────────────────────────────────────────────
+   Drawn the way a code editor draws itself: a thin bar of label and icons, a
+   dense tree, and the file filling everything else. What was here read as a
+   settings page that happened to contain filenames. */
+
+.file-tree {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--surface-2);
+}
+
+.tree-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 var(--s1) 0 var(--s3);
+}
+
+.tree-title {
+  font-size: var(--t-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-weight: 650;
+}
+
+.tree-act {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  padding: 0;
+  border-radius: var(--r0);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tree-act:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+.tree-rows {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: var(--s3);
+}
+
+/* A row is 24px, the way every editor sets one: dense enough that a directory
+   of forty files is one screen rather than three. */
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--t-ui);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tree-row:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.tree-row.selected {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+}
+
+.tree-icon {
+  width: 12px;
+  flex: 0 0 12px;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-size {
+  margin-left: auto;
+  padding-left: var(--s2);
+  font-size: var(--t-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.tree-empty {
+  margin: 0;
+  padding: var(--s3);
+  color: var(--text-dim);
+  font-size: var(--t-ui);
+}
+
+.tree-new {
+  padding: 0 var(--s2) var(--s1);
+}
+
+.tree-new input {
+  width: 100%;
+  height: 26px;
+  padding: 0 var(--s2);
+  border-radius: var(--r0);
+  font-size: var(--t-ui);
+  font-family: var(--mono);
+}
+
+/* A workspace card is a door. It says so with the cursor and answers a
+   keyboard the same way, and the controls inside it keep their own cursor
+   because they are not the door. */
+.ws-card[role='link'] {
+  cursor: pointer;
+}
+
+.ws-card[role='link'] button,
+.ws-card[role='link'] .sel,
+.ws-card[role='link'] input,
+.ws-card[role='link'] label {
+  cursor: auto;
+}
+
+.ws-card[role='link']:hover {
+  background: color-mix(in srgb, var(--text) 3%, var(--surface));
+}
+
+/* ── The composer ───────────────────────────────────────────────────────────
+   One boundary, not two.
+
+   The form was a field and the text input inside it was another field, so
+   every message was typed into a box drawn six pixels inside an identical box.
+   The composer is the field now — it carries the edge, the ground and the
+   focus ring — and what sits in it is text, an attach button and send, with
+   nothing of their own to draw. */
+
+.composer {
+  padding: var(--s1);
+  border-radius: var(--r2);
+}
+
+.composer > .row {
+  gap: var(--s1);
+}
+
+.composer .grow {
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  height: 30px;
+  padding: 0 var(--s2);
+}
+
+.composer .grow:focus,
+.composer .grow:focus-visible {
+  outline: 0;
+}
+
+/* The whole control answers the caret, because the whole control is the
+   field. */
+.composer:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.composer > .row > button {
+  height: 30px;
+  border-radius: var(--r1);
+}
+
+/* ── The file list ──────────────────────────────────────────────────────────
+   Flush on the left, rounded on the right.
+
+   It was a square box floating eight pixels inside a cavity whose own corner
+   is rounded — two edges, one inside the other, in the corner where it shows
+   most. It reaches the cavity's edge now, so the left corners ARE the
+   cavity's, and it is rounded on the one side that faces the file. */
+
+.dk-files {
+  border-right: 0;
+}
+
+.dk-files > .dk-part-body {
+  padding: 0;
+}
+
+.dk-files .file-tree {
+  margin: 0;
+  gap: 0;
+  border-radius: 0 var(--r2) var(--r2) 0;
+  overflow: hidden;
+}
+
+/* ── Dragging a gear or an instruction onto the blueprint ────────────────────
+   The drawer lists the thing; the canvas is where it is given to an agent.
+   Three states have to be visible, in this order of loudness: something is
+   being carried (the canvas), it will land HERE (the agent), and it landed. */
+
+.gear-card-drag[draggable='true'] {
+  cursor: grab;
+}
+
+.gear-card-drag[draggable='true']:active {
+  cursor: grabbing;
+}
+
+.canvas {
+  position: relative;
+}
+
+/* The whole canvas is a target — dropping on empty space means every agent —
+   so it is the canvas that lights up, not a rectangle drawn inside it. */
+.canvas.bp-catching {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+  transition: box-shadow var(--ef-default-d) var(--ef-default);
+}
+
+/* The one agent under the pointer. React Flow owns the node's transform, so
+   this may not touch transform — a scale here fights the pane's own matrix and
+   the node drifts away from the cursor. Ring and wash only. */
+.react-flow__node.bp-catch {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 8px color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  transition:
+    box-shadow var(--ef-fast-d) var(--ef-fast),
+    background var(--ef-fast-d) var(--ef-fast);
+}
+
+.bp-catch-hint {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  top: var(--s3);
+  transform: translateX(-50%);
+  margin: 0;
+  padding: var(--s1) var(--s3);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--accent) 90%, var(--surface));
+  color: var(--on-accent, #fff);
+  font-size: var(--t-chrome);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: bp-catch-in var(--sp-fast-d) var(--sp-fast);
+}
+
+@keyframes bp-catch-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+}
+
+/* What just happened, said as a sentence, where it happened. */
+.bp-landed {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  top: var(--s3);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  max-width: min(30rem, calc(100% - var(--s6)));
+  padding: var(--s3) var(--s4);
+  border-radius: var(--r2);
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent),
+    var(--lift-2);
+  font-size: var(--t-ui);
+  animation: bp-catch-in var(--sp-fast-d) var(--sp-fast);
+}
+
+.bp-landed.warned {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--warn, var(--danger)) 45%, transparent),
+    var(--lift-2);
+}
+
+.bp-landed span {
+  color: var(--text-dim);
+}
+
+.bp-landed-acts {
+  gap: var(--s2);
+  justify-content: flex-end;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bp-catch-hint,
+  .bp-landed {
+    animation: none;
+  }
+}
+
+/* ── What the sweep turned up ────────────────────────────────────────────────
+   Measured across every screen and every drawer, not looked at: boxes drawn
+   inside boxes, corners that do not nest, and content jammed into a corner of
+   a screen it has all to itself. */
+
+/* An empty screen says so in the middle of itself.
+   Two selectors deep on purpose: `.hint` sets margin:0 and is declared later,
+   so a bare `.empty-note` loses the tie and the note stayed pinned to the top
+   left corner of a screen it had entirely to itself. */
+.empty-note {
+  max-width: 32rem;
+  text-align: center;
+}
+
+.transcript > .empty-note,
+.editor-empty > .empty-note {
+  margin: auto;
+}
+
+.editor-empty {
+  display: flex;
+}
+
+/* Rows are separated by tint, not by rules — the product's own rule, which
+   this one line of the workspace card had never followed. It drew a hairline
+   across a card that already has a boundary, inset from both ends, and read
+   as debris rather than as a division. */
+.ws-card .share-row {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: var(--s3);
+}
+
+/* An agent that has not run yet prints an em dash where the spend goes. Set at
+   the size of a number it reads as a missing value; set as what it is — a
+   quiet nothing — it reads as "not yet". */
+.agent-spend-big.idle {
+  opacity: 0.35;
+  font-weight: 400;
+}
+
+/* ── The blueprint's controls ────────────────────────────────────────────────
+   They stand ON the canvas, in its corner, the way every other control in this
+   product stands on something. What they replaced was two rows stacked across
+   the top of the cavity above a bordered box — chrome over a document, which
+   is the web-page shape the whole shell exists to get away from. */
+
+.blueprint {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.blueprint > .canvas {
+  flex: 1;
+  min-height: 0;
+}
+
+.bp-tools {
+  position: absolute;
+  z-index: 5;
+  top: var(--s3);
+  left: var(--s3);
+  right: var(--s3);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s2);
+  /* The bar itself catches nothing; each capsule inside it does. Otherwise a
+     transparent strip across the top of the canvas would swallow every drag
+     and every click meant for a node under it. */
+  pointer-events: none;
+}
+
+.bp-tools > * {
+  pointer-events: auto;
+  margin: 0;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent),
+    var(--lift);
+}
+
+.bp-tools > .bp-help {
+  padding: var(--s2) var(--s4);
+  max-width: min(60rem, 100%);
+  font-size: var(--t-chrome);
+}
+
+.bp-tools > .row {
+  padding: var(--s1);
+  gap: var(--s1);
+  flex-wrap: wrap;
+}
+
+/* A form is not a capsule: it is a panel, and it opens under the bar. */
+.bp-tools > form,
+.bp-tools > .card {
+  border-radius: var(--r2);
+  padding: var(--s4);
+  max-width: 34rem;
+}
+
+/* The canvas has to clear the bar, or the top of the graph opens underneath
+   it. React Flow reads this as part of the viewport when it fits. */
+.blueprint .react-flow {
+  --xy-fit-padding-top: 96px;
+}
+
+/* A search hit: where it is, and the line it is on. */
+.context-hit {
+  display: flex;
+  gap: var(--s3);
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: var(--s1) var(--s2);
+  border-radius: var(--r0);
+  cursor: pointer;
+  font-size: var(--t-chrome);
+}
+
+.context-hit:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.context-hit .path {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+}
+
+.context-hit .hit-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+}
+
+/* Asking the record questions: a row of narrow fields, not a form. */
+.run-ask {
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+
+.run-ask input {
+  flex: 1 1 11rem;
+  min-width: 0;
+  font-size: var(--t-chrome);
+}
+
+/* ── The controls standing on the canvas ─────────────────────────────────────
+   Measured before this: the legend capsule was 32px tall and the add capsule
+   45px, so two bars of related controls did not line up. Inside them, a legend
+   chip was 24px at 12px type and "+ agent" was 37px at 16px — the size the
+   product uses for a form, not for a control sitting on a graph. And both
+   capsules were pills, 4px of padding, holding children rounded to 10px, so
+   the corners inside disagreed with the corners around them.
+
+   ONE SCALE for everything on the canvas, and corners that nest: a pill with
+   4px of padding wants pills inside it, because a pill minus a gap is a pill. */
+
+.bp-tools > .row {
+  align-items: center;
+  min-height: 32px;
+}
+
+/* `.round` on the elements themselves, not here, and this is why: tokens.css
+   carries `button:not([data-own]):not(.agent-card):not(.card):not(.look-option)
+   :not(.ws-card):not(.dk-view-tab):not(.round)`, whose seven :not() clauses
+   give it a specificity of (0,8,1) — more than any ordinary selector in this
+   product. It sets border-radius: var(--r1), so EVERY radius any other rule
+   gives a button is silently discarded unless the button opts out. That is why
+   `.legend-item { border-radius: var(--r-pill) }` in index.css has been
+   rendering at 10px: the stylesheet has been saying pill and drawing r1.
+   `.round` is that rule's own documented escape hatch, used as intended. The
+   rule itself deserves a fix — a cascade layer rather than weight — and that
+   is its own change, not one made in passing here. */
+.bp-tools > .row > button,
+.bp-tools > .row .drop-trigger,
+.bp-tools > .row .legend-item {
+  height: 24px;
+  padding: 0 var(--s3);
+  border-radius: var(--r-pill);
+  font-size: var(--t-chrome);
+  line-height: 1;
+}
+
+/* A TOGGLE and an ACTION are allowed to differ, and here the difference does a
+   job: a layer toggle is an outline chip holding a state, an action is filled
+   and does something. What was wrong before was not that they differed — it
+   was that they differed in SIZE, which says nothing. */
+.bp-tools .bp-act {
+  border: 0;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  font-weight: 600;
+}
+
+.bp-tools .bp-act:hover {
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+}
+
+/* ── A button that opens a list of things to do ──────────────────────────────
+   Drawn like the rail's menus, because it is the same gesture — but anchored
+   under its trigger rather than joined to the rail's edge, so all four corners
+   are rounded: it is not growing out of anything. */
+
+.drop-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  cursor: pointer;
+}
+
+.drop-caret {
+  font-size: 9px;
+  opacity: 0.55;
+}
+
+.drop-menu {
+  position: fixed;
+  z-index: var(--z-float);
+  max-width: 340px;
+  padding: var(--s2);
+  border-radius: var(--r2);
+  background: var(--bg);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent),
+    var(--lift-2);
+  transform-origin: top left;
+  animation: drop-menu-in var(--sp-fast-d) var(--sp-fast);
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+}
+
+@keyframes drop-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(-6px);
+  }
+}
+
+.drop-menu-label {
+  display: block;
+  padding: var(--s2) var(--s3) var(--s1);
+  font-size: var(--t-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.drop-menu button {
+  display: block;
+  width: 100%;
+  height: auto;
+  text-align: left;
+  padding: var(--s2) var(--s3);
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  font-size: var(--t-ui);
+  cursor: pointer;
+}
+
+.drop-menu button.on,
+.drop-menu button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.drop-menu button .sub {
+  display: block;
+  font-size: var(--t-micro);
+  color: var(--text-dim);
+  margin-top: 1px;
+}
+
+.drop-empty {
+  padding: var(--s2) var(--s3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drop-menu {
+    animation: none;
+  }
+}

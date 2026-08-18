@@ -5,7 +5,6 @@ import {
   MIN_FILES,
   MIN_OVERLAY_H,
   MIN_OVERLAY_W,
-  MIN_TERMINAL,
   VIEW_ORDER,
   px,
   type OverlayId,
@@ -31,7 +30,11 @@ export function Deck({ view, views }: { view: ViewId; views: { id: ViewId; node:
   const at = VIEW_ORDER.indexOf(view)
   return (
     <div className="dk-viewport">
-      <div className="dk-track" style={{ transform: `translateX(${-Math.max(0, at) * 100}%)` }}>
+      {/* VERTICALLY, because the control that moves it is a vertical rail.
+          Going down the rail sends the work down and brings the next view up
+          from below; going back up reverses it. A horizontal slide driven by a
+          vertical column reads as two unrelated motions. */}
+      <div className="dk-track" style={{ transform: `translateY(${-Math.max(0, at) * 100}%)` }}>
         {VIEW_ORDER.map((id) => {
           const v = views.find((x) => x.id === id)
           return (
@@ -60,7 +63,11 @@ function Slide({ live, children }: { live: boolean; children: ReactNode }) {
 }
 
 /**
- * The workbench: a tree, a file, and a shell in the same directory.
+ * The workbench: a tree and the file it opens.
+ *
+ * The shell used to be its third part, along the bottom. It is a drawer now —
+ * something pulled out over whatever you are doing and pushed back — and
+ * keeping both would be two terminals with one session between them.
  *
  * The tree and the shell roll up to their own header rather than closing.
  * There is no "where did it go" state to recover from, and therefore no
@@ -71,12 +78,10 @@ export function Workbench({
   deck,
   files,
   editor,
-  terminal,
 }: {
   deck: DeckApi
   files: ReactNode
   editor: ReactNode
-  terminal: ReactNode
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const d = deck.deck
@@ -86,14 +91,20 @@ export function Workbench({
       ref={ref}
       style={
         {
-          '--dk-files': d.files ? px(d.filesW, 240) : 'var(--dk-rail)',
-          '--dk-term': d.terminal ? px(d.terminalH, 240) : 'var(--dk-rail)',
+          /* Always its width. It used to collapse to a 34px rail when
+             d.files was false, and the control that set that flag was the
+             header I removed — so the tree could shrink to a sliver with
+             'FILES' broken across two characters and nothing able to open it
+             again. The seam resizes it; leaving the stage closes it. */
+          '--dk-files': px(d.filesW, 240),
         } as React.CSSProperties
       }
     >
-      <section className={`dk-part dk-files ${d.files ? '' : 'dk-rolled'}`}>
-        <PartHead title="Files" open={d.files} onToggle={deck.toggleFiles} />
-        {d.files && <div className="dk-part-body">{files}</div>}
+      {/* No PartHead: the tree draws its own bar with its own name and its own
+          actions, so this one printed "Files" a second time directly above it.
+          Rolling the tree up is what the Editor stage is for — you leave it. */}
+      <section className="dk-part dk-files">
+        <div className="dk-part-body">{files}</div>
       </section>
       {d.files && (
         <Seam
@@ -110,33 +121,7 @@ export function Workbench({
 
       <section className="dk-part dk-centre">{editor}</section>
 
-      <section className={`dk-part dk-term ${d.terminal ? '' : 'dk-rolled'}`}>
-        <PartHead title="Terminal" open={d.terminal} onToggle={deck.toggleTerminal} />
-        {d.terminal && <div className="dk-part-body">{terminal}</div>}
-      </section>
-      {d.terminal && (
-        <Seam
-          axis="y"
-          cssVar="--dk-term"
-          size={d.terminalH}
-          min={MIN_TERMINAL}
-          max={() => Math.max(MIN_TERMINAL, (ref.current?.clientHeight ?? 0) - 160)}
-          hostRef={ref}
-          onCommit={deck.sizeTerminal}
-        />
-      )}
     </div>
-  )
-}
-
-function PartHead({ title, open, onToggle }: { title: string; open: boolean; onToggle: () => void }) {
-  return (
-    <button className="dk-part-head" onClick={onToggle} aria-expanded={open} title={open ? 'Roll up' : 'Open'}>
-      <span className="dk-caret" aria-hidden>
-        {open ? '▾' : '▸'}
-      </span>
-      {title}
-    </button>
   )
 }
 

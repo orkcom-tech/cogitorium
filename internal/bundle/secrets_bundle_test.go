@@ -70,7 +70,7 @@ func (i *install) seedDeclaring(name string) (workspace.Workspace, gear.Gear) {
 	if g, err = i.stores.Gears.SetNetwork(ctx, g.ID, true, []string{"api.example.com"}); err != nil {
 		i.t.Fatalf("grant the network: %v", err)
 	}
-	if g, err = i.stores.Gears.SetStatus(ctx, g.ID, gear.StatusApproved); err != nil {
+	if g, err = i.stores.Gears.SetStatus(ctx, g.ID, gear.StatusApproved, gear.Actor{Name: "test-operator"}); err != nil {
 		i.t.Fatalf("approve the gear: %v", err)
 	}
 	i.bind(g.ID, ws.ID, nil)
