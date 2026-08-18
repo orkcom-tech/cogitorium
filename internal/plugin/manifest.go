@@ -235,7 +235,9 @@ func (m Manifest) Validate() Problems {
 		}
 	}
 
-	if m.Needs != "" {
+	// An OCI reference is a legitimate `needs` and does not follow the
+	// technology grammar, so it is recognised before that grammar is applied.
+	if m.Needs != "" && !looksLikeImage(m.Needs) {
 		if _, err := ParseNeeds(m.Needs); err != nil {
 			add("needs", "%v", err)
 		}
