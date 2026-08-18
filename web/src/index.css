@@ -3248,3 +3248,44 @@ button.big {
   padding: var(--s3) var(--s3) var(--s2);
   gap: var(--s3);
 }
+
+/* ── Panels that are also drawers ────────────────────────────────────────────
+   AT THE END OF THIS FILE ON PURPOSE, and this is the third time the same trap
+   has cost a change: index.css imports the other stylesheets at the top, so
+   every rule it declares itself beats an equally specific one in frame.css or
+   tokens.css. A container query does not change that — `.context-layout` in a
+   query still loses to `.context-layout` written later. Overrides for rules
+   that live in this file have to live in this file, after them.
+
+   What this fixes: the context space is a two-column grid built for a
+   full-width page — a 260px list beside the editor. In a 400px drawer that
+   leaves 140px for the editor, and the empty-state sentence rendered one word
+   per line down the right-hand edge.
+
+   A CONTAINER query rather than a viewport one, because what matters is the
+   width of the box it is in. The same panel is a page on a wide screen and a
+   drawer on that same screen a second later, and a media query cannot tell
+   those two apart. `.drawer-body` declares the container. */
+@container panel (max-width: 620px) {
+  .context-layout {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* The list keeps a share of the height rather than growing without bound: a
+     hundred documents would otherwise push the editor off the bottom. */
+  .context-files {
+    flex: 0 1 40%;
+    min-height: 6rem;
+  }
+
+  .context-editor {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Two fields and a button abreast in 400px is three squeezed columns. */
+  .run-ask input {
+    flex: 1 1 100%;
+  }
+}

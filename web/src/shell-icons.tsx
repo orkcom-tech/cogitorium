@@ -100,6 +100,14 @@ export const DRAWER_ICON: Record<string, ReactNode> = {
       <path d="M7.5 9.5 10 12l-2.5 2.5M12.5 15h4" />
     </>,
   ),
+  // The space itself: layered sheets, because that is what a versioned
+  // document store is — the same file, kept more than once.
+  context: svg(
+    <>
+      <path d="M4.5 8.2 12 4.5l7.5 3.7L12 12 4.5 8.2Z" />
+      <path d="M4.5 12.4 12 16.1l7.5-3.7M4.5 16.3 12 20l7.5-3.7" />
+    </>,
+  ),
   env: svg(
     <>
       <path d="M9.5 4.5c-2.2 0-3 1-3 3v2.2c0 1.3-.7 2-2 2.3 1.3.3 2 1 2 2.3V16.5c0 2 .8 3 3 3" />

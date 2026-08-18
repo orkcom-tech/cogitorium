@@ -63,13 +63,34 @@ async function settle(page) {
 /** Put the interface in a known appearance. Two choices now, not eleven. */
 async function theme(page, mode) {
   await page.evaluate(
-    (m) => localStorage.setItem('cogitorium.theme', JSON.stringify({ mode: m, accent: '#0a8624' })),
+    (m) => localStorage.setItem('cogitorium.theme', JSON.stringify({ mode: m, accent: '#0f766e' })),
     mode,
   )
 }
 
 /** A rail button, by the name its tooltip and its screen-reader label carry. */
 const rail = (page, name) => page.getByRole('button', { name, exact: true })
+
+/**
+ * A drawer, out over the blueprint.
+ *
+ * Over the BLUEPRINT and not the chat, because that is the picture that shows
+ * what a drawer is: the frame growing inward while the work stays where it
+ * was, with the canvas visible beside it. A drawer photographed over an empty
+ * transcript shows a panel next to nothing and could be a page.
+ *
+ * These used to be shot at /gears and /context — the standalone routes left
+ * over from the navigation the rail replaced — so two pictures in the set
+ * showed a window where every other one shows a drawer.
+ */
+async function overBlueprint(page, drawer) {
+  await page.goto(`${base}/workspaces/1`)
+  await ready(page)
+  await rail(page, 'Blueprint').click()
+  await page.waitForTimeout(1400)
+  await rail(page, drawer).click()
+  await page.waitForTimeout(800)
+}
 
 shoot('01-workspaces', 'the workspaces list, coloured, one shared with two teams', async (page) => {
   await page.goto(`${base}/workspaces`)
@@ -110,16 +131,18 @@ shoot('06-people', 'People, and the access map of who can reach what', async (pa
   await page.waitForTimeout(900)
 })
 
-shoot('07-gears', 'the gear catalogue: pending gears carry the way in', async (page) => {
-  await page.goto(`${base}/gears`)
-  await ready(page)
+// The gear catalogue as it is actually met: a drawer that crawls out over the
+// work, not a page of its own. It has a standalone route as well, left over
+// from the navigation the rail replaced, and shooting THAT was why these two
+// pictures showed a window where every other one shows a drawer.
+shoot('07-gears', 'the gear catalogue, where it is met: a drawer out over the blueprint', async (page) => {
+  await overBlueprint(page, 'Gears')
 })
 
 shoot('08-gear-review', 'what approving a gear grants, stated before you approve it', async (page) => {
-  await page.goto(`${base}/gears`)
-  await ready(page)
+  await overBlueprint(page, 'Gears')
   await page.getByRole('button', { name: 'review & approve' }).first().click()
-  await page.waitForTimeout(600)
+  await page.waitForTimeout(700)
 })
 
 shoot('09-map', 'the install map: people at the centre, workspaces on the outside', async (page) => {
@@ -178,10 +201,8 @@ drawer('15-receivers', 4, 'Receivers', 'a receiver with its two tasks, on suppor
 drawer('16-queue', 5, 'Queue', 'the queue, and the schedule that fills it at 03:00')
 drawer('17-variables', 5, 'Variables', "the workspace's own variables, and a secret that is not shown", 460)
 
-shoot('18-context', 'the context browser: search inside the files, and every version kept', async (page) => {
-  await page.goto(`${base}/context`)
-  await ready(page)
-  await page.waitForTimeout(500)
+shoot('18-context', 'the context space as a drawer: search inside the files, every version kept', async (page) => {
+  await overBlueprint(page, 'Context')
 })
 
 shoot('19-terminal', 'the terminal: a shell on the host, admin only, started by hand', async (page) => {
@@ -191,8 +212,7 @@ shoot('19-terminal', 'the terminal: a shell on the host, admin only, started by 
 })
 
 shoot('20-gear-approvals', 'who let this code run, when, to which version, and with what', async (page) => {
-  await page.goto(`${base}/gears`)
-  await ready(page)
+  await overBlueprint(page, 'Gears')
   // The trail lives beside the source and the grants, inside the open card —
   // the same rule that keeps approval itself out of a collapsed one.
   await page.getByRole('button', { name: 'review & run' }).first().click()
@@ -204,11 +224,10 @@ shoot('20-gear-approvals', 'who let this code run, when, to which version, and w
 })
 
 shoot('21-context-search', 'finding a memory without already knowing its path', async (page) => {
-  await page.goto(`${base}/context`)
-  await ready(page)
+  await overBlueprint(page, 'Context')
   await page.getByPlaceholder('search inside the files…').fill('context')
   await page.getByRole('button', { name: 'search', exact: true }).click()
-  await page.waitForTimeout(900)
+  await page.waitForTimeout(1000)
 })
 
 shoot('14-dark', 'the same install after dark — both modes, one geometry', async (page) => {

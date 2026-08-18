@@ -48,7 +48,12 @@ export const ACCENTS: { name: string; hex: string }[] = [
   { name: 'Slate', hex: '#4a5568' },
 ]
 
-export const DEFAULT_THEME: Theme = { mode: 'system', accent: '#0a8624' }
+// Teal, not green. The colour is not only the accent — every neutral is mixed
+// towards it — so the default decides whether a fresh install reads warm or
+// cool, and this one should read cool. It is also the most turquoise of the
+// eight and measures 5.47:1 carrying white text as a filled button, which is
+// comfortably past the 4.5 that stopped the old green being usable at all.
+export const DEFAULT_THEME: Theme = { mode: 'system', accent: '#0f766e' }
 
 const KEY = 'cogitorium.theme'
 const HEX = /^#[0-9a-f]{6}$/i

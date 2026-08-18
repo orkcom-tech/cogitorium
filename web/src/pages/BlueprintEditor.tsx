@@ -130,6 +130,7 @@ export default function BlueprintEditor({
   // theirs and nothing refits it under them.
   const owned = useRef(false)
   const lastFit = useRef('')
+  const flowBox = useRef<HTMLDivElement>(null)
 
   const reloadGraph = useCallback(
     () =>
@@ -446,6 +447,38 @@ export default function BlueprintEditor({
    * So it refits whenever the arrangement changes, and stops the first time
    * the operator pans, zooms or drags a node: after that the view is theirs.
    */
+  /**
+   * A drawer opening changes the size of the canvas, and the graph goes with
+   * it.
+   *
+   * React Flow keeps its viewport transform across a resize, so nodes stay at
+   * the same canvas coordinates while the window they are seen through gets
+   * narrower — which put the whole graph off screen the moment a drawer came
+   * out over the blueprint. Caught in a screenshot: the canvas empty, with the
+   * dotted ground and nothing on it.
+   *
+   * Same rule as the fit below: not once the operator has taken the view. If
+   * they panned somewhere deliberately, a drawer opening must not throw that
+   * away.
+   */
+  useEffect(() => {
+    const el = flowBox.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let t = 0
+    const ro = new ResizeObserver(() => {
+      if (owned.current) return
+      // Debounced: a drawer's transition fires this every frame, and fitting
+      // on each one animates against the animation.
+      window.clearTimeout(t)
+      t = window.setTimeout(() => flow.current?.fitView({ padding: 0.18 }), 160)
+    })
+    ro.observe(el)
+    return () => {
+      window.clearTimeout(t)
+      ro.disconnect()
+    }
+  }, [])
+
   useEffect(() => {
     if (owned.current || nodes.length === 0 || shape === lastFit.current) return
     let raf = 0
@@ -673,6 +706,7 @@ export default function BlueprintEditor({
       )}
       </div>
       <div
+        ref={flowBox}
         className={`canvas ${drag ? 'bp-catching' : ''}`}
         onDragOver={onCanvasDragOver}
         onDragLeave={(e) => {

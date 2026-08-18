@@ -32,6 +32,7 @@ export type OverlayId =
   | 'inlets'
   | 'queue'
   | 'env'
+  | 'context'
   | 'terminal'
 
 // The order is the rail's order, and the track slides in it: going down the
@@ -46,6 +47,7 @@ export const OVERLAY_ORDER: OverlayId[] = [
   'inlets',
   'queue',
   'env',
+  'context',
   'terminal',
 ]
 
