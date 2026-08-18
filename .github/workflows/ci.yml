@@ -102,11 +102,41 @@ jobs:
           fi
           echo "ok: everything is formatted"
 
+      # WITHOUT THIS, A WHOLE PACKAGE SILENTLY DID NOTHING.
+      #
+      # internal/contextstore drives a real contextd, and skips every test when
+      # there is none — which is right on a laptop, where its absence is a fact
+      # about the machine. Nothing here ever installed one, so in CI the package
+      # skipped from end to end and reported ok. That is the same failure the
+      # `file delete` gate already had once, one level up: a guard nobody
+      # exercises is a guard that rots.
+      #
+      # The version comes from MinContextd, so this cannot drift from the floor
+      # the product declares.
+      - name: Install contextd, the Contextverse this build declares it needs
+        run: sudo ./scripts/ci/install-contextd.sh /usr/local/bin
+
       - name: Test
         # -race, because the parts of this server most worth testing are the
         # concurrent ones: an SSE turn running while another request writes, the
         # egress broker parking a turn, the sandbox draining two pipes.
         run: go test ./... -count=1 -race
+
+      # And a proof that the step above actually did something: a skip is not a
+      # pass, and this package reporting ok while running nothing is precisely
+      # the state this is here to prevent.
+      - name: The context tests ran, rather than skipping
+        run: |
+          set -e
+          go test ./internal/contextstore/ -count=1 -v > /tmp/contextstore.log 2>&1 || {
+            cat /tmp/contextstore.log; exit 1
+          }
+          if grep -q -- "--- SKIP" /tmp/contextstore.log; then
+            echo "FAIL: contextstore tests skipped — contextd is missing or too old:"
+            grep -- "--- SKIP" /tmp/contextstore.log
+            exit 1
+          fi
+          echo "ok: $(grep -c -- '--- PASS' /tmp/contextstore.log) context tests ran against $(contextd version)"
 
       - name: Coverage
         # Reported, not gated. A percentage threshold rewards tests that touch

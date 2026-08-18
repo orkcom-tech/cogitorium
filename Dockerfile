@@ -37,8 +37,16 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/cogitor
 #
 # Pinned to a tag rather than @latest: an image that rebuilds into a different
 # Contextverse than it was tested against is a supply chain nobody is watching.
+#
+# AT OR ABOVE update.MinContextd, which is the version this build says it needs
+# and warns about at runtime. It was v0.30.0 for a while, which is below both
+# that floor and v0.31.0 — where `file delete` and `--if-version` first appeared
+# — so the official image shipped a contextd that could not do compare-and-swap
+# saves and tripped the product's own compatibility warning on first start.
+# Raising this is not optional maintenance: MinContextd is the promise, and a
+# pin below it makes the image the one deployment that breaks the promise.
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS contextd
-ARG CONTEXTD_VERSION=v0.30.0
+ARG CONTEXTD_VERSION=v1.0.0
 ARG TARGETOS
 ARG TARGETARCH
 # The same cross-compile, and this is where the cost actually showed: 800

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/orkcom-tech/cogitorium/internal/update"
 )
 
 // These run against the REAL contextd if it is installed, because the whole
@@ -38,6 +40,9 @@ func realSpace(t *testing.T) *Store {
 // `--if-version` were tested before either had been released. Otherwise the one
 // on PATH. Skipped, never failed, when there is none: contextd is a separate
 // product and its absence is a fact about the machine, not a defect here.
+//
+// A contextd that is PRESENT AND TOO OLD is a different fact, and it is not
+// skipped — see requireSupportedContextd.
 func contextdBinary(t *testing.T) string {
 	t.Helper()
 	if bin := os.Getenv("COGITORIUM_CONTEXTD"); bin != "" {
@@ -46,8 +51,38 @@ func contextdBinary(t *testing.T) string {
 	bin, err := exec.LookPath("contextd")
 	if err != nil {
 		t.Skip("contextd not installed and COGITORIUM_CONTEXTD not set")
+		// Unreachable; Skip stops the test. Kept so the signature is honest
+		// about always returning a path when it returns at all.
+		return ""
 	}
 	return bin
+}
+
+// requireSupportedContextd FAILS on a contextd older than this build declares
+// it works with, rather than skipping.
+//
+// The distinction against contextdBinary is the whole point. No contextd is a
+// fact about the machine, so those tests skip. A contextd BELOW MinContextd is
+// a machine that cannot run this product correctly — the server says so at
+// startup, in as many words, and refusing quietly here would let a developer
+// believe a green suite meant a working install.
+//
+// It failed before this existed, just not usefully: `--if-version` reached an
+// old binary, cobra answered "unknown flag: --if-version", and the test
+// reported that the other person's work had been lost. Which is what would
+// happen — the save really does become last-write-wins — but the message sent
+// the reader hunting through this package for a bug that was a version.
+func requireSupportedContextd(t *testing.T) {
+	t.Helper()
+	out, err := exec.Command(contextdBinary(t), "file", "put", "--help").CombinedOutput()
+	if err == nil && strings.Contains(string(out), "--if-version") {
+		return
+	}
+	t.Fatalf("this contextd predates --if-version, so a save here is last-write-wins rather than "+
+		"compare-and-swap. Cogitorium needs Contextverse %s or newer, and says so at startup.\n"+
+		"  install it:  scripts/ci/install-contextd.sh ~/.local/bin\n"+
+		"  or point at a build you are working on:  COGITORIUM_CONTEXTD=/path/to/contextd go test ./...\n"+
+		"  using: %s", update.MinContextd, contextdBinary(t))
 }
 
 // requireDelete skips a test on a contextd that predates `file delete`.
@@ -183,6 +218,7 @@ func TestNoMatchesIsAlwaysAListNeverNull(t *testing.T) {
 func TestASaveIsRefusedWhenTheFileMovedUnderIt(t *testing.T) {
 	s := realSpace(t)
 	ctx := context.Background()
+	requireSupportedContextd(t)
 	if err := s.Put(ctx, "team/policy.md", "one\n"); err != nil {
 		t.Fatal(err)
 	}
