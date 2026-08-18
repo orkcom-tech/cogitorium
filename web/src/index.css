@@ -2006,6 +2006,10 @@ th {
   border-color: var(--accent);
 }
 
+.update-half.broken {
+  border-color: var(--danger);
+}
+
 /* Somebody else's text, shown as text. Monospace and pre-wrap because a
    changelog is written with hard line breaks and lists, and reflowing it into
    a paragraph loses the shape that makes it scannable. */

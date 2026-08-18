@@ -117,6 +117,12 @@ export type UpdateProduct = {
   newer: boolean
   /** False for a development build: "up to date" and "cannot say" differ. */
   comparable: boolean
+  /** This install HAS this product, in a version too old for the Cogitorium
+   *  running. Different from `newer`: that is "there is something better if
+   *  you want it", this is "something you already do is failing". */
+  too_old?: boolean
+  /** The version that would fix it, when too_old. */
+  needs?: string
   error?: string
 }
 

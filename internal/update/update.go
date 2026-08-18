@@ -113,6 +113,21 @@ type Release struct {
 	PublishedAt string `json:"published_at"`
 }
 
+// MinContextd is the oldest Contextverse this build can actually work with.
+//
+// WHY THIS CONSTANT EXISTS AT ALL. Cogitorium writes context through
+// `contextd file put --if-version`, which is what turns a save into a
+// compare-and-set instead of last-write-wins. A contextd that predates that
+// flag refuses the command, and the operator meets it as a failed save with a
+// message about an unknown flag — true, and useless, and arriving at the worst
+// possible moment. The pair versions and installs independently, and until now
+// nothing anywhere joined those two facts up.
+//
+// It is compiled in rather than probed. A capability check would mean running
+// the other binary to see what it rejects, which is a subprocess on every
+// start to answer a question a constant already answers.
+const MinContextd = "1.0.0"
+
 // Product is one half of the pair, and what is known about its versions.
 //
 // Running and Latest are kept apart from Newer deliberately. "There is a 1.6.0
@@ -136,6 +151,12 @@ type Product struct {
 	// say", and collapsing the two would let a dev build claim currency it has
 	// no basis for.
 	Comparable bool `json:"comparable"`
+	// TooOld says this install has Contextverse, and an older one than this
+	// build needs. Distinct from Newer, which is "there is something newer if
+	// you want it": this one is "something you already do will fail".
+	TooOld bool `json:"too_old,omitempty"`
+	// Needs is the version that would fix it, when TooOld.
+	Needs string `json:"needs,omitempty"`
 	// Error is why this half has no answer. It is shown, not swallowed: an
 	// operator who turned the check on and sees nothing deserves to know
 	// whether that means "current" or "could not ask".
@@ -156,7 +177,19 @@ type Report struct {
 // Any reports whether anything in this report has moved on.
 func (r Report) Any() bool {
 	for _, p := range r.Products {
-		if p.Newer {
+		if p.Newer || p.TooOld {
+			return true
+		}
+	}
+	return false
+}
+
+// Broken reports a version pairing that is already failing, as opposed to one
+// that could be improved. It is what decides whether the notice is a quiet
+// suggestion or something an operator should read now.
+func (r Report) Broken() bool {
+	for _, p := range r.Products {
+		if p.TooOld {
 			return true
 		}
 	}
@@ -405,6 +438,12 @@ func (c *Checker) Check(ctx context.Context) (Report, error) {
 			// case, and a stack of ERROR lines about it every day is noise
 			// about something the operator already knows.
 			slog.Info("could not check for a newer release", "product", p.Name, "err", p.Error)
+		case p.TooOld:
+			// A warning rather than info: this one is not a suggestion. Saving
+			// a context document already fails on this install.
+			slog.Warn("the installed Contextverse is older than this Cogitorium needs",
+				"running", p.Running, "needs", p.Needs,
+				"note", "context saves that use --if-version will fail until it is updated")
 		case p.Newer:
 			slog.Info("a newer release exists", "product", p.Name, "running", p.Running, "latest", p.Latest.Tag)
 		}
@@ -435,7 +474,28 @@ func (c *Checker) one(ctx context.Context, name, repo, running string) Product {
 	want, okWant := parse(rel.Tag)
 	p.Comparable = okHave && okWant
 	p.Newer = p.Comparable && want.after(have)
+	p.TooOld, p.Needs = c.tooOld(name, p.Running)
 	return p
+}
+
+// tooOld answers the question the whole update check was written about: not
+// "is there a newer one" but "is the one you have too old for the one you are
+// running". They are different questions and the second is the urgent one — it
+// describes something that is already broken rather than something that could
+// be better.
+func (c *Checker) tooOld(name, running string) (bool, string) {
+	if name != ProductContextverse || running == "" {
+		return false, ""
+	}
+	have, ok := parse(running)
+	if !ok {
+		// A development build of contextd. Nothing here can say, and claiming
+		// it is too old would send somebody to reinstall a binary they built
+		// deliberately.
+		return false, ""
+	}
+	need, _ := parse(MinContextd)
+	return need.after(have), MinContextd
 }
 
 // githubRelease is the shape of the one endpoint this package calls. Named

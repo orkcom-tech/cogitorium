@@ -47,10 +47,15 @@ function seen(): string[] {
 function offer(report: UpdateReport | null): string {
   if (!report) return ''
   return report.products
-    .filter((p) => p.newer && p.latest)
-    .map((p) => `${p.name}@${p.latest!.tag}`)
+    .filter((p) => (p.newer && p.latest) || p.too_old)
+    .map((p) => (p.too_old ? `${p.name}!needs${p.needs}` : `${p.name}@${p.latest!.tag}`))
     .sort()
     .join(' ')
+}
+
+/** A pairing that is already failing, as opposed to one that could be better. */
+function broken(report: UpdateReport | null): boolean {
+  return (report?.products ?? []).some((p) => p.too_old)
 }
 
 export default function UpdateNotice({ me }: { me: User }) {
@@ -101,6 +106,10 @@ export default function UpdateNotice({ me }: { me: User }) {
   const admin = me.role === 'admin'
   const available = offer(report)
   const unread = available !== '' && !dismissed.includes(available)
+  // A broken pairing is not dismissible in the same way: it describes something
+  // that is failing right now rather than something that could be improved, so
+  // the button keeps its mark until the version actually changes.
+  const isBroken = broken(report)
   // The question, asked once, and only of somebody who can answer it. Putting
   // it to a member would be asking permission from a person the server will
   // refuse.
@@ -125,11 +134,15 @@ export default function UpdateNotice({ me }: { me: User }) {
   return (
     <>
       <button
-        className={`rail-btn ${unread ? 'has-news' : ''} ${asking && !unread ? 'has-question' : ''}`}
+        className={`rail-btn ${isBroken ? 'has-problem' : unread ? 'has-news' : ''} ${
+          asking && !unread && !isBroken ? 'has-question' : ''
+        }`}
         data-own
         onClick={() => setOpen((v) => !v)}
         title={
-          unread
+          isBroken
+            ? 'A version this install depends on is too old'
+            : unread
             ? `A newer version is available — ${available.replace(/@/g, ' ')}`
             : asking
               ? 'Updates — this install has not been asked yet'
@@ -141,7 +154,9 @@ export default function UpdateNotice({ me }: { me: User }) {
           <path d="M4.6 3.8h14.8" />
         </svg>
         <span className="sr-only">Updates</span>
-        {unread && <span className="rail-badge news" aria-hidden />}
+        {(unread || isBroken) && (
+          <span className={`rail-badge ${isBroken ? 'problem' : 'news'}`} aria-hidden />
+        )}
       </button>
 
       {open &&
@@ -257,12 +272,21 @@ function Half({ p }: { p: UpdateProduct }) {
   if (!p.running) return null
 
   return (
-    <div className={`card update-half ${p.newer ? 'newer' : ''}`}>
+    <div className={`card update-half ${p.too_old ? 'broken' : p.newer ? 'newer' : ''}`}>
       <div className="row">
         <strong>{p.name}</strong>
         <span className="spacer" />
         <span className="muted">{p.running}</span>
       </div>
+
+      {p.too_old && (
+        <p className="warn">
+          <strong>This is older than this Cogitorium needs.</strong> It requires <strong>{p.needs}</strong> or
+          newer. Until it is updated, saving a context document fails — the save is refused rather than
+          silently overwriting somebody else’s edit, which is the right failure and a confusing one to meet
+          without this sentence.
+        </p>
+      )}
 
       {p.error && (
         <p className="hint">

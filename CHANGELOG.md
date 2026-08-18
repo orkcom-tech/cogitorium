@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### It says when the pair no longer fits, instead of letting a save fail
+
+The last open question from the update-checking plan, and the thing that
+prompted the whole document: Cogitorium needs `contextd` 1.0.0 or newer for the
+compare-and-set a context save uses, and on an older one the save is refused
+with a message about an unknown flag — the right failure, arriving at the worst
+moment, saying nothing about why.
+
+"There is a newer one" and "the one you have is too old for the one you are
+running" are different questions, and only the second describes something that
+is already broken. It is reported separately, in red rather than orange, with
+the version that would fix it — and a development build of `contextd` is never
+called too old, because telling somebody to reinstall a binary they built
+deliberately is a notice they cannot act on.
+
 ### A bundle carries MCP, and a connection outlives one call
 
 **Workspace bundles carry external MCP servers**, answering the open question

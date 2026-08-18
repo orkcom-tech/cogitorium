@@ -1786,6 +1786,14 @@ because *"1.6.0 is out"* is not a reason to update and *"1.6.0 fixes the thing
 costing you an hour a week"* is. Both halves are reported: Cogitorium and, if
 `contextd` is on the machine, Contextverse.
 
+**And it says when the pair no longer fits.** "There is a newer one" and "the
+one you have is too old for the one you are running" are different questions,
+and the second is the urgent one: it describes something that is already
+failing. Cogitorium needs `contextd` 1.0.0 or newer for the compare-and-set a
+context save uses; on an older one the save is refused with a message about an
+unknown flag, which is true and useless. The notice now says so in advance, in
+red rather than orange, because it is not a suggestion.
+
 Three states are kept apart on purpose, because collapsing them would be the
 panel claiming confidence it does not have:
 

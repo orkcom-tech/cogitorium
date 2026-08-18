@@ -239,6 +239,24 @@
   background: color-mix(in srgb, var(--update) 26%, transparent);
 }
 
+/* A pairing that is already failing, as opposed to one that could be better.
+   Red rather than orange: orange means "there is something newer if you want
+   it", and this means "something you already do is broken right now". */
+.rail-btn.has-problem {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.rail-badge.problem {
+  min-width: 9px;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  top: 3px;
+  right: 3px;
+  background: var(--danger);
+}
+
 /* A question nobody has answered is not news. It is marked, and quietly: the
    product asks once and then waits, rather than nagging in orange forever. */
 .rail-btn.has-question {

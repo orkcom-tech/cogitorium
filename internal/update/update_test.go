@@ -445,3 +445,78 @@ func TestAnUnparseableStoredAnswerIsIgnored(t *testing.T) {
 		t.Fatalf("mode is %q after nonsense in the store; want the configured ask", c.Mode())
 	}
 }
+
+// ── the question the whole document was written about ────────────────────
+
+// "Is there a newer one" and "is the one you have too old for the one you are
+// running" are different questions, and the second is the urgent one: it
+// describes something that is already broken rather than something that could
+// be better. Cogitorium needs contextd >= 1.0.0 for --if-version, and until now
+// an operator met that as a failed save about an unknown flag.
+func TestAnOlderContextdIsReportedAsBrokenRatherThanMerelyOld(t *testing.T) {
+	c := release(t, map[string]string{
+		repoCogitorium:   body("v1.5.0"),
+		repoContextverse: body("v1.0.0"),
+	})
+	c.contextd = func(context.Context) string { return "0.9.0" }
+
+	r, err := c.Check(context.Background())
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	cv := find(t, r, ProductContextverse)
+	if !cv.TooOld {
+		t.Fatalf("an older contextd was not reported as too old: %+v", cv)
+	}
+	if cv.Needs != MinContextd {
+		t.Fatalf("it does not say which version would fix it: %q", cv.Needs)
+	}
+	if !r.Broken() {
+		t.Fatal("the report does not say the pairing is broken")
+	}
+}
+
+// A contextd new enough is not nagged at, even when a newer one exists.
+func TestAContextdThatIsNewEnoughIsNotCalledTooOld(t *testing.T) {
+	c := release(t, map[string]string{
+		repoCogitorium:   body("v1.5.0"),
+		repoContextverse: body("v1.2.0"),
+	})
+	c.contextd = func(context.Context) string { return "1.1.0" }
+
+	r, _ := c.Check(context.Background())
+	cv := find(t, r, ProductContextverse)
+	if cv.TooOld {
+		t.Fatalf("a contextd past the minimum was called too old: %+v", cv)
+	}
+	if !cv.Newer {
+		t.Fatal("a newer contextd exists and was not reported")
+	}
+	if r.Broken() {
+		t.Fatal("a working pairing was reported as broken")
+	}
+}
+
+// A development build of contextd is somebody's deliberate choice. Telling them
+// to reinstall a binary they built is a notice they cannot act on.
+func TestADevelopmentContextdIsNotCalledTooOld(t *testing.T) {
+	c := release(t, map[string]string{
+		repoCogitorium:   body("v1.5.0"),
+		repoContextverse: body("v1.0.0"),
+	})
+	c.contextd = func(context.Context) string { return "0.0.0-dev" }
+
+	r, _ := c.Check(context.Background())
+	if find(t, r, ProductContextverse).TooOld {
+		t.Fatal("a dev build of contextd was called too old")
+	}
+}
+
+// An install with no contextd at all has nothing to be too old.
+func TestNoContextdIsNotABrokenPairing(t *testing.T) {
+	c := release(t, map[string]string{repoCogitorium: body("v1.5.0")})
+	r, _ := c.Check(context.Background())
+	if r.Broken() {
+		t.Fatal("an install without Contextverse was reported as a broken pairing")
+	}
+}
