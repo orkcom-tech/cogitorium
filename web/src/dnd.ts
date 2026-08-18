@@ -19,10 +19,12 @@ import type { DragEvent } from 'react'
 export type Dragged =
   | { kind: 'gear'; id: number; name: string; status: string }
   | { kind: 'instruction'; id: number; name: string; path: string }
+  | { kind: 'mcp'; id: number; name: string; status: string }
 
 const TYPE = {
   gear: 'application/x-cogitorium-gear',
   instruction: 'application/x-cogitorium-instruction',
+  mcp: 'application/x-cogitorium-mcp',
 } as const
 
 /** Handler for onDragStart on whatever is being offered. */
@@ -42,19 +44,20 @@ export function draggedKind(e: DragEvent): Dragged['kind'] | null {
   const types = Array.from(e.dataTransfer.types)
   if (types.includes(TYPE.gear)) return 'gear'
   if (types.includes(TYPE.instruction)) return 'instruction'
+  if (types.includes(TYPE.mcp)) return 'mcp'
   return null
 }
 
 /**
  * The payload, on drop.
  *
- * Total: anything that is not one of our two types, or is not the shape we
+ * Total: anything that is not one of our three types, or is not the shape we
  * wrote, comes back null. A drop is a place where content from outside the
  * page arrives — a file, a link, a selection from another tab — and none of it
  * may become an action here.
  */
 export function readDragged(e: DragEvent): Dragged | null {
-  for (const kind of ['gear', 'instruction'] as const) {
+  for (const kind of ['gear', 'instruction', 'mcp'] as const) {
     const raw = e.dataTransfer.getData(TYPE[kind])
     if (!raw) continue
     try {

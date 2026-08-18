@@ -12,6 +12,7 @@ import EnvPanel from './EnvPanel'
 import { Select } from './Select'
 import { Deck, ShellGate, Workbench } from '../deck/Deck'
 import GearsPage from './GearsPage'
+import McpPage from './McpPage'
 import LibraryPage from './LibraryPage'
 import ContextPage from './ContextPage'
 import { Drawer, type Edge } from '../deck/Drawer'
@@ -269,6 +270,7 @@ export default function WorkspacePage({ me }: { me: User }) {
   const DRAWER_EDGE: Record<string, Edge> = {
     agents: 'right',
     gears: 'right',
+    mcp: 'right',
     instructions: 'right',
     memory: 'right',
     env: 'right',
@@ -285,6 +287,10 @@ export default function WorkspacePage({ me }: { me: User }) {
   const OVERLAY_ITEMS: { id: OverlayId; title: string }[] = [
     { id: 'agents', title: 'Agents' },
     { id: 'gears', title: 'Gears' },
+    // Beside Gears, because they are the same kind of object: somebody else's
+    // code, granted to an agent, behind an approval. The card says how they
+    // differ, which is on every axis and not in this list's favour.
+    { id: 'mcp', title: 'MCP servers' },
     { id: 'instructions', title: 'Instructions' },
     { id: 'memory', title: 'Memory' },
     { id: 'inlets', title: 'Receivers' },
@@ -525,6 +531,7 @@ export default function WorkspacePage({ me }: { me: User }) {
           </ShellGate>
         )}
         {overlay === 'gears' && <GearsPage me={me} review={reviewGear} />}
+        {overlay === 'mcp' && <McpPage me={me} />}
         {overlay === 'instructions' && <LibraryPage />}
         {/* The space itself, where the memory being searched and edited is —
             a drawer rather than a page you leave the work for, which is the

@@ -444,7 +444,28 @@ func (s *Store) Bind(ctx context.Context, serverID, workspaceID int64, agentID *
 		return Binding{}, asConflict(err, "mcp binding")
 	}
 	id, _ := res.LastInsertId()
-	return Binding{ID: id, ServerID: serverID, WorkspaceID: workspaceID, AgentID: agentID}, nil
+	// Read it back rather than assembling it here. The listing joins the
+	// server's name and returns the stored timestamp, and a create that
+	// answered with neither made the same noun arrive in two shapes — which a
+	// client renders straight back, showing a blank where a name belongs.
+	return s.binding(ctx, id)
+}
+
+// binding reads one row in the shape the listing returns.
+func (s *Store) binding(ctx context.Context, id int64) (Binding, error) {
+	var b Binding
+	err := s.db.QueryRowContext(ctx,
+		`SELECT b.id, b.server_id, s.name, b.workspace_id, b.agent_id, b.created_at
+		   FROM mcp_bindings b JOIN mcp_servers s ON s.id = b.server_id
+		  WHERE b.id = ?`, id).
+		Scan(&b.ID, &b.ServerID, &b.ServerName, &b.WorkspaceID, &b.AgentID, &b.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Binding{}, fmt.Errorf("mcp binding %d: %w", id, catalog.ErrNotFound)
+	}
+	if err != nil {
+		return Binding{}, fmt.Errorf("read mcp binding %d: %w", id, err)
+	}
+	return b, nil
 }
 
 func (s *Store) Unbind(ctx context.Context, id int64) error {

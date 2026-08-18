@@ -1334,6 +1334,139 @@ th {
   --kind: var(--outward);
 }
 
+/* MCP servers on the canvas. Beside the gears because they are the same kind of
+   thing — code an agent may call — and coloured apart because only one of them
+   runs outside the sandbox. */
+.react-flow__node.bp-mcp {
+  border-color: var(--mcp);
+  border-width: 2px;
+  background: color-mix(in srgb, var(--mcp) 12%, transparent);
+  max-width: 15rem;
+}
+
+/* Not approved: drawn, and doing nothing. The same dashed vocabulary a pending
+   gear and a switched-off gate use. */
+.react-flow__node.bp-mcp-pending,
+.react-flow__node.bp-mcp-disabled {
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+.react-flow__edge.bp-mcp-edge .react-flow__edge-path {
+  stroke: var(--mcp);
+  stroke-width: 2;
+}
+
+/* The drawer. */
+.mcp-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.mcp-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+
+.mcp-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  cursor: grab;
+}
+
+.mcp-name {
+  text-align: left;
+}
+
+.mcp-status-pending,
+.mcp-status-disabled {
+  color: var(--warn);
+}
+
+.mcp-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding-top: var(--s2);
+}
+
+/* The four facts. Bordered in the danger colour on purpose: this is the one
+   screen in the product where the honest summary of what is being agreed to is
+   worse than the operator expects, and a soft box would undersell it. */
+.mcp-warning {
+  border-color: var(--danger);
+}
+
+.mcp-warning ul {
+  margin: var(--s1) 0 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+
+.mcp-cmd {
+  margin: 0;
+  padding: var(--s2);
+  overflow-x: auto;
+  font: var(--t-mono)/1.5 var(--mono);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r1);
+  user-select: all;
+}
+
+.mcp-tools {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.mcp-tools li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: var(--r1);
+}
+
+.mcp-tools li.on {
+  border-color: var(--mcp);
+  background: color-mix(in srgb, var(--mcp) 8%, transparent);
+}
+
+.mcp-tools label {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.mcp-offered {
+  font: var(--t-micro)/1.4 var(--mono);
+}
+
+.mcp-library,
+.mcp-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.mcp-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  padding: var(--s2) 0;
+  border-top: 1px solid var(--border);
+}
+
 /* Clocks. Three states have to be legible without opening anything: a paused
    schedule that looks like a running one is how somebody re-enables the wrong
    one, and a schedule failing every night for a week is the most useful thing

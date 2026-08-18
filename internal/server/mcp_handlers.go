@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/orkcom-tech/cogitorium/internal/mcpcatalog"
 	"github.com/orkcom-tech/cogitorium/internal/mcpclient"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 )
@@ -33,6 +34,20 @@ func (s *Server) mcpOff(w http.ResponseWriter) bool {
 	return false
 }
 
+// handleListMCPServers lists what is installed, REDACTED FOR ANYBODY BUT AN
+// ADMINISTRATOR.
+//
+// This route was open and unredacted, which was survivable while nothing in the
+// interface called it: an operator had to know the endpoint existed. Putting it
+// in a drawer turns "reachable by curl" into "on everybody's screen", and what
+// it carries is a full command line — `npx -y @acme/jira-mcp --site
+// acme.atlassian.net` — plus the NAMES of every credential that server is
+// handed. Neither is a value, and both are a map of this install's integrations
+// and internal hostnames drawn for anybody with a login.
+//
+// So a member sees that a server exists, what it is called, what it is for and
+// whether it is approved — everything needed to understand why an agent has a
+// tool — and nothing about how it is spawned.
 func (s *Server) handleListMCPServers(w http.ResponseWriter, r *http.Request) {
 	if s.mcpOff(w) {
 		return
@@ -42,7 +57,54 @@ func (s *Server) handleListMCPServers(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
+	if !callerFrom(r.Context()).IsAdmin() {
+		for i := range servers {
+			servers[i] = redactServer(servers[i])
+		}
+	}
 	writeJSON(w, http.StatusOK, servers)
+}
+
+// redactServer removes what a non-administrator has no business reading.
+//
+// Blanked rather than omitted: a field that disappears makes a client guess
+// whether it is absent or empty, and the one thing this must not do is let a
+// reader mistake "you may not see this" for "there is nothing here". The
+// fingerprint goes too — it is a hash OVER the command, and publishing a hash
+// of a secret-ish string to everyone is a smaller version of the same mistake.
+func redactServer(srv mcpstore.Server) mcpstore.Server {
+	srv.Command = ""
+	srv.Args = []string{}
+	srv.Dir = ""
+	srv.EnvNames = []string{}
+	srv.Fingerprint = ""
+	return srv
+}
+
+// handleMCPCatalog is the library: servers an operator adds by choosing rather
+// than by knowing an npm package name.
+//
+// Admin-only, like everything else about MCP, and for the same reason the write
+// routes are: this list's whole purpose is to be installed FROM, and a
+// catalogue anybody can install from is a catalogue that spawns subprocesses on
+// this server.
+//
+// It is a static list compiled into the binary. Nothing is fetched to render
+// it, so it works offline and cannot change under an install between the day it
+// was reviewed and the day somebody installs from it.
+func (s *Server) handleMCPCatalog(w http.ResponseWriter, r *http.Request) {
+	if s.mcpOff(w) {
+		return
+	}
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"entries": mcpcatalog.Search(r.URL.Query().Get("q")),
+		// Said once, here, so the interface renders the same sentence the
+		// review screen does rather than inventing a softer one.
+		"fetched_at_spawn": mcpcatalog.FetchedAtSpawn,
+	})
 }
 
 func (s *Server) handleInstallMCPServer(w http.ResponseWriter, r *http.Request) {

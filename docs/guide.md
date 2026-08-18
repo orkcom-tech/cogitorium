@@ -1894,8 +1894,35 @@ child runs on this host as the server's own user, so approving one means it can
 read the database and the provider keys in it. What bounds that is who may do
 it, not what it can reach.
 
-So it is three deliberate acts, all administrator-only, and no agent can reach
-any of them:
+**Where it is.** A drawer on the rail beside Gears, because they are the same
+kind of object: somebody else's code, granted to an agent, behind an approval.
+The card is the gear's card with harder wording, not softer — it opens with the
+four facts you are agreeing to, and a granted server is drawn on the blueprint
+as a node saying *not sandboxed · reaches the network*, so "what can this
+workspace reach" is answered by looking rather than by remembering.
+
+**The library.** Adding your issue tracker is choosing it from a list, not
+knowing that its server is an npm package, what its binary is called, which
+arguments it takes and which environment variables it reads. Each entry names
+what it reaches, the command it will run, the credentials it needs **by name**,
+and the prerequisite — most are an `npx` or a `uvx` away, which means node or
+python on the machine, and an entry that did not say so would produce a spawn
+failure nobody can read.
+
+The list is compiled into the binary, so nothing is fetched to show it, it works
+offline, and it cannot change under an install between the day it was reviewed
+and the day somebody installs from it. Anything not in it installs by name,
+which has always worked. Picking one **fills in the form and skips no gate**:
+what lands is a pending server that does nothing.
+
+**A member sees less than an administrator.** They see that a server exists,
+what it is for and whether it is approved — which is why their agent has a tool.
+They do not see its command line or the names of the credentials it is handed:
+those are a map of this install's integrations and internal hostnames, and a
+drawer would otherwise put it on everybody's screen.
+
+The same three acts drive it from a shell, all administrator-only, and no agent
+can reach any of them:
 
 ```bash
 # 1. Install it. It exists, and it is pending.

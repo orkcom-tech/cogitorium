@@ -81,6 +81,9 @@
      canvas already carries four meanings a reader has to keep apart at a
      glance. */
   --clock: light-dark(#5a6f2e, #9ab55c);
+  /* An MCP server. Close to the gear colour because it IS a tool, and distinct
+     because it is the one that runs outside the sandbox. */
+  --mcp: light-dark(#7a4b8a, #b088c4);
 
   --memory: light-dark(#6b53a8, #9a86d0);
   --shared: light-dark(#2f6f8a, #6aa8c8);

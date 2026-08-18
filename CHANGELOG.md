@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+### MCP servers are a thing you pick, not a command line you type
+
+Consuming MCP was built and working, in the backend — the store, the client, the
+per-tool approval, the bindings, the dispatch. **Nothing under `web/src`
+mentioned it.** An operator added a server by POSTing JSON with a command line
+and an argument array, which means the capability shipped and effectively
+nobody had it.
+
+**A drawer beside Gears**, because they are the same kind of object: somebody
+else's code, granted to an agent, behind an approval. Same card, same
+review-then-approve. Drag one onto an agent on the blueprint and it is granted
+there, exactly as a gear is; **a node on the canvas** says *not sandboxed ·
+reaches the network*, so "what can this workspace reach" is answered by looking.
+Tools are listed and approved **one at a time**, because a server's tool list is
+its own claim about itself and can change between spawns — granting your issue
+tracker should not have to mean granting `delete_issue`.
+
+**The card opens with what it costs, and the wording is harder rather than
+softer.** An MCP server is worse than a gear on every axis and the interface has
+to say so instead of feeling like installing a plugin: it is not sandboxed and
+can read this install's database and the provider keys in it; it reaches the
+network by definition, so the gate that covers web search does not cover it; its
+code is fetched at every spawn, so what was approved on Tuesday is not
+necessarily what runs on Friday; and it is handed real credentials.
+
+**And a library.** Adding Jira is choosing "Jira", not knowing that its server
+is an npm package. Six entries to begin with, each naming what it reaches, the
+command, the credentials it needs by NAME, and the prerequisite — most are an
+`npx` or a `uvx` away, and an entry that did not say so produces a spawn failure
+nobody can read. Compiled into the binary rather than fetched: it works offline
+and cannot change under an install between review and use. An install that does
+not phone home should not acquire a catalogue that does. Picking one fills in
+the form and skips no gate.
+
+**A leak closed on the way.** `GET /api/v1/mcp-servers` was open and
+unredacted — survivable while nothing called it, and not once it is in a drawer.
+It carries a full command line and the names of every credential a server is
+handed, which is a map of an install's integrations and internal hostnames. A
+member now sees the name, description and status, and nothing about how it is
+spawned.
+
 ### A clock you can draw, that can dial an agent or a gear
 
 The canvas is supposed to answer "what does this workspace do, and what may

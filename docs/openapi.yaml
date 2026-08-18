@@ -604,6 +604,12 @@ paths:
       responses:
         default:
           description: see the reference
+  "/api/v1/mcp-catalog":
+    get:
+      summary: "Read mcp-catalog"
+      responses:
+        default:
+          description: see the reference
   "/api/v1/mcp-servers":
     get:
       summary: "Read mcp-servers"

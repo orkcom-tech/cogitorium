@@ -72,9 +72,11 @@ spent it.
   [→](https://orkcom-tech.github.io/cogitorium/#mcp--this-install-as-a-tool-provider)
 - 🔗 **And consumes it, when you say so** — an agent can be granted an external
   MCP server's tools the way it is granted a gear: install, probe, approve the
-  server *and each tool*, then grant. Off by default, admin-only, driven through
-  the HTTP API for now, and the documentation says plainly what it costs — the
-  child runs on the host, outside the sandbox.
+  server *and each tool*, then grant. **Pick one from the built-in library**
+  rather than knowing that Jira's server is an npm package, drag it onto an
+  agent on the blueprint, and see it there as a node. Off by default,
+  admin-only, and the review screen states plainly what it costs — the child
+  runs on the host, outside the sandbox, fetched fresh every time it starts.
   [→](https://orkcom-tech.github.io/cogitorium/#consuming-mcp--somebody-elses-tools-granted-to-an-agent)
 - 🌐 **A browser, when you grant one** — a gear can be given an environment with a
   real browser in it, through the API: `PATCH /api/v1/gears/{id}` with

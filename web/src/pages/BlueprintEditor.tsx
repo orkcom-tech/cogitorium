@@ -23,6 +23,8 @@ import {
   type GraphNode,
   type EgressGrant,
   type Schedule,
+  type MCPBinding,
+  type MCPServer,
   type ContextBinding,
   type Model,
   type Wire,
@@ -45,11 +47,12 @@ const bindingEdge = (id: number) => `b-${id}`
 const idOf = (nodeOrEdgeId: string) => Number(nodeOrEdgeId.slice(2))
 
 type NodeData = {
-  kind: 'agent' | 'gear' | 'memory' | 'outward' | 'clock'
+  kind: 'agent' | 'gear' | 'memory' | 'outward' | 'clock' | 'mcp'
   egressOn?: boolean
   destination?: string
   agent?: Agent
   gear?: Gear
+  server?: MCPServer
   memory?: GraphNode
   clock?: Schedule
   workspaceWide?: boolean
@@ -81,6 +84,10 @@ const egressEdge = (id: number) => `x-${id}`
 // thing.
 const clockNode = (id: number) => `k-${id}`
 const clockEdge = (id: number) => `t-${id}`
+// An MCP server is the same kind of thing as a gear on this canvas — somebody
+// else's code an agent may call — so it gets a node and a binding edge like one.
+const mcpNode = (id: number) => `p-${id}`
+const mcpBindingEdge = (id: number) => `n-${id}`
 
 export default function BlueprintEditor({
   wsId,
@@ -121,6 +128,8 @@ export default function BlueprintEditor({
   const [showHelp, setShowHelp] = useState(() => localStorage.getItem('cogitorium.bpHelp') !== 'off')
   const [egress, setEgress] = useState<{ enabled: boolean; destination: string; grants: EgressGrant[]; reach: Record<string, string[]> } | null>(null)
   const [schedules, setSchedules] = useState<Schedule[]>([])
+  const [mcpBindings, setMcpBindings] = useState<MCPBinding[]>([])
+  const [mcpServers, setMcpServers] = useState<MCPServer[]>([])
   const [addingClock, setAddingClock] = useState(false)
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<NodeData>>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -158,8 +167,13 @@ export default function BlueprintEditor({
         api.egress.grants(wsId),
         api.context.bindings(wsId),
         api.schedules.list(wsId),
+        // Its own catch: this route answers 404 when mcp_clients is off, which
+        // is an ordinary install rather than an error, and one rejected promise
+        // in a Promise.all would take the whole canvas down with it.
+        api.mcp.bindings(wsId).catch(() => [] as MCPBinding[]),
+        api.mcp.servers().catch(() => [] as MCPServer[]),
       ])
-        .then(([w, b, c, g, e, cb, sch]) => {
+        .then(([w, b, c, g, e, cb, sch, mb, ms]) => {
           setWires(w)
           setBindings(b)
           setCatalog(c)
@@ -167,6 +181,8 @@ export default function BlueprintEditor({
           setEgress(e)
           setContext(cb)
           setSchedules(sch)
+          setMcpBindings(mb)
+          setMcpServers(ms)
         })
         .catch((e: Error) => onError(e.message)),
     [wsId, onError],
@@ -237,6 +253,23 @@ export default function BlueprintEditor({
           },
         ]
 
+    // MCP servers sit beside the gears and on the same layer: both are tools an
+    // agent may call, and splitting them would make an operator check two
+    // places to answer one question. They are drawn one row lower so the two
+    // kinds stay distinguishable at a glance.
+    const mcpById = new Map(mcpServers.map((m) => [m.id, m]))
+    const mcpIds = layers.tools ? [...new Set(mcpBindings.map((b) => b.server_id))] : []
+    const mcpNodes: Node<NodeData>[] = mcpIds.map((sid, i) => {
+      const srv = mcpById.get(sid)
+      const wide = mcpBindings.some((b) => b.server_id === sid && b.agent_id === null)
+      return {
+        id: mcpNode(sid),
+        position: { x: (i - (mcpIds.length - 1) / 2) * 220, y: 560 },
+        data: { kind: 'mcp', server: srv, workspaceWide: wide, state: 'idle' },
+        className: `bp-node bp-mcp bp-mcp-${srv?.status ?? 'pending'}`,
+      }
+    })
+
     // Clocks sit below everything, opposite the memory layer — the canvas reads
     // top to bottom as "what this knows, who it is, what it may use, and what
     // starts it".
@@ -246,7 +279,7 @@ export default function BlueprintEditor({
     // landed on top of the last agent and ran its edge straight through it.
     // Gears sit at 440, so the floor is whichever is lower.
     const deepestAgent = agents.reduce((low, a) => Math.max(low, positions.get(a.id)?.y ?? 0), 0)
-    const clockY = Math.max(deepestAgent, gearIds.length > 0 ? 440 : 0) + 200
+    const clockY = Math.max(deepestAgent, gearIds.length > 0 ? 440 : 0, mcpIds.length > 0 ? 560 : 0) + 200
     const clockNodes: Node<NodeData>[] = !layers.time
       ? []
       : schedules.map((sc, i, all) => ({
@@ -258,8 +291,8 @@ export default function BlueprintEditor({
           }`,
         }))
 
-    setNodes([...agentNodes, ...gearNodes, ...memoryNodes, ...outwardNodes, ...clockNodes])
-  }, [agents, positions, bindings, gearById, graph, layers.tools, layers.memory, layers.outward, layers.time, egress, schedules, setNodes])
+    setNodes([...agentNodes, ...gearNodes, ...mcpNodes, ...memoryNodes, ...outwardNodes, ...clockNodes])
+  }, [agents, positions, bindings, gearById, graph, layers.tools, layers.memory, layers.outward, layers.time, egress, schedules, mcpBindings, mcpServers, setNodes])
 
   useEffect(() => {
     setNodes((prev) =>
@@ -325,6 +358,16 @@ export default function BlueprintEditor({
             target: agentNode(b.agent_id as number),
             className: 'bp-binding-edge',
           }))
+    const mcpEdges: Edge[] = !layers.tools
+      ? []
+      : mcpBindings
+          .filter((b) => b.agent_id !== null)
+          .map((b) => ({
+            id: mcpBindingEdge(b.id),
+            source: mcpNode(b.server_id),
+            target: agentNode(b.agent_id as number),
+            className: 'bp-mcp-edge',
+          }))
     const memoryEdges: Edge[] = !layers.memory
       ? []
       : (graph?.edges ?? [])
@@ -386,8 +429,8 @@ export default function BlueprintEditor({
             },
           ]
         })
-    setEdges([...wireEdges, ...bindingEdges, ...memoryEdges, ...egressEdges, ...clockEdges])
-  }, [wires, bindings, graph, layers, egress, schedules, agents, setEdges])
+    setEdges([...wireEdges, ...bindingEdges, ...mcpEdges, ...memoryEdges, ...egressEdges, ...clockEdges])
+  }, [wires, bindings, graph, layers, egress, schedules, agents, mcpBindings, setEdges])
 
   const onConnect = useCallback(
     (c: Connection) => {
@@ -442,6 +485,16 @@ export default function BlueprintEditor({
           .catch((e: Error) => onError(e.message))
         return
       }
+      if (from.data.kind === 'mcp') {
+        api.mcp
+          .bind(wsId, idOf(from.id), idOf(to.id))
+          .then(reloadGraph)
+          // Granting one is an administrator's, unlike a gear binding: a gear's
+          // source is in this install and somebody read it, while an MCP server
+          // is a host process. A member gets that refusal here, in words.
+          .catch((e: Error) => onError(e.message))
+        return
+      }
       api.wires
         .create(wsId, idOf(from.id), idOf(to.id))
         .then(() => {
@@ -478,10 +531,15 @@ export default function BlueprintEditor({
         deleted
           .filter(
             (e) =>
-              e.id.startsWith('b-') || e.id.startsWith('w-') || e.id.startsWith('x-') || e.id.startsWith('t-'),
+              e.id.startsWith('b-') ||
+              e.id.startsWith('w-') ||
+              e.id.startsWith('x-') ||
+              e.id.startsWith('t-') ||
+              e.id.startsWith('n-'),
           )
           .map((e) => {
             if (e.id.startsWith('t-')) return api.schedules.remove(idOf(e.id))
+            if (e.id.startsWith('n-')) return api.mcp.unbind(idOf(e.id))
             if (e.id.startsWith('x-')) return api.egress.revoke(idOf(e.id))
             if (e.id.startsWith('b-')) return api.gears.unbind(idOf(e.id))
             return api.wires.remove(idOf(e.id))
@@ -681,6 +739,33 @@ export default function BlueprintEditor({
                   ? undefined
                   : `Nobody has approved ${d.name}. The link is drawn and it does nothing — no agent can call it until someone reads the source and says yes.`,
               gearId: d.status === 'approved' ? undefined : d.id,
+            }),
+          )
+          .catch((err: Error) => onError(err.message))
+        return
+      }
+
+      if (d.kind === 'mcp') {
+        if (mcpBindings.some((b) => b.server_id === d.id && b.agent_id === (target?.id ?? null))) {
+          setLanded({ text: `${where} already has ${d.name}.` })
+          return
+        }
+        api.mcp
+          .bind(wsId, d.id, target?.id ?? null)
+          .then(() => {
+            setLayers((p) => (p.tools ? p : { ...p, tools: true }))
+            return reloadGraph()
+          })
+          .then(() =>
+            setLanded({
+              text: `${d.name} → ${where}.`,
+              // Same rule as a gear: the link is drawn and the truth is stated
+              // rather than the drop being refused for a rule it does not
+              // enforce — an unapproved server's tools are never offered.
+              warn:
+                d.status === 'approved'
+                  ? undefined
+                  : `Nobody has approved ${d.name}. The link is drawn and it does nothing — no agent is offered its tools until an administrator reads what it runs and says yes.`,
             }),
           )
           .catch((err: Error) => onError(err.message))
@@ -985,6 +1070,20 @@ function nodeLabel(data: NodeData) {
         </strong>
         <span className="muted">{m?.detail}</span>
         <span className="bp-state">{KINDS[m?.kind ?? '']?.label ?? m?.kind}</span>
+      </div>
+    )
+  }
+  if (data.kind === 'mcp') {
+    const m = data.server
+    return (
+      <div className="bp-label">
+        <strong>🔌 {m?.name ?? 'mcp server'}</strong>
+        <span className="muted">{m?.status ?? 'unknown'}</span>
+        {/* Said on the canvas, not only in the drawer: this is the one thing
+            here that runs outside the sandbox, and somebody reading the graph
+            to answer "what can this workspace reach" needs it in the picture. */}
+        <span className="warn">not sandboxed · reaches the network</span>
+        {data.workspaceWide && <span className="bp-state">all agents</span>}
       </div>
     )
   }

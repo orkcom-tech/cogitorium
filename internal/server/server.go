@@ -339,6 +339,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// External MCP servers. Reading is open to any authenticated caller; every
 	// write is admin-only, and there is deliberately no agent-reachable path to
 	// any of them.
+	s.route(mux, "GET /api/v1/mcp-catalog", s.handleMCPCatalog)
 	s.route(mux, "GET /api/v1/mcp-servers", s.handleListMCPServers)
 	s.routeIn(mux, "POST /api/v1/mcp-servers", s.handleInstallMCPServer, CreateMCPServerBody{})
 	s.routeIn(mux, "PATCH /api/v1/mcp-servers/{id}", s.handleUpdateMCPServer, UpdateMCPServerBody{})

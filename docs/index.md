@@ -758,6 +758,30 @@ read every provider key in it.
 | isolation | a container; no network unless granted | none — a host process with this server's uid |
 | its secrets | stand-ins, substituted at the gate | resolved into its environment at spawn |
 
+**The library** is a static list compiled into the binary — Jira, GitHub, a
+Postgres database, a git repository — so an operator adds one by choosing it
+rather than by knowing an npm package name, its arguments and its environment
+variables. `GET /api/v1/mcp-catalog` returns it, admin-only like everything else
+here, because a list whose purpose is to be installed FROM is a list that spawns
+subprocesses on this server.
+
+It is deliberately **not fetched at runtime**. A catalogue that could change
+under an install between the day it was reviewed and the day somebody installs
+from it is a different security story, and this product does not make outbound
+requests nobody agreed to. If one is ever added it belongs behind the same
+switch as the update check. Each entry states its install prerequisite — most
+are an `npx` or a `uvx` away — and the credentials it needs **by name**, never a
+value. Picking an entry fills in the install form and skips no gate: what lands
+is a pending server that does nothing.
+
+**`GET /api/v1/mcp-servers` is redacted for anybody but an administrator.** The
+row carries a full command line and the NAMES of every credential the server is
+handed, which together are a map of this install's integrations and internal
+hostnames. A member sees the name, the description and the status — enough to
+understand why an agent has a tool — and the command, arguments, working
+directory, credential names and fingerprint come back blank rather than absent,
+so a client cannot mistake "you may not see this" for "there is nothing here".
+
 What bounds it is **policy rather than isolation**, which is the honest word:
 
 - off unless configured on;

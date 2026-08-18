@@ -489,6 +489,69 @@ export const auth = {
     req<void>(`/api/v1/teams/${teamId}/members/${userId}`, { method: 'DELETE' }),
 }
 
+// Somebody else's tools, granted to an agent the way a gear is — and worse than
+// a gear on every axis, which is why the card says so rather than making it feel
+// like installing a plugin.
+export type MCPServer = {
+  id: number
+  name: string
+  description: string
+  /** Blank for a non-administrator: the command line and the credential NAMES
+   *  are a map of this install's integrations, and a member needs to know that
+   *  a server exists and is approved, not how it is spawned. */
+  command: string
+  args: string[]
+  cwd: string
+  env_names: string[]
+  transport: 'stdio'
+  status: 'pending' | 'approved' | 'disabled'
+  approved_fingerprint: string
+  timeout_seconds: number
+  created_at: string
+  updated_at: string
+}
+
+export type MCPTool = {
+  id: number
+  server_id: number
+  server_name: string
+  /** What the server calls it, and what the model is offered. They differ:
+   *  somebody else's namespace may hold characters no provider accepts. */
+  remote_name: string
+  offered_name: string
+  description: string
+  input_schema: string
+  /** Per tool, on purpose. Granting a Jira server should not have to mean
+   *  granting delete_issue. */
+  approved: boolean
+  first_seen_at: string
+  listed_at: string
+}
+
+export type MCPBinding = {
+  id: number
+  server_id: number
+  server_name: string
+  workspace_id: number
+  /** Null means the whole workspace, exactly as a gear binding does. */
+  agent_id: number | null
+  created_at: string
+}
+
+/** One server in the shipped library: what an operator picks instead of knowing
+ *  an npm package name. Nothing is fetched to render this. */
+export type MCPCatalogEntry = {
+  id: string
+  name: string
+  title: string
+  reaches: string
+  command: string
+  args: string[]
+  env_names?: string[]
+  needs: string
+  docs: string
+}
+
 export const api = {
   providers: {
     list: () => req<Provider[]>('/api/v1/providers'),
@@ -702,6 +765,48 @@ export const api = {
   // Whether a newer release exists. Reading never triggers a request: the
   // server holds the last answer and asks GitHub at most once a day, so a rail
   // that rendered on every navigation cannot rate-limit a team out of the API.
+  mcp: {
+    servers: () => req<MCPServer[]>('/api/v1/mcp-servers'),
+    library: (q = '') =>
+      req<{ entries: MCPCatalogEntry[]; fetched_at_spawn: string }>(
+        `/api/v1/mcp-catalog${q ? `?q=${encodeURIComponent(q)}` : ''}`,
+      ),
+    install: (body: {
+      name: string
+      description?: string
+      command: string
+      args?: string[]
+      cwd?: string
+      env_names?: string[]
+      timeout_seconds?: number
+    }) => req<MCPServer>('/api/v1/mcp-servers', { method: 'POST', body: JSON.stringify(body) }),
+    // An edit and an approval are never the same request: approving what you
+    // have just changed is approving something you have not seen.
+    edit: (id: number, body: Partial<{ description: string; command: string; args: string[]; cwd: string; env_names: string[]; timeout_seconds: number }>) =>
+      req<MCPServer>(`/api/v1/mcp-servers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    setStatus: (id: number, status: MCPServer['status']) =>
+      req<MCPServer>(`/api/v1/mcp-servers/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    remove: (id: number) => req<void>(`/api/v1/mcp-servers/${id}`, { method: 'DELETE' }),
+    // Starts it once and asks what it offers, given no credentials at all —
+    // the question is "what does this claim to be", and a server that needs a
+    // secret to answer it is one to be suspicious of.
+    probe: (id: number) =>
+      req<{ tools: MCPTool[]; capped: boolean; cap: number; identified: string }>(
+        `/api/v1/mcp-servers/${id}/probe`,
+        { method: 'POST' },
+      ),
+    tools: (id: number) => req<MCPTool[]>(`/api/v1/mcp-servers/${id}/tools`),
+    approveTool: (toolId: number, approved: boolean) =>
+      req<void>(`/api/v1/mcp-tools/${toolId}`, { method: 'PATCH', body: JSON.stringify({ approved }) }),
+    bindings: (wsId: number) => req<MCPBinding[]>(`/api/v1/workspaces/${wsId}/mcp-bindings`),
+    bind: (wsId: number, serverId: number, agentId: number | null) =>
+      req<MCPBinding>(`/api/v1/workspaces/${wsId}/mcp-bindings`, {
+        method: 'POST',
+        body: JSON.stringify({ server_id: serverId, agent_id: agentId }),
+      }),
+    unbind: (bindingId: number) => req<void>(`/api/v1/mcp-bindings/${bindingId}`, { method: 'DELETE' }),
+  },
+
   updates: {
     status: () => req<UpdateReport>('/api/v1/updates'),
     // Asks now. Works while the setting is still `ask` — one press is one look
