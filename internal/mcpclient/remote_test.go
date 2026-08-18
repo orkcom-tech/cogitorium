@@ -498,3 +498,138 @@ func TestAnnotatedParametersAreMirroredIntoHeaders(t *testing.T) {
 		t.Fatalf("Mcp-Param-Page was sent as %q for an argument that was not supplied", missing)
 	}
 }
+
+// ── resources and prompts ────────────────────────────────────────────────
+
+// A server that does not do resources answers "method not found", which is the
+// ANSWER rather than a failure: the caller wanted to know what it holds, and
+// "nothing" is a valid reply. Treating it as an error would make every
+// tools-only server look broken.
+func TestAServerWithoutResourcesIsNotAnError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		m := rpc(t, r)
+		if m["method"] == "initialize" {
+			var res any
+			_ = json.Unmarshal([]byte(initResult), &res)
+			answerJSON(w, idOf(m), res)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0", "id": m["id"],
+			"error": map[string]any{"code": -32601, "message": "Method not found"},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	c, err := Dial(t.Context(), Spec{Name: "r", Transport: TransportStreamableHTTP, URL: srv.URL, Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+
+	res, _, err := c.Resources(t.Context(), 10)
+	if err != nil {
+		t.Fatalf("a tools-only server made Resources fail: %v", err)
+	}
+	if len(res) != 0 {
+		t.Fatalf("%d resources from a server that has none", len(res))
+	}
+	p, _, err := c.Prompts(t.Context(), 10)
+	if err != nil || len(p) != 0 {
+		t.Fatalf("Prompts: %v (%d)", err, len(p))
+	}
+}
+
+func TestResourcesAndPromptsAreReadAndPaged(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		m := rpc(t, r)
+		cursor := ""
+		if p, ok := m["params"].(map[string]any); ok {
+			cursor, _ = p["cursor"].(string)
+		}
+		switch m["method"] {
+		case "initialize":
+			var res any
+			_ = json.Unmarshal([]byte(initResult), &res)
+			answerJSON(w, idOf(m), res)
+		case "resources/list":
+			if cursor == "" {
+				answerJSON(w, idOf(m), map[string]any{
+					"resources":  []any{map[string]any{"uri": "file:///a", "name": "a"}},
+					"nextCursor": "p2",
+				})
+				return
+			}
+			answerJSON(w, idOf(m), map[string]any{
+				"resources": []any{map[string]any{"uri": "file:///b", "name": "b"}},
+			})
+		case "resources/read":
+			answerJSON(w, idOf(m), map[string]any{"contents": []any{
+				map[string]any{"uri": "file:///a", "text": "the text"},
+				// A blob is named, not decoded: a megabyte of base64 in a
+				// prompt is a bill for something the model cannot read.
+				map[string]any{"uri": "file:///a.png", "blob": "iVBORw0KGgo="},
+			}})
+		case "prompts/list":
+			answerJSON(w, idOf(m), map[string]any{"prompts": []any{
+				map[string]any{"name": "review", "description": "review a diff"},
+			}})
+		case "prompts/get":
+			answerJSON(w, idOf(m), map[string]any{"messages": []any{
+				map[string]any{"role": "user", "content": map[string]any{"type": "text", "text": "look at this"}},
+			}})
+		default:
+			answerJSON(w, idOf(m), map[string]any{})
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c, err := Dial(t.Context(), Spec{Name: "r", Transport: TransportStreamableHTTP, URL: srv.URL, Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+
+	res, _, err := c.Resources(t.Context(), 10)
+	if err != nil {
+		t.Fatalf("resources: %v", err)
+	}
+	if len(res) != 2 {
+		t.Fatalf("the second page was not read: %+v", res)
+	}
+
+	read, err := c.ReadResource(t.Context(), "file:///a")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if read.Text != "the text" {
+		t.Fatalf("the document came back as %q", read.Text)
+	}
+	if len(read.Dropped) != 1 {
+		t.Fatalf("the blob was not named as dropped: %+v", read.Dropped)
+	}
+
+	prompts, _, err := c.Prompts(t.Context(), 10)
+	if err != nil || len(prompts) != 1 || prompts[0].Name != "review" {
+		t.Fatalf("prompts: %v %+v", err, prompts)
+	}
+	got, err := c.GetPrompt(t.Context(), "review", nil)
+	if err != nil {
+		t.Fatalf("get prompt: %v", err)
+	}
+	// The role is a LABEL rather than structure: splicing somebody else's
+	// "assistant" turns into this agent's history would let a server write
+	// words into the transcript as though the model had said them.
+	if !strings.Contains(got.Text, "user: look at this") {
+		t.Fatalf("the prompt came back as %q", got.Text)
+	}
+}

@@ -2060,6 +2060,15 @@ curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/mcp-bindings \
 The tools then appear to that agent as `mcp_files__read_file` and so on, beside
 its gears, and a call is dispatched to the server you installed.
 
+**Documents and prompt templates too, through two tools rather than four
+hundred.** A server that holds a wiki reaches the agent as `mcp_documents` —
+call it with nothing to list what is there, with a uri to read one — and its
+prompt templates as `mcp_prompts`. The alternative, a synthetic tool per
+document, would put a definition per page into every request: they are not four
+hundred capabilities, they are one capability with an argument. A server that
+offers neither answers "method not found", which is the answer rather than a
+failure, so a tools-only server does not look broken.
+
 **Per tool, not per server**, and that is the part worth keeping: a server that
 grows a `run_shell` tool after you approved it has grown one nobody agreed to,
 and it stays inert until you look. Editing the command puts the server back to

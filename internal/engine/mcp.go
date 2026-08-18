@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -215,4 +216,170 @@ func (e *Engine) SetMetrics(m *metrics.Set) { e.metrics = m }
 func (e *Engine) SetMCP(store *mcpstore.Store, resolver *secrets.Resolver) {
 	e.mcp = store
 	e.mcpSecrets = resolver
+}
+
+// The two tools a server's documents and prompt templates reach the model
+// through — see tools.go for why it is two rather than one per item.
+const (
+	mcpReadTool   = "mcp_documents"
+	mcpPromptTool = "mcp_prompts"
+)
+
+// runMCPRead lists or reads the documents this agent's granted servers hold.
+//
+// It walks EVERY granted server rather than asking the agent to name one. A
+// document uri is globally unique in practice and the agent has no way to know
+// which server holds which — making it guess would turn one call into several,
+// each of which spawns or dials.
+func (e *Engine) runMCPRead(ctx context.Context, wsID int64, agent workspace.Agent, argsJSON string) (string, error) {
+	var in struct {
+		URI string `json:"uri"`
+	}
+	_ = json.Unmarshal([]byte(argsJSON), &in)
+
+	servers, err := e.grantedServers(ctx, wsID, agent)
+	if err != nil {
+		return "", err
+	}
+	var listing []string
+	for _, srv := range servers {
+		conn, release, err := e.openMCP(ctx, wsID, srv)
+		if err != nil {
+			// One unreachable server must not deny the agent the others.
+			slog.Warn("an MCP server could not be reached for its documents",
+				"server", srv.Name, "workspace_id", wsID, "err", err)
+			continue
+		}
+		if in.URI == "" {
+			found, capped, err := conn.Resources(ctx, mcpstore.MaxToolsPerServer)
+			release()
+			if err != nil {
+				continue
+			}
+			for _, r := range found {
+				line := r.URI
+				if r.Name != "" {
+					line += " — " + r.Name
+				}
+				if r.Description != "" {
+					line += ": " + r.Description
+				}
+				listing = append(listing, line)
+			}
+			if capped {
+				listing = append(listing, "(the list from "+srv.Name+" was cut short)")
+			}
+			continue
+		}
+		res, err := conn.ReadResource(ctx, in.URI)
+		release()
+		if err != nil {
+			continue
+		}
+		out := res.Text
+		if len(res.Dropped) > 0 {
+			out += "\n\n[" + strings.Join(res.Dropped, ", ") + " was returned and this install cannot carry it.]"
+		}
+		return out, nil
+	}
+	if in.URI != "" {
+		return "", fmt.Errorf("no MCP server this agent was granted holds %q", in.URI)
+	}
+	if len(listing) == 0 {
+		return "None of the MCP servers you were granted offers any documents.", nil
+	}
+	return strings.Join(listing, "\n"), nil
+}
+
+// runMCPPrompt lists or renders the templates this agent's granted servers
+// offer.
+func (e *Engine) runMCPPrompt(ctx context.Context, wsID int64, agent workspace.Agent, argsJSON string) (string, error) {
+	var in struct {
+		Name      string          `json:"name"`
+		Arguments json.RawMessage `json:"arguments"`
+	}
+	_ = json.Unmarshal([]byte(argsJSON), &in)
+
+	servers, err := e.grantedServers(ctx, wsID, agent)
+	if err != nil {
+		return "", err
+	}
+	var listing []string
+	for _, srv := range servers {
+		conn, release, err := e.openMCP(ctx, wsID, srv)
+		if err != nil {
+			slog.Warn("an MCP server could not be reached for its prompts",
+				"server", srv.Name, "workspace_id", wsID, "err", err)
+			continue
+		}
+		if in.Name == "" {
+			found, _, err := conn.Prompts(ctx, mcpstore.MaxToolsPerServer)
+			release()
+			if err != nil {
+				continue
+			}
+			for _, p := range found {
+				line := p.Name
+				if p.Description != "" {
+					line += ": " + p.Description
+				}
+				listing = append(listing, line)
+			}
+			continue
+		}
+		res, err := conn.GetPrompt(ctx, in.Name, in.Arguments)
+		release()
+		if err != nil {
+			continue
+		}
+		return res.Text, nil
+	}
+	if in.Name != "" {
+		return "", fmt.Errorf("no MCP server this agent was granted offers the prompt %q", in.Name)
+	}
+	if len(listing) == 0 {
+		return "None of the MCP servers you were granted offers any prompt templates.", nil
+	}
+	return strings.Join(listing, "\n"), nil
+}
+
+// grantedServers is the distinct set of servers behind this agent's granted
+// tools.
+//
+// Derived from the TOOLS rather than from the bindings, deliberately: the tool
+// query is the one that already applies every gate — the server is approved,
+// the binding reaches this agent, the tool itself is approved — and a second
+// path to "which servers may this agent reach" would be a second place for
+// those gates to drift apart.
+func (e *Engine) grantedServers(ctx context.Context, wsID int64, agent workspace.Agent) ([]mcpstore.Server, error) {
+	if e.mcp == nil {
+		return nil, errors.New("external MCP servers are not switched on for this install")
+	}
+	tools, err := e.mcp.ToolsForAgent(ctx, wsID, agent.ID)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[int64]bool{}
+	var out []mcpstore.Server
+	for _, t := range tools {
+		if seen[t.ServerID] {
+			continue
+		}
+		seen[t.ServerID] = true
+		srv, err := e.mcp.Spawnable(ctx, t.ServerID)
+		if err != nil {
+			continue
+		}
+		out = append(out, srv)
+	}
+	return out, nil
+}
+
+// openMCP resolves a server's named values and takes a pooled connection.
+func (e *Engine) openMCP(ctx context.Context, wsID int64, srv mcpstore.Server) (*mcpclient.Conn, func(), error) {
+	spec, err := e.mcpSpec(ctx, wsID, srv)
+	if err != nil {
+		return nil, nil, err
+	}
+	return e.mcpPool.take(ctx, srv, spec)
 }

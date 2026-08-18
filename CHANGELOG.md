@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Documents and prompts, which were offered to nothing
+
+Only `tools/list` and `tools/call` were implemented, so a server holding a wiki,
+a drive or a codebase looked empty against this install — and a good share of
+what people publish is exactly that.
+
+**Two tools rather than one per item.** A server's documents reach an agent
+through `mcp_documents` and its templates through `mcp_prompts`: call either
+with nothing to list, or with a uri or a name to fetch one. The obvious
+alternative — a synthetic `read_x` per document — would put four hundred tool
+definitions into every request for a four-hundred-page wiki, and they are not
+four hundred capabilities but one capability with an argument.
+
+A server that does neither answers `method not found`, which is treated as the
+ANSWER rather than a failure, so a tools-only server does not read as broken. A
+prompt template arrives as a conversation and is flattened with the role as a
+LABEL: splicing somebody else's "assistant" turns into an agent's history would
+let a server write words into the transcript as though the model had said them.
+Binary content is named rather than decoded, the same rule the tool path
+already follows.
+
 ### It says when the pair no longer fits, instead of letting a save fail
 
 The last open question from the update-checking plan, and the thing that
