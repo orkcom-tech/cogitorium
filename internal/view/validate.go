@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -118,7 +119,19 @@ func Validate(s *Set, models Models) Report {
 		}
 		field, suggestion := explain(err, model)
 
-		layers := appendContributors[name]
+		// Blame the layer whose body actually broke. A template reached
+		// through an alias is somebody else's body running inside a wrapper,
+		// and dropping the wrapper for it would take an innocent plugin down
+		// with the guilty one.
+		var layers []string
+		if inner := executingName(err); inner != "" {
+			if l, ok := s.DefinedBy(inner); ok && l != "" {
+				layers = []string{l}
+			}
+		}
+		if len(layers) == 0 {
+			layers = appendContributors[name]
+		}
 		if len(layers) == 0 {
 			layers = []string{owner[name]}
 		}
@@ -143,6 +156,24 @@ func Validate(s *Set, models Models) Report {
 // pre-check every field path — would reimplement the evaluator badly and
 // still miss what a method returns.
 var fieldErr = regexp.MustCompile(`can't evaluate field ([A-Za-z0-9_]+) in type`)
+
+// executingErr pulls out the innermost template that was running when the
+// failure happened, which is not the same as the name that was asked for.
+var executingErr = regexp.MustCompile(`executing "([^"]+)"`)
+
+func executingName(err error) string {
+	m := executingErr.FindStringSubmatch(err.Error())
+	if m == nil {
+		return ""
+	}
+	// The template engine formats the name with %q, so the NUL separators in
+	// the private alias names arrive escaped. Unquoting is what turns the
+	// message back into a key that can be looked up.
+	if unquoted, uerr := strconv.Unquote(`"` + m[1] + `"`); uerr == nil {
+		return unquoted
+	}
+	return m[1]
+}
 
 // nilMapErr is what missingkey=error produces. A map key is a different kind
 // of absence from a struct field and worth naming differently.

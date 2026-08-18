@@ -51,6 +51,12 @@ type Set struct {
 	// rather than read back out of html/template so this package never depends
 	// on that package's internals.
 	bodies map[string]*parse.Tree
+	// definedBy records whose body sits under each installed name, including
+	// the private alias names. It is what lets a failure be blamed on the
+	// layer that actually wrote the broken markup rather than on whoever
+	// happens to define the outermost name — a wrapper reached through an
+	// alias is innocent of what it wrapped.
+	definedBy map[string]string
 }
 
 // Ledger is what each layer actually did, computed from parsed bytes.
@@ -137,7 +143,7 @@ func Compose(funcs template.FuncMap, layers ...Layer) (*Set, error) {
 	}
 
 	root := template.New("").Funcs(funcs).Option("missingkey=error")
-	s := &Set{tmpl: root, funcs: funcs, bodies: map[string]*parse.Tree{}}
+	s := &Set{tmpl: root, funcs: funcs, bodies: map[string]*parse.Tree{}, definedBy: map[string]string{}}
 
 	owner := map[string]string{}           // name -> layer id currently rendering it
 	coreBodies := map[string]*parse.Tree{} // layer zero's bodies, for the core: alias
@@ -172,7 +178,7 @@ func Compose(funcs template.FuncMap, layers ...Layer) (*Set, error) {
 				// reference that fails to resolve would take down a plugin over
 				// a misunderstanding — and the misunderstanding is said out loud
 				// instead.
-				if err := s.add(underName(name, i), emptyTree(name)); err != nil {
+				if err := s.own(underName(name, i), emptyTree(name), ""); err != nil {
 					return nil, err
 				}
 				if refs > 0 {
@@ -185,7 +191,7 @@ func Compose(funcs template.FuncMap, layers ...Layer) (*Set, error) {
 					})
 				}
 				seg := fmt.Sprintf("%s\x00seg\x00%d", name, i)
-				if err := s.add(seg, tree); err != nil {
+				if err := s.own(seg, tree, layer.ID); err != nil {
 					return nil, err
 				}
 				appendParts[name] = append(appendParts[name], seg)
@@ -198,7 +204,7 @@ func Compose(funcs template.FuncMap, layers ...Layer) (*Set, error) {
 			// under: for this layer is whatever is currently installed. Empty
 			// when nothing is, so an override that wraps a name the host never
 			// defined renders its own body and nothing else rather than failing.
-			if err := s.add(underName(name, i), orEmpty(s.bodies[name], name)); err != nil {
+			if err := s.own(underName(name, i), orEmpty(s.bodies[name], name), owner[name]); err != nil {
 				return nil, err
 			}
 
@@ -221,7 +227,7 @@ func Compose(funcs template.FuncMap, layers ...Layer) (*Set, error) {
 				Layer: layer.ID, Name: name, Action: action, Took: took,
 			})
 
-			if err := s.add(name, tree); err != nil {
+			if err := s.own(name, tree, layer.ID); err != nil {
 				return nil, err
 			}
 			owner[name] = layer.ID
@@ -231,7 +237,7 @@ func Compose(funcs template.FuncMap, layers ...Layer) (*Set, error) {
 	// core: reaches past every plugin to the host's own body. Installed after
 	// the loop so it is never confused with a layer's own definition.
 	for name, tree := range coreBodies {
-		if err := s.add(plugin.AliasCore+name, tree); err != nil {
+		if err := s.own(plugin.AliasCore+name, tree, plugin.CoreNamespace); err != nil {
 			return nil, err
 		}
 	}
@@ -284,6 +290,22 @@ func (s *Set) add(name string, tree *parse.Tree) error {
 	}
 	s.bodies[name] = tree
 	return nil
+}
+
+// own installs a body and records which layer wrote it.
+func (s *Set) own(name string, tree *parse.Tree, layer string) error {
+	if err := s.add(name, tree); err != nil {
+		return err
+	}
+	s.definedBy[name] = layer
+	return nil
+}
+
+// DefinedBy reports which layer wrote the body currently installed under a
+// name, including the private alias names a failure can surface from.
+func (s *Set) DefinedBy(name string) (string, bool) {
+	l, ok := s.definedBy[name]
+	return l, ok
 }
 
 // Ledger reports what each layer did.
