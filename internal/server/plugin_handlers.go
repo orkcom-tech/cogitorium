@@ -9,8 +9,10 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -430,7 +432,7 @@ func sameOrder(a, b []string) bool {
 // update check already answer to. One switch, not three: an operator who said
 // this install may not reach out said it once.
 func (s *Server) pluginCatalog() *plugin.Catalog {
-	return plugin.NewCatalog(s.dataDir, nil, func() bool {
+	return plugin.NewCatalog(s.dataDir, s.catalogClient, func() bool {
 		return s.updates.Mode() != update.ModeOff
 	})
 }
@@ -484,12 +486,42 @@ type catalogView struct {
 	// an empty Updates list is ambiguous, and the ambiguity resolves the
 	// flattering way by default.
 	Versioned bool `json:"versioned"`
+	// Total is how many entries matched, before the page was taken. Without
+	// it a full page and a last page look identical and a client cannot know
+	// whether to offer another.
+	Total  int `json:"total"`
+	Offset int `json:"offset"`
+	Limit  int `json:"limit"`
 	// Cached and Fetched are shown rather than hidden. A cached list is not a
 	// current one, and presenting yesterday's as today's is how somebody
 	// installs a version that was withdrawn yesterday.
 	Cached  bool   `json:"cached"`
 	Fetched string `json:"fetched,omitempty"`
 }
+
+// window reads offset and limit, clamped.
+//
+// Clamped rather than refused: a client asking for ten thousand entries is not
+// attacking anything, it is a client that did not think about it, and the
+// useful answer is a page rather than an error.
+func catalogWindow(q url.Values) (offset, limit int) {
+	limit = defaultCatalogPage
+	if n, err := strconv.Atoi(q.Get("limit")); err == nil && n > 0 {
+		limit = n
+	}
+	if limit > maxCatalogPage {
+		limit = maxCatalogPage
+	}
+	if n, err := strconv.Atoi(q.Get("offset")); err == nil && n > 0 {
+		offset = n
+	}
+	return offset, limit
+}
+
+const (
+	defaultCatalogPage = 50
+	maxCatalogPage     = 200
+)
 
 // UpdateView is one installed plugin with a newer version on offer.
 type UpdateView struct {
@@ -535,7 +567,25 @@ func (s *Server) handleBrowseCatalog(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
-	for _, e := range idx.Search(r.URL.Query().Get("q")) {
+	matched := idx.Search(r.URL.Query().Get("q"))
+	out.Total = len(matched)
+
+	// A page, because a catalog is a list that only grows and a screen that
+	// renders all of it gets slower for everybody every time somebody
+	// publishes. The window is reported rather than implied, so a client can
+	// say "51 of 340" instead of leaving somebody to count.
+	offset, limit := catalogWindow(r.URL.Query())
+	out.Offset, out.Limit = offset, limit
+	if offset >= len(matched) {
+		matched = nil
+	} else {
+		matched = matched[offset:]
+	}
+	if len(matched) > limit {
+		matched = matched[:limit]
+	}
+
+	for _, e := range matched {
 		v := CatalogEntryView{
 			ID: e.ID, Name: e.Name, Author: e.Author,
 			Description: e.Description, Repo: e.Repo, Source: e.SourceURL(),

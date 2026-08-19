@@ -1866,6 +1866,115 @@ No agent can open either.
 
 ---
 
+## Plugins
+
+A plugin adds functionality *and* changes the interface. It can put a screen in
+the rail, hang a panel inside a workspace, take over a template the core never
+designated as extensible, and run code of its own. Restart-to-activate is the
+model, and the plugins screen can perform the restart.
+
+### Installing one
+
+Three ways in, and all three land in the same place: **switched off and
+unapproved.**
+
+- **From the library** — the Plugins screen has a Library tab listing the
+  shared catalog, searchable and sortable.
+- **From a file** — drop a `.zip` on the Plugins screen, or
+  `cogitorium plugins install <bundle.zip>`.
+- **From a directory you are editing** — `cogitorium plugins dev .`, with no
+  build step.
+
+Nothing runs until somebody approves it, and **approval is bound to the
+content, not the name**: the digest is read from what the machine holds, so a
+decision can only ever be about bytes somebody could have looked at. Rebuild
+the plugin and it drops back to pending on its own.
+
+The approval card shows what it overrides, which hosts it wants, which secrets
+it names, what API subjects it asks for — and a **preview** of each override,
+rendered against an example through the composed stack. "It overrides
+`cog.row.nav`" is not a thing anybody can evaluate; a picture of the row is.
+
+### What an author writes
+
+A directory with a `plugin.yaml`. Everything else is optional.
+
+```yaml
+schema: 1
+id: myplugin
+name: My Plugin
+version: 0.1.0
+needs: python          # or js, rust, go, node, an OCI image, native — or nothing
+host:
+  contract: 1
+pages:
+  - path: /p/myplugin/
+    template: myplugin.page.home
+    provider: home
+```
+
+**You declare a technology. The host decides the lane.** Which of the five
+tiers it picked is never your problem — that is the whole point of declaring
+what you wrote it in instead of shipping a runtime.
+
+| Tier | You ship | Runs |
+|---|---|---|
+| **bundle** | templates, CSS, JS | everywhere, nothing fetched |
+| **wasm** | one `.wasm` | everywhere, nothing fetched |
+| **provisioned** | source | everywhere the data directory is executable; the interpreter is fetched once and shared |
+| **image** | an OCI reference | where this install has a sandbox that starts containers |
+| **native** | a binary per `{os, arch}` | where one matches. No isolation: it is your machine code as this server's user |
+
+`cogitorium plugins names` lists every template you can override, what model it
+renders against, and what the host's own body is today — offline, from the
+binary you are actually running. `docs/registry.json` is the same thing as a
+file, and `docs/plugin.schema.json` is the manifest schema, so an editor
+completes the fields and underlines a typo.
+
+### What a plugin may ask the host for
+
+Nine calls, identical on every tier, so a plugin rewritten in another language
+calls the same nine.
+
+`log` · `now` · `rand` · `config` · `render` · `http` · `api` · `enqueue` ·
+`kv`
+
+Two of them are grants rather than capabilities. **`http` reaches only hosts
+listed under `hosts:`**, through the same gate gears use — which writes a row
+before the socket opens and refuses loopback and link-local regardless. **`api`
+calls only subjects listed under `api:`**, in-process, as `plugin:<id>` and
+never as whoever installed it, so a grant is not decorative.
+
+`enqueue` puts work on the durable queue, so a background task survives a
+restart instead of being a goroutine nothing recorded.
+
+There is a [Python SDK](https://github.com/orkcom-tech/cogitorium/tree/main/sdk/python)
+— one file, standard library only, copied in beside your code.
+
+### The catalog
+
+[`orkcom-tech/cogitorium-plugins`](https://github.com/orkcom-tech/cogitorium-plugins)
+is an index and nothing else: five fields saying where a plugin lives. The
+bundle stays in the author's own repository, in their releases, so listing
+costs one small file no matter how many plugins there are.
+
+**Adding your own entry merges on green CI.** You are not waiting for anybody.
+Editing or removing an entry that is already listed does not, and that is the
+one rule worth explaining: an edit can point an id people have already
+installed at a *different repository*, and nothing in a public JSON file can
+establish who owns an id.
+
+Verification shows as three states rather than a badge — the team read the
+version you have, they read a different one, or nobody has looked. The last is
+the ordinary state and not an accusation. **Verified means somebody read that
+version.** It is not a guarantee, not an audit, and not a substitute for the
+approval step on your own install, which is where somebody who can actually see
+your data decides.
+
+Update discovery costs nothing in privacy: the catalog's own CI publishes an
+index with versions filled in, and a client fetches the **whole file** and
+compares locally. No query string, no install id, no list of what you have.
+
 ## Configuration reference
 
 Configuration comes from, in order of precedence: command-line flags, then

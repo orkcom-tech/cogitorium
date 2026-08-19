@@ -7,9 +7,11 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/abi"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/store"
+	"github.com/orkcom-tech/cogitorium/internal/update"
 	"github.com/orkcom-tech/cogitorium/internal/work"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -483,5 +485,121 @@ func TestRestartIsRefusedToANonAdmin(t *testing.T) {
 
 	if rec.Code == http.StatusOK {
 		t.Fatalf("a member restarted the server: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// The catalog HTTP surface, end to end, against a catalog served over HTTP.
+//
+// Every piece of this was tested in internal/plugin and none of it through the
+// routes a client actually calls — which is where the id crosscheck, the
+// verified computation and the paging all meet, and where a mistake shows up
+// as a screen that is subtly wrong rather than a failing unit test.
+func TestBrowsingTheCatalogOverTheAPI(t *testing.T) {
+	entries := []map[string]string{}
+	for i := 0; i < 7; i++ {
+		entries = append(entries, map[string]string{
+			"id": fmt.Sprintf("plugin-%02d", i), "name": fmt.Sprintf("Plugin %02d", i),
+			"author": "someone", "description": "an entry", "repo": "someone/thing",
+		})
+	}
+	catalogJSON, _ := json.Marshal(entries)
+	verifiedJSON, _ := json.Marshal([]map[string]string{
+		{"id": "plugin-03", "version": "9.9.9", "by": "eduard", "note": "read it"},
+	})
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "verified.json"):
+			w.Write(verifiedJSON)
+		default:
+			w.Write(catalogJSON)
+		}
+	}))
+	defer upstream.Close()
+
+	s := newCatalogTestServer(t, upstream.URL)
+
+	// A page, and the total behind it. Without the total a full page and a
+	// last page look identical.
+	var listing catalogView
+	getJSON(t, s, "/api/v1/plugin-catalog?limit=3", &listing)
+	if listing.Total != 7 {
+		t.Fatalf("total is %d, want 7", listing.Total)
+	}
+	if len(listing.Entries) != 3 {
+		t.Fatalf("a limit of 3 returned %d entries", len(listing.Entries))
+	}
+
+	getJSON(t, s, "/api/v1/plugin-catalog?limit=3&offset=6", &listing)
+	if len(listing.Entries) != 1 {
+		t.Fatalf("the last page has %d entries, want 1", len(listing.Entries))
+	}
+
+	// Search narrows the whole catalog, not the page somebody happens to be on.
+	getJSON(t, s, "/api/v1/plugin-catalog?q=plugin-05", &listing)
+	if listing.Total != 1 || listing.Entries[0].ID != "plugin-05" {
+		t.Fatalf("search matched %d: %+v", listing.Total, listing.Entries)
+	}
+
+	// The verified list is consulted, and the state is about code rather than
+	// about a name. Nothing here is installed, so there is no version to
+	// disagree with and the answer is what the team read — the three-state
+	// distinction bites once a version IS installed, which internal/plugin
+	// covers.
+	getJSON(t, s, "/api/v1/plugin-catalog?q=plugin-03", &listing)
+	if listing.Entries[0].Verified == "unchecked" {
+		t.Fatal("the verified list was not consulted")
+	}
+	if listing.Entries[0].VerifiedBy != "eduard" {
+		t.Fatalf("who read it did not travel: %+v", listing.Entries[0])
+	}
+
+	// And a plugin nobody looked at reads unchecked, which is the ordinary
+	// state and not an accusation.
+	getJSON(t, s, "/api/v1/plugin-catalog?q=plugin-04", &listing)
+	if got := listing.Entries[0].Verified; got != "unchecked" {
+		t.Fatalf("an unread plugin reads %q", got)
+	}
+}
+
+// newCatalogTestServer points the catalog fetch at a server this test controls.
+//
+// The catalog's URL is a compiled-in constant and must stay one — a catalog
+// somebody can repoint is a catalog somebody can repoint — so the seam is the
+// HTTP client rather than the address.
+func newCatalogTestServer(t *testing.T, upstream string) *Server {
+	t.Helper()
+	base, err := url.Parse(upstream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &Server{
+		dataDir:       t.TempDir(),
+		updates:       update.New(update.ModeOn, "test", nil),
+		catalogClient: &http.Client{Transport: rewriteHost{base: base}},
+	}
+}
+
+type rewriteHost struct{ base *url.URL }
+
+func (r rewriteHost) RoundTrip(req *http.Request) (*http.Response, error) {
+	out := req.Clone(req.Context())
+	out.URL.Scheme, out.URL.Host = r.base.Scheme, r.base.Host
+	return http.DefaultTransport.RoundTrip(out)
+}
+
+func getJSON(t *testing.T, s *Server, path string, into any) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req = req.WithContext(withCaller(req.Context(), identity.User{
+		Name: "admin", Role: identity.RoleAdmin,
+	}))
+	s.handleBrowseCatalog(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%s -> %d %s", path, rec.Code, rec.Body)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), into); err != nil {
+		t.Fatalf("%s: %v", path, err)
 	}
 }

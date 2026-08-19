@@ -112,6 +112,11 @@ type Server struct {
 	// An OAuth redirect can point at the loopback address only here, and a
 	// browser is told to remember a session only here.
 	localInstall bool
+	// catalogClient fetches the shared plugin catalog. Nil in production, which
+	// means the default client — it is a field so a test can point the fetch
+	// at a server it controls, since the catalog's URL is a compiled-in
+	// constant on purpose and must stay one.
+	catalogClient *http.Client
 	// sandbox is the backend that starts containers, kept because the plugins
 	// screen has to answer "can the image tier run here" long after New
 	// returned — and the honest answer follows the LIVE backend rather than
