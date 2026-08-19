@@ -63,6 +63,10 @@ func (s *Server) handleWorkspaceDrawer(w http.ResponseWriter, r *http.Request) {
 		s.renderDrawer(w, r, "cog.drawer.agents", func() any {
 			return s.agentsModel(r, wsID, selected)
 		})
+	case "versions":
+		s.renderDrawer(w, r, "cog.drawer.versions", func() any {
+			return s.versionsModel(r, wsID, "", "", nil)
+		})
 	case "mcp":
 		s.renderDrawer(w, r, "cog.drawer.mcp", func() any {
 			return s.mcpModel(r, "", "")

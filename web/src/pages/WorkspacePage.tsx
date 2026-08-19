@@ -301,6 +301,9 @@ export default function WorkspacePage({ me }: { me: User }) {
     { id: 'inlets', title: 'Receivers' },
     { id: 'queue', title: 'Queue' },
     { id: 'env', title: 'Variables' },
+    // The workflow's history. A drawer rather than a page because rolling back
+    // is something you do while looking at what you are rolling back from.
+    { id: 'versions', title: 'Versions' },
     // The context space, admin-only, and a drawer for the same reason
     // everything else here is one: it is consulted while you work, not a place
     // you go instead of working. It was the last thing that existed only as a
@@ -573,7 +576,8 @@ export default function WorkspacePage({ me }: { me: User }) {
           overlay === 'env' ||
           overlay === 'inlets' ||
           overlay === 'mcp' ||
-          overlay === 'queue') && (
+          overlay === 'queue' ||
+          overlay === 'versions') && (
           <div
             key={overlay}
             className="dk-body"

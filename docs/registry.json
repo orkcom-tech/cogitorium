@@ -1171,6 +1171,117 @@
       "appends": false
     },
     {
+      "name": "cog.drawer.versions",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "WorkspaceID",
+          "type": "int64"
+        },
+        {
+          "path": "Items",
+          "type": "[]VersionRow"
+        },
+        {
+          "path": "Unchanged",
+          "type": "bool"
+        },
+        {
+          "path": "Problem",
+          "type": "string"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        },
+        {
+          "path": "Missing",
+          "type": "[]string"
+        }
+      ],
+      "body": "\u003cdiv class=\"dk-body versions\"\u003e\n  \u003cp class=\"hint\"\u003eEverything that decides what a run does — the agents, the wires, the gears they may\n  call, what they read and the clocks that start them. Not the conversation: rolling back to last week\n  must not delete what was said since.\u003c/p\u003e\n\n  {{if .Problem}}\u003cp class=\"error\"\u003e{{.Problem}}\u003c/p\u003e{{end}}\n  {{if .Notice}}\u003cp class=\"hint\"\u003e✓ {{.Notice}}\u003c/p\u003e{{end}}\n\n  {{range .Missing}}\u003cp class=\"error\"\u003e{{.}}\u003c/p\u003e{{end}}\n\n  \u003cform class=\"version-save\" method=\"post\" action=\"/workspaces/{{.WorkspaceID}}/versions\"\n        hx-post=\"/workspaces/{{.WorkspaceID}}/versions\" hx-target=\"#version-list\" hx-swap=\"outerHTML\"\u003e\n    \u003clabel\u003eWhat changed \u003cinput name=\"message\" required maxlength=\"200\"\n                               placeholder=\"added the checker, and wired the drafter to it\"\u003e\u003c/label\u003e\n    \u003cbutton type=\"submit\"\u003eSave this version\u003c/button\u003e\n  \u003c/form\u003e\n\n  {{if .Unchanged}}\u003cp class=\"hint\"\u003eNothing has changed since the newest version.\u003c/p\u003e{{end}}\n\n  {{template \"cog.list.versions\" .}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.empty.context",
       "model": [
         {
@@ -1830,6 +1941,117 @@
         }
       ],
       "body": "\u003cp class=\"hint\"\u003e\n{{if .Narrowed}}Nothing matches that.{{else}}Nothing installed. A plugin is a folder with a \u003ccode\u003eplugin.yaml\u003c/code\u003e and a \u003ccode\u003etemplates/\u003c/code\u003e directory — drop its zip above, or run \u003ccode\u003ecogitorium plugins install \u0026lt;bundle.zip\u0026gt;\u003c/code\u003e.{{end}}\n\u003c/p\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.empty.versions",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "WorkspaceID",
+          "type": "int64"
+        },
+        {
+          "path": "Items",
+          "type": "[]VersionRow"
+        },
+        {
+          "path": "Unchanged",
+          "type": "bool"
+        },
+        {
+          "path": "Problem",
+          "type": "string"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        },
+        {
+          "path": "Missing",
+          "type": "[]string"
+        }
+      ],
+      "body": "\u003cp class=\"hint\"\u003e\nNo versions yet. Save one when the workflow does what you meant, and you can always get back to it.\n\u003c/p\u003e",
       "appends": false
     },
     {
@@ -3427,6 +3649,117 @@
         }
       ],
       "body": "\u003cdiv id=\"users\" class=\"user-list\"\u003e\n{{range .Users}}{{template \"cog.row.person\" .}}{{else}}\u003cp class=\"hint\"\u003eNobody yet.\u003c/p\u003e{{end}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.list.versions",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "WorkspaceID",
+          "type": "int64"
+        },
+        {
+          "path": "Items",
+          "type": "[]VersionRow"
+        },
+        {
+          "path": "Unchanged",
+          "type": "bool"
+        },
+        {
+          "path": "Problem",
+          "type": "string"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        },
+        {
+          "path": "Missing",
+          "type": "[]string"
+        }
+      ],
+      "body": "\u003cdiv id=\"version-list\" class=\"version-list\"\u003e\n{{if .Items}}{{range .Items}}{{template \"cog.row.version\" .}}{{end}}{{else}}{{template \"cog.empty.versions\" .}}{{end}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -5626,6 +5959,45 @@
         }
       ],
       "body": "\u003cdiv class=\"queue-unit\"\u003e\n  \u003ccode\u003e{{.Kind}}\u003c/code\u003e\n  \u003cspan class=\"badge\"\u003e{{.State}}\u003c/span\u003e\n  \u003cspan class=\"muted\"\u003e{{.Lane}}\u003c/span\u003e\n  \u003cspan class=\"muted\"\u003eattempt {{.Attempts}} of {{.MaxAttempts}}\u003c/span\u003e\n  {{if .LastError}}\u003cp class=\"error\"\u003e{{.LastError}}\u003c/p\u003e{{end}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.row.version",
+      "model": [
+        {
+          "path": "WorkspaceID",
+          "type": "int64"
+        },
+        {
+          "path": "Number",
+          "type": "int"
+        },
+        {
+          "path": "Message",
+          "type": "string"
+        },
+        {
+          "path": "Author",
+          "type": "string"
+        },
+        {
+          "path": "At",
+          "type": "string"
+        },
+        {
+          "path": "Summary",
+          "type": "string"
+        },
+        {
+          "path": "RestoredFrom",
+          "type": "int"
+        },
+        {
+          "path": "Current",
+          "type": "bool"
+        }
+      ],
+      "body": "\u003carticle class=\"card version{{if .Current}} is-current{{end}}\"\u003e\n  \u003cheader class=\"version-head\"\u003e\n    \u003ch3\u003ev{{.Number}}\u003c/h3\u003e\n    {{if .Current}}\u003cspan class=\"badge is-ok\"\u003enow\u003c/span\u003e{{end}}\n    {{if .RestoredFrom}}\u003cspan class=\"badge\"\u003erolled back to v{{.RestoredFrom}}\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n  \u003cp\u003e{{.Message}}\u003c/p\u003e\n  \u003cp class=\"hint\"\u003e{{.Summary}} · saved by {{.Author}} · {{.At}}\u003c/p\u003e\n  {{/* No button on the version the workflow is already at: rolling back to\n       where you are does nothing and would still write a version saying you\n       did. */}}\n  {{if .Current}}{{else}}\n  \u003cform method=\"post\" action=\"/workspaces/{{.WorkspaceID}}/versions/{{.Number}}/restore\"\n        hx-confirm=\"Roll back to v{{.Number}}? What is there now is replaced. It is kept as a version, so this can be undone.\"\u003e\n    \u003cbutton type=\"submit\"\u003eRoll back to this\u003c/button\u003e\n  \u003c/form\u003e\n  {{end}}\n\u003c/article\u003e",
       "appends": false
     },
     {

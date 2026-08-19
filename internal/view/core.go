@@ -294,6 +294,10 @@ func CoreModels() Models {
 		"cog.page.account":    Account{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.frag.password":   Account{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.frag.library":    Instructions{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.drawer.versions": Versions{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.versions":   Versions{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.version":     VersionRow{},
+		"cog.empty.versions":  Versions{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.list.users":      People{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.person":      Person{},
 		"cog.list.teams":      People{Ctx: Ctx{T: DefaultStrings()}},
@@ -441,6 +445,46 @@ type Account struct {
 	IsAdmin bool
 	Problem string
 	Notice  string
+}
+
+// Versions is a workflow's history.
+//
+// One line per version, newest first, because the question somebody opens this
+// with is "what did it look like before I changed it" and the answer is always
+// near the top.
+type Versions struct {
+	Ctx         Ctx
+	WorkspaceID int64
+	Items       []VersionRow
+	// Unchanged says the workflow is exactly the newest version, so saving
+	// again would write a duplicate. Said rather than left to be discovered
+	// from two identical lines.
+	Unchanged bool
+	Problem   string
+	Notice    string
+	// Missing is what a restore could not bring back — a gear the library no
+	// longer has, an agent a clock pointed at. Restoring everything else and
+	// naming the gaps beats refusing the whole thing.
+	Missing []string
+}
+
+// VersionRow is one saved state.
+type VersionRow struct {
+	// WorkspaceID travels on the row because the row builds its own form
+	// action, and a row that had to be told by its container could not be
+	// overridden on its own.
+	WorkspaceID int64
+	Number      int
+	Message     string
+	Author      string
+	At          string
+	Summary     string
+	// RestoredFrom is the version this one was rolled back to, or zero. It is
+	// what makes a rollback readable as an event rather than as a version that
+	// mysteriously resembles an older one.
+	RestoredFrom int
+	// Current is the newest, which is the one the workflow is at.
+	Current bool
 }
 
 // Person is one account on this install.
@@ -1403,14 +1447,21 @@ func Exemplars() Models {
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
 
-		"cog.page.people":   examplePeople(ctx),
-		"cog.page.account":  Account{Ctx: ctx, Name: "admin", IsAdmin: true},
-		"cog.frag.password": Account{Ctx: ctx, Name: "admin", IsAdmin: true},
-		"cog.frag.library":  exampleLibrary(ctx),
-		"cog.list.users":    examplePeople(ctx),
-		"cog.row.person":    examplePeople(ctx).Users[0],
-		"cog.list.teams":    examplePeople(ctx),
-		"cog.row.team":      examplePeople(ctx).Teams[0],
+		"cog.page.people":     examplePeople(ctx),
+		"cog.page.account":    Account{Ctx: ctx, Name: "admin", IsAdmin: true},
+		"cog.frag.password":   Account{Ctx: ctx, Name: "admin", IsAdmin: true},
+		"cog.frag.library":    exampleLibrary(ctx),
+		"cog.drawer.versions": exampleVersions(ctx),
+		"cog.list.versions":   exampleVersions(ctx),
+		"cog.empty.versions":  Versions{Ctx: ctx, WorkspaceID: 1},
+		"cog.row.version": VersionRow{
+			WorkspaceID: 1, Number: 3, Message: "added the checker", Author: "admin",
+			At: "2026-08-19T18:04:00Z", Summary: "3 agents, 2 wires, 1 gear", Current: true,
+		},
+		"cog.list.users": examplePeople(ctx),
+		"cog.row.person": examplePeople(ctx).Users[0],
+		"cog.list.teams": examplePeople(ctx),
+		"cog.row.team":   examplePeople(ctx).Teams[0],
 
 		"cog.page.plugins": examplePlugins(ctx),
 		"cog.list.plugins": examplePlugins(ctx),
@@ -1627,5 +1678,21 @@ func Funcs() template.FuncMap {
 		// hasPrefix answers "is this nav entry the current one" without the
 		// host having to precompute it for every possible override.
 		"hasPrefix": strings.HasPrefix,
+	}
+}
+
+// exampleVersions is a workflow with a history somebody could read.
+func exampleVersions(ctx Ctx) Versions {
+	return Versions{
+		Ctx:         ctx,
+		WorkspaceID: 1,
+		Items: []VersionRow{
+			{WorkspaceID: 1, Number: 3, Message: "added the checker", Author: "admin",
+				At: "2026-08-19T18:04:00Z", Summary: "3 agents, 2 wires, 1 gear", Current: true},
+			{WorkspaceID: 1, Number: 2, Message: "back to how it was on Monday", Author: "admin",
+				At: "2026-08-19T17:40:00Z", Summary: "2 agents, 1 wire", RestoredFrom: 1},
+			{WorkspaceID: 1, Number: 1, Message: "first draft", Author: "admin",
+				At: "2026-08-19T16:20:00Z", Summary: "2 agents, 1 wire"},
+		},
 	}
 }

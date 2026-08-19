@@ -1,0 +1,60 @@
+{{/*
+  A workflow's history.
+
+  Saved by a person, with a message, because the alternative — a version per
+  change — is four hundred entries nobody reads, which is a history in the same
+  sense that a disk is a backup.
+
+  Rolling back writes a NEW version rather than deleting the ones after it. A
+  history that can be rewritten cannot be produced in an argument about what
+  ran, and that argument is the whole reason to keep one.
+*/}}
+
+{{define "cog.drawer.versions"}}<div class="dk-body versions">
+  <p class="hint">Everything that decides what a run does — the agents, the wires, the gears they may
+  call, what they read and the clocks that start them. Not the conversation: rolling back to last week
+  must not delete what was said since.</p>
+
+  {{if .Problem}}<p class="error">{{.Problem}}</p>{{end}}
+  {{if .Notice}}<p class="hint">✓ {{.Notice}}</p>{{end}}
+
+  {{range .Missing}}<p class="error">{{.}}</p>{{end}}
+
+  <form class="version-save" method="post" action="/workspaces/{{.WorkspaceID}}/versions"
+        hx-post="/workspaces/{{.WorkspaceID}}/versions" hx-target="#version-list" hx-swap="outerHTML">
+    <label>What changed <input name="message" required maxlength="200"
+                               placeholder="added the checker, and wired the drafter to it"></label>
+    <button type="submit">Save this version</button>
+  </form>
+
+  {{if .Unchanged}}<p class="hint">Nothing has changed since the newest version.</p>{{end}}
+
+  {{template "cog.list.versions" .}}
+</div>{{end}}
+
+{{define "cog.list.versions"}}<div id="version-list" class="version-list">
+{{if .Items}}{{range .Items}}{{template "cog.row.version" .}}{{end}}{{else}}{{template "cog.empty.versions" .}}{{end}}
+</div>{{end}}
+
+{{define "cog.row.version"}}<article class="card version{{if .Current}} is-current{{end}}">
+  <header class="version-head">
+    <h3>v{{.Number}}</h3>
+    {{if .Current}}<span class="badge is-ok">now</span>{{end}}
+    {{if .RestoredFrom}}<span class="badge">rolled back to v{{.RestoredFrom}}</span>{{end}}
+  </header>
+  <p>{{.Message}}</p>
+  <p class="hint">{{.Summary}} · saved by {{.Author}} · {{.At}}</p>
+  {{/* No button on the version the workflow is already at: rolling back to
+       where you are does nothing and would still write a version saying you
+       did. */}}
+  {{if .Current}}{{else}}
+  <form method="post" action="/workspaces/{{.WorkspaceID}}/versions/{{.Number}}/restore"
+        hx-confirm="Roll back to v{{.Number}}? What is there now is replaced. It is kept as a version, so this can be undone.">
+    <button type="submit">Roll back to this</button>
+  </form>
+  {{end}}
+</article>{{end}}
+
+{{define "cog.empty.versions"}}<p class="hint">
+No versions yet. Save one when the workflow does what you meant, and you can always get back to it.
+</p>{{end}}

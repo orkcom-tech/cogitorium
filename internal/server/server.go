@@ -48,6 +48,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/view"
 	"github.com/orkcom-tech/cogitorium/internal/websearch"
 	"github.com/orkcom-tech/cogitorium/internal/work"
+	"github.com/orkcom-tech/cogitorium/internal/workflow"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 	"github.com/orkcom-tech/cogitorium/web"
 )
@@ -86,6 +87,7 @@ type Server struct {
 	// is a way to run a server out of disk politely.
 	schedules *schedule.Store
 	settings  *settings.Store
+	versions  *workflow.Store
 	// orchestratorSecrets is what the config file said: "off" is absolute.
 	orchestratorSecrets string
 	queue               *work.Store
@@ -257,6 +259,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		queue:               queue,
 		schedules:           schedule.NewStore(db),
 		settings:            settings.NewStore(db),
+		versions:            workflow.NewStore(db),
 		orchestratorSecrets: cfg.OrchestratorSecrets,
 		queueMax:            queueMax,
 		callbackHosts:       cfg.CallbackHosts,
@@ -588,6 +591,8 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.page(mux, "POST /people/teams/{id}/delete", s.handleDeleteTeamForm)
 	s.page(mux, "POST /people/teams/{id}/members", s.handleAddTeamMemberForm)
 
+	s.page(mux, "POST /workspaces/{id}/versions", s.handleSaveVersionForm)
+	s.page(mux, "POST /workspaces/{id}/versions/{number}/restore", s.handleRestoreVersionForm)
 	s.page(mux, "GET /account", s.handleAccountPage)
 	s.page(mux, "POST /account/password", s.handleAccountPasswordForm)
 	s.page(mux, "POST /account/signout", s.handleAccountSignOutForm)

@@ -101,6 +101,16 @@ export const DRAWER_ICON: Record<string, ReactNode> = {
       <path d="M18.5 15.2v4.3M16.4 17.3h4.2" />
     </>,
   ),
+  // A history: earlier states behind the one you are on. Stacked cards rather
+  // than a clock, because what this drawer holds is what the workflow WAS, not
+  // when.
+  versions: svg(
+    <>
+      <rect x="8.5" y="3.5" width="12" height="12" rx="2" />
+      <path d="M5.5 6.5v11a2 2 0 0 0 2 2h9" />
+      <path d="M3.5 9.5v8a2 2 0 0 0 2 2h6" />
+    </>,
+  ),
   terminal: svg(
     <>
       <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
