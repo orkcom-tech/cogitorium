@@ -16,6 +16,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -35,6 +36,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/mcpoauth"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/metrics"
+	"github.com/orkcom-tech/cogitorium/internal/plugin"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/schedule"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
@@ -163,6 +165,15 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	plugins, err := loadPlugins(cfg.DataDir)
 	if err != nil {
 		panic("cogitorium: the interface could not be composed: " + err.Error())
+	}
+	// The image's own plugin tree, checked as the user this process actually
+	// runs as. It ran only inside `plugins seed` and its answer went nowhere,
+	// so a tree that is present and unreadable — the ownership case on the
+	// cluster channel — came up as an interface that quietly has nothing extra
+	// in it, with nothing anywhere to read.
+	if err := plugin.CheckRef(""); err != nil {
+		slog.Warn("this image carries plugins that cannot be read as this user, so none of them "+
+			"are installed", "err", err, "uid", os.Getuid())
 	}
 	// Compiled at boot rather than on the first request, so a module that will
 	// not load is a line in the startup log rather than a page that fails the

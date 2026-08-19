@@ -1,9 +1,13 @@
 package plugin
 
 import (
+	"context"
 	"fmt"
+	"github.com/orkcom-tech/cogitorium/internal/channel"
+	"github.com/orkcom-tech/cogitorium/internal/runtimes"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -80,13 +84,67 @@ func Bake(refDir string, bundles []string) ([]Installed, error) {
 		out = append(out, in)
 	}
 
+	// The runtimes, too, or baking is only half done.
+	//
+	// A baked plugin set is a property of the IMAGE: wipe the volume, land on
+	// a fresh node, run with no volume at all, and the same plugins come up.
+	// A provisioned plugin whose interpreter was not baked comes up and then
+	// reaches the network for a hundred megabytes — on every fresh node, and
+	// on the air-gapped installs this feature exists for, not at all.
+	if err := bakeRuntimes(refDir, out); err != nil {
+		return nil, err
+	}
+
 	if err := chmodTree(filepath.Join(refDir, pluginsDir)); err != nil {
+		return nil, err
+	}
+	if err := chmodTree(filepath.Join(refDir, "runtimes")); err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
 	if err := os.Chmod(filepath.Join(refDir, orderFile), refModeFile); err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// bakeRuntimes fetches the interpreter each provisioned plugin needs.
+//
+// Into the ref tree, where it is used in place and read-only at runtime rather
+// than copied into the volume — a hundred megabytes per interpreter copied on
+// every start would double storage for nothing.
+//
+// A tier this cannot materialise is named rather than passed over. An image
+// plugin needs its image on whatever will run it and a native plugin already
+// carries its binary, so both are fine — but an operator who baked one should
+// be told which of the two they got, because only one of them will still work
+// with no registry reachable.
+func bakeRuntimes(refDir string, baked []Installed) error {
+	profile := channel.Detect(refDir)
+	caps := Capabilities{Profile: profile, ContainerRunner: true}
+	store := runtimes.NewStore(refDir, "", profile, runtimes.HTTPFetcher{}, true)
+
+	for _, in := range baked {
+		res := Resolve(in.Manifest, caps)
+		switch res.Tier {
+		case TierProvisioned:
+			r, err := store.Ensure(context.Background(), res.Technology, func(string) bool { return true })
+			if err != nil {
+				return fmt.Errorf("baking %s: its %s runtime could not be fetched, so the image "+
+					"would come up and reach the network for it: %w", in.ID, res.Technology, err)
+			}
+			slog.Info("baked a plugin runtime into the image",
+				"plugin", in.ID, "technology", res.Technology, "version", r.Row.Version)
+		case TierImage:
+			// Nothing to put in the layer: the image is pulled by whatever
+			// runs the container, not by this build.
+			slog.Warn("a baked plugin runs from a container image, which this build cannot carry",
+				"plugin", in.ID, "image", res.Technology,
+				"note", "whatever runs this must be able to pull it")
+		case TierNative:
+			slog.Info("a baked plugin carries its own binary", "plugin", in.ID)
+		}
+	}
+	return nil
 }
 
 // chmodTree makes everything readable by mode rather than by owner.
