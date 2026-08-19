@@ -35,7 +35,8 @@ You describe a team: who thinks, who checks, who is allowed to run code, and
 what each of them may reach. Cogitorium runs it and shows you what happened —
 every wire a capability somebody granted, every gear a piece of code you read
 before it was allowed to run, every token spent attributed to the agent that
-spent it.
+spent it. And when it does what you meant, **save it as a version** — the whole
+workflow, so you can get back to it after an afternoon of changing your mind.
 
 ![The workspace: the stages on the rail, the drawers beside them](docs/assets/02-workspace-chat.png)
 
@@ -131,10 +132,35 @@ spent it.
   a per-agent grant, and every search still stops for a human to approve that
   exact query.
   [→](https://orkcom-tech.github.io/cogitorium/#letting-agents-reach-the-web)
+- 🧩 **Plugins: change the platform, not just what runs on it** — a plugin adds a
+  screen, hangs a panel inside every workspace, **takes over a screen that
+  shipped**, and runs code of its own. Every product screen is a template
+  addressable by name, so overriding one is a file rather than a fork. Five
+  tiers — templates, WebAssembly, a fetched interpreter, a container, a native
+  binary — and the author declares a technology while the host picks the lane.
+  Nine host calls, identical on every tier. SDKs for Python, Go, TinyGo and
+  Rust; `needs: js` needs no SDK at all. It arrives switched off, and approval
+  is bound to the sha256 of the bytes on disk — rebuild it and it drops back to
+  pending by itself.
+  [→](https://orkcom-tech.github.io/cogitorium/plugins/)
+- 🎨 **Which is why the look is yours too** — one template name is the palette,
+  and overriding it restyles the whole product in both appearances with no code
+  at all. The cheapest thing a plugin can do and the most visible.
+  [→](https://orkcom-tech.github.io/cogitorium/plugins/#the-cheapest-override-there-is)
+- 🕰 **Versions of a workflow** — save what a workflow is, with a message, and
+  get back to it. A version is the whole of it: the agents, the wires, the gears
+  they may call **pinned to the version they were pinned to**, what each reads,
+  and the clocks that start them. Rolling back keeps what it replaces — the
+  current state is saved first and the rollback is recorded as its own version,
+  because a history that can be rewritten cannot be produced in an argument
+  about what ran.
+  [→](https://orkcom-tech.github.io/cogitorium/guide/#versions)
 - 📦 **Portable and local-first** — a workspace exports as one JSON document you
   can hand to another install, from the interface or the command line. Everything
   runs on your machine.
   [→](#no-telemetry)
+
+![A workflow's history: what it was, and the way back](docs/assets/23-versions.png)
 
 ## How it compares
 
@@ -147,13 +173,13 @@ people already run. Each row is a structural difference, not a feature tick.
 |---|---|---|---|---|
 | **What you install** | one Go binary with the interface inside it | a pnpm workspace of Workers | an npm package, Node 22+ | containers, with Postgres and Redis beside them |
 | **Where it actually runs** | your laptop, your Docker, your cluster | Cloudflare Workers and Durable Objects; `workerd` locally | one Node process on your machine | your host, plus its datastores |
-| **Who may change the interface** | anyone — a plugin installs into a running server | whoever owns the deployment repository | anyone — the UI is itself a swappable plugin row | node and component authors, through a review you do not control |
-| **What isolates a third party's code** | tiered: WebAssembly today, container and native declared | Workers isolates; agent frames with outbound networking off | nothing — plugins mount in-process with full host rights | nothing to partial, depending on product and mode |
+| **Who may change the interface** | anyone — a plugin installs into a running server, and every product screen is a template it can take over by name | whoever owns the deployment repository | anyone — the UI is itself a swappable plugin row | node and component authors, through a review you do not control |
+| **What isolates a third party's code** | tiered and running: WebAssembly, a fetched interpreter, a container, or native with no isolation and said so in red | Workers isolates; agent frames with outbound networking off | nothing — plugins mount in-process with full host rights | nothing to partial, depending on product and mode |
 | **Before an extension runs** | approval bound to the sha256 of the bytes on disk; a new build drops back to pending | review of the deployment repository | no manifest, no prompt, no signature | install and it runs |
 | **Code an agent wrote for itself** | will not execute until a person approves that exact version | gadgets run in sandboxed frames | registered by a plugin, runs unsandboxed | executes when saved |
 | **Outbound: an allowlist *and* a record** | per-host at approval, and a row per connection — allowed and refused alike | Gatekeepers mediate per resource and operation, and every resource an agent observes is recorded | neither; the docs put network "outside this vocabulary" | Dify: Squid ACL with a log. n8n: off unless switched on. Flowise: a denylist, empty, no log |
 | **Governance without paying** | accounts, teams, workspace sharing and per-host records, Apache-2.0, no licence key | Apache-2.0 | MIT | SSO, roles and audit behind a paid licence in five of six |
-| **Maturity** | v2.0.0; the plugin system is still on a branch | 8.6k stars, run daily inside Cloudflare | developer preview at `rc.7`, warning of breaking changes | years in production |
+| **Maturity** | v3.0.0; the plugin system ships, with four SDKs and a catalog | 8.6k stars, run daily inside Cloudflare | developer preview at `rc.7`, warning of breaking changes | years in production |
 
 ### Where it loses
 
@@ -174,11 +200,10 @@ A table with no losses in it is an advertisement, so:
   interrupted work is marked dead rather than requeued, on purpose, because
   re-running something that may already have sent an email is a second execution
   nobody asked for. If you want automatic resume, that is Temporal's job.
-- **A plugin does not reach as far as the marketing word "plugin" suggests.** It
-  adds a rail entry, a workspace panel and pages of its own, and its stylesheet
-  and script load on every screen. It cannot yet contribute a tool to an agent or
-  make an outbound request, and the product's own screens are not template
-  surfaces yet.
+- **A plugin still cannot hand an agent a tool.** It adds screens, takes over the
+  product's own, reaches the network through the host's gate and calls this
+  server's API as itself — but a gear is what an agent calls, and a plugin
+  cannot contribute one. The two extension systems do not meet yet.
 - **Cloudflare OS is ahead on data flow.** Recording every resource an agent
   observed, and deciding policy on that record, is a stronger question than the
   one an egress allowlist answers. Cogitorium controls where an agent reaches,

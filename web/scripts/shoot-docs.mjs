@@ -75,11 +75,20 @@ async function settle(page) {
   await page.waitForTimeout(250)
 }
 
-/** Put the interface in a known appearance. Two choices now, not eleven. */
+/** Put the interface in a known appearance. Two choices now, not eleven.
+ *
+ * A cool turquoise-blue rather than the teal that was here: the documentation
+ * is read mostly in light, and a green-leaning accent on a light ground reads
+ * warm and slightly sickly at small sizes. This one sits on the blue side of
+ * turquoise and stays cold, which is what the product should look like the
+ * first time somebody sees it.
+ */
+const ACCENT = '#0e7490'
+
 async function theme(page, mode) {
   await page.evaluate(
-    (m) => localStorage.setItem('cogitorium.theme', JSON.stringify({ mode: m, accent: '#0f766e' })),
-    mode,
+    ([m, accent]) => localStorage.setItem('cogitorium.theme', JSON.stringify({ mode: m, accent })),
+    [mode, ACCENT],
   )
 }
 
@@ -127,7 +136,10 @@ shoot('03-blueprint', 'the blueprint: every wire is a capability, the clock says
 })
 
 shoot('04-appearance', 'appearance: light or dark, and a colour that is yours', async (page) => {
-  await page.goto(`${base}/workspaces`)
+  // The map rather than the workspaces list: the account, the appearance and
+  // the update notice live on the rail the CLIENT draws, and /workspaces is a
+  // screen the server renders now.
+  await page.goto(`${base}/map`)
   await ready(page)
   await rail(page, 'Appearance').click()
   await page.waitForTimeout(500)
@@ -156,7 +168,7 @@ shoot('07-gears', 'the gear catalogue, where it is met: a drawer out over the bl
 
 shoot('08-gear-review', 'what approving a gear grants, stated before you approve it', async (page) => {
   await overBlueprint(page, 'Gears')
-  await page.getByRole('button', { name: 'review & approve' }).first().click()
+  await page.getByRole('link', { name: /review . approve/ }).first().click()
   await page.waitForTimeout(700)
 })
 
@@ -188,7 +200,7 @@ shoot('12-models', 'the model catalogue: providers, and what each one offers', a
 })
 
 shoot('13-rail-menu', 'the rail: the install-wide pages, and the way out', async (page) => {
-  await page.goto(`${base}/workspaces`)
+  await page.goto(`${base}/map`)
   await ready(page)
   await rail(page, 'More').click()
   await page.waitForTimeout(400)
@@ -227,15 +239,25 @@ shoot('19-terminal', 'the terminal: a shell on the host, admin only, started by 
 })
 
 shoot('20-gear-approvals', 'who let this code run, when, to which version, and with what', async (page) => {
-  await overBlueprint(page, 'Gears')
-  // The trail lives beside the source and the grants, inside the open card —
-  // the same rule that keeps approval itself out of a collapsed one.
-  await page.getByRole('button', { name: 'review & run' }).first().click()
-  await page.waitForTimeout(700)
-  await page.getByRole('button', { name: 'who approved it' }).first().click()
-  await page.waitForTimeout(700)
-  await page.locator('.drawer-body, .page').first().evaluate((el) => el.scrollBy(0, 400))
+  // Straight to the open gear. The trail is a disclosure inside the card, and
+  // reaching it by clicking through the drawer navigated away from the drawer
+  // — the link goes to the page, because a screen the server renders reaches
+  // its actions by going somewhere.
+  await page.goto(`${base}/gears?open=1`)
+  await ready(page)
+  await page.getByText('who approved it').first().click()
+  await page.waitForTimeout(600)
+  await page.locator('main.page').first().evaluate((el) => el.scrollBy(0, 500))
   await page.waitForTimeout(300)
+})
+
+shoot('22-plugins', 'the plugins screen: what is installed, and the library beside it', async (page) => {
+  await page.goto(`${base}/plugins`)
+  await ready(page)
+})
+
+shoot('23-versions', "a workflow's history: what it was, and the way back", async (page) => {
+  await overBlueprint(page, 'Versions')
 })
 
 shoot('21-context-search', 'finding a memory without already knowing its path', async (page) => {

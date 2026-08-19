@@ -28,7 +28,9 @@
 
       <nav aria-label="Documentation">
         {%- assign on_guide = false -%}
+        {%- assign on_plugins = false -%}
         {%- if page.url contains 'guide' -%}{%- assign on_guide = true -%}{%- endif -%}
+        {%- if page.url contains 'plugins' -%}{%- assign on_plugins = true -%}{%- assign on_guide = false -%}{%- endif -%}
         {%- comment -%}
           Two pages, two anchor lists. The scrollspy below only ever touches
           links whose href starts with '#', so the page links keep their state
@@ -36,6 +38,7 @@
         {%- endcomment -%}
         <a class="page-link{% unless on_guide %} current{% endunless %}" href="{{ '/' | relative_url }}">Reference</a>
         <a class="page-link{% if on_guide %} current{% endif %}" href="{{ '/guide/' | relative_url }}">Guide</a>
+        <a class="page-link{% if on_plugins %} current{% endif %}" href="{{ '/plugins/' | relative_url }}">Write a plugin</a>
 
         {%- comment -%}
           Grouped by the question a reader is holding, not by the order the
@@ -47,7 +50,27 @@
           settled by reading the published HTML after a "fix" based on an older
           kramdown turned twelve working links into twelve dead ones.
         {%- endcomment -%}
-        {%- if on_guide -%}
+        {%- if on_plugins -%}
+        <span class="group">Start here</span>
+        <a href="#your-first-fifteen-minutes">First fifteen minutes</a>
+        <a href="#the-naming-rule">The naming rule</a>
+
+        <span class="group">What it can do</span>
+        <a href="#a-page-of-its-own">A page</a>
+        <a href="#taking-over-a-screen-that-shipped">Override a screen</a>
+        <a href="#the-cheapest-override-there-is">Restyle everything</a>
+        <a href="#stylesheets-scripts-and-files">Assets</a>
+
+        <span class="group">A backend</span>
+        <a href="#backends-five-tiers-and-you-pick-none-of-them">Five tiers</a>
+        <a href="#the-nine-host-calls">The nine calls</a>
+        <a href="#the-sdks">The SDKs</a>
+
+        <span class="group">Shipping it</span>
+        <a href="#what-the-operator-sees-before-saying-yes">The approval card</a>
+        <a href="#listing-it-in-the-shared-catalog">The catalog</a>
+        <a href="#rules-that-will-refuse-you">What will refuse you</a>
+        {%- elsif on_guide -%}
         <span class="group">Start here</span>
         <a href="#where-everything-is">Where everything is</a>
         <a href="#first-run">First run</a>
@@ -79,6 +102,7 @@
         <span class="group">Beyond the interface</span>
         <a href="#appearance">Appearance</a>
         <a href="#updates">Updates</a>
+        <a href="#versions">Versions</a>
         <a href="#plugins">Plugins</a>
         <a href="#watching-it">Watching it</a>
         <a href="#handing-this-install-to-claude-desktop-or-cursor">MCP</a>

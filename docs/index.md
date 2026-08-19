@@ -1897,6 +1897,10 @@ rendered against an example through the composed stack. "It overrides
 
 ### What an author writes
 
+There is a **[full authoring guide](/cogitorium/plugins/)** — the manifest, the
+five tiers, the nine calls, overriding a screen that shipped, the SDKs and how
+to get listed. What follows is the shape of it.
+
 A directory with a `plugin.yaml`. Everything else is optional.
 
 ```yaml
@@ -1998,6 +2002,23 @@ your data decides.
 Update discovery costs nothing in privacy: the catalog's own CI publishes an
 index with versions filled in, and a client fetches the **whole file** and
 compares locally. No query string, no install id, no list of what you have.
+
+## Versions of a workflow
+
+A workspace is a workflow, and it can be saved: agents, wires, the gears they
+may call pinned to the version they were pinned to, what each reads, and the
+clocks that start them. Saved by a person, with a message.
+
+**Rolling back keeps what it replaces.** The current state is saved first, the
+rollback is recorded as a version of its own, and numbers are never reused —
+because a history that can be rewritten cannot be produced in an argument about
+what ran. What could not be restored is named rather than swallowed: a gear the
+catalogue no longer has cannot be conjured back.
+
+Not the same thing as an export. A bundle crosses a machine boundary, so it
+drops approvals and credentials and names models by shape; a version stays here
+and restores exactly, or says why it could not.
+[→](/cogitorium/guide/#versions)
 
 ## Configuration reference
 

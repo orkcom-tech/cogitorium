@@ -1903,6 +1903,64 @@ on it. A slow or unreachable GitHub is not a reason for a workspace to be slow.
 
 ---
 
+## Versions
+
+A workflow you cannot get back to is one you stop changing. So save it: the
+**Versions** drawer, in the workspace rail beside Agents and Gears.
+
+![A workflow's history, beside the blueprint it describes](assets/23-versions.png)
+
+### What a version holds
+
+Everything that decides what a run does — the agents, the wires between them,
+the gears they may call **pinned to the version they were pinned to**, what each
+one reads, and the clocks that start them. Not some of it: a blueprint saved
+without the instruction an agent reads is a number that does not say how the
+thing will behave.
+
+Two things are deliberately not in it.
+
+**The conversation.** The transcript is work, not configuration. Rolling back to
+last week must not delete what was said since.
+
+**Approvals are not dropped**, unlike an export. A bundle crosses to another
+machine, so it carries no approvals and no credentials; a version stays here,
+and a rollback that quietly un-approved every gear would not be a rollback.
+
+### Saving one
+
+Write what changed and press **Save this version**. The message is required —
+a version with no message is a date, and a list of dates does not tell you which
+one to go back to. If nothing has changed since the newest version, it says so
+rather than recording a duplicate.
+
+### Going back
+
+Every version except the current one offers **Roll back to this**. What happens
+next is three things, and it is worth knowing all three:
+
+1. What is there **now** is saved first, as its own version, so nothing you had
+   not saved is lost.
+2. The workflow is put back — agents, wires, grants, bindings and clocks. What
+   is not in the version goes.
+3. The rollback is recorded as a **new version**, marked as a rollback and
+   saying which one it went to.
+
+Numbers are never reused. A history that can be rewritten is a history nobody
+can point at in an argument about what actually ran.
+
+### When something cannot come back
+
+A gear the catalogue no longer has cannot be conjured back by a rollback. So
+everything else is restored and the gap is **named** — and a gear that has moved
+on to a later version says so too, because that is exactly the thing a version
+exists to make visible.
+
+### On the list
+
+Each workflow on the Workspaces screen shows its newest version, and says
+**unsaved changes** when what is running has drifted from it.
+
 ## Plugins
 
 A gear adds a tool. A plugin adds a **screen** — and can change the ones already
@@ -1912,6 +1970,8 @@ a much larger thing to say yes to than a gear, and the screen is built around
 the moment you say it.
 
 Everything about plugins is under **Plugins** in the rail. It is admin-only.
+
+![The plugins screen: what is installed, what it takes over, and the library beside it](assets/22-plugins.png)
 
 ### Getting one in
 

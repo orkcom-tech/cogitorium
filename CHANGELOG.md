@@ -1,6 +1,218 @@
 # Changelog
 
-## Unreleased
+## v3.0.0
+
+**The platform became something you change from the inside.** Two things carry
+this release — plugins, and versions of a workflow — and most of the rest is the
+conversion that made the first one possible, plus the faults that conversion
+introduced, found by using the product rather than by reading it.
+
+### A plugin can take over a screen that shipped
+
+A plugin adds a screen, hangs a panel inside every workspace, takes over a
+template the core never designated as extensible, and runs code of its own. It
+arrives switched off, and **approval is bound to the sha256 of the bytes on
+disk**: rebuild it and it drops back to pending by itself, because the thing
+somebody approved no longer exists.
+
+Which means the product's own screens had to become templates, and they have.
+Instructions, models, context, gears, workspaces, variables, queue, receivers,
+MCP, agents, memory, the transcript, the terminal gate, plugins and the people
+lists are rendered by the server through an ordered layer stack — each verified
+against a running server before its React component was deleted, and each
+overridable by name from that moment. `cogitorium plugins names` lists every
+name, what model it renders against, and the host's own body today, offline,
+from the binary you are running.
+
+Four screens stay with the client, and the reason is the same in each: a
+template renders a thing that exists at a moment, and these exist in motion. The
+install map and the blueprint are drawn canvases somebody drags, the file editor
+is live text, and the terminal is a socket. The chat stage is the fifth and the
+one that was a judgement rather than a fact: it posts a turn and streams the
+answer on the same request, and splitting that into a send and a subscribe
+changes what cancelling a turn means.
+
+### Five ways to run one, and the author picks none of them
+
+An author declares a technology. The host decides the tier and says which it
+picked: templates only; WebAssembly on wazero; a fetched interpreter shared by
+every plugin that needs that version; an OCI image on the sandbox that already
+runs gears; or a native binary, which is the one with no isolation and is shown
+in red on the approval screen. `needs: js` needs nothing fetched at all — the
+JavaScript engine is compiled into this binary, and the author ships one file.
+
+**Nine host calls, identical on every tier** — `log`, `now`, `rand`, `config`,
+`render`, `http`, `api`, `enqueue`, `kv` — so a plugin that outgrows one
+language and is rewritten in another calls the same nine things. Two of them are
+grants rather than capabilities: `http` reaches only hosts listed in the
+manifest, through the same gate a gear's traffic goes through, and `api` calls
+this server as `plugin:<id>` and never as whoever installed it.
+
+`now` and `rand` are host calls rather than the guest's own so that
+`plugins invoke` can pin them, which is what makes a plugin's output
+reproducible in a test.
+
+### Four SDKs
+
+Python, Go, TinyGo and Rust. The Go SDK is one package with two transports: the
+same source builds to a WebAssembly module the server runs inside itself and to
+a native binary it supervises, so the tier stays the operator's decision and
+never reaches back into the author's code. A test reads every SDK and fails if
+one of them cannot make one of the nine calls, or states a contract this build
+does not speak.
+
+Two things that only running them could have taught: a plugin module must be
+built `-buildmode=c-shared`, because the default builds a command that runs once
+and ends, and a module that has ended has no exports left to call; and a counter
+comes back from storage as a string, because a JSON number is a float in every
+language with one number type.
+
+### A catalog you do not wait for
+
+[orkcom-tech/cogitorium-plugins](https://github.com/orkcom-tech/cogitorium-plugins)
+is an index of five fields per plugin; the bundle stays in the author's own
+repository, so listing costs one small file no matter how many plugins there
+are. **Adding your own entry merges on green CI.** Editing or removing one that
+is already listed does not, and that is the rule worth explaining: an edit can
+point an id people have already installed at a *different repository*, and
+nothing in a public JSON file can establish who owns an id.
+
+Verification shows as three states rather than a badge — the team read the
+version you have, they read a different one, or nobody has looked. The last is
+the ordinary state and not an accusation.
+
+**Authors show their own work.** A plugin may ship screenshots or a short clip
+inside its bundle, so what is shown is covered by the digest the operator
+approves and cannot change after they looked; a catalog entry may carry one
+picture, pinned to a file in the author's own repository, because a picture on a
+stranger's host would tell them who is browsing.
+
+### Versions of a workflow
+
+A workflow that cannot be rolled back is one nobody dares change.
+
+A version is **the whole of what the workflow was** — its agents, the wires
+between them, the gears they may call pinned to the version they were pinned to,
+what each reads, and the clocks that start them. A number identifying some of
+that would identify no behaviour: a blueprint versioned without the instruction
+an agent reads does not say how it will act.
+
+It is not the export bundle, and the difference is why it exists. A bundle
+crosses a machine boundary, so it drops approvals and credentials and names
+models by shape — all correct there and all wrong here, because a rollback that
+quietly un-approved every gear would not be a rollback. It is not the
+conversation either: the transcript is work rather than configuration, and going
+back to last week must not delete what was said since.
+
+Saved by a person, with a message. **Rolling back keeps what it replaces** — the
+current state is saved first, the rollback is recorded as a version of its own,
+and numbers are never reused, because a history that can be rewritten cannot be
+produced in an argument about what ran. What could not be restored is named: a
+gear the library no longer has cannot be conjured back, so everything else goes
+back and the gap is stated.
+
+The workspace list shows each workflow's newest version, and says when what is
+running has drifted from it.
+
+### The orchestrator can unbuild what it builds
+
+It had twenty tools and every one of them created, read or bound. Nothing
+removed anything — an agent could be made and never unmade, a wire drawn and
+never cut, a gear granted and never revoked — while the API had a DELETE for
+each. An orchestrator that can only add fills a workspace with what it got wrong
+and leaves the person to sweep up.
+
+`agent_delete`, `wire_cut` and `revoke_gear`, each refusing in words rather than
+succeeding quietly, and none of them able to delete the agent taking the turn.
+
+Clocks, which it could not touch at all: `schedule_create`, `schedule_list`,
+`schedule_update`, `schedule_delete`, found by name because a model that has
+just been told "turn off the nightly sweep" holds a name, not a number.
+
+And the operator's named values: `env_list` always, with `env_get`, `env_set`
+and `env_delete` behind a switch that is on by default. Reading a secret puts
+its plaintext into the model's context, which the tool's own description says
+out loud; `orchestrator_secrets: off` withholds those three rather than offering
+them and refusing, because a tool a model can see is a tool it will try.
+
+### Fixed
+
+A clean install, walked as a person would walk it, with every agent turn
+actually running against a model. Seventeen things did not work; these are the
+ones that mattered.
+
+**Every drawer inside a workspace opened empty.** The server rendered them
+correctly and answered 200, and the browser never asked: htmx scans the document
+once, at load, and React mounts these containers afterwards. Agents, gears,
+memory, MCP, receivers, queue, variables and context — the whole of the work
+that happens inside a workspace.
+
+**A gear could not be written by hand.** There was no `POST /gears`, so the form
+fell through to the single-page application, which answered 200 with its own
+shell and rendered nothing. Fill it in, press save, land on a blank page, and no
+gear.
+
+**No server-rendered screen scrolled.** The cavity clips — that is what makes
+its rounded corner a corner — and a converted page had no scrolling of its own,
+so everything past the first screenful was unreachable.
+
+**A clock whose agent was deleted fired and failed every minute, forever.** It
+now records the refusal once and switches itself off, and the row stays so it
+can be repointed.
+
+**The rail on a server-rendered screen carried seven destinations and nothing
+else** — no account, no way to sign out or change a password, and neither People
+nor the Terminal. There is one rail now, and an `/account` page.
+
+**Changing a password did not ask for the current one**, which made an unlocked
+screen enough to take an account over permanently.
+
+**An instruction and a gear could not be corrected.** Both are editable where
+they are read; correcting a gear forges its next version, which returns it to
+pending, because an approval covers exact content.
+
+**Dragging an instruction onto the blueprint** — how one is given to an agent —
+stopped working when the library became a template.
+
+**A form post left its own URL in the address bar**, so a refresh re-submitted
+it: a second provider, a second team, another dial of somebody's endpoint.
+
+**The blueprint could not fit its own graph.** React Flow refuses to zoom below
+0.5 unless told otherwise, so with a drawer docked along the bottom two nodes
+were left outside the canvas — and there is no scrollbar on a pane you pan.
+
+**A bundle lost its wiring.** Which agent was told to read which document was
+not in the export format at all, so the same agents arrived on the far side with
+nothing to read. The import screen also threw away what it was told: skipped
+gears, skipped MCP servers and agents whose model could not be resolved were all
+computed and none of them shown.
+
+A context file can now be deleted from the screen it is read on, which the API
+could already do.
+
+### Also
+
+The web test suite builds the bundle before the binary that embeds it. Without
+that it tested whatever was last built by hand, which is how a change that
+emptied every drawer stayed green.
+
+The documentation's screenshots are re-shot in the light appearance.
+
+### Upgrading
+
+Nothing to do: the database migrates on start, and an install with no plugins
+behaves as it did. Two things are worth knowing.
+
+A path is no longer anonymous merely because it is not under `/api/`. A screen
+registers its own first path segment as authenticated space, browsers get a
+redirect where the API still gets 401, and plugin routes take `auth: token` by
+default.
+
+`orchestrator_secrets` is a new configuration key, defaulting to `on`. Set it to
+`off` if you would rather type credentials yourself; written in the config file,
+off is absolute and no screen can lift it.
+
+## v2.0.0
 
 ### Signing in to a hosted MCP server, rather than pasting a token
 
