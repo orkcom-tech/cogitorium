@@ -55,7 +55,7 @@ func TestACoverStaysOnTheAuthorsOwnRepository(t *testing.T) {
 	ok := Entry{
 		ID: "release-radar", Name: "Release Radar", Author: "someone",
 		Description: "watches releases", Repo: "someone/cogitorium-release-radar",
-		Cover:       "https://raw.githubusercontent.com/someone/cogitorium-release-radar/main/docs/cover.png",
+		Cover: "https://raw.githubusercontent.com/someone/cogitorium-release-radar/main/docs/cover.png",
 	}
 	if err := ok.Validate(); err != nil {
 		t.Fatalf("a cover in the author's own repository was refused: %v", err)
