@@ -56,6 +56,16 @@ type Installed struct {
 	Enabled bool
 	// Order is its position in that list, or -1 when it is not in it.
 	Order int
+	// Broken is why this directory could not be read as a plugin. When it is
+	// set, everything above it except the id is unreliable.
+	//
+	// Reported rather than skipped. A directory somebody installed that
+	// silently does not appear is the worst answer available: the operator
+	// sees no plugin, no error, and no reason to look anywhere.
+	Broken error
+	// ID is the directory name, which is the only thing known about a broken
+	// install and the only thing needed to remove it.
+	ID string
 }
 
 // Store is the plugin directory and the enable list beside it.
@@ -111,11 +121,13 @@ func (s *Store) List() ([]Installed, error) {
 		}
 		in, err := s.read(e.Name())
 		if err != nil {
-			// A directory that is not a readable plugin is skipped rather than
-			// fatal: one corrupt install must not stop the server from
-			// starting and telling somebody about it.
+			// Reported, never skipped. One corrupt install must not stop the
+			// server from starting — but it must not vanish either, or the
+			// operator sees no plugin, no error, and no reason to look.
+			out = append(out, Installed{ID: e.Name(), Broken: err, Order: -1})
 			continue
 		}
+		in.ID = in.Manifest.ID
 		if i, ok := pos[in.Manifest.ID]; ok {
 			in.Enabled, in.Order = true, i
 		} else {
@@ -132,7 +144,7 @@ func (s *Store) List() ([]Installed, error) {
 		case a.Enabled:
 			return a.Order < b.Order
 		default:
-			return a.Manifest.ID < b.Manifest.ID
+			return a.ID < b.ID
 		}
 	})
 	return out, nil
@@ -147,7 +159,7 @@ func (s *Store) Enabled() ([]Installed, error) {
 	}
 	var out []Installed
 	for _, in := range all {
-		if in.Enabled {
+		if in.Enabled && in.Broken == nil {
 			out = append(out, in)
 		}
 	}
@@ -191,7 +203,7 @@ func (s *Store) read(id string) (Installed, error) {
 			id, version, m.Version)
 	}
 
-	in := Installed{Manifest: m, Version: version, Dir: vdir}
+	in := Installed{Manifest: m, ID: m.ID, Version: version, Dir: vdir}
 	if _, err := os.Stat(filepath.Join(dir, fromImage)); err == nil {
 		in.FromImage = true
 	}

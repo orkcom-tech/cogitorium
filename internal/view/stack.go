@@ -65,18 +65,7 @@ type Set struct {
 // is compared against — in that direction, never the reverse. A discrepancy
 // is reported; it is not an error, because declaration is advisory by design.
 type Ledger struct {
-	Entries  []Entry
-	Warnings []Warning
-}
-
-// Warning is something inert rather than broken: it renders, it just does not
-// do what its author probably meant. Broken fails the plugin; inert warns,
-// because taking a whole plugin away over a no-op would be a worse trade than
-// the confusion it prevents.
-type Warning struct {
-	Layer   string
-	Name    string
-	Message string
+	Entries []Entry
 }
 
 // LedgerAction is what defining a name amounted to.
@@ -152,6 +141,7 @@ func Compose(funcs template.FuncMap, layers ...Layer) (*Set, error) {
 	owner := map[string]string{}           // name -> layer id currently rendering it
 	coreBodies := map[string]*parse.Tree{} // layer zero's bodies, for the core: alias
 	appendParts := map[string][]string{}   // name -> synthesized segment names, in order
+	coreRefs := map[string][]string{}      // core: name -> layers that reached for it
 	installed := map[string]bool{}
 	for _, l := range layers {
 		installed[l.ID] = true
@@ -175,24 +165,21 @@ func Compose(funcs template.FuncMap, layers ...Layer) (*Set, error) {
 			// alias has to be private to this layer or the second plugin
 			// wrapping a name would reach its own wrapper and recurse forever.
 			refs := rewriteAliases(tree.Root, i)
+			for _, ref := range collectCoreRefs(tree.Root) {
+				coreRefs[ref] = append(coreRefs[ref], layer.ID)
+			}
 
 			if n.Appends() {
 				// An append segment replaces nothing, so there is nothing
-				// beneath it. The alias is still installed, empty, because a
-				// reference that fails to resolve would take down a plugin over
-				// a misunderstanding — and the misunderstanding is said out loud
-				// instead.
-				if err := s.own(underName(name, i), emptyTree(name), ""); err != nil {
-					return nil, err
-				}
+				// beneath it. Refused rather than rendered empty: a reference
+				// that can never resolve to anything is a mistake about how
+				// this name works, and quietly producing nothing would leave
+				// the author looking for a gap in their markup.
 				if refs > 0 {
-					s.ledger.Warnings = append(s.ledger.Warnings, Warning{
-						Layer: layer.ID, Name: name,
-						Message: "uses under: on a name that appends rather than replaces, " +
-							"so there is nothing beneath it and the reference renders nothing. " +
-							"Contributions to this name are concatenated in enable order — " +
-							"just write your own body.",
-					})
+					return nil, fmt.Errorf("view: %s uses under: inside %q, which appends rather "+
+						"than replaces, so there is nothing beneath it. Contributions to this "+
+						"name are concatenated in enable order — write your own body and drop "+
+						"the under: reference", layer.ID, name)
 				}
 				seg := fmt.Sprintf("%s\x00seg\x00%d", name, i)
 				if err := s.own(seg, tree, layer.ID); err != nil {
@@ -205,10 +192,22 @@ func Compose(funcs template.FuncMap, layers ...Layer) (*Set, error) {
 				continue
 			}
 
-			// under: for this layer is whatever is currently installed. Empty
-			// when nothing is, so an override that wraps a name the host never
-			// defined renders its own body and nothing else rather than failing.
-			if err := s.own(underName(name, i), orEmpty(s.bodies[name], name), owner[name]); err != nil {
+			// under: for this layer is whatever is currently installed. There
+			// being nothing installed is a refusal, not an empty render: the
+			// author asked to wrap something, and wrapping nothing is not a
+			// smaller version of that — it is a different thing they did not
+			// ask for, and they would go looking for the missing content
+			// rather than for the missing template.
+			beneath := s.bodies[name]
+			if beneath == nil {
+				if refs > 0 {
+					return nil, fmt.Errorf("view: %s uses under: inside %q, but nothing defines "+
+						"that name yet, so there is nothing to wrap. Define it, or drop the "+
+						"under: reference and write the body directly", layer.ID, name)
+				}
+				beneath = emptyTree(name)
+			}
+			if err := s.own(underName(name, i), beneath, owner[name]); err != nil {
 				return nil, err
 			}
 
@@ -245,18 +244,13 @@ func Compose(funcs template.FuncMap, layers ...Layer) (*Set, error) {
 			return nil, err
 		}
 	}
-	// A core: reference to a name the host never defined must still resolve,
-	// or an override that reaches for it fails at render rather than rendering
-	// nothing — which is the wrong failure for something that is legitimately
-	// absent.
-	for _, name := range sortedKeys(s.bodies) {
-		if _, ok := coreBodies[name]; !ok && !strings.Contains(name, "\x00") {
-			if _, exists := s.bodies[plugin.AliasCore+name]; !exists {
-				if err := s.add(plugin.AliasCore+name, emptyTree(plugin.AliasCore+name)); err != nil {
-					return nil, err
-				}
-			}
-		}
+	// A core: reference to a name the host never defined is refused rather
+	// than resolved to nothing. Reaching past every plugin to the product's
+	// own body is a deliberate act, and doing it for a body that does not
+	// exist is a mistake about what the host ships — one that would otherwise
+	// render an empty region the author goes hunting for.
+	if err := checkCoreRefs(coreRefs, coreBodies); err != nil {
+		return nil, err
 	}
 
 	if err := s.installAppendSlots(appendParts); err != nil {
@@ -463,6 +457,41 @@ func rewriteBranch(b *parse.BranchNode, layer int) int {
 	return rewriteAliases(b.List, layer) + rewriteAliases(b.ElseList, layer)
 }
 
+// collectCoreRefs lists the core: names a body reaches for, so a reference to
+// something the product does not define can be refused by name.
+func collectCoreRefs(n parse.Node) []string {
+	var out []string
+	var walk func(parse.Node)
+	walk = func(n parse.Node) {
+		switch v := n.(type) {
+		case nil:
+			return
+		case *parse.ListNode:
+			if v == nil {
+				return
+			}
+			for _, c := range v.Nodes {
+				walk(c)
+			}
+		case *parse.TemplateNode:
+			if alias, name, ok := plugin.SplitAlias(v.Name); ok && alias == plugin.AliasCore {
+				out = append(out, name)
+			}
+		case *parse.IfNode:
+			walk(v.List)
+			walk(v.ElseList)
+		case *parse.RangeNode:
+			walk(v.List)
+			walk(v.ElseList)
+		case *parse.WithNode:
+			walk(v.List)
+			walk(v.ElseList)
+		}
+	}
+	walk(n)
+	return out
+}
+
 // ── small helpers ─────────────────────────────────────────────────────────
 
 func sortedKeys[V any](m map[string]V) []string {
@@ -474,11 +503,17 @@ func sortedKeys[V any](m map[string]V) []string {
 	return out
 }
 
-func orEmpty(t *parse.Tree, name string) *parse.Tree {
-	if t != nil {
-		return t
+// checkCoreRefs refuses a core: reference to a name the host never defined.
+func checkCoreRefs(refs map[string][]string, coreBodies map[string]*parse.Tree) error {
+	for _, name := range sortedKeys(refs) {
+		if _, ok := coreBodies[name]; ok {
+			continue
+		}
+		return fmt.Errorf("view: %s uses core:%s, but the product does not define that name, "+
+			"so there is no original body to reach. Check the name, or use under: to wrap "+
+			"whatever is beneath you", refs[name][0], name)
 	}
-	return emptyTree(name)
+	return nil
 }
 
 func emptyTree(name string) *parse.Tree {

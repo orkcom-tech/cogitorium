@@ -53,9 +53,6 @@ type BootReport struct {
 	Loaded []string
 	// Disabled is the plugins that were dropped, each with its reason.
 	Disabled []Disabled
-	// Warnings are things inert rather than broken — they render, they just do
-	// not do what their author probably meant.
-	Warnings []Warning
 	// Unvalidated names had no registered model. Reported so a check that
 	// covers less than it appears to cannot be mistaken for one that covers
 	// everything.
@@ -105,7 +102,6 @@ func Boot(funcs template.FuncMap, core fs.FS, plugins []Source, models Models) (
 		}
 
 		if len(failed) == 0 {
-			report.Warnings = set.Ledger().Warnings
 			report.Unvalidated = vr.Unvalidated
 			for _, p := range live {
 				report.Loaded = append(report.Loaded, p.ID)

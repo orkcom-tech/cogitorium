@@ -96,15 +96,21 @@ func TestCoreReachesPastEveryPlugin(t *testing.T) {
 	}
 }
 
-// Wrapping a name the host never defined renders the wrapper and nothing else,
-// rather than failing. A legitimately absent body is not an error.
-func TestUnderIsEmptyWhenNothingWasThere(t *testing.T) {
-	s := compose(t,
+// Wrapping nothing is not a smaller version of wrapping something — it is a
+// different thing the author did not ask for, and rendering it empty sends
+// them looking for missing content instead of a missing template.
+func TestWrappingANameNothingDefinesIsRefused(t *testing.T) {
+	_, err := Compose(template.FuncMap{},
 		layer("cog", map[string]string{"r.html": `{{define "cog.page.home"}}home{{end}}`}),
-		layer("a", map[string]string{"r.html": `{{define "cog.slot.x"}}[{{template "under:cog.slot.x" .}}]{{end}}`}),
+		layer("a", map[string]string{"r.html": `{{define "cog.row.gear"}}[{{template "under:cog.row.gear" .}}]{{end}}`}),
 	)
-	if got := render(t, s, "cog.slot.x", nil); !strings.Contains(got, "[]") {
-		t.Errorf("got %q, want an empty under", got)
+	if err == nil {
+		t.Fatal("under: with nothing beneath it must be refused")
+	}
+	for _, want := range []string{"a", "cog.row.gear", "nothing to wrap"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal omits %q: %v", want, err)
+		}
 	}
 }
 
@@ -307,51 +313,48 @@ func TestAliasRewritingIsNotATextSubstitution(t *testing.T) {
 	}
 }
 
-// Using under: on a name that appends is a misunderstanding, not a crime. It
-// renders nothing and the ledger says why, rather than taking the whole plugin
-// away over a no-op.
-func TestUnderOnAnAppendNameWarnsRatherThanFails(t *testing.T) {
-	s := compose(t,
+// A reference that can never resolve to anything is a mistake about how the
+// name works, and quietly producing nothing would leave the author hunting for
+// a gap in their markup.
+func TestUnderOnAnAppendNameIsRefused(t *testing.T) {
+	_, err := Compose(template.FuncMap{},
 		layer("cog", map[string]string{"s.html": `{{define "cog.slot.rail"}}core{{end}}`}),
 		layer("a", map[string]string{"s.html": `{{define "cog.slot.rail"}}[{{template "under:cog.slot.rail" .}}]{{end}}`}),
 	)
-	if got := render(t, s, "cog.slot.rail", nil); got != "core[]" {
-		t.Errorf("got %q, want the contributions concatenated with an empty under", got)
+	if err == nil {
+		t.Fatal("under: inside an append name must be refused")
 	}
-	var warned bool
-	for _, w := range s.Ledger().Warnings {
-		if w.Layer == "a" && w.Name == "cog.slot.rail" {
-			warned = true
-			if !strings.Contains(w.Message, "concatenated") {
-				t.Errorf("the warning should explain what to do instead: %s", w.Message)
-			}
-		}
-	}
-	if !warned {
-		t.Error("an under: that can never resolve must be said out loud")
+	if !strings.Contains(err.Error(), "concatenated") {
+		t.Errorf("the refusal should say what to do instead: %v", err)
 	}
 }
 
-// A replaced name with nothing beneath it renders the wrapper alone.
-func TestUnderOnAReplaceNameWithNoCoreBody(t *testing.T) {
-	s := compose(t,
-		layer("cog", map[string]string{"r.html": `{{define "cog.page.home"}}home{{end}}`}),
-		layer("a", map[string]string{"r.html": `{{define "cog.row.gear"}}[{{template "under:cog.row.gear" .}}]{{end}}`}),
-	)
-	if got := render(t, s, "cog.row.gear", nil); got != "[]" {
-		t.Errorf("got %q, want []", got)
-	}
-}
-
-// core: on a name the host never defined must resolve to nothing rather than
-// fail at render — absence is legitimate, and the wrong failure for it is a
-// broken page.
-func TestCoreOnAnAbsentHostBodyResolvesToNothing(t *testing.T) {
-	s := compose(t,
+// Reaching past every plugin to the product's own body is a deliberate act,
+// and doing it for a body that does not exist is a mistake about what the host
+// ships.
+func TestCoreOnANameTheHostDoesNotDefineIsRefused(t *testing.T) {
+	_, err := Compose(template.FuncMap{},
 		layer("cog", map[string]string{"r.html": `{{define "cog.page.home"}}home{{end}}`}),
 		layer("a", map[string]string{"r.html": `{{define "cog.row.gear"}}[{{template "core:cog.row.gear" .}}]{{end}}`}),
 	)
-	if got := render(t, s, "cog.row.gear", nil); got != "[]" {
-		t.Errorf("got %q, want []", got)
+	if err == nil {
+		t.Fatal("core: on a name the product does not define must be refused")
+	}
+	for _, want := range []string{"a", "core:cog.row.gear", "under:"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal omits %q: %v", want, err)
+		}
+	}
+}
+
+// A plugin defining a name of its own without reaching for anything beneath it
+// is perfectly ordinary and must still work.
+func TestDefiningANewNameNeedsNoBodyBeneath(t *testing.T) {
+	s := compose(t,
+		layer("cog", map[string]string{"r.html": `{{define "cog.page.home"}}home{{end}}`}),
+		layer("a", map[string]string{"r.html": `{{define "a.page.own"}}mine{{end}}`}),
+	)
+	if got := render(t, s, "a.page.own", nil); got != "mine" {
+		t.Errorf("got %q", got)
 	}
 }

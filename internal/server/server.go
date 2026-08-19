@@ -14,7 +14,6 @@ import (
 	"mime"
 	"net"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -616,37 +615,65 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, code, map[string]string{"status": status, "version": version.Version})
 }
 
-// fallsBackToTheApp reports whether a path that is not a real file should be
-// answered with the application shell.
+// clientRoutes is every path the single-page application answers.
 //
-// A client-side route should: deep-linking /workspaces/3 has to work. An asset
-// must NOT, and that distinction is the whole reason this function exists.
-// Serving index.html at 200 for a missing .js is the worst failure this server
-// can produce, because the browser hands an HTML document to its module parser
-// and reports a syntax error at line 1 of a file that looks fine on disk —
-// pointing at the bundle rather than at the thing that is actually missing.
+// Declared, not guessed. This server knows exactly which screens exist, so a
+// path that is not one of them is a mistake and must be answered as one — the
+// alternative is a 200 and an HTML document for anything anybody types, which
+// makes a typo look like a working page and a missing asset look like a
+// corrupt bundle.
 //
-// Named by extension rather than by directory, because a plugin's assets and
-// the application's own are served from different places and both suffer the
-// same way.
-func fallsBackToTheApp(path string) bool {
-	if strings.HasPrefix(path, pluginPagePrefix) {
-		// Plugin space is answered by the plugin router once it exists. Until
-		// then, a miss here is a miss — never the application shell wearing a
-		// plugin's URL.
+// One segment of ":" matches any single segment. Kept in step with the Route
+// elements in web/src/App.tsx by a test that fails when the two disagree, and
+// it shrinks as pages are converted to templates.
+var clientRoutes = []string{
+	"/",
+	"/workspaces",
+	"/workspaces/:",
+	"/map",
+	"/people",
+	"/terminal",
+	"/context",
+	"/gears",
+	"/env",
+	"/instructions",
+	"/models",
+}
+
+// servesTheApp reports whether a path is one of the application's own screens.
+func servesTheApp(path string) bool {
+	got := splitPath(path)
+	for _, pattern := range clientRoutes {
+		if matchRoute(splitPath(pattern), got) {
+			return true
+		}
+	}
+	return false
+}
+
+func splitPath(p string) []string {
+	p = strings.Trim(p, "/")
+	if p == "" {
+		return nil
+	}
+	return strings.Split(p, "/")
+}
+
+func matchRoute(pattern, got []string) bool {
+	if len(pattern) != len(got) {
 		return false
 	}
-	switch strings.ToLower(filepath.Ext(path)) {
-	case "":
-		return true
-	case ".js", ".mjs", ".css", ".map", ".json", ".webmanifest",
-		".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp", ".avif",
-		".woff", ".woff2", ".ttf", ".otf", ".wasm":
-		return false
+	for i := range pattern {
+		if pattern[i] == ":" {
+			if got[i] == "" {
+				return false
+			}
+			continue
+		}
+		if pattern[i] != got[i] {
+			return false
+		}
 	}
-	// An unfamiliar extension is treated as a route rather than an asset: a
-	// client-side path segment can contain a dot, and refusing those would
-	// break deep links that work today.
 	return true
 }
 
@@ -677,7 +704,7 @@ func uiHandler() http.Handler {
 			// Any Stat failure (ErrNotExist, ErrInvalid for e.g. trailing
 			// slashes) means "not a real file" — serve the SPA shell.
 			if _, err := fs.Stat(dist, path[1:]); err != nil {
-				if !fallsBackToTheApp(path) {
+				if !servesTheApp(path) {
 					http.NotFound(w, r)
 					return
 				}

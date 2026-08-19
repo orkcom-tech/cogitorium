@@ -219,9 +219,9 @@ func TestAVersionMismatchIsRefused(t *testing.T) {
 	}
 }
 
-// One corrupt install must not stop the server from starting and telling
-// somebody about it.
-func TestACorruptDirectoryIsSkippedNotFatal(t *testing.T) {
+// A directory somebody installed that silently does not appear is the worst
+// answer available: no plugin, no error, and no reason to look anywhere.
+func TestACorruptDirectoryIsReportedNotSkipped(t *testing.T) {
 	s := open(t)
 	install(t, s, "good", "1.0.0")
 	if err := os.MkdirAll(filepath.Join(s.Root(), "broken"), 0o755); err != nil {
@@ -231,8 +231,42 @@ func TestACorruptDirectoryIsSkippedNotFatal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a broken directory must not fail the listing: %v", err)
 	}
-	if len(all) != 1 || all[0].Manifest.ID != "good" {
-		t.Errorf("expected only the good plugin, got %+v", all)
+	if len(all) != 2 {
+		t.Fatalf("both the good and the broken install must appear, got %+v", all)
+	}
+
+	var broken *Installed
+	for i := range all {
+		if all[i].ID == "broken" {
+			broken = &all[i]
+		}
+	}
+	if broken == nil {
+		t.Fatal("the broken directory is missing from the listing")
+	}
+	if broken.Broken == nil {
+		t.Error("a broken install must carry the reason it is broken")
+	}
+}
+
+// Broken means it cannot be layered, whatever the enable list says.
+func TestABrokenPluginIsNeverEnabled(t *testing.T) {
+	s := open(t)
+	install(t, s, "good", "1.0.0")
+	_ = s.Enable("good")
+	if err := os.MkdirAll(filepath.Join(s.Root(), "broken"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(s.Root()), "plugins.order"),
+		[]byte("good\nbroken\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	enabled, err := s.Enabled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(enabled) != 1 || enabled[0].ID != "good" {
+		t.Errorf("a broken plugin must not reach the layer stack: %+v", enabled)
 	}
 }
 

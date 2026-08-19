@@ -75,6 +75,10 @@ func newPluginsCmds() *cobra.Command {
 			caps := plugin.Capabilities{Profile: channel.Detect(cfg.DataDir)}
 			table("ID\tVERSION\tSTATE\tTIER\tNAME", func(w *tabwriter.Writer) {
 				for _, in := range all {
+					if in.Broken != nil {
+						fmt.Fprintf(w, "%s\t-\tBROKEN\t-\t%v\n", in.ID, in.Broken)
+						continue
+					}
 					state := "installed"
 					if in.Enabled {
 						state = fmt.Sprintf("enabled #%d", in.Order+1)
@@ -259,9 +263,6 @@ func newPluginsCmds() *cobra.Command {
 						fmt.Printf("  adds      %s\n", e.Name)
 					}
 				}
-			}
-			for _, w := range report.Warnings {
-				fmt.Printf("\nwarning: %s: %s\n  %s\n", w.Layer, w.Name, w.Message)
 			}
 			for _, d := range report.Disabled {
 				fmt.Fprintf(os.Stderr, "\nDISABLED %s\n  %s\n", d.ID, d.Reason())
