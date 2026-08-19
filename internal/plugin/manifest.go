@@ -113,6 +113,12 @@ type Page struct {
 	Path     string `yaml:"path"`
 	Template string `yaml:"template"`
 	Title    string `yaml:"title"`
+	// Provider is an export that supplies this page's model. Optional, and its
+	// absence is what makes a template-only plugin complete rather than a
+	// waiting room: the page renders against the standard model until an
+	// author adds one, and adding one changes neither the route, the template
+	// name nor the URL.
+	Provider string `yaml:"provider"`
 	// Auth defaults to "token". Writing "none" is allowed and is shown in red
 	// on the approval screen beside the path, because every non-/api/ path in
 	// this server is anonymous by construction and a plugin route is the first
@@ -216,6 +222,9 @@ func Parse(b []byte) (Manifest, error) {
 var (
 	idRe  = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 	envRe = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
+	// An export name is what an author writes in two places — their code and
+	// their manifest — so it is kept to what every language can spell.
+	exportRe = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 	// Exactly what the gate accepts, and nothing more: a hostname, optionally
 	// with the gate's own *. wildcard, and never a port. The gate refuses a
 	// port outright — a grant names hosts — so accepting one here would let an
@@ -323,6 +332,16 @@ func (m Manifest) validatePages(add func(string, string, ...any)) {
 		case "", "token", "admin", "none":
 		default:
 			add(f+".auth", "must be token, admin or none, got %q", p.Auth)
+		}
+
+		if p.Provider != "" {
+			if m.Needs == "" {
+				add(f+".provider", "names an export, but this plugin declares no `needs:` "+
+					"and so has no backend to export it")
+			}
+			if !exportRe.MatchString(p.Provider) {
+				add(f+".provider", "must be a name like latest_release, got %q", p.Provider)
+			}
 		}
 	}
 }

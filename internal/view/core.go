@@ -164,6 +164,11 @@ type Page struct {
 	Title  string
 	Params map[string]string
 	Query  map[string]string
+	// Data is whatever the plugin's provider returned, or nil when the page is
+	// templates alone. Deliberately untyped: it is the plugin's own shape, and
+	// a host that insisted on knowing it would be a host that has to be
+	// changed every time an author adds a field.
+	Data any
 }
 
 // CoreModels is the zero-value model for every name the host owns.

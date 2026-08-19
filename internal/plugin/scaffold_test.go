@@ -276,3 +276,44 @@ func TestABrokenDevelopmentLayerIsReported(t *testing.T) {
 		t.Error("and still be marked as a development layer")
 	}
 }
+
+// Found by using it: the default output directory IS the directory being
+// walked, so building in place folded the archive into itself, half-written,
+// and produced a zip that read as corrupt with no clue why.
+func TestBuildingInPlaceProducesAReadableBundle(t *testing.T) {
+	dir := scaffolded(t, "radar")
+
+	out, _, err := Build(dir, dir)
+	if err != nil {
+		t.Fatalf("building in place: %v", err)
+	}
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Install(out); err != nil {
+		t.Fatalf("a bundle built in place must install: %v", err)
+	}
+}
+
+// And building twice must not fold the first bundle into the second.
+func TestBuildingTwiceDoesNotNestTheFirstBundle(t *testing.T) {
+	dir := scaffolded(t, "radar")
+	if _, _, err := Build(dir, dir); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := Build(dir, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := zip.OpenReader(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	for _, f := range r.File {
+		if strings.HasSuffix(f.Name, ".zip") {
+			t.Errorf("the bundle contains a bundle: %s", f.Name)
+		}
+	}
+}

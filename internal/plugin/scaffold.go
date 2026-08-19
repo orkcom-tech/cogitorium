@@ -209,13 +209,32 @@ func Build(dir, outDir string) (string, Manifest, error) {
 	}
 	out := filepath.Join(outDir, fmt.Sprintf("%s-%s.zip", m.ID, m.Version))
 
-	f, err := os.Create(out)
+	// Written to a temporary file and renamed, because the default output
+	// directory IS the directory being walked — building in place would
+	// otherwise include the archive in itself, half-written, and produce a zip
+	// that reads as corrupt with no clue why. Also means a failed build leaves
+	// the previous bundle rather than a truncated one.
+	f, err := os.CreateTemp(outDir, ".cogitorium-build-*.zip")
 	if err != nil {
 		return "", Manifest{}, err
 	}
-	defer f.Close()
+	tmpName := f.Name()
+	defer func() {
+		f.Close()
+		os.Remove(tmpName)
+	}()
 
+	absOut, _ := filepath.Abs(out)
 	zw := zip.NewWriter(f)
+
+	// A ceiling, as well as the exclusions above.
+	//
+	// The exclusions are the fix; this is the belt. Writing an archive into
+	// the directory being walked is a mistake that does not fail — it
+	// recurses, and the first symptom is a disk filling up. It cost 28GB
+	// before it was noticed, and a plugin bundle that is approaching this is
+	// wrong whatever the reason.
+	var written int64
 	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -236,6 +255,14 @@ func Build(dir, outDir string) (string, Manifest, error) {
 		if d.IsDir() {
 			return nil
 		}
+		// The archive being written, and any bundle left from a previous
+		// build, are not part of the plugin.
+		if abs, err := filepath.Abs(p); err == nil && (abs == tmpName || abs == absOut) {
+			return nil
+		}
+		if strings.HasPrefix(d.Name(), ".cogitorium-build-") {
+			return nil
+		}
 		// A bundle holds files and directories only. A symlink is a way out of
 		// the tree on the other machine, and the unpacker refuses one anyway —
 		// refusing it here means the author hears about it.
@@ -251,16 +278,33 @@ func Build(dir, outDir string) (string, Manifest, error) {
 			return err
 		}
 		defer src.Close()
-		_, err = io.Copy(w, src)
-		return err
+
+		n, err := io.Copy(w, io.LimitReader(src, maxBundleBytes-written+1))
+		written += n
+		if err != nil {
+			return err
+		}
+		if written > maxBundleBytes {
+			return fmt.Errorf("this bundle passed %d MB while packing %s, which is not a plugin "+
+				"— check for an archive or a build directory inside it",
+				int64(maxBundleBytes)>>20, rel)
+		}
+		return nil
 	})
 	if err != nil {
 		zw.Close()
-		os.Remove(out)
 		return "", Manifest{}, err
 	}
 	if err := zw.Close(); err != nil {
-		os.Remove(out)
+		return "", Manifest{}, err
+	}
+	if err := f.Close(); err != nil {
+		return "", Manifest{}, err
+	}
+	if err := os.Chmod(tmpName, 0o644); err != nil {
+		return "", Manifest{}, err
+	}
+	if err := os.Rename(tmpName, out); err != nil {
 		return "", Manifest{}, err
 	}
 	return out, m, nil

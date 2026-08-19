@@ -89,6 +89,9 @@ type Server struct {
 	// anyone who can reach the workspace, so defaulting to open would turn
 	// "edit a task" into "make this server call an address of my choosing".
 	callbackHosts []string
+	// backends runs plugin code. Nil when nothing enabled has any, which is
+	// the ordinary case for an install whose plugins are templates.
+	backends *backends
 	// plugins is the composed interface: the template set every page renders
 	// through, and the pages the enabled plugins declared. Nil only if
 	// composition failed, which is fatal at startup rather than survivable.
@@ -155,6 +158,10 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	if err != nil {
 		panic("cogitorium: the interface could not be composed: " + err.Error())
 	}
+	// Compiled at boot rather than on the first request, so a module that will
+	// not load is a line in the startup log rather than a page that fails the
+	// first time somebody visits it.
+	pluginBackends := startBackends(context.Background(), plugins, plugins.live, cfg.DataDir)
 
 	cat := catalog.NewStore(db)
 	ws := workspace.NewStore(db)
@@ -186,6 +193,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	}
 	s := &Server{
 		plugins:    plugins,
+		backends:   pluginBackends,
 		db:         db,
 		catalog:    cat,
 		workspaces: ws,

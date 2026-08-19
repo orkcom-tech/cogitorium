@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/orkcom-tech/cogitorium/internal/abi"
 	"github.com/orkcom-tech/cogitorium/internal/channel"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/plugin"
@@ -46,6 +47,9 @@ type pluginRuntime struct {
 	styles  []string
 	scripts []view.Asset
 	report  view.BootReport
+	// live is the enabled plugins whose templates actually loaded, kept so the
+	// backends can be started for exactly those and no others.
+	live []plugin.Installed
 }
 
 // Contribution is what the plugins add to the application's own interface.
@@ -84,6 +88,9 @@ type pluginPage struct {
 	PluginID string
 	Template string
 	Title    string
+	// Provider is the export that supplies this page's model, empty when the
+	// page is templates alone.
+	Provider string
 	// Auth is what the manifest declared. This is the first place in this
 	// server where a route's authentication is DECLARED rather than derived
 	// from the shape of its path — and it has to be, because "this page is
@@ -149,6 +156,7 @@ func loadPlugins(dataDir string) (*pluginRuntime, error) {
 		if !live[in.ID] {
 			continue
 		}
+		rt.live = append(rt.live, in)
 		m := in.Manifest
 		for _, p := range m.Pages {
 			auth := p.Auth
@@ -156,7 +164,8 @@ func loadPlugins(dataDir string) (*pluginRuntime, error) {
 				auth = plugin.AuthDefault
 			}
 			rt.pages[p.Path] = pluginPage{
-				PluginID: m.ID, Template: p.Template, Title: p.Title, Auth: auth,
+				PluginID: m.ID, Template: p.Template, Title: p.Title,
+				Provider: p.Provider, Auth: auth,
 			}
 			if auth == "none" {
 				// Said at WARN because it is the one declaration that gives
@@ -336,6 +345,23 @@ func (s *Server) pluginHandler() http.Handler {
 			Query:  flattenQuery(r.URL.Query()),
 		}
 
+		// A page with a provider gets its data from the plugin's own code. A
+		// page without one renders against the standard model, which is what
+		// makes a template-only plugin complete rather than a waiting room.
+		if page.Provider != "" {
+			data, hasBackend, err := s.backends.provide(r.Context(), page.PluginID, page.Provider,
+				abi.Request{Ctx: abiCtx(model.Ctx), HTTP: abiHTTP(r)})
+			switch {
+			case err != nil:
+				slog.Error("a plugin's provider failed",
+					"plugin", page.PluginID, "export", page.Provider, "err", err)
+				http.Error(w, "this page could not be rendered", http.StatusInternalServerError)
+				return
+			case hasBackend:
+				model.Data = data
+			}
+		}
+
 		var body bytes.Buffer
 		if err := rt.set.Execute(&body, page.Template, model); err != nil {
 			// A page that validated at boot and fails now is a bug worth
@@ -367,6 +393,32 @@ func (s *Server) pluginHandler() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(out.Bytes())
 	})
+}
+
+// abiCtx narrows the template context to what a plugin's code may see. A
+// plugin gets who is asking, never how they proved it.
+func abiCtx(c view.Ctx) abi.Ctx {
+	return abi.Ctx{
+		Viewer: abi.Viewer{
+			ID: c.Viewer.ID, Name: c.Viewer.Name,
+			IsAdmin: c.Viewer.IsAdmin, SignedIn: c.Viewer.SignedIn,
+		},
+		Workspace:   c.Workspace.ID,
+		InstallMode: c.InstallMode,
+		Path:        c.Path,
+		Locale:      c.Lang,
+	}
+}
+
+// abiHTTP carries the parts of a request a plugin may see. No headers: the
+// Authorization header and the session cookie are how the VIEWER proved who
+// they are, and a plugin holding either could act as them everywhere.
+func abiHTTP(r *http.Request) *abi.HTTPRequest {
+	return &abi.HTTPRequest{
+		Method: r.Method,
+		Path:   r.URL.Path,
+		Query:  flattenQuery(r.URL.Query()),
+	}
 }
 
 // serveAsset answers for one declared file.
