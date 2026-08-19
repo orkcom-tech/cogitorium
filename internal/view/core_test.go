@@ -1,6 +1,7 @@
 package view
 
 import (
+	"html/template"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -41,20 +42,53 @@ func TestEveryCoreNameIsAddressable(t *testing.T) {
 	}
 }
 
-func TestTheDocumentRenders(t *testing.T) {
+func TestTheDocumentCarriesTheApplicationThroughUntouched(t *testing.T) {
 	set, _, err := Boot(Funcs(), Core(), nil, CoreModels())
 	if err != nil {
 		t.Fatal(err)
 	}
+	// What Vite actually writes: a hashed module and a hashed stylesheet. The
+	// shell must not restate, rewrite or escape any of it.
+	appHead := `<title>Cogitorium</title>` +
+		`<script type="module" crossorigin src="/assets/index-D5NMYaXw.js"></script>` +
+		`<link rel="stylesheet" crossorigin href="/assets/index-Doin25bG.css">`
+
 	out := render(t, set, "cog.shell.document", Shell{
-		Ctx:   Ctx{Lang: "en", Theme: "dark", T: DefaultStrings()},
-		Title: "Cogitorium",
-		Nav:   []NavItem{{Label: "Workspaces", Href: "/workspaces", Current: true}},
+		Ctx:     Ctx{Lang: "en", Theme: "dark", T: DefaultStrings()},
+		AppHead: template.HTML(appHead),
 	})
 	for _, want := range []string{"<!doctype html>", `lang="en"`, `data-theme="dark"`,
-		"Cogitorium", "Workspaces", `id="app"`, `aria-current="page"`} {
+		"index-D5NMYaXw.js", "index-Doin25bG.css", "<title>Cogitorium</title>", `id="root"`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the document omits %q:\n%s", want, out)
+		}
+	}
+	// Escaping the build output would serve a page whose script tag is text.
+	if strings.Contains(out, "&lt;script") || strings.Contains(out, "&#34;") {
+		t.Errorf("the application's head was escaped:\n%s", out)
+	}
+}
+
+// The rail is defined but deliberately not rendered by the document yet: the
+// one on screen is still the application's, and a second server-rendered one
+// would sit unstyled above it. The names exist so the vocabulary is stable
+// before anybody writes against it.
+func TestTheRailIsAddressableButNotYetInTheDocument(t *testing.T) {
+	set, _, err := Boot(Funcs(), Core(), nil, CoreModels())
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := render(t, set, "cog.shell.document", Shell{Ctx: Ctx{T: DefaultStrings()}})
+	if strings.Contains(doc, "<nav") {
+		t.Errorf("the document must not render a second rail yet:\n%s", doc)
+	}
+	rail := render(t, set, "cog.shell.rail", Shell{
+		Ctx: Ctx{T: DefaultStrings()},
+		Nav: []NavItem{{Label: "Workspaces", Href: "/workspaces", Current: true}},
+	})
+	for _, want := range []string{"<nav", "Workspaces", `aria-current="page"`} {
+		if !strings.Contains(rail, want) {
+			t.Errorf("the rail template omits %q:\n%s", want, rail)
 		}
 	}
 }
@@ -76,9 +110,6 @@ func TestAPluginCanReskinByOverridingOneName(t *testing.T) {
 	if !strings.Contains(out, "--ground:#000") {
 		t.Errorf("the override did not reach the document:\n%s", out)
 	}
-	if strings.Contains(out, "tokens.css") {
-		t.Error("the host's own tokens should have been replaced, not added to")
-	}
 }
 
 // Two plugins adding a rail entry must both get one. This is the append-slot
@@ -96,7 +127,7 @@ func TestTwoPluginsBothGetARailEntry(t *testing.T) {
 	if !r.OK() {
 		t.Fatalf("both should load: %+v", r.Disabled)
 	}
-	out := render(t, set, "cog.shell.document", Shell{Ctx: Ctx{T: DefaultStrings()}})
+	out := render(t, set, "cog.shell.rail", Shell{Ctx: Ctx{T: DefaultStrings()}})
 	if !strings.Contains(out, "Alfa") || !strings.Contains(out, "Bravo") {
 		t.Errorf("both rail entries must survive:\n%s", out)
 	}

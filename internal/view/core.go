@@ -130,9 +130,21 @@ type Asset struct {
 
 // Shell is the model the document renders against.
 type Shell struct {
-	Ctx     Ctx
-	Title   string
-	Nav     []NavItem
+	Ctx   Ctx
+	Title string
+	// AppHead is the application's own head, carried through as-is.
+	//
+	// Vite writes hashed asset names into it on every build, so restating them
+	// in a template would be a second place the build output has to be kept
+	// true — and the one that drifted would be the one serving a stale bundle.
+	// It is template.HTML because it comes from this repository's own build
+	// output rather than from anything a request could influence.
+	AppHead template.HTML
+	// Nav is the rail. Populated from plugin manifests, and NOT rendered by
+	// the document yet: the rail on screen is still the application's, and a
+	// second server-rendered one would sit unstyled above it.
+	Nav []NavItem
+	// Styles and Scripts are plugin contributions injected into the head.
 	Styles  []string
 	Scripts []Asset
 }

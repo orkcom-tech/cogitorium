@@ -1,0 +1,17 @@
+{{/*
+  The rail, and one repeated unit named on its own so the container above can
+  be rebuilt without touching an override hanging off the row.
+
+  NOT rendered by the document yet. The rail on screen is still the
+  application's, and server-rendering a second one would put an unstyled copy
+  above it. These names are defined now so the vocabulary is stable before
+  anybody writes against it, and the document starts calling them when the
+  rail itself is converted.
+*/}}
+
+{{define "cog.shell.rail"}}<nav class="rail" aria-label="{{.Ctx.T.Navigation}}">
+{{range .Nav}}{{template "cog.row.nav" .}}{{end}}{{template "cog.slot.rail" .}}</nav>{{end}}
+
+{{define "cog.row.nav"}}<a class="rail-item{{if .Current}} is-current{{end}}" href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}>{{if .Icon}}<span class="rail-icon" data-icon="{{.Icon}}" aria-hidden="true"></span>{{end}}<span class="rail-label">{{.Label}}</span></a>{{end}}
+
+{{define "cog.slot.rail"}}{{end}}
