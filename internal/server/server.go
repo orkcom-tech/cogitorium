@@ -673,6 +673,10 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	// The runtime kill switch is handed to the engine here rather than at
 	// construction, so the engine never imports the server.
 	s.engine.SetEgressKill(s.egressOff.Load)
+	// The orchestrator's clocks. Without this it can build the agent that
+	// would run nightly and then has to tell somebody to go and set the timer
+	// themselves, which is not what an orchestrator is for.
+	s.engine.SetSchedules(s.schedules)
 
 	// Before anything else asks for context: an installed contextd with no
 	// space is a product where memory silently does nothing, and until now only

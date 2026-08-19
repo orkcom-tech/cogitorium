@@ -3,8 +3,10 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/library"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
+	"github.com/orkcom-tech/cogitorium/internal/schedule"
 	"github.com/orkcom-tech/cogitorium/internal/workdir"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
@@ -76,6 +79,72 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 					"name":  str("name of the agent to update"),
 					"role":  str("new system prompt (omit to keep)"),
 					"model": str("new catalog model (omit to keep)"),
+				}, "name"),
+			},
+			llm.Tool{
+				Name: "agent_delete",
+				Description: "Remove an agent from this workspace, with its wires and its grants. " +
+					"Use it to undo something you built that turned out wrong — an orchestrator that can only add " +
+					"leaves the person to sweep up after it.",
+				InputSchema: obj(map[string]any{
+					"name": str("agent to remove"),
+				}, "name"),
+			},
+			llm.Tool{
+				Name: "wire_cut",
+				Description: "Cut the wire from one agent to another, so the first may no longer delegate to the second. " +
+					"The wire IS the capability, so cutting it revokes the capability.",
+				InputSchema: obj(map[string]any{
+					"from": str("agent that loses the ability to delegate"),
+					"to":   str("agent it may no longer delegate to"),
+				}, "from", "to"),
+			},
+			llm.Tool{
+				Name: "revoke_gear",
+				Description: "Take a gear away from an agent, or from the whole workspace. The gear itself stays in the " +
+					"catalog; what goes is permission to call it.",
+				InputSchema: obj(map[string]any{
+					"gear":  str("gear name"),
+					"agent": str("agent to take it from; omit for the workspace-wide grant"),
+				}, "gear"),
+			},
+			llm.Tool{
+				Name: "schedule_list",
+				Description: "List this workspace's clocks: what each starts, when it next fires, how it went last time, " +
+					"and whether its target still exists.",
+				InputSchema: obj(map[string]any{}),
+			},
+			llm.Tool{
+				Name: "schedule_create",
+				Description: "Put something on a clock. Somebody asking for work to happen every morning is asking for " +
+					"this — build the agent that does it, then set the time.",
+				InputSchema: obj(map[string]any{
+					"name":  str("what to call it, e.g. 'nightly sweep'"),
+					"spec":  str("when: 'every 15m', 'every 1h', or a cron expression like '0 3 * * 1-5'"),
+					"agent": str("agent to start"),
+					"tell":  str("what to say to it when it fires; a firing with nothing to say is a turn with an empty prompt"),
+					"tz":    str("optional IANA timezone, e.g. 'Europe/Berlin'. Blank is UTC"),
+					"on_miss": str("optional: 'skip' (default) or 'run' — what to do about a firing the server was " +
+						"switched off for"),
+				}, "name", "spec", "agent", "tell"),
+			},
+			llm.Tool{
+				Name:        "schedule_update",
+				Description: "Change a clock: its timing, what it says, or whether it runs at all.",
+				InputSchema: obj(map[string]any{
+					"name":     str("the clock to change"),
+					"spec":     str("new timing (omit to keep)"),
+					"tell":     str("new instruction (omit to keep)"),
+					"tz":       str("new timezone (omit to keep)"),
+					"enabled":  map[string]any{"type": "boolean", "description": "switch it on or off (omit to keep)"},
+					"new_name": str("rename it (omit to keep)"),
+				}, "name"),
+			},
+			llm.Tool{
+				Name:        "schedule_delete",
+				Description: "Remove a clock. Nothing it started is undone; it simply stops firing.",
+				InputSchema: obj(map[string]any{
+					"name": str("the clock to remove"),
 				}, "name"),
 			},
 			llm.Tool{
@@ -703,6 +772,234 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 		}
 		return marshal(updated)
 
+	case "agent_delete":
+		name, err := args.reqStr("name")
+		if err != nil {
+			return "", err
+		}
+		target, err := e.ws.GetAgentByName(ctx, wsID, name)
+		if err != nil {
+			return "", err
+		}
+		// Not itself, and not the orchestrator. A workspace whose orchestrator
+		// is gone is a workspace nobody can talk to, and the model asking is
+		// the one that would disappear mid-sentence.
+		if target.ID == agent.ID {
+			return "", fmt.Errorf("agent %q is you; a turn cannot end by deleting the one taking it", name)
+		}
+		if err := e.ws.DeleteAgent(ctx, target.ID); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("deleted agent %q, with its wires and grants", name), nil
+
+	case "wire_cut":
+		fromName, err := args.reqStr("from")
+		if err != nil {
+			return "", err
+		}
+		toName, err := args.reqStr("to")
+		if err != nil {
+			return "", err
+		}
+		from, err := e.ws.GetAgentByName(ctx, wsID, fromName)
+		if err != nil {
+			return "", err
+		}
+		to, err := e.ws.GetAgentByName(ctx, wsID, toName)
+		if err != nil {
+			return "", err
+		}
+		wires, err := e.ws.ListWires(ctx, wsID)
+		if err != nil {
+			return "", err
+		}
+		for _, w := range wires {
+			if w.FromAgentID == from.ID && w.ToAgentID == to.ID {
+				if err := e.ws.DeleteWire(ctx, w.ID); err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("cut the wire from %q to %q; %s may no longer delegate to %s",
+					fromName, toName, fromName, toName), nil
+			}
+		}
+		// Named rather than silently successful: "there was no such wire" and
+		// "the wire is gone" are the same end state and different answers to
+		// what the model asked.
+		return "", fmt.Errorf("there is no wire from %q to %q", fromName, toName)
+
+	case "revoke_gear":
+		gearName, err := args.reqStr("gear")
+		if err != nil {
+			return "", err
+		}
+		agentName, err := args.str("agent")
+		if err != nil {
+			return "", err
+		}
+		scope, err := e.bindScope(ctx, wsID, agentName)
+		if err != nil {
+			return "", err
+		}
+		g, err := e.gears.GetByName(ctx, gearName)
+		if err != nil {
+			return "", err
+		}
+		bindings, err := e.gears.ListBindings(ctx, wsID)
+		if err != nil {
+			return "", err
+		}
+		for _, b := range bindings {
+			if b.GearID != g.ID {
+				continue
+			}
+			if (scope == nil && b.AgentID == nil) || (scope != nil && b.AgentID != nil && *b.AgentID == *scope) {
+				if err := e.gears.Unbind(ctx, b.ID); err != nil {
+					return "", err
+				}
+				if agentName == "" {
+					return fmt.Sprintf("revoked %q from the workspace", gearName), nil
+				}
+				return fmt.Sprintf("revoked %q from %q", gearName, agentName), nil
+			}
+		}
+		return "", fmt.Errorf("%q is not granted there", gearName)
+
+	case "schedule_list":
+		if e.schedules == nil {
+			return "", errors.New("this install has no clocks")
+		}
+		list, err := e.schedules.List(ctx, wsID)
+		if err != nil {
+			return "", err
+		}
+		return marshal(list)
+
+	case "schedule_create":
+		if e.schedules == nil {
+			return "", errors.New("this install has no clocks")
+		}
+		name, err := args.reqStr("name")
+		if err != nil {
+			return "", err
+		}
+		spec, err := args.reqStr("spec")
+		if err != nil {
+			return "", err
+		}
+		agentName, err := args.reqStr("agent")
+		if err != nil {
+			return "", err
+		}
+		tell, err := args.reqStr("tell")
+		if err != nil {
+			return "", err
+		}
+		tz, err := args.str("tz")
+		if err != nil {
+			return "", err
+		}
+		onMiss, err := args.str("on_miss")
+		if err != nil {
+			return "", err
+		}
+		target, err := e.ws.GetAgentByName(ctx, wsID, agentName)
+		if err != nil {
+			return "", err
+		}
+		made, err := e.schedules.Create(ctx, schedule.Schedule{
+			WorkspaceID: wsID, TargetKind: schedule.TargetAgent, TargetAgentID: &target.ID,
+			Name: name, Spec: spec, TZ: tz, OnMiss: onMiss, Instruction: tell, Enabled: true,
+		})
+		if err != nil {
+			return "", err
+		}
+		return marshal(made)
+
+	case "schedule_update":
+		if e.schedules == nil {
+			return "", errors.New("this install has no clocks")
+		}
+		name, err := args.reqStr("name")
+		if err != nil {
+			return "", err
+		}
+		found, err := e.scheduleByName(ctx, wsID, name)
+		if err != nil {
+			return "", err
+		}
+		// Read-modify-write on the row as it stands, so an omitted field means
+		// "leave it" rather than "clear it".
+		next := found
+		for _, f := range []struct {
+			key string
+			set func(string)
+		}{
+			{"spec", func(v string) { next.Spec = v }},
+			{"tell", func(v string) { next.Instruction = v }},
+			{"tz", func(v string) { next.TZ = v }},
+			{"new_name", func(v string) { next.Name = v }},
+		} {
+			if !args.has(f.key) {
+				continue
+			}
+			v, err := args.str(f.key)
+			if err != nil {
+				return "", err
+			}
+			f.set(v)
+		}
+		saved, err := e.schedules.Update(ctx, found.ID, next)
+		if err != nil {
+			return "", err
+		}
+		// Switching it on or off is its own call, and not for tidiness: it
+		// re-bases the next firing, so a clock switched back on after a week
+		// starts from now rather than owing a week of catch-up. Update alone
+		// leaves `enabled` exactly as it was, which is how this tool silently
+		// ignored the field the first time it was written.
+		if args.has("enabled") {
+			// Through the string form, because a model asked for a boolean
+			// sends true, "true" and "yes" on different days, and the argument
+			// reader already normalises all of them to text.
+			on, err := args.str("enabled")
+			if err != nil {
+				return "", err
+			}
+			var want bool
+			switch strings.ToLower(strings.TrimSpace(on)) {
+			case "true", "yes", "on", "1":
+				want = true
+			case "false", "no", "off", "0":
+				want = false
+			default:
+				return "", fmt.Errorf("enabled is %q; it is true or false", on)
+			}
+			if want != saved.Enabled {
+				saved, err = e.schedules.SetEnabled(ctx, found.ID, want)
+				if err != nil {
+					return "", err
+				}
+			}
+		}
+		return marshal(saved)
+
+	case "schedule_delete":
+		if e.schedules == nil {
+			return "", errors.New("this install has no clocks")
+		}
+		name, err := args.reqStr("name")
+		if err != nil {
+			return "", err
+		}
+		found, err := e.scheduleByName(ctx, wsID, name)
+		if err != nil {
+			return "", err
+		}
+		if err := e.schedules.Delete(ctx, found.ID); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("removed the clock %q; nothing it already started is undone", name), nil
+
 	case "wire_create":
 		fromName, err := args.reqStr("from")
 		if err != nil {
@@ -1204,4 +1501,30 @@ func strayWorkspacePath(argsJSON string) string {
 		}
 	}
 	return ""
+}
+
+// scheduleByName finds one of this workspace's clocks.
+//
+// By name rather than by id, because a model that has just been told "turn off
+// the nightly sweep" holds a name, and making it list first to find a number
+// is a round trip that answers nothing.
+func (e *Engine) scheduleByName(ctx context.Context, wsID int64, name string) (schedule.Schedule, error) {
+	list, err := e.schedules.List(ctx, wsID)
+	if err != nil {
+		return schedule.Schedule{}, err
+	}
+	for _, sc := range list {
+		if strings.EqualFold(sc.Name, name) {
+			return sc, nil
+		}
+	}
+	have := make([]string, 0, len(list))
+	for _, sc := range list {
+		have = append(have, strconv.Quote(sc.Name))
+	}
+	if len(have) == 0 {
+		return schedule.Schedule{}, fmt.Errorf("there is no clock called %q; this workspace has none at all", name)
+	}
+	return schedule.Schedule{}, fmt.Errorf("there is no clock called %q; there is: %s",
+		name, strings.Join(have, ", "))
 }

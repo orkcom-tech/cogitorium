@@ -24,6 +24,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/mcpoauth"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/metrics"
+	"github.com/orkcom-tech/cogitorium/internal/schedule"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/websearch"
 	"github.com/orkcom-tech/cogitorium/internal/work"
@@ -135,6 +136,10 @@ type Engine struct {
 	// record — all keyed by workspace.
 	lanes *work.Store
 
+	// schedules is the clocks. Nil is an engine that offers no schedule tools
+	// rather than one that offers them and fails.
+	schedules *schedule.Store
+
 	// runTokenBudget is the most one run may spend before it is stopped. Zero
 	// is off, and off is the default.
 	//
@@ -196,6 +201,14 @@ func (e *Engine) CloseMCP() { e.mcpPool.closeAll() }
 
 // SetEgressKill injects the server's runtime kill switch.
 func (e *Engine) SetEgressKill(f func() bool) { e.egressKilled = f }
+
+// SetSchedules gives the orchestrator its clocks.
+//
+// Injected rather than taken in New for one reason: an engine without it is
+// still a working engine — it simply offers no schedule tools — and every test
+// that builds one by hand would otherwise have to know about a subsystem it is
+// not testing.
+func (e *Engine) SetSchedules(s *schedule.Store) { e.schedules = s }
 
 // Statuses returns the live status of every agent in a workspace (agents
 // with no recorded activity are idle).
