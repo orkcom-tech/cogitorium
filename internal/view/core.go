@@ -405,8 +405,8 @@ type WorkspaceRow struct {
 	// Unsaved says the workflow has changed since that version. It is the
 	// thing somebody actually wants from this column — a number alone says
 	// what was recorded, not whether what is running matches it.
-	Unsaved bool
-	MayShare  bool
+	Unsaved  bool
+	MayShare bool
 	// Shared is every team it has gone to. A list rather than a picker: a
 	// workspace can go to any number of teams, and each is withdrawn on its
 	// own rather than by replacing whoever currently has it.

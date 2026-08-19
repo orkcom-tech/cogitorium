@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -80,13 +81,28 @@ func TestAnAgentScheduleSendsTheInstructionUnfenced(t *testing.T) {
 	ctx := context.Background()
 	agent := d.agent(t, "orchestrator")
 
+	// Behind a mutex, because the provider answers on the HTTP server's own
+	// goroutine and waitFor reads from this one. Without it the race detector
+	// is right and the test is a coin flip about whether the read sees the
+	// write at all.
+	var mu sync.Mutex
 	var seen string
-	d.provider.answers(func(n int, c modelCall) modelReply {
+	record := func(raw string) {
+		mu.Lock()
+		defer mu.Unlock()
 		if seen == "" {
 			// Raw, not a decoded field: the claim is about what actually went
 			// on the wire, including what is NOT in it.
-			seen = c.Raw
+			seen = raw
 		}
+	}
+	saw := func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		return seen
+	}
+	d.provider.answers(func(n int, c modelCall) modelReply {
+		record(c.Raw)
 		return says("ok")
 	})
 
@@ -99,13 +115,14 @@ func TestAnAgentScheduleSendsTheInstructionUnfenced(t *testing.T) {
 	}
 	d.due(t, sc.ID)
 	d.srv.tick(ctx)
-	waitFor(t, func() bool { return seen != "" }, "the agent to be given its turn")
+	waitFor(t, func() bool { return saw() != "" }, "the agent to be given its turn")
 
-	if !strings.Contains(seen, "sweep yesterday's tickets") {
-		t.Fatalf("the agent was not told what the schedule says. It got:\n%s", seen)
+	got := saw()
+	if !strings.Contains(got, "sweep yesterday's tickets") {
+		t.Fatalf("the agent was not told what the schedule says. It got:\n%s", got)
 	}
-	if strings.Contains(seen, "untrusted") {
-		t.Fatalf("an operator's own instruction was fenced as untrusted payload:\n%s", seen)
+	if strings.Contains(got, "untrusted") {
+		t.Fatalf("an operator's own instruction was fenced as untrusted payload:\n%s", got)
 	}
 }
 

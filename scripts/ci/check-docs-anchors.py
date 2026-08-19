@@ -66,17 +66,27 @@ def main() -> int:
     layout = (DOCS / "_layouts" / "default.html").read_text()
     # The sidebar renders one anchor list per page, chosen by a Liquid
     # conditional; each branch is checked against the page it belongs to.
+    #
+    # Three branches now, and the parse is written as a chain rather than a
+    # fixed pair so that adding a fourth page needs one tuple below rather than
+    # a new regular expression. The previous shape silently attributed a new
+    # page's anchors to the guide, which is a check reporting twelve failures
+    # about the wrong document.
     branches = re.search(
-        r"\{%-?\s*if on_guide\s*-?%\}(.*?)\{%-?\s*else\s*-?%\}(.*?)\{%-?\s*endif", layout, re.S
+        r"\{%-?\s*if on_plugins\s*-?%\}(.*?)"
+        r"\{%-?\s*elsif on_guide\s*-?%\}(.*?)"
+        r"\{%-?\s*else\s*-?%\}(.*?)"
+        r"\{%-?\s*endif", layout, re.S
     )
     if not branches:
-        print("the sidebar no longer has the two-page branch this check knows about", file=sys.stderr)
+        print("the sidebar no longer has the page branches this check knows about", file=sys.stderr)
         return 1
 
     failures = 0
     for label, page, block in (
-        ("guide.md", DOCS / "guide.md", branches.group(1)),
-        ("index.md", DOCS / "index.md", branches.group(2)),
+        ("plugins.md", DOCS / "plugins.md", branches.group(1)),
+        ("guide.md", DOCS / "guide.md", branches.group(2)),
+        ("index.md", DOCS / "index.md", branches.group(3)),
     ):
         ids = heading_ids(page)
         links = re.findall(r'href="#([^"]+)"', block)
