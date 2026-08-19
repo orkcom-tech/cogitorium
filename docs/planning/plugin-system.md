@@ -207,16 +207,29 @@ search, the three-state verified check, install-with-crosscheck, the browse and
 install screens, and its CI — `check-catalog` and `check-bundle`, with
 additions auto-merging and edits held for a person.
 
-**Described here and not built.** The conversion itself: **no screen of the
-product is a server template yet**, so there is nothing for a plugin to
-override except the shell around its own pages and the rail. The hypermedia
-layer is vendored and the rail renders, which is the foundation; the twenty-odd
-screens on top of it are the work that remains, and the chat stage needs its
-SSE stream reshaped into the dialect before it can be first.
+The conversion, since: every product screen a template can render is one.
+Instructions, models, context, gears, workspaces, variables, queue, receivers,
+MCP, agents, memory, the transcript, the terminal gate, plugins and the people
+lists — each verified against a running server before its React component was
+deleted, and each overridable by name from that moment.
 
-Author SDKs beyond Python: Go, Rust and TinyGo guests still write the three
-exports by hand, which is thirty lines but thirty lines nobody should have to
-find out about.
+Four SDKs. Python, and now Go, TinyGo and Rust. The Go one is a single package
+with two transports: the same source builds to a WebAssembly module and to a
+native binary, so the tier stays the operator's decision and never reaches back
+into the author's code. A test reads every SDK and fails if one of them cannot
+make one of the nine calls.
+
+**Described here and not built.** Four screens stay with the client, and the
+reason is the same one in each case: a template renders a thing that exists at
+a moment, and these exist in motion. The install map and the blueprint are
+drawn canvases somebody drags. The file editor is live text. The terminal is a
+socket.
+
+The chat stage is the fifth, and it is the one that was a judgement rather than
+a fact: it posts a turn and streams the answer on the same request. Hypermedia
+would need that split into a send and a subscribe, with a per-workspace broker
+in between — which changes what cancelling a turn means. That is a redesign of
+the thing the product is for, and it was declined rather than deferred.
 
 **Dropped rather than deferred.** An Extism-shaped ABI. The plan wanted it so
 that "every existing Extism PDK is a Cogitorium PDK on day one", and that was
@@ -253,9 +266,9 @@ The restart controller at step 7 is the part an earlier draft assumed the enviro
 - **The desktop channel is a three-target build**, all `CGO_ENABLED=1` on native runners because webview needs cgo. The server binary's six-target `CGO_ENABLED=0` claim is separately intact.
 - **Identity pinning does not survive administrative compromise of the marks repository.** The design puts the broad attack surface and the trust anchor in different repos, relies on public Rekor monitoring for detection, and has a bounded recovery path. It does not claim compromise is impossible.
 - **Revocations are additive and monotone** — a stale cache can miss a revocation but never mis-apply one. The UI shows `catalog last fetched <date>` rather than pretending currency.
-- **A stock-Go wasm guest carries the Go runtime at ~3 MiB per pooled instance.** TinyGo and Rust are orders smaller. Docs tier this so a toolchain is chosen knowingly rather than discovered through an OOM.
+- **A stock-Go wasm guest carries the Go runtime.** Measured on the same sample plugin, built three ways: 3.1 MiB from `go`, 1.1 MiB from TinyGo, 124 KiB from Rust. The SDK READMEs say so, so a toolchain is chosen knowingly rather than discovered through an OOM. Note also that a plugin module must be built `-buildmode=c-shared`: the default builds a command, which runs once and ends, and a module that has ended has no exports left to call.
 - **Multi-arch derived images cannot carry a pre-warmed AOT cache** — ~314 ms per module on first boot after an image upgrade, ~11 ms from cache after.
-- **Every non-`/api/` path in this server is anonymous by construction.** Plugin routes get `auth: token` by default via an explicit prefix exemption plus a regression test, but the underlying rule is unchanged and `auth: none` remains reachable — shown in red on the approval screen.
+- **A path is anonymous unless something claims it.** This was once "every non-`/api/` path is anonymous by construction", and the conversion made that dangerous rather than merely true: the first converted screen answered 200 with its content to anybody who asked. A page now registers its first path segment as authenticated space, which covers the screen and everything nested under it, and browsers get a redirect where the API still gets 401. Plugin routes get `auth: token` by default via the same mechanism; `auth: none` remains reachable and is shown in red on the approval screen.
 
 ## Open decisions
 
