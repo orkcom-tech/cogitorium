@@ -59,7 +59,9 @@ func readFrame() ([]byte, error) {
 `
 
 // An ordinary worker: says hello, then answers.
-const goodChild = `package main
+// header is everything a guest fixture needs before its own loop: the imports,
+// the framing helpers, and the hello that names the contract.
+const header = `package main
 
 import (
 	"encoding/binary"
@@ -70,7 +72,10 @@ import (
 )
 ` + frameHelpers + `
 func main() {
-	writeFrame([]byte(` + "`" + `{"contract":1}` + "`" + `))
+	_ = time.Now
+	writeFrame([]byte(` + "`" + `{"contract":1}` + "`" + `))`
+
+const goodChild = header + `
 	for {
 		in, err := readFrame()
 		if err != nil {
@@ -82,15 +87,19 @@ func main() {
 		}
 		json.Unmarshal(in, &req)
 
-		var out []byte
+		// Wrapped in a frame, because the channel carries two kinds of
+		// message: a guest may ask the host for something before it answers,
+		// as many times as it needs, and the wrapper is what tells an answer
+		// apart from a question.
+		var body map[string]any
 		switch req.Export {
 		case "echo":
-			out, _ = json.Marshal(map[string]any{"data": req.Input})
+			body = map[string]any{"data": req.Input}
 		case "render":
-			out, _ = json.Marshal(map[string]any{
+			body = map[string]any{
 				"template": "child.stage.panel",
 				"model":    map[string]any{"Count": 7},
-			})
+			}
 		case "die":
 			os.Stderr.WriteString("Traceback: something went wrong on line 42\n")
 			os.Exit(3)
@@ -100,8 +109,9 @@ func main() {
 			// would crash and this would be testing a crash rather than a hang.
 			time.Sleep(time.Hour)
 		default:
-			out, _ = json.Marshal(map[string]any{"error": "no such export"})
+			body = map[string]any{"error": "no such export"}
 		}
+		out, _ := json.Marshal(map[string]any{"response": body})
 		writeFrame(out)
 	}
 }
@@ -302,3 +312,85 @@ func TestTheStderrTailIsBounded(t *testing.T) {
 		t.Error("it should keep the END of the output — the last words are the diagnosis")
 	}
 }
+
+// A guest asking the host for something mid-exchange.
+//
+// This is the half that did not exist: one request in, one response out, so
+// cog.* was answered on the WebAssembly tier and nowhere else. The parity
+// promise — every tier offers the identical set — was already broken and
+// nothing said so.
+func TestAGuestCanAskTheHostBeforeItAnswers(t *testing.T) {
+	const src = header + `
+	for {
+		in, err := readFrame()
+		if err != nil {
+			return
+		}
+		_ = in
+
+		// Two questions, then the answer, so the loop is exercised rather
+		// than the single-call case.
+		ask, _ := json.Marshal(map[string]any{"host": map[string]any{"call": "now"}})
+		writeFrame(ask)
+		first, err := readFrame()
+		if err != nil {
+			return
+		}
+		writeFrame(ask)
+		second, err := readFrame()
+		if err != nil {
+			return
+		}
+
+		out, _ := json.Marshal(map[string]any{"response": map[string]any{
+			"data": map[string]any{"first": string(first), "second": string(second)},
+		}})
+		writeFrame(out)
+	}
+}
+`
+	asked := 0
+	w := run(t, src, func(s *Spec) {
+		s.Host = hostFunc(func(plugin string, req abi.HostRequest) abi.HostReply {
+			asked++
+			return abi.HostReply{Output: []byte(`{"rfc3339":"2026-01-01T00:00:00Z"}`)}
+		})
+	})
+
+	resp, err := w.Call(context.Background(), abi.Request{Export: "anything"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asked != 2 {
+		t.Fatalf("the host was asked %d times, want 2", asked)
+	}
+	if !strings.Contains(string(resp.Data), "2026-01-01") {
+		t.Fatalf("the host's answer did not reach the guest: %s", resp.Data)
+	}
+}
+
+// A guest with no host attached gets a refusal it can read, not a hang.
+func TestAGuestCallingWithNoHostIsRefused(t *testing.T) {
+	const src = header + `
+	for {
+		if _, err := readFrame(); err != nil {
+			return
+		}
+		ask, _ := json.Marshal(map[string]any{"host": map[string]any{"call": "now"}})
+		writeFrame(ask)
+		if _, err := readFrame(); err != nil {
+			return
+		}
+	}
+}
+`
+	w := run(t, src, nil)
+	_, err := w.Call(context.Background(), abi.Request{Export: "anything"})
+	if err == nil || !strings.Contains(err.Error(), "no host") {
+		t.Fatalf("expected a refusal naming the missing host, got %v", err)
+	}
+}
+
+type hostFunc func(string, abi.HostRequest) abi.HostReply
+
+func (f hostFunc) Call(plugin string, req abi.HostRequest) abi.HostReply { return f(plugin, req) }
