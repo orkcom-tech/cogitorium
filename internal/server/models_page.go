@@ -14,10 +14,12 @@ import (
 // from, and which of them this install offers an agent. A plugin can take over
 // either without touching the other.
 //
-// Every action is a form that answers with the page. A failure keeps somebody
-// on the screen beside the reason, which a redirect could not do — and the
-// whole thing works with scripting switched off, which is what makes it
-// testable without a browser.
+// Every action is a form. A failure answers with the page, because the reason
+// belongs beside the form that produced it; a success sends the browser back
+// to /models, because a rendered POST leaves its own URL in the address bar
+// and a refresh then adds a second provider, or dials somebody's endpoint
+// again. The whole thing works with scripting switched off, which is what
+// makes it testable without a browser.
 
 func (s *Server) handleModelsPage(w http.ResponseWriter, r *http.Request) {
 	s.renderModels(w, r, "", nil)
@@ -39,7 +41,7 @@ func (s *Server) handleCreateProviderForm(w http.ResponseWriter, r *http.Request
 		s.renderModels(w, r, err.Error(), nil)
 		return
 	}
-	s.renderModels(w, r, "", nil)
+	s.done(w, r, "/models")
 }
 
 func (s *Server) handleDeleteProviderForm(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +57,7 @@ func (s *Server) handleDeleteProviderForm(w http.ResponseWriter, r *http.Request
 		s.renderModels(w, r, err.Error(), nil)
 		return
 	}
-	s.renderModels(w, r, "", nil)
+	s.done(w, r, "/models")
 }
 
 // handleTestProviderForm dials the provider and reports what it said.
@@ -115,7 +117,7 @@ func (s *Server) handleCreateModelForm(w http.ResponseWriter, r *http.Request) {
 		s.renderModels(w, r, err.Error(), nil)
 		return
 	}
-	s.renderModels(w, r, "", nil)
+	s.done(w, r, "/models")
 }
 
 func (s *Server) handleDeleteModelForm(w http.ResponseWriter, r *http.Request) {
@@ -131,7 +133,7 @@ func (s *Server) handleDeleteModelForm(w http.ResponseWriter, r *http.Request) {
 		s.renderModels(w, r, err.Error(), nil)
 		return
 	}
-	s.renderModels(w, r, "", nil)
+	s.done(w, r, "/models")
 }
 
 // providerTest is the result of a check somebody just made.

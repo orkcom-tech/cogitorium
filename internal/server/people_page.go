@@ -119,7 +119,7 @@ func (s *Server) handleDeleteUserForm(w http.ResponseWriter, r *http.Request) {
 		s.renderPeople(w, r, err.Error(), "", "")
 		return
 	}
-	s.renderPeople(w, r, "", "", "")
+	s.done(w, r, "/people/lists")
 }
 
 func (s *Server) handleCreateTeamForm(w http.ResponseWriter, r *http.Request) {
@@ -131,7 +131,7 @@ func (s *Server) handleCreateTeamForm(w http.ResponseWriter, r *http.Request) {
 		s.renderPeople(w, r, err.Error(), "", "")
 		return
 	}
-	s.renderPeople(w, r, "", "", "")
+	s.done(w, r, "/people/lists")
 }
 
 func (s *Server) handleDeleteTeamForm(w http.ResponseWriter, r *http.Request) {
@@ -147,7 +147,7 @@ func (s *Server) handleDeleteTeamForm(w http.ResponseWriter, r *http.Request) {
 		s.renderPeople(w, r, err.Error(), "", "")
 		return
 	}
-	s.renderPeople(w, r, "", "", "")
+	s.done(w, r, "/people/lists")
 }
 
 func (s *Server) handleAddTeamMemberForm(w http.ResponseWriter, r *http.Request) {
@@ -169,5 +169,5 @@ func (s *Server) handleAddTeamMemberForm(w http.ResponseWriter, r *http.Request)
 		s.renderPeople(w, r, err.Error(), "", "")
 		return
 	}
-	s.renderPeople(w, r, "", "", "")
+	s.done(w, r, "/people/lists")
 }

@@ -85,7 +85,7 @@ func (s *Server) handleDeleteWorkspaceForm(w http.ResponseWriter, r *http.Reques
 		s.renderWorkspaces(w, r, err.Error(), "")
 		return
 	}
-	s.renderWorkspaces(w, r, "", "")
+	s.done(w, r, "/workspaces")
 }
 
 func (s *Server) handleShareWorkspaceForm(w http.ResponseWriter, r *http.Request) {
@@ -106,7 +106,7 @@ func (s *Server) handleShareWorkspaceForm(w http.ResponseWriter, r *http.Request
 		s.renderWorkspaces(w, r, err.Error(), "")
 		return
 	}
-	s.renderWorkspaces(w, r, "", "")
+	s.done(w, r, "/workspaces")
 }
 
 func (s *Server) handleUnshareWorkspaceForm(w http.ResponseWriter, r *http.Request) {
@@ -127,7 +127,7 @@ func (s *Server) handleUnshareWorkspaceForm(w http.ResponseWriter, r *http.Reque
 		s.renderWorkspaces(w, r, err.Error(), "")
 		return
 	}
-	s.renderWorkspaces(w, r, "", "")
+	s.done(w, r, "/workspaces")
 }
 
 func workspacePathID(w http.ResponseWriter, r *http.Request, s *Server) (int64, bool) {
@@ -232,7 +232,7 @@ func (s *Server) handleColourWorkspaceForm(w http.ResponseWriter, r *http.Reques
 		s.renderWorkspaces(w, r, err.Error(), "")
 		return
 	}
-	s.renderWorkspaces(w, r, "", "")
+	s.done(w, r, "/workspaces")
 }
 
 // handleImportWorkspaceForm builds a workspace from a bundle somebody exported.

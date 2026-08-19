@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/orkcom-tech/cogitorium/internal/view"
@@ -53,7 +54,11 @@ func (s *Server) handleSaveContextForm(w http.ResponseWriter, r *http.Request) {
 		s.renderContext(w, r, err.Error(), "")
 		return
 	}
-	s.renderContext(w, r, "", "saved a new version of "+path)
+	// Back to the file, open. Somebody who just saved wants to see what they
+	// saved rather than a list with it closed — and a rendered POST leaves the
+	// form's own URL in the address bar, where a refresh writes the same
+	// version again.
+	s.done(w, r, "/context?open="+url.QueryEscape(path))
 }
 
 func (s *Server) renderContext(w http.ResponseWriter, r *http.Request, problem, notice string) {

@@ -213,3 +213,16 @@ func (s *Server) Routes() []Route {
 	})
 	return out
 }
+
+// done ends a form post by sending the browser back to the screen.
+//
+// See Other, not a rendered page. A form that answers a POST with its own
+// screen leaves the POST's URL in the address bar — /models/providers/1/test —
+// and a refresh re-submits it: a second provider, a second user, a second dial
+// of somebody's endpoint. The person did nothing wrong; they pressed reload.
+//
+// Failures still render in place, because the message belongs beside the form
+// that produced it and there is nothing to repeat.
+func (s *Server) done(w http.ResponseWriter, r *http.Request, path string) {
+	http.Redirect(w, r, path, http.StatusSeeOther)
+}
