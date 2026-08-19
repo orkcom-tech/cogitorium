@@ -366,6 +366,7 @@ export default function Rail({
           <Link to="/models">Models</Link>
           {user.role === "admin" && <Link to="/people">People</Link>}
           {user.role === "admin" && <Link to="/context">Context</Link>}
+          {user.role === "admin" && <Link to="/plugins">Plugins</Link>}
           <hr />
           <a href={DOCS_URL} target="_blank" rel="noreferrer">
             Documentation

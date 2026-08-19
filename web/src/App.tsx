@@ -14,6 +14,7 @@ import LibraryPage from './pages/LibraryPage'
 import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
 import InstallMap from './pages/InstallMap'
+import PluginsPage from './pages/PluginsPage'
 import { applyTheme, loadTheme } from './styles/theme'
 import Rail from './Rail'
 import { ShellProvider } from './shell'
@@ -124,6 +125,10 @@ export default function App() {
             <Route path="/env" element={user.role === 'admin' ? <EnvPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/instructions" element={<LibraryPage />} />
             <Route path="/models" element={<ModelsPage />} />
+            <Route
+              path="/plugins"
+              element={user.role === 'admin' ? <PluginsPage /> : <Navigate to="/workspaces" replace />}
+            />
           </Routes>
           </main>
         </div>

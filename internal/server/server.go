@@ -655,6 +655,7 @@ var clientRoutes = []string{
 	"/env",
 	"/instructions",
 	"/models",
+	"/plugins",
 }
 
 // servesTheApp reports whether a path is one of the application's own screens.

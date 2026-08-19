@@ -17,6 +17,45 @@ export type Model = {
 
 export type TestResult = { ok: boolean; models?: string[]; error?: string }
 
+export type PluginPage = { path: string; title?: string; auth: string }
+
+/** One plugin as the library screen sees it.
+ *
+ * Everything under `overrides`/`adds`/`extends`/`inert` is computed by the
+ * server from the templates a plugin ships, never from what its manifest
+ * claimed — so nothing here can be improved by writing a nicer manifest.
+ */
+export type Plugin = {
+  id: string
+  name: string
+  version: string
+  author?: string
+  docs?: string
+  source?: string
+  enabled: boolean
+  /** Position in the enable list, 1-based. Position is precedence. */
+  order: number
+  /** Whether it is actually rendering. Enabled and live are different
+   *  questions, and the gap between them is why this screen exists. */
+  live: boolean
+  problem?: string
+  tier: string
+  available: boolean
+  refusal?: string
+  overrides?: string[]
+  adds?: string[]
+  extends?: string[]
+  /** Defined in a namespace nothing installed owns, so it never renders. */
+  inert?: string[]
+  /** Overridden without saying so in the manifest. Allowed by design; shown
+   *  because it is the difference between what was approved and what happens. */
+  undeclared?: string[]
+  pages?: PluginPage[]
+  hosts?: string[]
+  secrets?: string[]
+  api?: string[]
+}
+
 export class Unauthorized extends Error {}
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
@@ -607,6 +646,9 @@ export type MCPCatalogEntry = {
 }
 
 export const api = {
+  plugins: {
+    list: () => req<Plugin[]>('/api/v1/plugins'),
+  },
   providers: {
     list: () => req<Provider[]>('/api/v1/providers'),
     create: (p: { name: string; type: string; base_url: string; api_key: string }) =>

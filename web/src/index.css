@@ -3554,3 +3554,52 @@ button.big {
     flex: 1 1 100%;
   }
 }
+
+/* The library.
+ *
+ * The card is deliberately plain: what matters on this screen is which of the
+ * two states a plugin is in and which template names it took over, and any
+ * decoration competing with those is decoration in the way. */
+.plugin-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.plugin-head h3 {
+  margin: 0;
+}
+.plugin-rows {
+  display: grid;
+  grid-template-columns: minmax(8rem, max-content) 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0.5rem 0;
+}
+.plugin-rows .label {
+  color: var(--ink-dim, inherit);
+  font-size: 0.85em;
+}
+.plugin-rows ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.plugin-rows li {
+  margin: 0 0 0.15rem;
+}
+.badge {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.05rem 0.55rem;
+  font-size: 0.8em;
+  white-space: nowrap;
+}
+.badge.is-ok {
+  color: var(--ok, #2e7d32);
+}
+/* "on, not loading" has to read as loudly as broken does. A plugin an
+   operator switched on that is silently not rendering is the state this
+   screen exists to surface. */
+.badge.is-danger {
+  color: var(--danger, #b3261e);
+}
