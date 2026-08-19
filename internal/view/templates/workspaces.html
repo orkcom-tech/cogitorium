@@ -96,6 +96,12 @@
     <a class="ws-title" href="/workspaces/{{.ID}}"><strong>{{.Name}}</strong></a>
     <span class="muted">{{.Description}}</span>
     {{if .SharedWithMe}}<span class="badge">shared with you</span>{{end}}
+    {{/* Its newest saved version, beside the workflow rather than only inside
+         it: "which of these have I ever saved" is a question about the list.
+         The warning is the useful half — a number says what was recorded, and
+         this says whether what is running still matches it. */}}
+    {{if .Version}}<span class="badge" title="the newest saved version of this workflow">v{{.Version}}</span>{{end}}
+    {{if .Unsaved}}<span class="badge is-warn" title="this workflow has changed since its newest version">unsaved changes</span>{{end}}
     <span class="spacer"></span>
     <form method="post" action="/workspaces/{{.ID}}/clone">
       <input type="hidden" name="name" value="{{.Name}} copy">

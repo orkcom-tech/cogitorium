@@ -397,6 +397,15 @@ type WorkspaceRow struct {
 	// MayDelete is the owner or an administrator. A workspace somebody else
 	// owns is not yours to remove.
 	MayDelete bool
+	// Version is the newest saved version, or zero when none has been. Beside
+	// the workflow rather than only inside it: "which of these have I ever
+	// saved" is a question about the list, and answering it one workspace at a
+	// time is not answering it.
+	Version int
+	// Unsaved says the workflow has changed since that version. It is the
+	// thing somebody actually wants from this column — a number alone says
+	// what was recorded, not whether what is running matches it.
+	Unsaved bool
 	MayShare  bool
 	// Shared is every team it has gone to. A list rather than a picker: a
 	// workspace can go to any number of teams, and each is withdrawn on its

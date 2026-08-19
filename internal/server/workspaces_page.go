@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/orkcom-tech/cogitorium/internal/bundle"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/orkcom-tech/cogitorium/internal/view"
+	"github.com/orkcom-tech/cogitorium/internal/workflow"
 )
 
 // The landing screen, served as a template.
@@ -181,6 +183,18 @@ func (s *Server) renderWorkspaces(w http.ResponseWriter, r *http.Request, proble
 			MayDelete: mine || caller.IsAdmin(),
 			MayShare:  caller.IsAdmin(),
 		}
+		// Its newest version, and whether it still describes what is running.
+		// A number on its own says what was recorded; what somebody scanning
+		// this list wants to know is which workflows have drifted from it.
+		if s.versions != nil {
+			if latest, err := s.versions.Latest(r.Context(), ws.ID); err == nil {
+				row.Version = latest.Number
+				if now, err := workflow.Take(r.Context(), s.workflowStores(), ws.ID); err == nil {
+					row.Unsaved = !workflow.Same(latest.Snapshot, now)
+				}
+			}
+		}
+
 		if ws.Hue != nil {
 			row.Hue, row.HasHue = *ws.Hue, true
 		}
@@ -271,5 +285,36 @@ func (s *Server) handleImportWorkspaceForm(w http.ResponseWriter, r *http.Reques
 		s.renderWorkspaces(w, r, err.Error(), "")
 		return
 	}
+	// What did not arrive, before anything else.
+	//
+	// The import already worked all of this out and the screen used to throw
+	// it away: a bundle whose gears were skipped and whose agents lost their
+	// models imported "successfully" and dropped somebody into a workspace
+	// with agents that cannot think. Being told afterwards is the difference
+	// between a workspace you can fix and one you have to diagnose.
+	if notes := importNotes(res); len(notes) > 0 {
+		s.renderWorkspaces(w, r, "", strings.Join(notes, " · "))
+		return
+	}
 	http.Redirect(w, r, "/workspaces/"+strconv.FormatInt(res.Workspace.ID, 10), http.StatusSeeOther)
+}
+
+// importNotes is what an operator has to know about an import that worked.
+//
+// Every one of these is a workflow that is quietly not the workflow that was
+// exported, which is exactly the case where silence costs the most.
+func importNotes(res bundle.Result) []string {
+	var notes []string
+	for _, g := range res.GearsSkipped {
+		notes = append(notes, fmt.Sprintf("the gear %q did not arrive: %s", g.Name, g.Why))
+	}
+	for _, m := range res.MCPSkipped {
+		notes = append(notes, fmt.Sprintf("the MCP server %q did not arrive: %s", m.Name, m.Why))
+	}
+	for _, u := range res.UnresolvedModels {
+		notes = append(notes, fmt.Sprintf(
+			"%s has no model: this install has no %s serving %s, so it cannot think until you give it one",
+			u.Agent, u.ProviderType, u.ModelName))
+	}
+	return notes
 }
