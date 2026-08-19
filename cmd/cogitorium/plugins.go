@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -66,6 +71,85 @@ func newPluginsCmds() *cobra.Command {
 		"path to config.yaml (default: $COGITORIUM_CONFIG, then <data-dir>/config.yaml)")
 	root.PersistentFlags().StringVar(&dataDir, "data", def.DataDir,
 		"data directory (SQLite DB and server-owned files)")
+
+	var newOverride string
+	newCmd := &cobra.Command{
+		Use:   "new <directory>",
+		Short: "Scaffold a plugin. No language, no compiler, no build step",
+		Long: "Writes a plugin you can read rather than a form to fill in from documentation.\n" +
+			"The default has no language and no build step, because the cheapest tier is\n" +
+			"also the most common one.\n\n" +
+			"--override seeds it with a real template name so you start from something\n" +
+			"that renders instead of a blank file and a naming rule to look up.",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := args[0]
+			id := filepath.Base(strings.TrimSuffix(dir, string(filepath.Separator)))
+			if err := plugin.Scaffold(dir, id, newOverride); err != nil {
+				return err
+			}
+			fmt.Printf("Wrote %s\n\n  cd %s\n  cogitorium plugins dev . --watch\n", dir, dir)
+			return nil
+		},
+	}
+	newCmd.Flags().StringVar(&newOverride, "override", "",
+		"seed it with an override of this template, e.g. cog.row.nav")
+	root.AddCommand(newCmd)
+
+	root.AddCommand(&cobra.Command{
+		Use:          "build [directory]",
+		Short:        "Package a plugin directory into a bundle",
+		Args:         cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := "."
+			if len(args) == 1 {
+				dir = args[0]
+			}
+			out, m, err := plugin.Build(dir, "")
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Built %s\n  %s %s\n", out, m.ID, m.Version)
+			return nil
+		},
+	})
+
+	var watch bool
+	devCmd := &cobra.Command{
+		Use:   "dev [directory]",
+		Short: "Work on a plugin from a directory, with no build step",
+		Long: "Registers a directory as a development layer: no version directory, no digest,\n" +
+			"no signature, and shown as such wherever plugins are listed.\n\n" +
+			"--watch re-execs the server when a file under it changes. Restart-to-activate\n" +
+			"is the model, so automating the restart is not designing around it — it IS the\n" +
+			"development loop.",
+		Args:         cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := "."
+			if len(args) == 1 {
+				dir = args[0]
+			}
+			s, _, err := load(cmd)
+			if err != nil {
+				return err
+			}
+			in, err := s.AddDev(dir)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%s %s is now a development layer at %s\n", in.Manifest.ID, in.Version, in.Dir)
+			if !watch {
+				fmt.Println("Restart Cogitorium to apply. Add --watch to reload on every change.")
+				return nil
+			}
+			return watchDir(cmd.Context(), in.Dir)
+		},
+	}
+	devCmd.Flags().BoolVar(&watch, "watch", false, "report every change, so a supervisor can restart")
+	root.AddCommand(devCmd)
 
 	root.AddCommand(&cobra.Command{
 		Use:          "list",
@@ -325,4 +409,87 @@ func printDeclarations(m plugin.Manifest) {
 			fmt.Printf("    api      %s\n", a)
 		}
 	}
+}
+
+// watchDir reports changes under a development layer.
+//
+// It polls rather than using a filesystem notification API, and that is a
+// deliberate trade: notifications differ on every platform this ships to and
+// would be a dependency and six behaviours, while a plugin directory is a
+// handful of small files and a second-resolution poll is imperceptible to the
+// person editing them.
+//
+// It does not restart the server itself. What restarts a process is the thing
+// supervising it — systemd, compose, the kubelet, or the developer's own
+// terminal — and a command that killed somebody's server because a file was
+// saved would be a worse surprise than the one it saves them.
+func watchDir(ctx context.Context, dir string) error {
+	fmt.Println("Watching for changes. Restart Cogitorium to pick them up; Ctrl-C to stop.")
+	prev, err := snapshot(dir)
+	if err != nil {
+		return err
+	}
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-tick.C:
+			cur, err := snapshot(dir)
+			if err != nil {
+				// A directory that vanished mid-edit is worth saying out loud
+				// rather than exiting silently on.
+				fmt.Fprintf(os.Stderr, "watch: %v\n", err)
+				continue
+			}
+			for _, line := range diff(prev, cur) {
+				fmt.Println(line)
+			}
+			prev = cur
+		}
+	}
+}
+
+func snapshot(dir string) (map[string]string, error) {
+	out := map[string]string{}
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" || d.Name() == "node_modules" {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		rel, _ := filepath.Rel(dir, p)
+		out[rel] = fmt.Sprintf("%d/%d", info.Size(), info.ModTime().UnixNano())
+		return nil
+	})
+	return out, err
+}
+
+func diff(before, after map[string]string) []string {
+	var out []string
+	for name, stamp := range after {
+		switch prev, existed := before[name]; {
+		case !existed:
+			out = append(out, "added   "+name)
+		case prev != stamp:
+			out = append(out, "changed "+name)
+		}
+	}
+	for name := range before {
+		if _, still := after[name]; !still {
+			out = append(out, "removed "+name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

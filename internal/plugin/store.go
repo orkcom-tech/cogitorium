@@ -66,7 +66,19 @@ type Installed struct {
 	// ID is the directory name, which is the only thing known about a broken
 	// install and the only thing needed to remove it.
 	ID string
+	// Dev marks a layer that is a directory somebody is working in rather than
+	// an installed version. It has no digest, no signature and no version
+	// directory, and it is shown as such — an operator looking at a plugins
+	// page should never have to wonder whether what they are seeing is
+	// somebody's working copy.
+	Dev bool
 }
+
+// devPrefix marks a line in the enable list as a path being worked on rather
+// than an installed id. Explicit rather than "a line that starts with a
+// slash", because an operator reading the file should not have to infer the
+// difference from punctuation.
+const devPrefix = "dev:"
 
 // Store is the plugin directory and the enable list beside it.
 type Store struct {
@@ -115,6 +127,18 @@ func (s *Store) List() ([]Installed, error) {
 	}
 
 	var out []Installed
+	for i, entry := range order {
+		if !strings.HasPrefix(entry, devPrefix) {
+			continue
+		}
+		in, err := readDev(strings.TrimPrefix(entry, devPrefix))
+		in.Enabled, in.Order, in.Dev = true, i, true
+		if err != nil {
+			in.Broken = err
+		}
+		out = append(out, in)
+	}
+
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -169,6 +193,68 @@ func (s *Store) Enabled() ([]Installed, error) {
 // Get reads one installed plugin.
 func (s *Store) Get(id string) (Installed, error) { return s.read(id) }
 
+// readDev reads a plugin straight out of a working directory.
+//
+// No version directory, no digest, no signature. The whole point is that an
+// author edits files and reloads; asking them to build an archive first would
+// make their own machine the least convenient place to try their own work.
+func readDev(dir string) (Installed, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return Installed{ID: dir}, err
+	}
+	mb, err := os.ReadFile(filepath.Join(abs, manifestNm))
+	if err != nil {
+		return Installed{ID: abs}, fmt.Errorf("development layer %s: %w", abs, err)
+	}
+	m, err := Parse(mb)
+	if err != nil {
+		return Installed{ID: abs}, fmt.Errorf("development layer %s: %w", abs, err)
+	}
+	if ps := m.Validate(); len(ps) > 0 {
+		return Installed{ID: abs}, fmt.Errorf("development layer %s: %w", abs, ps)
+	}
+	return Installed{Manifest: m, ID: m.ID, Version: m.Version, Dir: abs, Dev: true}, nil
+}
+
+// AddDev puts a working directory at the end of the enable list.
+func (s *Store) AddDev(dir string) (Installed, error) {
+	in, err := readDev(dir)
+	if err != nil {
+		return Installed{}, err
+	}
+	order, err := s.Order()
+	if err != nil {
+		return Installed{}, err
+	}
+	entry := devPrefix + in.Dir
+	for _, existing := range order {
+		if existing == entry {
+			return in, nil
+		}
+	}
+	return in, s.SetOrder(append(order, entry))
+}
+
+// RemoveDev takes a working directory back out.
+func (s *Store) RemoveDev(dir string) error {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+	order, err := s.Order()
+	if err != nil {
+		return err
+	}
+	out := make([]string, 0, len(order))
+	for _, existing := range order {
+		if existing != devPrefix+abs {
+			out = append(out, existing)
+		}
+	}
+	return s.SetOrder(out)
+}
+
 func (s *Store) read(id string) (Installed, error) {
 	dir := filepath.Join(s.root, id)
 	b, err := os.ReadFile(filepath.Join(dir, currentTxt))
@@ -210,8 +296,10 @@ func (s *Store) read(id string) (Installed, error) {
 	return in, nil
 }
 
-// Templates is the layer FS for an installed plugin — its templates directory,
-// and nothing above it.
+// Templates is the layer FS for a plugin — its templates directory, and
+// nothing above it. Identical for an installed version and a working
+// directory, so a plugin behaves the same whether it is being developed or
+// deployed.
 func (in Installed) Templates() (fs.FS, error) {
 	dir := filepath.Join(in.Dir, templates)
 	if _, err := os.Stat(dir); err != nil {
@@ -317,6 +405,12 @@ func (s *Store) Disable(id string) error {
 // a list naming something absent is a list whose precedence nobody can read.
 func (s *Store) Reorder(ids []string) error {
 	for _, id := range ids {
+		if strings.HasPrefix(id, devPrefix) {
+			if _, err := readDev(strings.TrimPrefix(id, devPrefix)); err != nil {
+				return fmt.Errorf("plugin: cannot order %q: %w", id, err)
+			}
+			continue
+		}
 		if _, err := s.read(id); err != nil {
 			return fmt.Errorf("plugin: cannot order %q: %w", id, err)
 		}
