@@ -127,9 +127,13 @@ func TestImageIsRecognisedByShapeNotKeyword(t *testing.T) {
 // refusal naming the target rather than a mystery.
 func TestNativeNeedsAPublishedRow(t *testing.T) {
 	c := caps(channel.Local, channel.Glibc, true)
-	c.NativeRows = []string{"darwin/arm64/", "linux/arm64/glibc"}
+	m := withNeeds("native")
+	m.Native = []Native{
+		{OS: "darwin", Arch: "arm64", Path: "bin/mac"},
+		{OS: "linux", Arch: "arm64", Libc: "glibc", Path: "bin/arm"},
+	}
 
-	r := Resolve(withNeeds("native"), c)
+	r := Resolve(m, c)
 	if r.Available {
 		t.Fatal("linux/amd64/glibc was not published, so it must be refused")
 	}
@@ -137,9 +141,13 @@ func TestNativeNeedsAPublishedRow(t *testing.T) {
 		t.Errorf("the refusal must name the target this install is: %s", r.Refusal)
 	}
 
-	c.NativeRows = append(c.NativeRows, "linux/amd64/glibc")
-	if r := Resolve(withNeeds("native"), c); !r.Available {
-		t.Errorf("the published row should match: %s", r.Refusal)
+	m.Native = append(m.Native, Native{OS: "linux", Arch: "amd64", Libc: "glibc", Path: "bin/x"})
+	got := Resolve(m, c)
+	if !got.Available {
+		t.Fatalf("the published row should match: %s", got.Refusal)
+	}
+	if got.Native.Path != "bin/x" {
+		t.Errorf("the matched row must come back so the caller knows what to run: %+v", got.Native)
 	}
 }
 
@@ -147,9 +155,59 @@ func TestNativeNeedsAPublishedRow(t *testing.T) {
 // it matches whatever libc this install runs.
 func TestNativeAnyLibcMatches(t *testing.T) {
 	c := caps(channel.Docker, channel.Musl, true)
-	c.NativeRows = []string{"linux/amd64/any"}
-	if r := Resolve(withNeeds("native"), c); !r.Available {
+	m := withNeeds("native")
+	m.Native = []Native{{OS: "linux", Arch: "amd64", Libc: "any", Path: "bin/static"}}
+	if r := Resolve(m, c); !r.Available {
 		t.Errorf("a static binary should run on musl: %s", r.Refusal)
+	}
+}
+
+// A row for a target nobody can run is a row published for nothing, and
+// learning that at install time on somebody else's machine is too late.
+func TestNativeRowsAreValidated(t *testing.T) {
+	m := Manifest{
+		Schema: SchemaVersion, ID: "radar", Name: "R", Version: "1.0.0",
+		Host: Host{Contract: Contract}, Needs: "native",
+		Native: []Native{
+			{OS: "plan9", Arch: "amd64", Path: "bin/x"},
+			{OS: "linux", Arch: "sparc", Path: "bin/y"},
+			{OS: "linux", Arch: "amd64", Libc: "uclibc", Path: "bin/z"},
+			{OS: "darwin", Arch: "arm64", Libc: "musl", Path: "bin/w"},
+			{OS: "linux", Arch: "arm64", Libc: "glibc", Path: "../escape"},
+		},
+	}
+	ps := m.Validate()
+	for _, f := range []string{"native[0].os", "native[1].arch", "native[2].libc",
+		"native[3].libc", "native[4].path"} {
+		if !hasField(ps, f) {
+			t.Errorf("no problem reported for %s; got %v", f, ps)
+		}
+	}
+}
+
+func TestDuplicateNativeTargetsAreRefused(t *testing.T) {
+	m := Manifest{
+		Schema: SchemaVersion, ID: "radar", Name: "R", Version: "1.0.0",
+		Host: Host{Contract: Contract}, Needs: "native",
+		Native: []Native{
+			{OS: "linux", Arch: "amd64", Libc: "musl", Path: "a"},
+			{OS: "linux", Arch: "amd64", Libc: "musl", Path: "b"},
+		},
+	}
+	if ps := m.Validate(); !hasField(ps, "native[1]") {
+		t.Errorf("two rows for one target is ambiguous: %v", ps)
+	}
+}
+
+// Rows that would never be read are a misunderstanding worth naming.
+func TestNativeRowsWithoutTheNativeTierAreRefused(t *testing.T) {
+	m := Manifest{
+		Schema: SchemaVersion, ID: "radar", Name: "R", Version: "1.0.0",
+		Host: Host{Contract: Contract}, Needs: "python@>=3.11",
+		Native: []Native{{OS: "linux", Arch: "amd64", Libc: "musl", Path: "a"}},
+	}
+	if ps := m.Validate(); !hasField(ps, "native") {
+		t.Errorf("native rows beside a non-native needs must be named: %v", ps)
 	}
 }
 

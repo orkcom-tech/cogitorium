@@ -103,9 +103,6 @@ type Capabilities struct {
 	// channel name: the shipped compose image is a container itself and still
 	// cannot run one, while a native install with Docker can.
 	ContainerRunner bool
-	// NativeRows is what an author published for the native tier, as
-	// "os/arch/libc" — with libc "any" meaning a proved-static binary.
-	NativeRows []string
 }
 
 // Resolution is the answer: which tier, whether it can run here, and if not,
@@ -117,6 +114,8 @@ type Resolution struct {
 	// still works. The plugin is not refused for it.
 	Superseded string
 	Available  bool
+	// Native is the row that matched, for the native tier only.
+	Native Native
 	// Refusal is empty when Available. It is written to be read by a person
 	// deciding what to do next, so it names what is wrong and what still works.
 	Refusal string
@@ -205,22 +204,29 @@ func resolveProvisioned(r *Resolution, m Manifest, c Capabilities) {
 
 func resolveNative(r *Resolution, m Manifest, c Capabilities) {
 	p := c.Profile
-	want := fmt.Sprintf("%s/%s/%s", p.OS, p.Arch, p.Libc)
+	libc := string(p.Libc)
+	if libc == "" {
+		libc = "any"
+	}
+	want := fmt.Sprintf("%s/%s/%s", p.OS, p.Arch, libc)
 	anyLibc := fmt.Sprintf("%s/%s/any", p.OS, p.Arch)
 
-	for _, row := range c.NativeRows {
-		if row == want || row == anyLibc {
+	var have []string
+	for _, n := range m.Native {
+		have = append(have, n.Target())
+		if n.Target() == want || n.Target() == anyLibc {
 			r.Available = true
-			r.Note = "runs the author's published binary for " + row
+			r.Native = n
+			r.Note = "runs the author's published binary for " + n.Target()
 			return
 		}
 	}
-	have := "nothing"
-	if len(c.NativeRows) > 0 {
-		have = strings.Join(c.NativeRows, ", ")
+	published := "nothing"
+	if len(have) > 0 {
+		published = strings.Join(have, ", ")
 	}
 	r.Refusal = fmt.Sprintf("plugin %q is a native plugin and published %s, but this install is %s. "+
-		"Ask its author for that target.", m.ID, have, want)
+		"Ask its author for that target.", m.ID, published, want)
 }
 
 func resolveImage(m Manifest, c Capabilities) Resolution {

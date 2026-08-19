@@ -77,6 +77,13 @@ type Manifest struct {
 	// wasm. The host maps the technology to a tier and reports which it picked.
 	Needs string `yaml:"needs"`
 
+	// Native is the ONLY platform-keyed structure in this manifest, and an
+	// author reaches it by typing "native" in needs: on purpose. Everything
+	// else here is platform-free, which is the parity guarantee written as a
+	// rule — so the cost of choosing a native binary lands visibly on the
+	// author who chose it rather than invisibly on everyone.
+	Native []Native `yaml:"native"`
+
 	// ── grants: what the operator is being asked to approve ──
 
 	Hosts   []string `yaml:"hosts"`
@@ -127,6 +134,31 @@ type Nav struct {
 	Href  string `yaml:"href"`
 	Order int    `yaml:"order"`
 	When  string `yaml:"when"`
+}
+
+// Native is one published binary, for one target.
+//
+// Keyed on libc as well as os and arch, because a glibc build does not start
+// on the Alpine image and the failure is a missing-interpreter error that says
+// nothing about the cause.
+type Native struct {
+	OS   string `yaml:"os"`
+	Arch string `yaml:"arch"`
+	// Libc is "glibc", "musl", or "any" — and "any" may be claimed only for a
+	// binary proved static, because a build that merely happens to work on the
+	// author's machine is not one that works on somebody's Alpine image.
+	Libc string `yaml:"libc"`
+	// Path is the binary inside the bundle.
+	Path string `yaml:"path"`
+}
+
+// Target is the tuple this row answers for.
+func (n Native) Target() string {
+	libc := n.Libc
+	if libc == "" {
+		libc = "any"
+	}
+	return n.OS + "/" + n.Arch + "/" + libc
 }
 
 // Script is a head-injected module. Integrity is computed from the bundle at
@@ -257,6 +289,7 @@ func (m Manifest) Validate() Problems {
 	m.validateNav(add)
 	m.validateAssets(add)
 	m.validateOverrides(add)
+	m.validateNative(add)
 	m.validateGrants(add)
 
 	return ps
@@ -356,6 +389,50 @@ func (m Manifest) validateOverrides(add func(string, string, ...any)) {
 			add(f, "%q is in your own namespace, so it adds rather than overrides — "+
 				"remove it from overrides", n)
 		}
+	}
+}
+
+// knownOS and knownArch are what this product is built for. A row for
+// something else is refused rather than stored: an author publishing for a
+// target nobody can run has published nothing, and learning that at install
+// time on somebody else's machine is too late.
+var knownOS = map[string]bool{"linux": true, "darwin": true, "windows": true}
+var knownArch = map[string]bool{"amd64": true, "arm64": true}
+
+func (m Manifest) validateNative(add func(string, string, ...any)) {
+	seen := map[string]bool{}
+	for i, n := range m.Native {
+		f := fmt.Sprintf("native[%d]", i)
+		if !knownOS[n.OS] {
+			add(f+".os", "must be linux, darwin or windows, got %q", n.OS)
+		}
+		if !knownArch[n.Arch] {
+			add(f+".arch", "must be amd64 or arm64, got %q", n.Arch)
+		}
+		switch n.Libc {
+		case "", "any", "glibc", "musl":
+		default:
+			add(f+".libc", "must be glibc, musl or any, got %q", n.Libc)
+		}
+		if n.OS != "linux" && n.Libc != "" && n.Libc != "any" {
+			add(f+".libc", "is meaningless on %s — leave it out", n.OS)
+		}
+		switch {
+		case n.Path == "":
+			add(f+".path", "is required")
+		case strings.HasPrefix(n.Path, "/"):
+			add(f+".path", "must be relative to the bundle, got %q", n.Path)
+		case strings.Contains(n.Path, ".."):
+			add(f+".path", "must not escape the bundle, got %q", n.Path)
+		}
+		if seen[n.Target()] {
+			add(f, "%s is published twice", n.Target())
+		}
+		seen[n.Target()] = true
+	}
+	if len(m.Native) > 0 && !looksLikeImage(m.Needs) && m.Needs != "native" {
+		add("native", "is only read when needs: is \"native\" — this plugin needs %q, "+
+			"so these rows would never be used", m.Needs)
 	}
 }
 
