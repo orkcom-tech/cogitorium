@@ -100,6 +100,12 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			}
 			// Everything else resolves a credential below, and "admin" is
 			// answered by the handler once there is somebody to check.
+		} else if s.inPageSpace(r.URL.Path) {
+			// A screen this server renders. It holds data, so it resolves a
+			// credential below like every other route that does — the
+			// "everything outside /api/ is open" rule was written when
+			// everything outside /api/ was the application's shell and its
+			// static files, which hold none.
 		} else if openToAnyone(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
@@ -140,6 +146,15 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, user)))
+			return
+		}
+
+		// A screen, opened by a person with no session. Sending them a JSON
+		// 401 would be technically correct and useless: they are looking at a
+		// browser, and what they need is the place to sign in. The API keeps
+		// the 401, because a script needs the status rather than a page.
+		if s.inPageSpace(r.URL.Path) {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
 

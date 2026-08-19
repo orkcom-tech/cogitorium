@@ -103,6 +103,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Instruction"
         },
@@ -128,6 +132,81 @@
         }
       ],
       "body": "\u003cp class=\"hint\"\u003e\n{{if .Narrowed}}Nothing in the library matches that.{{else}}The library is empty. An instruction is text an agent pins — write one above, or an agent will when it needs to remember something.{{end}}\n\u003c/p\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.empty.models",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Providers",
+          "type": "[]Provider"
+        },
+        {
+          "path": "Models",
+          "type": "[]Model"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cp class=\"hint\"\u003e\nNothing here yet. Add a model from a provider above — until there is one, an agent has nothing to think with.\n\u003c/p\u003e",
       "appends": false
     },
     {
@@ -221,6 +300,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Instruction"
         },
@@ -246,6 +329,156 @@
         }
       ],
       "body": "\u003cdiv id=\"library-list\" class=\"library-list\"\u003e\n{{if .Items}}{{range .Items}}{{template \"cog.row.instruction\" .}}{{end}}{{else}}{{template \"cog.empty.instructions\" .}}{{end}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.list.models",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Providers",
+          "type": "[]Provider"
+        },
+        {
+          "path": "Models",
+          "type": "[]Model"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv id=\"catalogue\" class=\"model-list\"\u003e\n{{if .Models}}\u003ctable\u003e\n  \u003cthead\u003e\u003ctr\u003e\u003cth\u003eModel\u003c/th\u003e\u003cth\u003eLabel\u003c/th\u003e\u003cth\u003eProvider\u003c/th\u003e\u003cth\u003e\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e\n  \u003ctbody\u003e{{range .Models}}{{template \"cog.row.model\" .}}{{end}}\u003c/tbody\u003e\n\u003c/table\u003e{{else}}{{template \"cog.empty.models\" .}}{{end}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.list.providers",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Providers",
+          "type": "[]Provider"
+        },
+        {
+          "path": "Models",
+          "type": "[]Model"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv id=\"providers\" class=\"provider-list\"\u003e\n{{if .Providers}}{{range .Providers}}{{template \"cog.row.provider\" .}}{{end}}{{else}}\u003cp class=\"hint\"\u003e\nNo providers yet. A provider is where models come from — Anthropic, or anything that speaks its\nOpenAI-compatible shape, which is how Ollama, LM Studio, vLLM and llama.cpp are reached.\n\u003c/p\u003e{{end}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -304,6 +537,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Instruction"
         },
@@ -329,6 +566,81 @@
         }
       ],
       "body": "\u003cmain class=\"page library\"\u003e\n  \u003ch2\u003e{{.Ctx.T.Instructions}}\u003c/h2\u003e\n\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n\n  \u003cform class=\"library-filters\" method=\"get\" action=\"/instructions\"\n        hx-get=\"/instructions\" hx-target=\"#library-list\" hx-swap=\"outerHTML\"\n        hx-trigger=\"submit, input from:input[name='q'] delay:250ms, change from:select\"\u003e\n    \u003cinput type=\"search\" name=\"q\" value=\"{{.Query}}\" placeholder=\"Search names, descriptions and text\"\n           aria-label=\"Search the library\"\u003e\n    \u003cselect name=\"tag\" aria-label=\"Filter by tag\"\u003e\n      \u003coption value=\"\"\u003eevery tag\u003c/option\u003e\n      {{range .Tags}}\u003coption value=\"{{.Name}}\"{{if .Selected}} selected{{end}}\u003e{{.Name}}\u003c/option\u003e{{end}}\n    \u003c/select\u003e\n    \u003cnoscript\u003e\u003cbutton type=\"submit\"\u003eSearch\u003c/button\u003e\u003c/noscript\u003e\n  \u003c/form\u003e\n\n  \u003cdetails class=\"library-write\"\u003e\n    \u003csummary\u003eWrite one\u003c/summary\u003e\n    {{/* A plain POST to this page. The answer is the page again, which is what\n         makes it work with nothing loaded. */}}\n    \u003cform method=\"post\" action=\"/instructions\"\u003e\n      \u003clabel\u003eName \u003cinput name=\"name\" required pattern=\"[a-z][a-z0-9-]*\"\n                         placeholder=\"lowercase-with-dashes\"\u003e\u003c/label\u003e\n      \u003clabel\u003eDescription \u003cinput name=\"description\" placeholder=\"What it is for, in one line\"\u003e\u003c/label\u003e\n      \u003clabel\u003eTags \u003cinput name=\"tags\" placeholder=\"comma, separated\"\u003e\u003c/label\u003e\n      \u003clabel\u003eText \u003ctextarea name=\"text\" rows=\"8\" required\n                            placeholder=\"The instruction itself. It is versioned in Contextverse.\"\u003e\u003c/textarea\u003e\u003c/label\u003e\n      \u003cbutton type=\"submit\"\u003eSave it\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/details\u003e\n\n  {{template \"cog.list.instructions\" .}}\n\u003c/main\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.page.models",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Providers",
+          "type": "[]Provider"
+        },
+        {
+          "path": "Models",
+          "type": "[]Model"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cmain class=\"page catalogue\"\u003e\n  \u003ch2\u003e{{.Ctx.T.Models}}\u003c/h2\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n\n  \u003csection\u003e\n    \u003ch3\u003eProviders\u003c/h3\u003e\n    \u003cdetails class=\"add-provider\"\u003e\n      \u003csummary\u003eAdd one\u003c/summary\u003e\n      \u003cform method=\"post\" action=\"/models/providers\"\u003e\n        \u003clabel\u003eName \u003cinput name=\"name\" required placeholder=\"What you will call it\"\u003e\u003c/label\u003e\n        \u003clabel\u003eKind\n          \u003cselect name=\"kind\"\u003e\n            \u003coption value=\"anthropic\"\u003eAnthropic\u003c/option\u003e\n            \u003coption value=\"openai-compatible\"\u003eOpenAI-compatible\u003c/option\u003e\n          \u003c/select\u003e\n        \u003c/label\u003e\n        \u003clabel\u003eAddress \u003cinput name=\"base_url\" placeholder=\"Empty for Anthropic's own; a URL for anything else\"\u003e\u003c/label\u003e\n        \u003clabel\u003eKey \u003cinput name=\"api_key\" type=\"password\" autocomplete=\"off\"\n                          placeholder=\"Stored, and never shown again\"\u003e\u003c/label\u003e\n        \u003cbutton type=\"submit\"\u003eAdd it\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/details\u003e\n    {{template \"cog.list.providers\" .}}\n  \u003c/section\u003e\n\n  \u003csection\u003e\n    \u003ch3\u003eWhat agents can be given\u003c/h3\u003e\n    {{template \"cog.list.models\" .}}\n  \u003c/section\u003e\n\u003c/main\u003e",
       "appends": false
     },
     {
@@ -387,6 +699,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -442,6 +758,33 @@
       "appends": false
     },
     {
+      "name": "cog.row.model",
+      "model": [
+        {
+          "path": "ID",
+          "type": "int64"
+        },
+        {
+          "path": "Name",
+          "type": "string"
+        },
+        {
+          "path": "Label",
+          "type": "string"
+        },
+        {
+          "path": "Provider",
+          "type": "string"
+        },
+        {
+          "path": "Kind",
+          "type": "string"
+        }
+      ],
+      "body": "\u003ctr class=\"model\"\u003e\n  \u003ctd\u003e\u003ccode\u003e{{.Name}}\u003c/code\u003e\u003c/td\u003e\n  \u003ctd\u003e{{.Label}}\u003c/td\u003e\n  \u003ctd\u003e{{.Provider}} \u003cspan class=\"hint\"\u003e{{.Kind}}\u003c/span\u003e\u003c/td\u003e\n  \u003ctd\u003e\u003cform method=\"post\" action=\"/models/{{.ID}}/delete\"\n            hx-post=\"/models/{{.ID}}/delete\" hx-target=\"#catalogue\" hx-swap=\"outerHTML\"\u003e\n    \u003cbutton type=\"submit\" class=\"danger\"\u003eRemove\u003c/button\u003e\n  \u003c/form\u003e\u003c/td\u003e\n\u003c/tr\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.row.nav",
       "model": [
         {
@@ -470,6 +813,53 @@
         }
       ],
       "body": "\u003ca class=\"rail-item{{if .Current}} is-current{{end}}\" href=\"{{.Href}}\"{{if .Current}} aria-current=\"page\"{{end}}\u003e{{if .Icon}}\u003cspan class=\"rail-icon\" data-icon=\"{{.Icon}}\" aria-hidden=\"true\"\u003e\u003c/span\u003e{{end}}\u003cspan class=\"rail-label\"\u003e{{.Label}}\u003c/span\u003e\u003c/a\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.row.provider",
+      "model": [
+        {
+          "path": "ID",
+          "type": "int64"
+        },
+        {
+          "path": "Name",
+          "type": "string"
+        },
+        {
+          "path": "Kind",
+          "type": "string"
+        },
+        {
+          "path": "BaseURL",
+          "type": "string"
+        },
+        {
+          "path": "HasKey",
+          "type": "bool"
+        },
+        {
+          "path": "Models",
+          "type": "[]Model"
+        },
+        {
+          "path": "Tested",
+          "type": "bool"
+        },
+        {
+          "path": "TestOK",
+          "type": "bool"
+        },
+        {
+          "path": "TestError",
+          "type": "string"
+        },
+        {
+          "path": "Offers",
+          "type": "[]string"
+        }
+      ],
+      "body": "\u003carticle class=\"card provider\"\u003e\n  \u003cheader class=\"provider-head\"\u003e\n    \u003ch4\u003e{{.Name}}\u003c/h4\u003e\n    \u003cspan class=\"badge\"\u003e{{.Kind}}\u003c/span\u003e\n    {{if .HasKey}}\u003cspan class=\"badge is-ok\"\u003ekey stored\u003c/span\u003e{{else}}\u003cspan class=\"badge\"\u003eno key\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n  {{if .BaseURL}}\u003cp class=\"hint\"\u003e\u003ccode\u003e{{.BaseURL}}\u003c/code\u003e\u003c/p\u003e{{end}}\n\n  {{/* The result of a check somebody just made, not a property of the row. A\n       connection that worked an hour ago is not a fact about now. */}}\n  {{if .Tested}}\n    {{if .TestOK}}\u003cp class=\"hint\"\u003eIt answered. It offers: {{range .Offers}}\u003ccode\u003e{{.}}\u003c/code\u003e {{end}}\u003c/p\u003e\n    {{else}}\u003cp class=\"error\"\u003e{{.TestError}}\u003c/p\u003e{{end}}\n  {{end}}\n\n  \u003cdiv class=\"provider-models\"\u003e\n    {{range .Models}}\u003cspan class=\"badge\"\u003e{{.Name}}\u003c/span\u003e{{end}}\n  \u003c/div\u003e\n\n  \u003cform class=\"provider-add\" method=\"post\" action=\"/models/providers/{{.ID}}/models\"\u003e\n    \u003cinput name=\"model_name\" required placeholder=\"A model this provider serves\"\u003e\n    \u003cinput name=\"label\" placeholder=\"What you will read on a screen\"\u003e\n    \u003cbutton type=\"submit\"\u003eOffer it\u003c/button\u003e\n  \u003c/form\u003e\n\n  \u003cdiv class=\"provider-actions\"\u003e\n    \u003cform method=\"post\" action=\"/models/providers/{{.ID}}/test\"\u003e\n      \u003cbutton type=\"submit\"\u003eTest the connection\u003c/button\u003e\n    \u003c/form\u003e\n    \u003cform method=\"post\" action=\"/models/providers/{{.ID}}/delete\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eRemove\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/div\u003e\n\u003c/article\u003e",
       "appends": false
     },
     {
@@ -525,6 +915,10 @@
         },
         {
           "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
           "type": "string"
         },
         {
@@ -611,6 +1005,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -691,6 +1089,10 @@
         },
         {
           "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
           "type": "string"
         },
         {
@@ -777,6 +1179,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -857,6 +1263,10 @@
         },
         {
           "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
           "type": "string"
         },
         {
@@ -943,6 +1353,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -1023,6 +1437,10 @@
         },
         {
           "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
           "type": "string"
         },
         {

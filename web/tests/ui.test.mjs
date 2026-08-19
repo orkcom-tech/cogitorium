@@ -303,3 +303,41 @@ describe('a converted screen', () => {
     assert.equal(await ui.page.locator('.badge.is-ok').first().innerText(), 'live')
   })
 })
+
+// The rule that stopped a converted screen from publishing itself.
+//
+// Everything outside /api/ was anonymous, which was correct while everything
+// outside /api/ was the application's shell and its static files — those hold
+// nothing, because the application fetches its own data with a token. The
+// first converted screen broke that silently: /instructions answered 200 with
+// the library in it to anybody who asked.
+describe('a screen the server renders', () => {
+  let binary, server
+
+  before(async () => {
+    binary = build()
+    server = await start(binary)
+  })
+
+  after(async () => {
+    await server?.stop()
+  })
+
+  test('needs a credential, and sends a person to sign in rather than a status', async () => {
+    for (const path of ['/instructions', '/models', '/models/providers']) {
+      const res = await fetch(`${server.url}${path}`, { redirect: 'manual' })
+      assert.equal(res.status, 303, `${path} answered ${res.status} with no credential`)
+      assert.equal(res.headers.get('location'), '/')
+    }
+  })
+
+  test('the application shell stays reachable, or nobody could sign in', async () => {
+    const res = await fetch(`${server.url}/`)
+    assert.equal(res.status, 200)
+  })
+
+  test('the API keeps its status, because a script needs one', async () => {
+    const res = await fetch(`${server.url}/api/v1/workspaces`)
+    assert.equal(res.status, 401)
+  })
+})

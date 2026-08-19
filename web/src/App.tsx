@@ -4,7 +4,6 @@ import { auth, setup, Unauthorized, type SetupState, type User } from './api'
 import { session } from './session'
 import LoginPage from './pages/LoginPage'
 import SetupPage from './pages/SetupPage'
-import ModelsPage from './pages/ModelsPage'
 import WorkspacesPage from './pages/WorkspacesPage'
 import WorkspacePage from './pages/WorkspacePage'
 import ContextPage from './pages/ContextPage'
@@ -128,7 +127,9 @@ export default function App() {
                 stays: the workspace still opens the library as a drawer, and
                 that is a different surface with a different name still to be
                 converted. */}
-            <Route path="/models" element={<ModelsPage />} />
+            {/* /models is a server template now, like /instructions. The
+                component stays: the workspace opens the catalogue as a drawer,
+                and that is a different surface still to be converted. */}
             <Route
               path="/plugins"
               element={user.role === 'admin' ? <PluginsPage /> : <Navigate to="/workspaces" replace />}

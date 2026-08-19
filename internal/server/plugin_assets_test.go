@@ -603,3 +603,43 @@ func getJSON(t *testing.T, s *Server, path string, into any) {
 		t.Fatalf("%s: %v", path, err)
 	}
 }
+
+// A screen this server renders holds data, so it needs a credential.
+//
+// This was a hole, briefly and for a reason worth writing down: everything
+// outside /api/ was anonymous, which was correct while everything outside
+// /api/ was the application's shell and its static files. Those hold nothing —
+// the application fetches its own data with a token. The first converted
+// screen broke that assumption silently: /instructions answered 200 with the
+// library in it to anybody who asked, and no test noticed because no test had
+// ever needed to.
+func TestAConvertedScreenIsNotAnonymous(t *testing.T) {
+	s := &Server{}
+	mux := http.NewServeMux()
+	s.page(mux, "GET /widgets", func(http.ResponseWriter, *http.Request) {})
+	s.page(mux, "POST /widgets/{id}/delete", func(http.ResponseWriter, *http.Request) {})
+
+	// The screen, and every action hanging off it. Matching exact paths would
+	// leave the actions open, which is the half that deletes things.
+	for _, path := range []string{"/widgets", "/widgets/4/delete", "/widgets/anything"} {
+		if !s.inPageSpace(path) {
+			t.Errorf("%s is not page space, so it would be served anonymously", path)
+		}
+	}
+
+	// And nothing else becomes page space by accident.
+	for _, path := range []string{"/", "/assets/index.js", "/api/v1/workspaces", "/health"} {
+		if s.inPageSpace(path) {
+			t.Errorf("%s was taken for a page", path)
+		}
+	}
+}
+
+// The application's own shell stays anonymous. It is where somebody signs in,
+// and requiring a credential to reach the sign-in card would lock everybody
+// out of an install permanently.
+func TestTheApplicationShellStaysAnonymous(t *testing.T) {
+	if !openToAnyone("/") || !openToAnyone("/workspaces") {
+		t.Fatal("the application's shell now needs a credential to load")
+	}
+}

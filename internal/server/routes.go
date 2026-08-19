@@ -123,16 +123,55 @@ func (s *Server) route(mux *http.ServeMux, pattern string, h http.HandlerFunc) {
 	mux.HandleFunc(pattern, h)
 }
 
-// page registers a screen this server renders, and keeps it out of the API
-// inventory.
+// page registers a screen this server renders.
 //
-// Its own verb rather than a prefix rule, because "is this a page" is a
-// decision somebody makes when they write the route, and a rule inferring it
-// from the path would be wrong the first time a page lives somewhere
-// unexpected. The inventory describes a JSON API; putting a document in it
-// would tell every generated client to expect one.
+// Two things at once, and the second is the one that matters.
+//
+// It keeps the route out of the API inventory: the inventory describes a JSON
+// API, and putting a document in it would tell every generated client to
+// expect one.
+//
+// And it records the path as PAGE SPACE, which is what makes it
+// authenticated. Everything outside /api/ was anonymous, and that was right
+// while everything outside /api/ was the application's shell and its static
+// files — none of which hold data, because the application fetches its own
+// with a token. A server-rendered screen holds data. Without this, converting
+// a screen would quietly publish it: /instructions answered 200 with the
+// library in it to anybody who asked.
 func (s *Server) page(mux *http.ServeMux, pattern string, h http.HandlerFunc) {
+	_, path, ok := strings.Cut(pattern, " ")
+	if !ok {
+		path = pattern
+	}
+	// The space, not the path: a page has actions hanging off it —
+	// /models/providers/{id}/delete — and matching exact paths would leave
+	// every one of them open. The first segment is the screen.
+	if space := firstSegment(path); space != "" {
+		if s.pageSpaces == nil {
+			s.pageSpaces = map[string]bool{}
+		}
+		s.pageSpaces[space] = true
+	}
 	mux.HandleFunc(pattern, h)
+}
+
+// firstSegment is "/models" for "/models/providers/{id}/delete".
+func firstSegment(path string) string {
+	trimmed := strings.TrimPrefix(path, "/")
+	if trimmed == "" {
+		return ""
+	}
+	if i := strings.IndexByte(trimmed, '/'); i >= 0 {
+		trimmed = trimmed[:i]
+	}
+	return "/" + trimmed
+}
+
+// inPageSpace reports whether a request is for a screen this server renders,
+// and therefore needs a credential like every other route that shows data.
+func (s *Server) inPageSpace(path string) bool {
+	space := firstSegment(path)
+	return space != "" && s.pageSpaces[space]
 }
 
 // routeIn is route, for an endpoint that takes a body. The body argument is a

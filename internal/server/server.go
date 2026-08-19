@@ -113,6 +113,10 @@ type Server struct {
 	// An OAuth redirect can point at the loopback address only here, and a
 	// browser is told to remember a session only here.
 	localInstall bool
+	// pageSpaces is every screen this server renders as a template, by its
+	// first path segment. What makes a converted screen authenticated — see
+	// (*Server).page for why the rule about /api/ is not enough.
+	pageSpaces map[string]bool
 	// catalogClient fetches the shared plugin catalog. Nil in production, which
 	// means the default client — it is a field so a test can point the fetch
 	// at a server it controls, since the catalog's URL is a compiled-in
@@ -544,6 +548,13 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// application. Its own paths rather than /api/v1 ones: these answer with
 	// HTML, and the described API is a JSON surface — putting a page in it
 	// would make every generated client expect a document.
+	s.page(mux, "GET /models", s.handleModelsPage)
+	s.page(mux, "POST /models/providers", s.handleCreateProviderForm)
+	s.page(mux, "POST /models/providers/{id}/delete", s.handleDeleteProviderForm)
+	s.page(mux, "POST /models/providers/{id}/test", s.handleTestProviderForm)
+	s.page(mux, "POST /models/providers/{id}/models", s.handleCreateModelForm)
+	s.page(mux, "POST /models/{id}/delete", s.handleDeleteModelForm)
+
 	s.page(mux, "GET /instructions", s.handleInstructionsPage)
 	s.page(mux, "POST /instructions", s.handleCreateInstructionForm)
 	s.page(mux, "POST /instructions/{id}/delete", s.handleDeleteInstructionForm)

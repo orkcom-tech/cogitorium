@@ -103,13 +103,15 @@ type Strings struct {
 	// the template because a plugin translating the product should not have to
 	// take over a page to change one word.
 	Instructions string
+	// Models is the catalogue's title, for the same reason.
+	Models string
 }
 
 // DefaultStrings is English, which is what this product ships in today. It is
 // a value rather than constants so a plugin overriding the shell can be handed
 // a different one without the host changing shape first.
 func DefaultStrings() Strings {
-	return Strings{Navigation: "Navigation", Instructions: "Instructions"}
+	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalogue"}
 }
 
 // Action is one control that causes a request.
@@ -226,7 +228,61 @@ func CoreModels() Models {
 		"cog.list.instructions":  Instructions{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.instruction":    Instruction{},
 		"cog.empty.instructions": Instructions{Ctx: Ctx{T: DefaultStrings()}},
+
+		// The model catalogue. Providers and the catalogue are separate lists
+		// on one page because they are separate decisions: where models come
+		// from, and which of them this install offers an agent.
+		"cog.page.models":    Catalogue{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.providers": Catalogue{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.provider":   Provider{},
+		"cog.list.models":    Catalogue{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.model":      Model{},
+		"cog.empty.models":   Catalogue{Ctx: Ctx{T: DefaultStrings()}},
 	}
+}
+
+// Provider is one place models come from.
+type Provider struct {
+	ID   int64
+	Name string
+	// Kind is "anthropic" or "openai-compatible". The word an operator reads,
+	// not an enum they have to look up.
+	Kind    string
+	BaseURL string
+	// HasKey is whether a credential is stored — never the credential. A
+	// template that could render a key is a template somebody will.
+	HasKey bool
+	// Models are this provider's entries in the catalogue.
+	Models []Model
+	// Tested and TestError report the last connection check, when one was
+	// made in this request. A check is an action somebody took, so its result
+	// belongs to the render that answered it rather than to the row forever.
+	Tested    bool
+	TestOK    bool
+	TestError string
+	// Offers is what the provider said it has, when a check succeeded.
+	Offers []string
+}
+
+// Model is one entry in the catalogue.
+type Model struct {
+	ID       int64
+	Name     string
+	Label    string
+	Provider string
+	Kind     string
+}
+
+// Catalogue is the model the model-catalogue page renders against.
+//
+// Not called Models: that name is already the registry of template models, and
+// two things called Models in one package is two things somebody has to
+// disambiguate at every use.
+type Catalogue struct {
+	Ctx       Ctx
+	Providers []Provider
+	Models    []Model
+	Error     string
 }
 
 // Instruction is one entry in the library, as a template sees it.
@@ -368,6 +424,32 @@ func Exemplars() Models {
 		"cog.list.instructions":  exampleLibrary(ctx),
 		"cog.empty.instructions": Instructions{Ctx: ctx, Query: "nothing matches this"},
 		"cog.row.instruction":    exampleLibrary(ctx).Items[0],
+
+		"cog.page.models":    exampleModels(ctx),
+		"cog.list.providers": exampleModels(ctx),
+		"cog.list.models":    exampleModels(ctx),
+		"cog.row.provider":   exampleModels(ctx).Providers[0],
+		"cog.row.model":      exampleModels(ctx).Models[0],
+		"cog.empty.models":   Catalogue{Ctx: ctx},
+	}
+}
+
+func exampleModels(ctx Ctx) Catalogue {
+	catalogue := []Model{
+		{ID: 1, Name: "claude-opus-4", Label: "Opus — the one that thinks",
+			Provider: "Anthropic", Kind: "anthropic"},
+		{ID: 2, Name: "qwen2.5-coder:14b", Label: "Qwen Coder — local, free",
+			Provider: "Ollama", Kind: "openai-compatible"},
+	}
+	return Catalogue{
+		Ctx: ctx,
+		Providers: []Provider{
+			{ID: 1, Name: "Anthropic", Kind: "anthropic",
+				BaseURL: "https://api.anthropic.com", HasKey: true, Models: catalogue[:1]},
+			{ID: 2, Name: "Ollama", Kind: "openai-compatible",
+				BaseURL: "http://127.0.0.1:11434/v1", Models: catalogue[1:]},
+		},
+		Models: catalogue,
 	}
 }
 
