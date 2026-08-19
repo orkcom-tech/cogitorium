@@ -5,7 +5,6 @@ import { session } from './session'
 import LoginPage from './pages/LoginPage'
 import SetupPage from './pages/SetupPage'
 import WorkspacePage from './pages/WorkspacePage'
-import EnvPage from './pages/EnvPage'
 import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
 import InstallMap from './pages/InstallMap'
@@ -124,7 +123,8 @@ export default function App() {
                 comparison. The component stays: the workspace opens the
                 catalogue as a drawer, which is a different surface still to be
                 converted. */}
-            <Route path="/env" element={user.role === 'admin' ? <EnvPage /> : <Navigate to="/workspaces" replace />} />
+            {/* /env is a server template now, admin-only there as it was
+                here: one name set install-wide reaches every workspace. */}
             {/* /instructions is served by the server as a template now, so
                 the router must not claim it — a client route would shadow the
                 page and put React back over the top of it. The component

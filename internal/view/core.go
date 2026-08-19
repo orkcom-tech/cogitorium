@@ -111,13 +111,15 @@ type Strings struct {
 	Gears string
 	// Workspaces is the landing screen's title.
 	Workspaces string
+	// Variables is the install-wide named values' title.
+	Variables string
 }
 
 // DefaultStrings is English, which is what this product ships in today. It is
 // a value rather than constants so a plugin overriding the shell can be handed
 // a different one without the host changing shape first.
 func DefaultStrings() Strings {
-	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalog", Context: "Context", Gears: "Gears", Workspaces: "Workspaces"}
+	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalog", Context: "Context", Gears: "Gears", Workspaces: "Workspaces", Variables: "Variables & Secrets"}
 }
 
 // Action is one control that causes a request.
@@ -245,6 +247,13 @@ func CoreModels() Models {
 		// it, so it is the same list without the page frame — and its own
 		// name, because a plugin overriding the drawer should not have to take
 		// the page with it.
+		"cog.page.variables":   Env{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.drawer.variables": Env{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.envname":      EnvName{},
+		"cog.drawer.queue":     Queue{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.unit":         Unit{},
+		"cog.row.schedule":     Schedule{},
+
 		"cog.drawer.instructions": Instructions{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.drawer.gears":        Gears{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.drawer.context":      Context{Ctx: Ctx{T: DefaultStrings()}},
@@ -344,6 +353,82 @@ type Workspaces struct {
 	// page: importing is how a workspace arrives from somewhere else, and it
 	// belongs beside the list it will appear in.
 	Importing bool
+	Error     string
+	Notice    string
+}
+
+// EnvName is one named value a gear can be given.
+type EnvName struct {
+	Name string
+	// Kind is "variable" or "secret". A variable's value is shown afterwards;
+	// a secret's is not, and the difference is the whole reason the two are
+	// separate words rather than a flag.
+	Kind        string
+	Value       string
+	Secret      bool
+	Description string
+	// Source names where this value came from, because a name can be supplied
+	// by this workspace, by the install, or by a file on disk — and somebody
+	// whose value is not the one they set has to be able to see which.
+	Source string
+	// FromWorkspace marks a value this workspace set, which wins over the same
+	// name set install-wide.
+	FromWorkspace bool
+}
+
+// Env is what the variables drawer renders against.
+type Env struct {
+	Ctx   Ctx
+	Names []EnvName
+	// Workspace is set when this is a workspace's own list rather than the
+	// install's.
+	Workspace bool
+	// CanStoreSecrets is false without a secret key, and then a secret cannot
+	// be stored at all rather than being stored badly.
+	CanStoreSecrets bool
+	VariablesDir    string
+	SecretsDir      string
+	HasDirs         bool
+	// JustSet is a name somebody just wrote. If it was a secret this is the
+	// only time it appears anywhere.
+	JustSet string
+	Error   string
+}
+
+// Unit is one piece of work on the queue.
+type Unit struct {
+	ID    int64
+	Kind  string
+	State string
+	Lane  string
+	// Attempts and MaxAttempts say how close this is to being abandoned.
+	Attempts    int
+	MaxAttempts int
+	RunAfter    string
+	LastError   string
+	Failed      bool
+}
+
+// Schedule is one clock.
+type Schedule struct {
+	ID      int64
+	Name    string
+	Spec    string
+	TZ      string
+	Enabled bool
+	Target  string
+	NextRun string
+	LastRun string
+	// LastError is what went wrong last time it fired, which is the question
+	// somebody opens this drawer with.
+	LastError string
+}
+
+// Queue is what the queue drawer renders against.
+type Queue struct {
+	Ctx       Ctx
+	Units     []Unit
+	Schedules []Schedule
 	Error     string
 	Notice    string
 }
@@ -730,6 +815,21 @@ func Exemplars() Models {
 		"cog.row.provider":   exampleModels(ctx).Providers[0],
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
+
+		"cog.page.variables": Env{Ctx: ctx, CanStoreSecrets: true,
+			Names: []EnvName{{Name: "REGION", Kind: "variable", Value: "eu-central-1", Source: "the install"}}},
+		"cog.drawer.variables": Env{Ctx: ctx, Workspace: true, CanStoreSecrets: true,
+			Names: []EnvName{
+				{Name: "REGION", Kind: "variable", Value: "eu-central-1", Source: "this workspace", FromWorkspace: true},
+				{Name: "DEPLOY_TOKEN", Kind: "secret", Secret: true, Source: "the install"},
+			}},
+		"cog.row.envname": EnvName{Name: "REGION", Kind: "variable", Value: "eu-central-1"},
+		"cog.drawer.queue": Queue{Ctx: ctx,
+			Units: []Unit{{ID: 4, Kind: "chat", State: "claimed", Lane: "ws:1", MaxAttempts: 1}},
+			Schedules: []Schedule{{ID: 1, Name: "morning sweep", Spec: "every 15m",
+				TZ: "Europe/Berlin", Enabled: true, Target: "the orchestrator"}}},
+		"cog.row.unit":     Unit{ID: 4, Kind: "chat", State: "queued", Lane: "ws:1", MaxAttempts: 1},
+		"cog.row.schedule": Schedule{ID: 1, Name: "morning sweep", Spec: "every 15m", Enabled: true},
 
 		"cog.drawer.instructions": exampleLibrary(ctx),
 		"cog.drawer.gears":        exampleGears(ctx),

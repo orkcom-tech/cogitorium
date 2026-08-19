@@ -22,7 +22,8 @@ import (
 
 // handleWorkspaceDrawer renders one panel for the workspace it belongs to.
 func (s *Server) handleWorkspaceDrawer(w http.ResponseWriter, r *http.Request) {
-	if _, err := strconv.ParseInt(r.PathValue("id"), 10, 64); err != nil {
+	wsID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
 		http.Error(w, "that is not a workspace", http.StatusBadRequest)
 		return
 	}
@@ -38,6 +39,14 @@ func (s *Server) handleWorkspaceDrawer(w http.ResponseWriter, r *http.Request) {
 	case "gears":
 		s.renderDrawer(w, r, "cog.drawer.gears", func() any {
 			return s.gearsModel(r, "", "", nil)
+		})
+	case "variables":
+		s.renderDrawer(w, r, "cog.drawer.variables", func() any {
+			return s.envModel(r, &wsID, "")
+		})
+	case "queue":
+		s.renderDrawer(w, r, "cog.drawer.queue", func() any {
+			return s.queueModel(r, wsID, "", "")
 		})
 	case "context":
 		// Admin-only, like the page: it reads and writes every document in the

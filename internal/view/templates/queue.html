@@ -1,0 +1,55 @@
+{{/*
+  Work that is waiting, and the clocks that fill it.
+
+  Two lists because they answer two questions: what is happening now, and what
+  will happen without anybody asking. A schedule with a last error is why
+  somebody opened this drawer, so it says so on the row rather than behind a
+  click.
+*/}}
+
+{{define "cog.drawer.queue"}}<div class="dk-body queue-panel">
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  {{if .Notice}}<p class="hint">✓ {{.Notice}}</p>{{end}}
+
+  <div id="queue-units" class="queue-units">
+    {{if .Units}}{{range .Units}}{{template "cog.row.unit" .}}{{end}}{{else}}
+    <p class="hint">Nothing is waiting. Work queues here instead of being dropped when a workspace is already busy.</p>
+    {{end}}
+  </div>
+
+  <h3>Schedules</h3>
+  <form class="row" method="post" action="/schedules">
+    <input name="name" required placeholder="morning sweep" aria-label="Name">
+    <input name="spec" required placeholder="every 15m" aria-label="When">
+    <input name="tz" placeholder="Europe/Berlin" aria-label="Timezone">
+    <button type="submit">add it</button>
+  </form>
+
+  <div id="queue-schedules" class="queue-schedules">
+    {{range .Schedules}}{{template "cog.row.schedule" .}}{{else}}
+    <p class="hint">No clocks here. A schedule starts work on its own, on a cron line or an interval.</p>
+    {{end}}
+  </div>
+</div>{{end}}
+
+{{define "cog.row.unit"}}<div class="queue-unit">
+  <code>{{.Kind}}</code>
+  <span class="badge">{{.State}}</span>
+  <span class="muted">{{.Lane}}</span>
+  <span class="muted">attempt {{.Attempts}} of {{.MaxAttempts}}</span>
+  {{if .LastError}}<p class="error">{{.LastError}}</p>{{end}}
+</div>{{end}}
+
+{{define "cog.row.schedule"}}<div class="queue-schedule">
+  <strong>{{.Name}}</strong>
+  <code>{{.Spec}}</code>
+  {{if .TZ}}<span class="muted">{{.TZ}}</span>{{end}}
+  {{if .Enabled}}<span class="badge is-ok">on</span>{{else}}<span class="badge">off</span>{{end}}
+  {{if .Target}}<span class="muted">→ {{.Target}}</span>{{end}}
+  {{if .NextRun}}<span class="muted">next {{.NextRun}}</span>{{end}}
+  {{/* Why somebody opened this drawer, on the row rather than behind a click. */}}
+  {{if .LastError}}<p class="error">last time: {{.LastError}}</p>{{end}}
+  <form method="post" action="/schedules/{{.ID}}/toggle">
+    <button type="submit">{{if .Enabled}}switch it off{{else}}switch it on{{end}}</button>
+  </form>
+</div>{{end}}

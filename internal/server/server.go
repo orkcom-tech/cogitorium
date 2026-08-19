@@ -573,6 +573,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.page(mux, "POST /gears/{id}/disable", s.handleDisableGearForm)
 	s.page(mux, "POST /gears/{id}/delete", s.handleDeleteGearForm)
 
+	s.page(mux, "GET /env", s.handleVariablesPage)
 	s.page(mux, "GET /context", s.handleContextPage)
 	s.page(mux, "POST /context/save", s.handleSaveContextForm)
 

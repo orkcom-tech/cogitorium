@@ -7,8 +7,6 @@ import FilesPage from './FilesPage'
 import CodeEditor from './CodeEditor'
 import ApprovalDialog from './ApprovalDialog'
 import InletsPanel from './InletsPanel'
-import QueuePanel from './QueuePanel'
-import EnvPanel from './EnvPanel'
 import { Select } from './Select'
 import { Deck, ShellGate, Workbench } from '../deck/Deck'
 import McpPage from './McpPage'
@@ -554,8 +552,6 @@ export default function WorkspacePage({ me }: { me: User }) {
         )}
         {overlay === 'agents' && roster}
         {overlay === 'inlets' && <InletsPanel wsId={wsId} agents={agents} shown onError={setError} />}
-        {overlay === 'queue' && <QueuePanel wsId={wsId} shown onError={setError} />}
-        {overlay === 'env' && <EnvPanel wsId={wsId} shown onError={setError} />}
         {overlay === 'terminal' && (
           <ShellGate started={shell} onStart={() => setShell(true)}>
             <div className="dk-body">
@@ -572,11 +568,15 @@ export default function WorkspacePage({ me }: { me: User }) {
 
             The context drawer keeps its admin rule; the server applies it, so
             a rule that lives in one place cannot disagree with itself. */}
-        {(overlay === 'gears' || overlay === 'instructions' || overlay === 'context') && (
+        {(overlay === 'gears' ||
+          overlay === 'instructions' ||
+          overlay === 'context' ||
+          overlay === 'env' ||
+          overlay === 'queue') && (
           <div
             key={overlay}
             className="dk-body"
-            hx-get={`/workspaces/${wsId}/drawers/${overlay}${
+            hx-get={`/workspaces/${wsId}/drawers/${overlay === 'env' ? 'variables' : overlay}${
               overlay === 'gears' && reviewGear ? `?open=${reviewGear}` : ''
             }`}
             hx-trigger="load"
