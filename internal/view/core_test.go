@@ -56,6 +56,7 @@ func TestTheDocumentCarriesTheApplicationThroughUntouched(t *testing.T) {
 	out := render(t, set, "cog.shell.document", Shell{
 		Ctx:     Ctx{Lang: "en", Theme: "dark", T: DefaultStrings()},
 		AppHead: template.HTML(appHead),
+		Body:    template.HTML(`<div id="root"></div>`),
 	})
 	for _, want := range []string{"<!doctype html>", `lang="en"`, `data-theme="dark"`,
 		"index-D5NMYaXw.js", "index-Doin25bG.css", "<title>Cogitorium</title>", `id="root"`} {

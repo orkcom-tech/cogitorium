@@ -368,6 +368,10 @@ func (m Manifest) validateGrants(add func(string, string, ...any)) {
 	}
 }
 
+// AuthDefault is what a page gets when its manifest says nothing. Closed, so
+// forgetting the field is never the thing that opens a page.
+const AuthDefault = "token"
+
 // PagePrefix is the path space this plugin owns. Every page it registers lives
 // under here, which is why no plugin can ever collide with another or with a
 // route the server already serves.

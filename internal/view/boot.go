@@ -1,6 +1,7 @@
 package view
 
 import (
+	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -33,11 +34,17 @@ type Source struct {
 type Disabled struct {
 	ID       string
 	Failures []Failure
+	// Compose is set when the plugin never got as far as being validated —
+	// its templates would not parse, or it broke a naming rule.
+	Compose error
 }
 
 // Reason renders the first failure as one line, which is what a row on the
 // plugins page has space for.
 func (d Disabled) Reason() string {
+	if d.Compose != nil {
+		return d.Compose.Error()
+	}
 	if len(d.Failures) == 0 {
 		return "disabled"
 	}
@@ -85,10 +92,17 @@ func Boot(funcs template.FuncMap, core fs.FS, plugins []Source, models Models) (
 
 		set, err := Compose(funcs, layers...)
 		if err != nil {
-			// Composition failed rather than validation, so nothing has been
-			// attributed yet. If a plugin's own templates are unparseable the
-			// error names its layer; there is no way to continue without
-			// knowing which, so this is reported as-is.
+			// A composition failure that belongs to a plugin drops that plugin
+			// and the set is rebuilt without it. A plugin whose templates will
+			// not parse is that plugin's problem — failing the whole boot for
+			// it would let any stranger's typo take the product down.
+			var le *LayerError
+			if errors.As(err, &le) && le.Layer != plugin.CoreNamespace && !dropped[le.Layer] {
+				dropped[le.Layer] = true
+				report.Disabled = append(report.Disabled, Disabled{ID: le.Layer, Compose: le.Err})
+				live = without(live, le.Layer)
+				continue
+			}
 			return nil, report, err
 		}
 
@@ -134,6 +148,16 @@ func Boot(funcs template.FuncMap, core fs.FS, plugins []Source, models Models) (
 		}
 		live = kept
 	}
+}
+
+func without(sources []Source, id string) []Source {
+	out := make([]Source, 0, len(sources))
+	for _, s := range sources {
+		if s.ID != id {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // Sources builds the layer inputs from what the store says is enabled. It is a

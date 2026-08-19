@@ -40,7 +40,12 @@
 */}}
 {{define "cog.shell.tokens"}}{{end}}
 
-{{define "cog.shell.body"}}<div id="root"></div>{{end}}
+{{/*
+  The body is whatever was rendered into it. A plugin page puts its own output
+  here; the application puts its mount point here once it is served through
+  this shell rather than beside it.
+*/}}
+{{define "cog.shell.body"}}{{.Body}}{{end}}
 
 {{/*
   Append slots. Definitions of these CONCATENATE rather than replace, so two

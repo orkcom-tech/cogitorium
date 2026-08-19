@@ -122,3 +122,45 @@ func TestSeveralBrokenPluginsAreAllReported(t *testing.T) {
 		t.Errorf("loaded = %v, want [ok]", r.Loaded)
 	}
 }
+
+// A plugin whose templates will not parse is that plugin's problem. Failing
+// the whole boot for it would let any stranger's typo take the product down.
+func TestAPluginThatWillNotParseIsDroppedNotFatal(t *testing.T) {
+	set, r, err := Boot(template.FuncMap{}, core, []Source{
+		src("broken", map[string]string{"b.html": `{{define "cog.row.gear"}}{{if}}{{end}}`}),
+		src("good", map[string]string{"g.html": `{{define "cog.row.gear"}}good:{{.Name}}{{end}}`}),
+	}, models)
+	if err != nil {
+		t.Fatalf("one unparseable plugin must not fail the boot: %v", err)
+	}
+	if len(r.Disabled) != 1 || r.Disabled[0].ID != "broken" {
+		t.Fatalf("expected only 'broken' disabled, got %+v", r.Disabled)
+	}
+	if r.Disabled[0].Reason() == "" {
+		t.Error("the reason must survive to the plugins page")
+	}
+	if got := render(t, set, "cog.row.gear", row{Name: "x"}); got != "good:x" {
+		t.Errorf("the working plugin must still render, got %q", got)
+	}
+}
+
+// A plugin breaking a naming rule is also its own problem.
+func TestAPluginWithABadTemplateNameIsDropped(t *testing.T) {
+	_, r, err := Boot(template.FuncMap{}, core, []Source{
+		src("rulebreaker", map[string]string{"b.html": `{{define "cog.sidebar.thing"}}x{{end}}`}),
+	}, models)
+	if err != nil {
+		t.Fatalf("a bad name must not fail the boot: %v", err)
+	}
+	if len(r.Disabled) != 1 || r.Disabled[0].ID != "rulebreaker" {
+		t.Fatalf("expected 'rulebreaker' disabled, got %+v", r.Disabled)
+	}
+}
+
+// The host breaking its own rules is still fatal: there is nothing to serve.
+func TestTheHostFailingToComposeIsStillFatal(t *testing.T) {
+	broken := coreFS(map[string]string{"r.html": `{{define "cog.sidebar.thing"}}x{{end}}`})
+	if _, _, err := Boot(template.FuncMap{}, broken, nil, models); err == nil {
+		t.Fatal("the product breaking its own naming rules must be fatal")
+	}
+}

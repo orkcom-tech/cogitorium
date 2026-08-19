@@ -32,6 +32,24 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/plugin"
 )
 
+// LayerError is a failure that belongs to one layer.
+//
+// Typed rather than a formatted string, because Boot has to decide WHOSE
+// plugin to drop and reading that back out of a message would be guessing at
+// its own error format. A plugin whose templates will not parse is that
+// plugin's problem, not the product's.
+type LayerError struct {
+	Layer string
+	Err   error
+}
+
+func (e *LayerError) Error() string { return "plugin " + e.Layer + ": " + e.Err.Error() }
+func (e *LayerError) Unwrap() error { return e.Err }
+
+func layerErr(layer string, format string, a ...any) *LayerError {
+	return &LayerError{Layer: layer, Err: fmt.Errorf(format, a...)}
+}
+
 // Layer is one source of templates. Layer zero is always the host's own; every
 // layer after it is a plugin, in the operator's enable order.
 type Layer struct {
@@ -158,7 +176,7 @@ func Compose(funcs template.FuncMap, layers ...Layer) (*Set, error) {
 
 			n, err := plugin.ParseName(name)
 			if err != nil {
-				return nil, fmt.Errorf("view: %s defines %w", layer.ID, err)
+				return nil, layerErr(layer.ID, "defines %w", err)
 			}
 
 			// An override reaches the body beneath it through an alias, and the
@@ -176,10 +194,10 @@ func Compose(funcs template.FuncMap, layers ...Layer) (*Set, error) {
 				// this name works, and quietly producing nothing would leave
 				// the author looking for a gap in their markup.
 				if refs > 0 {
-					return nil, fmt.Errorf("view: %s uses under: inside %q, which appends rather "+
+					return nil, layerErr(layer.ID, "uses under: inside %q, which appends rather "+
 						"than replaces, so there is nothing beneath it. Contributions to this "+
 						"name are concatenated in enable order — write your own body and drop "+
-						"the under: reference", layer.ID, name)
+						"the under: reference", name)
 				}
 				seg := fmt.Sprintf("%s\x00seg\x00%d", name, i)
 				if err := s.own(seg, tree, layer.ID); err != nil {
@@ -201,9 +219,9 @@ func Compose(funcs template.FuncMap, layers ...Layer) (*Set, error) {
 			beneath := s.bodies[name]
 			if beneath == nil {
 				if refs > 0 {
-					return nil, fmt.Errorf("view: %s uses under: inside %q, but nothing defines "+
+					return nil, layerErr(layer.ID, "uses under: inside %q, but nothing defines "+
 						"that name yet, so there is nothing to wrap. Define it, or drop the "+
-						"under: reference and write the body directly", layer.ID, name)
+						"under: reference and write the body directly", name)
 				}
 				beneath = emptyTree(name)
 			}
@@ -361,11 +379,11 @@ func parseLayer(l Layer, funcs template.FuncMap) (map[string]*parse.Tree, error)
 		}
 		b, err := fs.ReadFile(l.FS, p)
 		if err != nil {
-			return fmt.Errorf("view: %s: reading %s: %w", l.ID, p, err)
+			return layerErr(l.ID, "reading %s: %w", p, err)
 		}
 		trees, err := parse.Parse(p, string(b), "{{", "}}", known)
 		if err != nil {
-			return fmt.Errorf("view: %s: %s: %w", l.ID, p, err)
+			return layerErr(l.ID, "%s: %w", p, err)
 		}
 		for name, tree := range trees {
 			// parse.Parse returns the file itself under its own path as well as
@@ -374,14 +392,13 @@ func parseLayer(l Layer, funcs template.FuncMap) (map[string]*parse.Tree, error)
 			// would put a name in the set that no naming rule allows.
 			if name == p {
 				if !isEffectivelyEmpty(tree.Root) {
-					return fmt.Errorf("view: %s: %s has markup outside a {{define}}; "+
-						"every template must be inside one so it has a name to be "+
-						"overridden by", l.ID, p)
+					return layerErr(l.ID, "%s has markup outside a {{define}}; every template "+
+						"must be inside one so it has a name to be overridden by", p)
 				}
 				continue
 			}
 			if prev, dup := out[name]; dup && prev != nil {
-				return fmt.Errorf("view: %s defines %q twice in its own layer", l.ID, name)
+				return layerErr(l.ID, "defines %q twice in its own layer", name)
 			}
 			out[name] = tree
 		}
@@ -509,9 +526,9 @@ func checkCoreRefs(refs map[string][]string, coreBodies map[string]*parse.Tree) 
 		if _, ok := coreBodies[name]; ok {
 			continue
 		}
-		return fmt.Errorf("view: %s uses core:%s, but the product does not define that name, "+
-			"so there is no original body to reach. Check the name, or use under: to wrap "+
-			"whatever is beneath you", refs[name][0], name)
+		return layerErr(refs[name][0], "uses core:%s, but the product does not define that "+
+			"name, so there is no original body to reach. Check the name, or use under: to "+
+			"wrap whatever is beneath you", name)
 	}
 	return nil
 }

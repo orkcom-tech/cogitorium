@@ -1,0 +1,7 @@
+{{/*
+  The frame a plugin's own page is rendered inside.
+
+  It exists as a name so a plugin can take over the chrome around every page —
+  its own and anybody else's — without touching the pages themselves.
+*/}}
+{{define "cog.page.plugin"}}<main class="plugin-page">{{if .Title}}<h1>{{.Title}}</h1>{{end}}</main>{{end}}

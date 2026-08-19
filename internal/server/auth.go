@@ -56,7 +56,29 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 		// must not be exempt only as a side effect of a rule about static
 		// files, which somebody tightening the SPA fallback would take away
 		// without ever seeing an inlet.
-		if openToAnyone(r.URL.Path) {
+		// Plugin space is decided by DECLARATION, not by the shape of the
+		// path, and it is decided before the derived rules get a look in. A
+		// plugin saying its page is open is somebody's decision about their
+		// own plugin; a rule about where a URL sits cannot express that, and
+		// letting the derived rule answer here would either close a page an
+		// operator approved as open or open one nobody did.
+		if strings.HasPrefix(r.URL.Path, pluginPagePrefix) {
+			auth, declared := s.plugins.pageAuth(r.URL.Path)
+			if !declared {
+				// Not a page anybody declared. A 404 here rather than a walk
+				// through the credential machinery, so an unknown plugin path
+				// cannot be probed for whether it exists by watching which
+				// refusal comes back.
+				http.NotFound(w, r)
+				return
+			}
+			if auth == "none" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			// Everything else resolves a credential below, and "admin" is
+			// answered by the handler once there is somebody to check.
+		} else if openToAnyone(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}

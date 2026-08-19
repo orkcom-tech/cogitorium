@@ -36,13 +36,26 @@ func newPluginsCmds() *cobra.Command {
 	// a data directory set in config.yaml or the environment is honoured
 	// without anybody repeating it on the command line.
 	load := func(cmd *cobra.Command) (*plugin.Store, config.Config, error) {
+		// Read the flag itself rather than asking two flag sets whether they
+		// were changed. --data is persistent on the parent, and testing
+		// Changed on the subcommand's own set silently answered false — which
+		// sent every install to the default data directory while printing the
+		// path the operator asked for. cmd.Flags() resolves inherited flags,
+		// so there is one place to ask and it is the one that knows.
 		override := ""
-		if cmd.Flags().Changed("data") || root.PersistentFlags().Changed("data") {
-			override = dataDir
+		if f := cmd.Flags().Lookup("data"); f != nil && f.Changed {
+			override = f.Value.String()
 		}
 		cfg, err := config.Load(configPath, override)
 		if err != nil {
 			return nil, config.Config{}, err
+		}
+		// Load takes the override only to work out WHERE to look for
+		// config.yaml; it does not apply it. serve does this same assignment
+		// for the same reason, and leaving it out here sent every install to
+		// the default directory while printing the path that was asked for.
+		if override != "" {
+			cfg.DataDir = override
 		}
 		s, err := plugin.Open(cfg.DataDir)
 		return s, cfg, err

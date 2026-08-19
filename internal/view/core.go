@@ -140,6 +140,11 @@ type Shell struct {
 	// It is template.HTML because it comes from this repository's own build
 	// output rather than from anything a request could influence.
 	AppHead template.HTML
+	// Body is the rendered page. Filled by a two-pass render: the page's own
+	// template runs first, and its output is placed here — because Go
+	// templates cannot take a template name from data, and the alternative
+	// would be a fixed name every page had to be squeezed into.
+	Body template.HTML
 	// Nav is the rail. Populated from plugin manifests, and NOT rendered by
 	// the document yet: the rail on screen is still the application's, and a
 	// second server-rendered one would sit unstyled above it.
@@ -147,6 +152,18 @@ type Shell struct {
 	// Styles and Scripts are plugin contributions injected into the head.
 	Styles  []string
 	Scripts []Asset
+}
+
+// Page is the model a plugin's own page renders against.
+//
+// Deliberately small. A page that needs more than its context, its title and
+// what was in the URL needs a backend, and pretending otherwise would put a
+// half-model in front of an author who then discovers the missing half later.
+type Page struct {
+	Ctx    Ctx
+	Title  string
+	Params map[string]string
+	Query  map[string]string
 }
 
 // CoreModels is the zero-value model for every name the host owns.
@@ -169,6 +186,7 @@ func CoreModels() Models {
 		"cog.action.button":  Action{},
 		"cog.list.actions":   []Action{},
 		"cog.empty.default":  "",
+		"cog.page.plugin":    Page{Ctx: Ctx{T: DefaultStrings()}},
 	}
 }
 

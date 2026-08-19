@@ -87,6 +87,10 @@ type Server struct {
 	// anyone who can reach the workspace, so defaulting to open would turn
 	// "edit a task" into "make this server call an address of my choosing".
 	callbackHosts []string
+	// plugins is the composed interface: the template set every page renders
+	// through, and the pages the enabled plugins declared. Nil only if
+	// composition failed, which is fatal at startup rather than survivable.
+	plugins *pluginRuntime
 	// publicURL is how this install is reachable from outside, used to put
 	// fetchable links to a run's files in its callback. Empty simply leaves
 	// them out.
@@ -140,6 +144,16 @@ type Server struct {
 // egress bool) a caller that swaps two arguments compiles cleanly, and the
 // result is a security gate silently switched on.
 func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.Searcher, env *secrets.Resolver, gate *gearnet.Gate) *Server {
+	// The interface is composed before anything is served. A plugin that
+	// cannot render is dropped by name here rather than discovered by a
+	// visitor, and the product's own templates failing is a panic because
+	// there would be nothing to serve — a test in internal/view catches that
+	// long before a build gets this far.
+	plugins, err := loadPlugins(cfg.DataDir)
+	if err != nil {
+		panic("cogitorium: the interface could not be composed: " + err.Error())
+	}
+
 	cat := catalog.NewStore(db)
 	ws := workspace.NewStore(db)
 	cs := contextstore.New(cfg.ContextdPath)
@@ -169,6 +183,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		queueMax = config.Defaults().QueueMaxPerWorkspace
 	}
 	s := &Server{
+		plugins:    plugins,
 		db:         db,
 		catalog:    cat,
 		workspaces: ws,
@@ -453,6 +468,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "GET /i/{address}/runs/{id}/file", s.handleInletRunFile)
 	s.route(mux, inletDeliveryPrefix, handleInletDeliveryPath)
 
+	mux.Handle(pluginPagePrefix, s.pluginHandler())
 	mux.Handle("/", uiHandler())
 
 	s.http = &http.Server{
