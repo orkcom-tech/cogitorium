@@ -18,6 +18,7 @@ func main() {
 
 	root.AddCommand(newServeCmd())
 	root.AddCommand(newMCPCmd())
+	root.AddCommand(newPluginsCmds())
 	for _, c := range newCLICmds() {
 		root.AddCommand(c)
 	}
