@@ -15,6 +15,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/channel"
 	"github.com/orkcom-tech/cogitorium/internal/gearnet"
 	"github.com/orkcom-tech/cogitorium/internal/imagert"
+	"github.com/orkcom-tech/cogitorium/internal/jsrt"
 	"github.com/orkcom-tech/cogitorium/internal/plugin"
 	"github.com/orkcom-tech/cogitorium/internal/runtimes"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
@@ -158,15 +159,24 @@ func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Inst
 	b.wasm = engine
 
 	for _, in := range wasmPlugins {
-		path := filepath.Join(in.Dir, "plugin.wasm")
-		module, err := os.ReadFile(path)
+		// The entry file follows the technology, the same way it does on every
+		// other tier: a JavaScript plugin ships plugin.js and the engine is
+		// this binary's, while everything else on this tier ships plugin.wasm
+		// and is its own module.
+		entry := plugin.EntryFile(in.Manifest.Needs)
+		path := filepath.Join(in.Dir, entry)
+		source, err := os.ReadFile(path)
 		if err != nil {
-			slog.Error("a plugin needs a WebAssembly module and does not ship one",
-				"plugin", in.ID, "expected", path, "err", err)
+			slog.Error("a plugin declares a technology whose entry file it does not ship",
+				"plugin", in.ID, "needs", in.Manifest.Needs, "expected", entry, "err", err)
 			continue
 		}
-		if err := engine.Compile(ctx, in.ID, module); err != nil {
-			slog.Error("a plugin's module would not load", "plugin", in.ID, "err", err)
+		load := engine.Compile
+		if entry == jsrt.SourceFile {
+			load = engine.CompileJS
+		}
+		if err := load(ctx, in.ID, source); err != nil {
+			slog.Error("a plugin's code would not load", "plugin", in.ID, "err", err)
 			continue
 		}
 		b.tier[in.ID] = plugin.TierWasm

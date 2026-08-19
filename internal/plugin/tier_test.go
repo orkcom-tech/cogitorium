@@ -265,8 +265,12 @@ func TestOnlyBundleAndWasmClaimToBeUniversal(t *testing.T) {
 // whose file is right there.
 func TestEveryTechnologyThatRunsAFileNamesTheSameOne(t *testing.T) {
 	for _, c := range []struct{ needs, want string }{
-		{"js", "plugin.wasm"},
-		{"javascript", "plugin.wasm"}, // superseded name, same answer
+		// JavaScript is the one technology on the WebAssembly tier that ships
+		// SOURCE: the engine is the host's, compiled into the binary. That is
+		// what makes `needs: js` worth declaring instead of compiling to wasm
+		// yourself.
+		{"js", "plugin.js"},
+		{"javascript", "plugin.js"}, // superseded name, same answer
 		{"rust", "plugin.wasm"},
 		{"go", "plugin.wasm"},
 		{"python", "plugin.py"},

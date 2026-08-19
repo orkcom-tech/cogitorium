@@ -26,6 +26,7 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 
 	"github.com/orkcom-tech/cogitorium/internal/abi"
+	"github.com/orkcom-tech/cogitorium/internal/jsrt"
 )
 
 // The guest contract, in four functions.
@@ -75,6 +76,9 @@ type Runtime struct {
 
 	mu       sync.Mutex
 	compiled map[string]wazero.CompiledModule
+	// js holds the source of every plugin whose module is the engine rather
+	// than its own. Empty for an ordinary WebAssembly plugin.
+	js map[string][]byte
 }
 
 // New prepares the engine.
@@ -96,7 +100,11 @@ func New(ctx context.Context, host abi.Host, limits Limits) (*Runtime, error) {
 		return nil, fmt.Errorf("wasmrt: preparing wasi: %w", err)
 	}
 
-	r := &Runtime{rt: rt, host: host, limits: limits, compiled: map[string]wazero.CompiledModule{}}
+	r := &Runtime{
+		rt: rt, host: host, limits: limits,
+		compiled: map[string]wazero.CompiledModule{},
+		js:       map[string][]byte{},
+	}
 	if err := r.exportHost(ctx); err != nil {
 		rt.Close(ctx)
 		return nil, err
@@ -127,6 +135,26 @@ func (r *Runtime) exportHost(ctx context.Context) error {
 func (r *Runtime) Close(ctx context.Context) error { return r.rt.Close(ctx) }
 
 // Compile prepares a module and remembers it under an id.
+// CompileJS registers a plugin written in JavaScript.
+//
+// The module is the engine, shared by every JavaScript plugin on the install
+// and compiled once; what differs per plugin is its source, which is written
+// into each fresh instance before the call. A plugin ships plugin.js and
+// exports nothing — that is what the tier is for.
+func (r *Runtime) CompileJS(ctx context.Context, id string, source []byte) error {
+	engine, err := jsrt.Module()
+	if err != nil {
+		return err
+	}
+	if err := r.Compile(ctx, id, engine); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	r.js[id] = source
+	r.mu.Unlock()
+	return nil
+}
+
 func (r *Runtime) Compile(ctx context.Context, id string, module []byte) error {
 	code, err := r.rt.CompileModule(ctx, module)
 	if err != nil {
@@ -206,6 +234,18 @@ func (r *Runtime) Call(ctx context.Context, id string, req abi.Request) (abi.Res
 		return abi.Response{}, err
 	}
 
+	// A JavaScript plugin's source, into this instance. Per instance rather
+	// than once, because instances are per call by design — module state that
+	// survives between calls is state two callers can see.
+	r.mu.Lock()
+	source, isJS := r.js[id]
+	r.mu.Unlock()
+	if isJS {
+		if err := loadJS(ctx, mod, id, source); err != nil {
+			return abi.Response{}, err
+		}
+	}
+
 	out, err := r.invoke(ctx, mod, in)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -224,6 +264,30 @@ func (r *Runtime) Call(ctx context.Context, id string, req abi.Request) (abi.Res
 		return abi.Response{}, fmt.Errorf("wasmrt: plugin %q: %w", id, err)
 	}
 	return resp, nil
+}
+
+// loadJS writes a plugin's own JavaScript into an instance of the engine.
+func loadJS(ctx context.Context, mod api.Module, id string, source []byte) error {
+	fn := mod.ExportedFunction(jsrt.LoadExport)
+	if fn == nil {
+		return fmt.Errorf("wasmrt: the JavaScript engine does not export %s, so plugin %q "+
+			"cannot be loaded into it", jsrt.LoadExport, id)
+	}
+	ptr, err := guestWrite(ctx, mod, source)
+	if err != nil {
+		return fmt.Errorf("wasmrt: plugin %q: %w", id, err)
+	}
+	res, err := fn.Call(ctx, uint64(ptr), uint64(len(source)))
+	if err != nil {
+		return fmt.Errorf("wasmrt: plugin %q: its JavaScript would not load: %w", id, err)
+	}
+	if len(res) > 0 && res[0] != 0 {
+		// The engine holds the reason and hands it back on the first call, so
+		// a syntax error arrives as a response an operator can read rather
+		// than as a module that started and did nothing.
+		return nil
+	}
+	return nil
 }
 
 func checkContract(ctx context.Context, mod api.Module, id string) error {

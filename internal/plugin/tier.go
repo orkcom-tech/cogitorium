@@ -62,7 +62,7 @@ type technology struct {
 // better answer than a fetch that fails later against a name nobody owns.
 var technologies = map[string]technology{
 	// The universal tier.
-	"js":         {tier: TierWasm, note: "runs on the JavaScript engine inside this binary"},
+	"js":         {tier: TierWasm, note: "runs on the JavaScript engine compiled into this binary; you ship plugin.js and nothing else"},
 	"javascript": {tier: TierWasm, supersededBy: "js"},
 	"wasm":       {tier: TierWasm},
 	"rust":       {tier: TierWasm},
@@ -102,6 +102,14 @@ func EntryFile(needs string) string {
 	}
 	switch t.tier {
 	case TierWasm:
+		// JavaScript is the one technology on this tier that does not ship a
+		// module: the engine is the host's, compiled into the binary, and the
+		// author ships source. That is the whole reason `needs: js` is worth
+		// declaring rather than compiling to wasm yourself.
+		if strings.ToLower(strings.TrimSpace(needs)) == "js" ||
+			strings.ToLower(strings.TrimSpace(needs)) == "javascript" {
+			return "plugin.js"
+		}
 		return "plugin.wasm"
 	case TierProvisioned:
 		switch strings.ToLower(strings.TrimSpace(needs)) {
