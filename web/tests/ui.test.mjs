@@ -47,6 +47,28 @@ describe('the interface', () => {
     assert.equal(r.status(), 404)
   })
 
+  // The application's own bundle, by name, from the document that asks for it.
+  //
+  // A handler registered on /assets/ once shadowed this — the host's vendored
+  // hypermedia layer was put there, and Vite writes the interface's build
+  // output to the same prefix. Every screen answered 404 for its own
+  // JavaScript, which presents as a blank page rather than as a routing
+  // mistake, and every test in this file failed at once with a timeout.
+  test('the interface can load the bundle its own document asks for', async () => {
+    const res = await ui.page.goto(`${server.url}/workspaces`)
+    assert.equal(res.status(), 200)
+
+    const html = await res.text()
+    for (const href of html.match(/\/assets\/[A-Za-z0-9._-]+/g) ?? []) {
+      const asset = await ui.page.request.get(`${server.url}${href}`)
+      assert.equal(asset.status(), 200, `${href} is ${asset.status()}`)
+    }
+
+    // And the host's own vendored layer, which must not live on that prefix.
+    const htmx = await ui.page.request.get(`${server.url}/cog/htmx.min.js`)
+    assert.equal(htmx.status(), 200)
+  })
+
   test('a missing asset is a 404, not an HTML document', async () => {
     // The worst failure this server can produce: the browser hands an HTML
     // document to its module parser and reports a syntax error at line 1 of a
@@ -202,5 +224,82 @@ describe('approving a plugin', () => {
 
     const after = await ui.page.locator('.plugin-actions button').allInnerTexts()
     assert.ok(after.includes('Withdraw approval'), 'no way back out of the decision')
+  })
+})
+
+// The first screen of the product served as a template rather than by the
+// application — and the thing that makes the whole plugin system worth having:
+// a plugin can take over part of a screen the core never designated as
+// extensible.
+//
+// Until this landed, "override a screen" was a promise with nothing behind it.
+// The template surface rendered plugin pages only, so there was nothing to
+// override except the frame around a plugin's own markup.
+describe('a converted screen', () => {
+  let binary, server, ui
+
+  before(async () => {
+    binary = build()
+    const p = bundle('rowskin', {
+      'plugin.yaml': [
+        'schema: 1',
+        'id: rowskin',
+        'name: Row Skin',
+        'version: 1.0.0',
+        'host:',
+        '  contract: 1',
+        'overrides:',
+        '  - cog.row.instruction',
+        '',
+      ].join('\n'),
+      'templates/row.html':
+        '{{define "cog.row.instruction"}}<article class="card skinned">' +
+        '<h3>{{.Name}}</h3></article>{{end}}',
+    })
+    server = await start(binary, { plugins: [p] })
+    ui = await session(server)
+  })
+
+  after(async () => {
+    await ui?.close()
+    await server?.stop()
+  })
+
+  // Nothing is seeded here on purpose. Writing an instruction stores its text
+  // in Contextverse, which this harness does not run — an earlier version of
+  // this test seeded through the API and hung forever waiting on a process
+  // that was never going to answer. What the browser uniquely proves is that
+  // the page is served as a document rather than by the application; that a
+  // plugin's body reaches the rows is a composition question, and
+  // internal/view answers it without a browser.
+  test('it is rendered by the server, inside the product', async () => {
+    await ui.page.goto(`${server.url}/instructions`)
+    await ui.page.waitForSelector('.library-list')
+
+    // The rail is there, so a page served this way sits inside the product
+    // rather than being a bare document dropped beside it.
+    assert.ok(await ui.page.locator('nav.rail').count(), 'the page has no rail')
+    // And React was not booted over the top of it.
+    assert.equal(await ui.page.locator('#root').count(), 0, 'the application mounted over the template')
+  })
+
+  test('the empty state says which kind of empty it is', async () => {
+    await ui.page.goto(`${server.url}/instructions`)
+    await ui.page.waitForSelector('.library-list')
+    assert.match(await ui.page.locator('.library-list').innerText(), /library is empty/)
+
+    // Narrowed to nothing is a different sentence from having nothing, and
+    // showing the wrong one tells somebody their library is gone.
+    await ui.page.goto(`${server.url}/instructions?q=nothingmatchesthis`)
+    await ui.page.waitForSelector('.library-list')
+    assert.match(await ui.page.locator('.library-list').innerText(), /Nothing in the library matches/)
+  })
+
+  test('the plugin overriding its row is live', async () => {
+    await ui.page.goto(`${server.url}/plugins`)
+    await ui.page.waitForSelector('.card')
+    const card = await ui.page.locator('.card').first().innerText()
+    assert.match(card, /cog\.row\.instruction/)
+    assert.equal(await ui.page.locator('.badge.is-ok').first().innerText(), 'live')
   })
 })

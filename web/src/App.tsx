@@ -10,7 +10,6 @@ import WorkspacePage from './pages/WorkspacePage'
 import ContextPage from './pages/ContextPage'
 import GearsPage from './pages/GearsPage'
 import EnvPage from './pages/EnvPage'
-import LibraryPage from './pages/LibraryPage'
 import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
 import InstallMap from './pages/InstallMap'
@@ -123,7 +122,12 @@ export default function App() {
             <Route path="/context" element={user.role === 'admin' ? <ContextPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/gears" element={<GearsPage me={user} />} />
             <Route path="/env" element={user.role === 'admin' ? <EnvPage /> : <Navigate to="/workspaces" replace />} />
-            <Route path="/instructions" element={<LibraryPage />} />
+            {/* /instructions is served by the server as a template now, so
+                the router must not claim it — a client route would shadow the
+                page and put React back over the top of it. The component
+                stays: the workspace still opens the library as a drawer, and
+                that is a different surface with a different name still to be
+                converted. */}
             <Route path="/models" element={<ModelsPage />} />
             <Route
               path="/plugins"

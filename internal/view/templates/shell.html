@@ -24,8 +24,8 @@
 {{end}}
 
 {{define "cog.shell.head"}}{{.AppHead}}
-<script src="/assets/htmx.min.js" defer></script>
-<script src="/assets/htmx-sse.js" defer></script>
+<script src="/cog/htmx.min.js" defer></script>
+<script src="/cog/htmx-sse.js" defer></script>
 {{template "cog.shell.tokens" .}}
 {{range .Styles}}<link rel="stylesheet" href="{{.}}">
 {{end}}{{range .Scripts}}<script type="module" src="{{.Src}}"{{if .Integrity}} integrity="{{.Integrity}}"{{end}}></script>

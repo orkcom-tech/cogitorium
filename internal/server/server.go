@@ -527,11 +527,26 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "GET /i/{address}/runs/{id}/file", s.handleInletRunFile)
 	s.route(mux, inletDeliveryPrefix, handleInletDeliveryPath)
 
-	// The hypermedia layer, from this binary. Its own prefix rather than under
-	// a plugin's assets: it belongs to the host, and a plugin that could serve
-	// something at this path would be a plugin that can replace htmx.
-	mux.Handle("/assets/", http.StripPrefix("/assets/",
+	// The hypermedia layer, from this binary.
+	//
+	// Under /cog/ and NOT /assets/, which is where it was first put — and
+	// /assets/ is where Vite writes the application's own bundle. Registering
+	// a handler there shadowed the whole interface: every screen answered 404
+	// for its own JavaScript, which presents as a blank page rather than as a
+	// routing mistake.
+	//
+	// /cog/ matches the template namespace, so it reads as the host's own, and
+	// nothing a plugin serves can land in it.
+	mux.Handle(hostAssetPrefix, http.StripPrefix(hostAssetPrefix,
 		http.FileServer(http.FS(view.Hypermedia()))))
+
+	// The first screen of the product served as a template rather than by the
+	// application. Its own paths rather than /api/v1 ones: these answer with
+	// HTML, and the described API is a JSON surface — putting a page in it
+	// would make every generated client expect a document.
+	s.page(mux, "GET /instructions", s.handleInstructionsPage)
+	s.page(mux, "POST /instructions", s.handleCreateInstructionForm)
+	s.page(mux, "POST /instructions/{id}/delete", s.handleDeleteInstructionForm)
 
 	mux.Handle(pluginPagePrefix, s.pluginHandler())
 	mux.Handle("/", s.uiHandler())

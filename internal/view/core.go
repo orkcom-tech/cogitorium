@@ -99,13 +99,17 @@ type Workspace struct {
 // Strings are the few words the host's own chrome renders.
 type Strings struct {
 	Navigation string
+	// Instructions is the library's own title. Here rather than written into
+	// the template because a plugin translating the product should not have to
+	// take over a page to change one word.
+	Instructions string
 }
 
 // DefaultStrings is English, which is what this product ships in today. It is
 // a value rather than constants so a plugin overriding the shell can be handed
 // a different one without the host changing shape first.
 func DefaultStrings() Strings {
-	return Strings{Navigation: "Navigation"}
+	return Strings{Navigation: "Navigation", Instructions: "Instructions"}
 }
 
 // Action is one control that causes a request.
@@ -214,7 +218,71 @@ func CoreModels() Models {
 		"cog.list.actions":   []Action{},
 		"cog.empty.default":  "",
 		"cog.page.plugin":    Page{Ctx: Ctx{T: DefaultStrings()}},
+
+		// The library, the first screen of the product served as a template.
+		// Four names rather than one: a plugin that only wants a different row
+		// should not have to reproduce the page around it.
+		"cog.page.instructions":  Instructions{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.instructions":  Instructions{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.instruction":    Instruction{},
+		"cog.empty.instructions": Instructions{Ctx: Ctx{T: DefaultStrings()}},
 	}
+}
+
+// Instruction is one entry in the library, as a template sees it.
+//
+// Its own type rather than the store's, because a template model is a promise
+// to every plugin that overrides the row: adding a field is free, and removing
+// one somebody wrote against is a plugin that disables itself at boot. What is
+// here is what a row needs to render, and nothing that happens to be in the
+// database beside it.
+type Instruction struct {
+	ID          int64
+	Name        string
+	Description string
+	Tags        []string
+	// Text is the body, present only when this row is the one being read. A
+	// list that carried every body would carry every version of every
+	// instruction in the library to draw a page of names.
+	Text string
+	// Open says this row is expanded, so an override knows which of the two
+	// shapes it is drawing.
+	Open      bool
+	UpdatedAt string
+}
+
+// Tag is one filter option.
+type Tag struct {
+	Name     string
+	Selected bool
+}
+
+// Instructions is the model the library page renders against.
+type Instructions struct {
+	Ctx   Ctx
+	Items []Instruction
+	// Query and Tag are what the list was narrowed by, echoed back so the
+	// controls show what is in effect rather than resetting on every render.
+	Query string
+	Tag   string
+	// Tags is every tag in the library, for the filter, each already knowing
+	// whether it is the one in effect. Computed here rather than compared in
+	// the template: which option is selected is a fact about the request, and
+	// a template working it out is a template that has to be given the request
+	// to work it out from.
+	Tags []Tag
+	// Narrowed says a search or a tag is in effect, so the empty state can say
+	// "nothing matches that" rather than "the library is empty" — two
+	// sentences that mean opposite things to the person reading them.
+	//
+	// Computed here for the same reason Tag.Selected is: a template renders,
+	// it does not decide. The function set every template may call is small on
+	// purpose, and every name in it is a permanent promise to every plugin.
+	Narrowed bool
+
+	// Error is what went wrong with the last thing somebody did, in the words
+	// they need. Empty is the ordinary case.
+	Error string
 }
 
 // HostNav is the product's own rail, as the server knows it.
@@ -295,6 +363,24 @@ func Exemplars() Models {
 			Params: map[string]string{"id": "42"},
 			Query:  map[string]string{"q": "search"},
 		},
+
+		"cog.page.instructions":  exampleLibrary(ctx),
+		"cog.list.instructions":  exampleLibrary(ctx),
+		"cog.empty.instructions": Instructions{Ctx: ctx, Query: "nothing matches this"},
+		"cog.row.instruction":    exampleLibrary(ctx).Items[0],
+	}
+}
+
+func exampleLibrary(ctx Ctx) Instructions {
+	return Instructions{
+		Ctx: ctx,
+		Items: []Instruction{
+			{ID: 1, Name: "house-voice", Description: "How anything written here should read",
+				Tags: []string{"writing"}, UpdatedAt: "2026-08-19"},
+			{ID: 2, Name: "refuse-an-empty-diff", Description: "A review of nothing is not a review",
+				Tags: []string{"review"}, UpdatedAt: "2026-08-18"},
+		},
+		Tags: []Tag{{Name: "review"}, {Name: "writing", Selected: true}},
 	}
 }
 

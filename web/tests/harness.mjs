@@ -27,12 +27,25 @@ export const PASSWORD = 'correct-horse-battery-staple-42'
  * binary with the interface embedded in it — and a test that passed against
  * `vite dev` would not have exercised the thing an operator installs.
  */
+let built = ''
+
 export function build() {
+  // Once per process, not once per describe block.
+  //
+  // Every block calls this in its own before hook, which read as four builds
+  // of the same commit. Go's cache made that cheap while it was warm and
+  // expensive the moment it was not — and a cold first run looked exactly like
+  // a hung suite, because the default reporter prints nothing until the
+  // process ends. Two things that look identical from outside and are not.
+  if (built) {
+    return built
+  }
   execFileSync('go', ['build', '-o', join(ROOT, 'bin', 'cogitorium-test'), './cmd/cogitorium'], {
     cwd: ROOT,
     stdio: 'inherit',
   })
-  return join(ROOT, 'bin', 'cogitorium-test')
+  built = join(ROOT, 'bin', 'cogitorium-test')
+  return built
 }
 
 /** start runs a server on its own port against its own empty data directory,

@@ -63,6 +63,13 @@ const (
 // path exists, everything under /p/ needs a token.
 const pluginPagePrefix = "/p/"
 
+// hostAssetPrefix is where this server's own vendored assets live.
+//
+// Deliberately not /assets/: that is the application's build output, and a
+// handler registered there shadows every script and stylesheet the interface
+// needs.
+const hostAssetPrefix = "/cog/"
+
 // openToAnyone reports whether a path is reachable without a credential.
 //
 // The authentication middleware and the published description both call this,
@@ -113,6 +120,18 @@ func (s *Server) route(mux *http.ServeMux, pattern string, h http.HandlerFunc) {
 		return
 	}
 	s.routes = append(s.routes, Route{Method: method, Path: path, Auth: authFor(path)})
+	mux.HandleFunc(pattern, h)
+}
+
+// page registers a screen this server renders, and keeps it out of the API
+// inventory.
+//
+// Its own verb rather than a prefix rule, because "is this a page" is a
+// decision somebody makes when they write the route, and a rule inferring it
+// from the path would be wrong the first time a page lives somewhere
+// unexpected. The inventory describes a JSON API; putting a document in it
+// would tell every generated client to expect one.
+func (s *Server) page(mux *http.ServeMux, pattern string, h http.HandlerFunc) {
 	mux.HandleFunc(pattern, h)
 }
 

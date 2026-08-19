@@ -95,7 +95,7 @@ func TestTheDocumentRendersTheRail(t *testing.T) {
 	// And the hypermedia layer is served from this binary rather than fetched:
 	// the interface reaches nothing on the network, and a library would read
 	// the same in a packet capture as anything else.
-	for _, want := range []string{"/assets/htmx.min.js", "/assets/htmx-sse.js"} {
+	for _, want := range []string{"/cog/htmx.min.js", "/cog/htmx-sse.js"} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("the document does not load %q:\n%s", want, doc)
 		}
