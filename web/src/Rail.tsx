@@ -39,6 +39,15 @@ const I = {
       <rect x="14" y="14" width="7" height="7" rx="2" />
     </svg>
   ),
+  plugins: (
+    /* A block seated into a socket: the two tabs are what makes it read as
+       something that plugs in rather than as another panel. */
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <rect x="7" y="9.5" width="13" height="11" rx="2.5" />
+      <path d="M10.5 9.5V6a2.5 2.5 0 0 1 5 0v3.5" />
+      <path d="M7 13.5H3.5M7 16.5H3.5" />
+    </svg>
+  ),
   map: (
     <svg viewBox="0 0 24 24" aria-hidden>
       <path d="M9 4 3 6.5v13L9 17l6 3 6-2.5v-13L15 7 9 4Z" />
@@ -319,6 +328,21 @@ export default function Rail({
             answered for yet — something to ask. */}
         <UpdateNotice me={user} />
         <ThemeMenu />
+        {/* Directly above the account, because it is about this install
+            rather than about the work: the same half of the column the
+            appearance bead and the update notice already sit in. */}
+        {user.role === "admin" && (
+          <button
+            data-own
+            className={`rail-btn ${loc.pathname === "/plugins" ? "on" : ""}`}
+            onMouseEnter={hover("Plugins")}
+            onMouseLeave={unhover}
+            onClick={() => nav("/plugins")}
+          >
+            {I.plugins}
+            <span className="sr-only">Plugins</span>
+          </button>
+        )}
         <button
           data-own
           className={`rail-btn ${menu === "account" ? "on" : ""}`}
@@ -366,7 +390,6 @@ export default function Rail({
           <Link to="/models">Models</Link>
           {user.role === "admin" && <Link to="/people">People</Link>}
           {user.role === "admin" && <Link to="/context">Context</Link>}
-          {user.role === "admin" && <Link to="/plugins">Plugins</Link>}
           <hr />
           <a href={DOCS_URL} target="_blank" rel="noreferrer">
             Documentation
