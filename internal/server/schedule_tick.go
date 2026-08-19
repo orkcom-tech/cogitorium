@@ -109,24 +109,6 @@ func (s *Server) sampleQueue(ctx context.Context) {
 // visible; the other order loses the schedule itself into a loop of firing the
 // same instant forever.
 func (s *Server) fire(ctx context.Context, sc schedule.Schedule) {
-	// A schedule whose target was deleted cannot fire, and it will not start
-	// being able to on its own. Left enabled it fires and fails on every tick
-	// forever — a clock set to a minute filled the record with a failure a
-	// minute, none of which told anybody anything the first one had not.
-	//
-	// So it is switched off, not removed. The row is what lets somebody point
-	// it at another agent and switch it back on; cascading it away with its
-	// target is how a nightly job disappears and nobody learns why until the
-	// thing it was doing is noticed missing.
-	if sc.Broken() {
-		slog.Warn("a schedule's target was deleted; switching it off until it is repointed",
-			"schedule", sc.ID, "name", sc.Name, "target", sc.TargetKind)
-		if _, err := s.schedules.SetEnabled(context.WithoutCancel(ctx), sc.ID, false); err != nil {
-			slog.Error("could not switch off a broken schedule", "schedule", sc.ID, "err", err)
-		}
-		return
-	}
-
 	spec, err := schedule.Parse(sc.Spec)
 	if err != nil {
 		// Stored specs are validated when written, so this means the row was
@@ -197,6 +179,21 @@ func (s *Server) fire(ctx context.Context, sc schedule.Schedule) {
 		if _, aErr := s.schedules.Advance(context.WithoutCancel(ctx),
 			schedule.Schedule{ID: sc.ID, NextAt: next}, next, schedule.OutcomeFailed, sc.LastWorkID); aErr != nil {
 			slog.Error("could not record a failed firing", "schedule", sc.ID, "err", aErr)
+		}
+		// A target that was deleted will not come back on its own, so this
+		// failure is not one of many — it is the same failure forever. Record
+		// it once, which is the evidence, then switch the clock off.
+		//
+		// Off rather than removed: the row is what lets somebody point it at
+		// another agent and start it again. Left running, a clock set to a
+		// minute wrote a failure a minute, none of which said anything the
+		// first one had not.
+		if sc.Broken() {
+			slog.Warn("a schedule's target was deleted; switching it off until it is repointed",
+				"schedule", sc.ID, "name", sc.Name, "target", sc.TargetKind)
+			if _, dErr := s.schedules.SetEnabled(context.WithoutCancel(ctx), sc.ID, false); dErr != nil {
+				slog.Error("could not switch off a broken schedule", "schedule", sc.ID, "err", dErr)
+			}
 		}
 		// The one this whole metric exists for: a nightly job that has been
 		// failing every night for a week, which nothing could tell anybody.
