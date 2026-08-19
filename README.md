@@ -4,8 +4,14 @@
 
 # Cogitorium
 
-**A workbench for running teams of models — on your machine, in your cluster, or
-between departments.**
+**Our magnum opus of running agents and the workflows they live in** — a harness
+and platform ops in the same binary, built on graph engineering and context
+engineering.
+
+Memory and context, managed, indexed and versioned. A dependency graph in which
+every edge is a permission the runtime checks on the call. And a thing that bends
+at both levels: the toolkit inside it — gears, instructions, MCP servers — and
+the platform around them, through plugins.
 
 One Go binary, your own models, no telemetry, ever.
 
@@ -17,6 +23,13 @@ One Go binary, your own models, no telemetry, ever.
 </div>
 
 ---
+
+It is a sandbox you are meant to rebuild from the inside. Run it on a laptop as
+the thing that remembers between sessions, or behind an API as a department's
+infrastructure — the same product either way, with nothing bolted on for the
+larger use. Shape the workflows however you want them. And when the platform
+itself is what is in the way, change that too: a plugin can add a screen,
+override one that shipped, or give the interface something it never had.
 
 You describe a team: who thinks, who checks, who is allowed to run code, and
 what each of them may reach. Cogitorium runs it and shows you what happened —
@@ -122,6 +135,54 @@ spent it.
   can hand to another install, from the interface or the command line. Everything
   runs on your machine.
   [→](#no-telemetry)
+
+## How it compares
+
+The field is young enough that most comparisons are between things that are not
+really alternatives. These four are: an agent workspace you can host, an agent
+harness where everything is a plugin, and the self-hosted workflow builders
+people already run. Each row is a structural difference, not a feature tick.
+
+| | Cogitorium | [Cloudflare OS](https://github.com/cloudflare/cloudflare-os) | [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) | Dify · n8n · Flowise |
+|---|---|---|---|---|
+| **What you install** | one Go binary with the interface inside it | a pnpm workspace of Workers | an npm package, Node 22+ | containers, with Postgres and Redis beside them |
+| **Where it actually runs** | your laptop, your Docker, your cluster | Cloudflare Workers and Durable Objects; `workerd` locally | one Node process on your machine | your host, plus its datastores |
+| **Who may change the interface** | anyone — a plugin installs into a running server | whoever owns the deployment repository | anyone — the UI is itself a swappable plugin row | node and component authors, through a review you do not control |
+| **What isolates a third party's code** | tiered: WebAssembly today, container and native declared | Workers isolates; agent frames with outbound networking off | nothing — plugins mount in-process with full host rights | nothing to partial, depending on product and mode |
+| **Before an extension runs** | approval bound to the sha256 of the bytes on disk; a new build drops back to pending | review of the deployment repository | no manifest, no prompt, no signature | install and it runs |
+| **Code an agent wrote for itself** | will not execute until a person approves that exact version | gadgets run in sandboxed frames | registered by a plugin, runs unsandboxed | executes when saved |
+| **Outbound: an allowlist *and* a record** | per-host at approval, and a row per connection — allowed and refused alike | Gatekeepers mediate per resource and operation, and every resource an agent observes is recorded | neither; the docs put network "outside this vocabulary" | Dify: Squid ACL with a log. n8n: off unless switched on. Flowise: a denylist, empty, no log |
+| **Governance without paying** | accounts, teams, workspace sharing and per-host records, Apache-2.0, no licence key | Apache-2.0 | MIT | SSO, roles and audit behind a paid licence in five of six |
+| **Maturity** | v2.0.0; the plugin system is still on a branch | 8.6k stars, run daily inside Cloudflare | developer preview at `rc.7`, warning of breaking changes | years in production |
+
+### Where it loses
+
+A table with no losses in it is an advertisement, so:
+
+- **No SSO, and only one real role.** There is no SAML, OIDC or SCIM anywhere in
+  this codebase, and every access check is admin-or-not plus team membership.
+  The workflow builders ship all of it — behind a paid licence, but shipping. If
+  SSO is a requirement, Cogitorium does not meet it at any price today.
+- **The host allowlist is cooperative.** Whether a gear gets a network at all is
+  enforced by the container runtime, and that part is real. *Which hosts* it may
+  reach is enforced by proxy variables an obliging client honours — so a gear
+  that opens its own socket reaches the network and leaves no row. Modal, E2B and
+  Cloudflare enforce outside the process, where the code's cooperation does not
+  matter. This is stated in the source rather than hidden.
+- **A killed run does not restart itself.** Every turn and tool result is
+  journaled and replayed, and nothing already spent is paid twice — but
+  interrupted work is marked dead rather than requeued, on purpose, because
+  re-running something that may already have sent an email is a second execution
+  nobody asked for. If you want automatic resume, that is Temporal's job.
+- **A plugin does not reach as far as the marketing word "plugin" suggests.** It
+  adds a rail entry, a workspace panel and pages of its own, and its stylesheet
+  and script load on every screen. It cannot yet contribute a tool to an agent or
+  make an outbound request, and the product's own screens are not template
+  surfaces yet.
+- **Cloudflare OS is ahead on data flow.** Recording every resource an agent
+  observed, and deciding policy on that record, is a stronger question than the
+  one an egress allowlist answers. Cogitorium controls where an agent reaches,
+  not what it has already read.
 
 ## You can use it like…
 
