@@ -29,6 +29,16 @@ import (
 const DefaultBrowserImage = "mcr.microsoft.com/playwright:v1.56.0-noble"
 
 type Config struct {
+	// Plugins is per-plugin settings, keyed by plugin id. Read-only from a
+	// plugin's side: what a plugin wants to remember goes in its own storage,
+	// and a plugin writing its own configuration would be a plugin granting
+	// itself something.
+	//
+	// Untyped on purpose. The host has no idea what any given plugin's
+	// settings mean and should not pretend to — validating them here would
+	// mean every plugin's schema living in this repository.
+	Plugins map[string]map[string]any `yaml:"plugins"`
+
 	// Listen is the HTTP listen address, e.g. "127.0.0.1:8688".
 	Listen string `yaml:"listen"`
 	// DataDir holds the SQLite database and everything the server owns on disk.

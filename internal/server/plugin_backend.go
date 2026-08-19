@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -52,44 +53,6 @@ type backends struct {
 	tier map[string]plugin.Tier
 }
 
-// hostGateway answers a plugin asking the host for something.
-//
-// Every refusal is a value rather than a trap: a denied host or an ungranted
-// scope is an ordinary thing a plugin handles, and trapping would turn "you
-// may not reach that" into a crash with no message.
-type hostGateway struct {
-	grants map[string]plugin.Grants
-}
-
-func (g *hostGateway) Call(id string, req abi.HostRequest) abi.HostReply {
-	gr, known := g.grants[id]
-	if !known {
-		return abi.HostReply{Err: fmt.Sprintf("plugin %q has no grants recorded on this install", id)}
-	}
-	switch req.Call {
-	case abi.CallLog:
-		// Tagged with the plugin, so a line in the server's log is always
-		// attributable to whoever wrote it.
-		slog.Info("plugin", "plugin", id, "message", string(req.Input))
-		return abi.HostReply{}
-	case abi.CallHTTP:
-		var in struct {
-			URL string `json:"url"`
-		}
-		_ = json.Unmarshal(req.Input, &in)
-		host := hostOf(in.URL)
-		if err := gr.AllowHost(host); err != nil {
-			return abi.HostReply{Err: err.Error()}
-		}
-		// The grant check is the part that is wired. Carrying the request
-		// itself belongs with the gate that already substitutes credentials at
-		// the edge, and pretending to do it here would mean a second way out
-		// of this process with different rules.
-		return abi.HostReply{Err: "outbound requests are not carried yet on this tier"}
-	}
-	return abi.HostReply{Err: fmt.Sprintf("%q is not answered yet on this tier", req.Call)}
-}
-
 func hostOf(url string) string {
 	s := url
 	for _, prefix := range []string{"https://", "http://"} {
@@ -111,7 +74,8 @@ func hostOf(url string) string {
 // At boot rather than on the first request, so a module that will not load is
 // a line in the startup log rather than a page that fails the first time
 // somebody visits it.
-func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Installed, dataDir string, sb sandbox.Runner) *backends {
+func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Installed, dataDir string,
+	sb sandbox.Runner, db *sql.DB, cfg map[string]map[string]any) *backends {
 	b := &backends{tier: map[string]plugin.Tier{}, dirOf: map[string]string{}}
 
 	grants := map[string]plugin.Grants{}
@@ -158,8 +122,9 @@ func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Inst
 		}
 	}
 
+	gateway := newHostGateway(grants, db, rt, cfg)
 	if len(workerPlugins) > 0 || len(nativePlugins) > 0 {
-		b.startWorkers(ctx, workerPlugins, nativePlugins, native, dataDir, profile)
+		b.startWorkers(ctx, workerPlugins, nativePlugins, native, dataDir, profile, gateway)
 	}
 	if len(imagePlugins) > 0 {
 		b.images = images
@@ -177,7 +142,7 @@ func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Inst
 		return b
 	}
 
-	engine, err := wasmrt.New(ctx, &hostGateway{grants: grants}, wasmrt.DefaultLimits())
+	engine, err := wasmrt.New(ctx, gateway, wasmrt.DefaultLimits())
 	if err != nil {
 		slog.Error("the WebAssembly engine could not start; plugin backends are unavailable", "err", err)
 		return b
@@ -209,7 +174,7 @@ func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Inst
 // a worker's child process spawns on its first call, so a plugin that is
 // enabled and never visited costs a row in a map and no memory.
 func (b *backends) startWorkers(ctx context.Context, provisioned, nativePlugins []plugin.Installed,
-	native map[string]plugin.Native, dataDir string, profile channel.Profile) {
+	native map[string]plugin.Native, dataDir string, profile channel.Profile, host abi.Host) {
 	store := runtimes.NewStore(dataDir, plugin.RefDir, profile, runtimes.HTTPFetcher{}, true)
 	sup := worker.NewSupervisor()
 
@@ -236,7 +201,8 @@ func (b *backends) startWorkers(ctx context.Context, provisioned, nativePlugins 
 		}
 		sup.Register(worker.Spec{
 			Plugin: in.ID, Path: path, Dir: in.Dir,
-			Env: []string{"COGITORIUM_PLUGIN=" + in.ID},
+			Env:  []string{"COGITORIUM_PLUGIN=" + in.ID},
+			Host: host,
 		})
 		b.tier[in.ID] = plugin.TierNative
 		slog.Warn("plugin backend ready", "plugin", in.ID, "tier", "native",
@@ -275,7 +241,8 @@ func (b *backends) startWorkers(ctx context.Context, provisioned, nativePlugins 
 			// started with the server's own variables would hold its database
 			// path and whatever else the operator exported, none of which a
 			// plugin was granted.
-			Env: []string{"COGITORIUM_PLUGIN=" + in.ID},
+			Env:  []string{"COGITORIUM_PLUGIN=" + in.ID},
+			Host: host,
 		})
 		b.tier[in.ID] = plugin.TierProvisioned
 		slog.Info("plugin backend ready", "plugin", in.ID, "tier", "provisioned",

@@ -62,6 +62,10 @@ type Spec struct {
 	// reaches a plugin as a stand-in the gate substitutes at the edge, which
 	// is the same rule a gear already lives under.
 	Env []string
+	// Host answers cog.* calls this child makes mid-exchange. Nil means the
+	// child may not make any — which is a refusal it can read, not a silent
+	// hang.
+	Host abi.Host
 	// Start bounds the handshake. A worker that has not said hello by then is
 	// one that never will.
 	Start time.Duration
@@ -243,16 +247,54 @@ func (w *Worker) exchange(ctx context.Context, req abi.Request) (abi.Response, e
 	if err := w.writeFrame(b); err != nil {
 		return abi.Response{}, err
 	}
-	out, err := w.readFrame(ctx)
-	if err != nil {
-		return abi.Response{}, err
+
+	// A guest may ask the host for things before it answers, as many times as
+	// it needs, so this reads frames until one of them is the response.
+	//
+	// Bounded, because a guest that only ever asks is a guest this loop would
+	// serve forever. The ceiling is high enough that no honest plugin reaches
+	// it and low enough that a runaway one is stopped while somebody can still
+	// read the log.
+	for i := 0; ; i++ {
+		if i >= maxHostCalls {
+			return abi.Response{}, fmt.Errorf("it made %d host calls without answering", i)
+		}
+		out, err := w.readFrame(ctx)
+		if err != nil {
+			return abi.Response{}, err
+		}
+		var frame abi.Frame
+		if err := json.Unmarshal(out, &frame); err != nil {
+			return abi.Response{}, fmt.Errorf("that is not a frame: %w", err)
+		}
+		switch {
+		case frame.Response != nil:
+			return *frame.Response, nil
+		case frame.Host != nil:
+			if w.spec.Host == nil {
+				return abi.Response{}, fmt.Errorf("it called cog.%s and this worker has no host attached",
+					frame.Host.Call)
+			}
+			// A refusal is a value the guest receives and handles, never an
+			// error that ends the exchange: "you may not reach that" is an
+			// ordinary answer.
+			reply := w.spec.Host.Call(w.spec.Plugin, *frame.Host)
+			rb, err := json.Marshal(reply)
+			if err != nil {
+				return abi.Response{}, err
+			}
+			if err := w.writeFrame(rb); err != nil {
+				return abi.Response{}, err
+			}
+		default:
+			return abi.Response{}, fmt.Errorf("it sent a frame that is neither a host call nor a response")
+		}
 	}
-	var resp abi.Response
-	if err := json.Unmarshal(out, &resp); err != nil {
-		return abi.Response{}, fmt.Errorf("that is not a response envelope: %w", err)
-	}
-	return resp, nil
 }
+
+// maxHostCalls bounds one exchange. Not a budget an author should ever think
+// about — it is a stop for a loop that has gone wrong.
+const maxHostCalls = 10_000
 
 func (w *Worker) writeFrame(b []byte) error {
 	if len(b) > maxFrame {

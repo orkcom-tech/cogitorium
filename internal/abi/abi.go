@@ -266,6 +266,25 @@ type HostReply struct {
 	Err    string          `json:"error,omitempty"`
 }
 
+// Frame is what a guest writes on a tier that talks down a pipe.
+//
+// A guest may answer the request, or it may ask the host for something first
+// and answer afterwards — as many times as it needs. Both travel as frames on
+// the same channel, so exactly one of these fields is set and the reader
+// switches on which.
+//
+// One channel rather than two, because a second pipe would need its own
+// framing, its own deadline and its own failure mode, all to carry a
+// conversation that is strictly sequential anyway: a guest waiting on a host
+// reply is not doing anything else.
+type Frame struct {
+	// Host is the guest asking. The host answers with a HostReply frame and
+	// the guest may then ask again.
+	Host *HostRequest `json:"host,omitempty"`
+	// Response ends the exchange.
+	Response *Response `json:"response,omitempty"`
+}
+
 // Host is what a runtime implements. Every tier's implementation differs;
 // what a plugin sees does not.
 //
