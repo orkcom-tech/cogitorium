@@ -1,0 +1,13 @@
+schema: 1
+id: rustsample
+name: Rust Sample
+version: 1.0.0
+license: Apache-2.0
+needs: rust
+host:
+  contract: 1
+pages:
+  - path: /p/rustsample/
+    template: rustsample.page.home
+    title: Rust Sample
+    provider: home

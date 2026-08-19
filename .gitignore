@@ -30,3 +30,10 @@ web/tsconfig.tsbuildinfo
 # anything in dist before it builds.
 /build/
 internal/wasmrt/testdata/guest.wasm
+
+# Built plugin artifacts. The source is in the sample; the module is whatever
+# your toolchain produced from it, and a 1 MB blob per commit is not a diff
+# anybody reads.
+examples/plugins/*/plugin.wasm
+examples/plugins/*/target/
+/*.zip

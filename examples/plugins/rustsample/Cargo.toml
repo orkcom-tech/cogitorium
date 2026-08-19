@@ -1,0 +1,19 @@
+[package]
+name = "rustsample"
+version = "1.0.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[lib]
+# A cdylib, because the host loads this and calls in. A binary would run once
+# and end, and a module that has ended has no exports left to call.
+crate-type = ["cdylib"]
+
+[dependencies]
+cogitorium = { path = "../../../sdk/rust" }
+serde_json = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
