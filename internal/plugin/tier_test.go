@@ -254,3 +254,37 @@ func TestOnlyBundleAndWasmClaimToBeUniversal(t *testing.T) {
 		}
 	}
 }
+
+// One fixed entry file per technology.
+//
+// Not a manifest field, for the same reason the wasm tier looks for
+// plugin.wasm: a configurable entry point is a thing every author decides,
+// every reviewer checks and every error message quotes. This pins the
+// convention so it cannot drift from what the backend starter looks for — a
+// drift that would present as "your plugin ships no entry file" to an author
+// whose file is right there.
+func TestEveryTechnologyThatRunsAFileNamesTheSameOne(t *testing.T) {
+	for _, c := range []struct{ needs, want string }{
+		{"js", "plugin.wasm"},
+		{"javascript", "plugin.wasm"}, // superseded name, same answer
+		{"rust", "plugin.wasm"},
+		{"go", "plugin.wasm"},
+		{"python", "plugin.py"},
+		{"node", "plugin.mjs"},
+		{"bun", "plugin.mjs"},
+		{"deno", "plugin.mjs"},
+	} {
+		if got := EntryFile(c.needs); got != c.want {
+			t.Errorf("needs: %s looks for %q, want %q", c.needs, got, c.want)
+		}
+	}
+
+	// Native ships one binary per {os, arch}, named in the manifest, so no
+	// single name could cover it — and Tier 0 has no backend at all.
+	if got := EntryFile("native"); got != "" {
+		t.Errorf("native claimed a fixed entry file %q", got)
+	}
+	if got := EntryFile("nonsense"); got != "" {
+		t.Errorf("an unknown technology claimed an entry file %q", got)
+	}
+}

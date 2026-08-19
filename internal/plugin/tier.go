@@ -81,6 +81,43 @@ var technologies = map[string]technology{
 	"native": {tier: TierNative},
 }
 
+// EntryFile is the file a plugin ships for its technology, by convention.
+//
+// One fixed name per technology rather than a manifest field, for the same
+// reason the wasm tier looks for plugin.wasm: a configurable entry point is a
+// thing every author has to decide, every reviewer has to check, and every
+// error message has to quote. The convention costs an author nothing and means
+// "where does it start" is never a question.
+//
+// Empty for a technology whose tier does not run a file this way — Tier 0 has
+// no backend at all, and native ships a binary named in the manifest because
+// there is one per {os, arch} and no single name could cover them.
+func EntryFile(needs string) string {
+	t, ok := technologies[strings.ToLower(strings.TrimSpace(needs))]
+	if !ok {
+		return ""
+	}
+	if t.supersededBy != "" {
+		t = technologies[t.supersededBy]
+	}
+	switch t.tier {
+	case TierWasm:
+		return "plugin.wasm"
+	case TierProvisioned:
+		switch strings.ToLower(strings.TrimSpace(needs)) {
+		case "python":
+			return "plugin.py"
+		default:
+			// node, bun and deno all read the same file. A module, not a
+			// script: every one of them defaults to ESM for .mjs, and picking
+			// the extension that means one thing everywhere avoids the
+			// package.json "type" argument entirely.
+			return "plugin.mjs"
+		}
+	}
+	return ""
+}
+
 // Technologies lists the vocabulary for an error that tells an author what
 // they could have written.
 func Technologies() []string {

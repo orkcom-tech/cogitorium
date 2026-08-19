@@ -12,7 +12,9 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/abi"
 	"github.com/orkcom-tech/cogitorium/internal/channel"
 	"github.com/orkcom-tech/cogitorium/internal/plugin"
+	"github.com/orkcom-tech/cogitorium/internal/runtimes"
 	"github.com/orkcom-tech/cogitorium/internal/wasmrt"
+	"github.com/orkcom-tech/cogitorium/internal/worker"
 )
 
 // Where a plugin's backend gets called from.
@@ -30,9 +32,15 @@ import (
 type backends struct {
 	mu   sync.Mutex
 	wasm *wasmrt.Runtime
-	// have records which plugins have a compiled module, so a page for a
-	// plugin without one renders its template alone rather than failing.
-	have map[string]bool
+	// workers is the provisioned tier: an interpreter this install fetched,
+	// supervised as a child process speaking the same ABI down a pipe. The
+	// caller never learns which of the two answered, which is the whole point
+	// of the tier model — an author declares a technology and the lane is not
+	// their problem.
+	workers *worker.Supervisor
+	// tier records which lane each plugin landed in, so a page for a plugin
+	// with no backend at all renders its template alone rather than failing.
+	tier map[string]plugin.Tier
 }
 
 // hostGateway answers a plugin asking the host for something.
@@ -95,15 +103,22 @@ func hostOf(url string) string {
 // a line in the startup log rather than a page that fails the first time
 // somebody visits it.
 func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Installed, dataDir string) *backends {
-	b := &backends{have: map[string]bool{}}
+	b := &backends{tier: map[string]plugin.Tier{}}
 
 	grants := map[string]plugin.Grants{}
-	var wasmPlugins []plugin.Installed
-	caps := plugin.Capabilities{Profile: channel.Detect(dataDir)}
+	var wasmPlugins, workerPlugins []plugin.Installed
+	profile := channel.Detect(dataDir)
+	caps := plugin.Capabilities{Profile: profile}
 
 	for _, in := range enabled {
 		res := plugin.Resolve(in.Manifest, caps)
-		if res.Tier != plugin.TierWasm || !res.Available {
+		if !res.Available {
+			// Already explained by the resolver, and already on the plugins
+			// screen as a refusal naming the runtime. Repeating it here would
+			// be a second voice saying the same thing differently.
+			continue
+		}
+		if res.Tier != plugin.TierWasm && res.Tier != plugin.TierProvisioned {
 			continue
 		}
 		g, err := plugin.ResolveGrants(in.Manifest)
@@ -113,7 +128,16 @@ func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Inst
 			continue
 		}
 		grants[in.ID] = g
-		wasmPlugins = append(wasmPlugins, in)
+		switch res.Tier {
+		case plugin.TierWasm:
+			wasmPlugins = append(wasmPlugins, in)
+		case plugin.TierProvisioned:
+			workerPlugins = append(workerPlugins, in)
+		}
+	}
+
+	if len(workerPlugins) > 0 {
+		b.startWorkers(ctx, workerPlugins, dataDir, profile)
 	}
 	if len(wasmPlugins) == 0 {
 		return b
@@ -138,10 +162,57 @@ func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Inst
 			slog.Error("a plugin's module would not load", "plugin", in.ID, "err", err)
 			continue
 		}
-		b.have[in.ID] = true
+		b.tier[in.ID] = plugin.TierWasm
 		slog.Info("plugin backend ready", "plugin", in.ID, "tier", "wasm")
 	}
 	return b
+}
+
+// startWorkers brings up the provisioned tier.
+//
+// The interpreter is located, and fetched only if it must be — one runtime per
+// version, shared by every plugin that asked for it. Nothing is started here:
+// a worker's child process spawns on its first call, so a plugin that is
+// enabled and never visited costs a row in a map and no memory.
+func (b *backends) startWorkers(ctx context.Context, plugins []plugin.Installed, dataDir string, profile channel.Profile) {
+	store := runtimes.NewStore(dataDir, plugin.RefDir, profile, runtimes.HTTPFetcher{}, true)
+	sup := worker.NewSupervisor()
+
+	for _, in := range plugins {
+		entry := plugin.EntryFile(in.Manifest.Needs)
+		path := filepath.Join(in.Dir, entry)
+		if _, err := os.Stat(path); err != nil {
+			slog.Error("a plugin declares a technology whose entry file it does not ship",
+				"plugin", in.ID, "needs", in.Manifest.Needs, "expected", entry)
+			continue
+		}
+
+		// Any version of the technology. A plugin that needs a particular one
+		// is a thing the manifest does not yet express, and inventing a
+		// constraint here would be a second place versions are decided.
+		res, err := store.Ensure(ctx, in.Manifest.Needs, func(string) bool { return true })
+		if err != nil {
+			slog.Error("a plugin's runtime could not be provided; its backend will not run",
+				"plugin", in.ID, "needs", in.Manifest.Needs, "err", err)
+			continue
+		}
+
+		sup.Register(worker.Spec{
+			Plugin: in.ID,
+			Path:   res.Exe,
+			Args:   []string{path},
+			Dir:    in.Dir,
+			// Nothing of this server's environment is inherited. A child that
+			// started with the server's own variables would hold its database
+			// path and whatever else the operator exported, none of which a
+			// plugin was granted.
+			Env: []string{"COGITORIUM_PLUGIN=" + in.ID},
+		})
+		b.tier[in.ID] = plugin.TierProvisioned
+		slog.Info("plugin backend ready", "plugin", in.ID, "tier", "provisioned",
+			"runtime", in.Manifest.Needs+" "+res.Row.Version, "from_image", res.FromSeed)
+	}
+	b.workers = sup
 }
 
 // provide asks a plugin for the model behind one of its pages.
@@ -150,14 +221,29 @@ func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Inst
 // ordinary case: a template-only plugin renders its own markup against the
 // standard page model and needs nothing from here.
 func (b *backends) provide(ctx context.Context, id, export string, req abi.Request) (any, bool, error) {
-	if b == nil || b.wasm == nil || !b.have[id] {
+	if b == nil {
 		return nil, false, nil
 	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	tier, has := b.tier[id]
+	if !has {
+		return nil, false, nil
+	}
 
 	req.Export, req.Role = export, abi.RoleProvider
-	resp, err := b.wasm.Call(ctx, id, req)
+
+	var resp abi.Response
+	var err error
+	switch tier {
+	case plugin.TierProvisioned:
+		// Not under b.mu: a worker serialises its own calls, and holding a
+		// lock across every tier would make one plugin's slow interpreter
+		// everybody's problem.
+		resp, err = b.workers.Call(ctx, id, req)
+	default:
+		b.mu.Lock()
+		resp, err = b.wasm.Call(ctx, id, req)
+		b.mu.Unlock()
+	}
 	if err != nil {
 		return nil, true, err
 	}
@@ -175,9 +261,18 @@ func (b *backends) provide(ctx context.Context, id, export string, req abi.Reque
 	return model, true, nil
 }
 
-// close releases the engine.
+// close releases the engine and stops every child.
+//
+// A server that exits leaving interpreters running has handed a machine's
+// memory to nobody.
 func (b *backends) close(ctx context.Context) {
-	if b != nil && b.wasm != nil {
+	if b == nil {
+		return
+	}
+	if b.workers != nil {
+		b.workers.Close()
+	}
+	if b.wasm != nil {
 		_ = b.wasm.Close(ctx)
 	}
 }
