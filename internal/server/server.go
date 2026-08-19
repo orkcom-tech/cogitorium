@@ -282,6 +282,13 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "GET /health", s.handleHealth)
 
 	s.route(mux, "GET /api/v1/plugins", s.handleListPlugins)
+	s.route(mux, "POST /api/v1/plugins", s.handleUploadPlugin)
+	s.routeIn(mux, "PUT /api/v1/plugins/order", s.handleOrderPlugins, struct {
+		Order []string `json:"order"`
+	}{})
+	s.route(mux, "POST /api/v1/plugins/{id}/enable", s.handleEnablePlugin)
+	s.route(mux, "POST /api/v1/plugins/{id}/disable", s.handleDisablePlugin)
+	s.route(mux, "DELETE /api/v1/plugins/{id}", s.handleRemovePlugin)
 	s.route(mux, "GET /api/v1/providers", s.handleListProviders)
 	s.route(mux, "POST /api/v1/providers", s.handleCreateProvider)
 	s.route(mux, "PATCH /api/v1/providers/{id}", s.handleUpdateProvider)

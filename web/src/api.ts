@@ -19,6 +19,18 @@ export type TestResult = { ok: boolean; models?: string[]; error?: string }
 
 export type PluginPage = { path: string; title?: string; auth: string }
 
+/** What an action changed.
+ *
+ * `restart_required` is computed, not assumed: installing arrives switched off
+ * and needs nothing, and enabling something already enabled changes nothing
+ * either. Saying it every time would teach an operator to ignore it.
+ */
+export type PluginAction = {
+  restart_required: boolean
+  plugin?: Plugin
+  message: string
+}
+
 /** One plugin as the library screen sees it.
  *
  * Everything under `overrides`/`adds`/`extends`/`inert` is computed by the
@@ -32,6 +44,10 @@ export type Plugin = {
   author?: string
   docs?: string
   source?: string
+  /** False only when the directory could not be read as a plugin at all — a
+   *  different thing from a plugin whose templates failed, and conflating the
+   *  two costs the operator the ability to switch one back on. */
+  readable: boolean
   enabled: boolean
   /** Position in the enable list, 1-based. Position is precedence. */
   order: number
@@ -185,6 +201,10 @@ export type UpdateReport = {
 }
 
 export type EgressStatus = {
+  /** False only when the directory could not be read as a plugin at all — a
+   *  different thing from a plugin whose templates failed, and conflating the
+   *  two costs the operator the ability to switch one back on. */
+  readable: boolean
   enabled: boolean
   reason: string
   destination: string
@@ -413,6 +433,10 @@ export type Schedule = {
   spec: string
   tz: string
   payload: string
+  /** False only when the directory could not be read as a plugin at all — a
+   *  different thing from a plugin whose templates failed, and conflating the
+   *  two costs the operator the ability to switch one back on. */
+  readable: boolean
   enabled: boolean
   on_miss: 'skip' | 'run'
   next_at: string
@@ -648,6 +672,26 @@ export type MCPCatalogEntry = {
 export const api = {
   plugins: {
     list: () => req<Plugin[]>('/api/v1/plugins'),
+    /** Upload a bundle from the operator's own machine. The path somebody
+     *  developing a plugin actually uses: build a zip, drop it, reload. */
+    upload: (file: File) =>
+      fetch(session.url('/api/v1/plugins'), {
+        method: 'POST',
+        headers: session.headers(),
+        body: form(file),
+      }).then(async (r) => {
+        if (r.status === 401) throw new Unauthorized('sign in required')
+        const body = await r.json().catch(() => null)
+        if (!r.ok) throw new Error(body?.error?.message ?? `${r.status} ${r.statusText}`)
+        return body as PluginAction
+      }),
+    enable: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}/enable`, { method: 'POST' }),
+    disable: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}/disable`, { method: 'POST' }),
+    /** Position is precedence: a plugin later in this list renders instead of
+     *  one earlier when both define the same template name. */
+    order: (order: string[]) =>
+      req<PluginAction>('/api/v1/plugins/order', { method: 'PUT', body: JSON.stringify({ order }) }),
+    remove: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}`, { method: 'DELETE' }),
   },
   providers: {
     list: () => req<Provider[]>('/api/v1/providers'),

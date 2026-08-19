@@ -3603,3 +3603,49 @@ button.big {
 .badge.is-danger {
   color: var(--danger, #b3261e);
 }
+
+.banner {
+  border: 1px solid var(--danger, #b3261e);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  margin: 0 0 0.75rem;
+}
+.plugin-filters {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin: 0.75rem 0;
+}
+.plugin-filters input[type='search'] {
+  flex: 1;
+}
+.plugin-filters label {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  white-space: nowrap;
+}
+.plugin-drop {
+  border: 1px dashed currentColor;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.plugin-drop.is-over {
+  border-style: solid;
+  border-color: var(--ok, #2e7d32);
+}
+.plugin-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+.plugin-actions .danger {
+  margin-left: auto;
+}

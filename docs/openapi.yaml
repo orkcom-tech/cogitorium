@@ -824,6 +824,67 @@ paths:
       responses:
         default:
           description: see the reference
+    post:
+      summary: "Create plugins"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/plugins/order":
+    put:
+      summary: "Replace plugins/order"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                "order":
+                  type: array
+                  items:
+                    type: string
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/plugins/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      summary: "Delete plugins/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/plugins/{id}/disable":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create plugins/{id}/disable"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/plugins/{id}/enable":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create plugins/{id}/enable"
+      responses:
+        default:
+          description: see the reference
   "/api/v1/providers":
     get:
       summary: "Read providers"

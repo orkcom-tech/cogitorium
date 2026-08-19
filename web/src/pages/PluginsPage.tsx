@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type Plugin } from '../api'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { api, type Plugin, type PluginAction } from '../api'
 
 /** The library.
  *
@@ -7,16 +7,27 @@ import { api, type Plugin } from '../api'
  * on this install draws: enabled and live are different questions. A plugin
  * can be switched on and still not be rendering, because its templates could
  * not run against this version — and the gap between those two states is the
- * reason somebody opens this page at all. So the state column never says
- * "enabled" on its own; it says which of the two it means.
+ * reason somebody opens this page. So the state badge never says "enabled" on
+ * its own; it says which of the two it means.
  *
- * Everything under the name — what it overrides, what it adds — comes from the
- * server having composed the templates, not from the manifest. A plugin cannot
- * look better here by claiming less.
+ * Everything under the name comes from the server having composed the
+ * templates, not from the manifest. A plugin cannot look better here by
+ * claiming less.
  */
+
+type Sort = 'state' | 'name' | 'order'
+
 export default function PluginsPage() {
   const [plugins, setPlugins] = useState<Plugin[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  /** Sticky once true. A restart is owed until it happens, and an operator who
+   *  enables three plugins should not watch the reminder disappear because the
+   *  last of the three happened to change nothing. */
+  const [restartOwed, setRestartOwed] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [sort, setSort] = useState<Sort>('state')
   const reloadSeq = useRef(0)
 
   const reload = useCallback(() => {
@@ -35,27 +46,224 @@ export default function PluginsPage() {
 
   useEffect(reload, [reload])
 
+  const act = useCallback(
+    (id: string, run: () => Promise<PluginAction>) => {
+      setBusy(id)
+      run()
+        .then((res) => {
+          setNotice(res.message)
+          setError(null)
+          if (res.restart_required) setRestartOwed(true)
+          reload()
+        })
+        .catch((e: Error) => setError(e.message))
+        .finally(() => setBusy(null))
+    },
+    [reload],
+  )
+
+  const shown = useMemo(() => filterAndSort(plugins, query, sort), [plugins, query, sort])
+
   return (
     <div className="page">
       <h2>Plugins</h2>
+
+      {restartOwed && (
+        <p className="banner">
+          Restart Cogitorium to apply your changes — what is running has not changed yet.
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
+      {notice && !error && <p className="hint">{notice}</p>}
+
+      <Upload
+        onDone={(res) => {
+          setNotice(res.message)
+          setError(null)
+          if (res.restart_required) setRestartOwed(true)
+          reload()
+        }}
+        onError={setError}
+      />
+
+      {plugins.length > 1 && (
+        <div className="plugin-filters">
+          <input
+            type="search"
+            placeholder="Search by name, id, or a template it overrides"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search plugins"
+          />
+          <label>
+            Sort
+            <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+              {/* State first by default: the reason to open this page is
+                  usually that something is wrong, so what is wrong sorts to
+                  the top rather than being alphabetically buried. */}
+              <option value="state">Needs attention first</option>
+              <option value="order">Layer order</option>
+              <option value="name">Name</option>
+            </select>
+          </label>
+        </div>
+      )}
 
       {plugins.length === 0 && !error && (
         <p className="hint">
           Nothing installed. A plugin is a folder with a <code>plugin.yaml</code> and a{' '}
-          <code>templates/</code> directory, installed with{' '}
+          <code>templates/</code> directory — drop its zip above, or run{' '}
           <code>cogitorium plugins install &lt;bundle.zip&gt;</code>.
         </p>
       )}
 
-      {plugins.map((p) => (
-        <PluginCard key={p.id} plugin={p} />
+      {plugins.length > 0 && shown.length === 0 && (
+        <p className="hint">Nothing matches “{query}”.</p>
+      )}
+
+      {shown.map((p) => (
+        <PluginCard
+          key={p.id}
+          plugin={p}
+          busy={busy === p.id}
+          onEnable={() => act(p.id, () => api.plugins.enable(p.id))}
+          onDisable={() => act(p.id, () => api.plugins.disable(p.id))}
+          onRemove={() => act(p.id, () => api.plugins.remove(p.id))}
+          onMove={(dir) => act(p.id, () => api.plugins.order(moved(plugins, p.id, dir)))}
+        />
       ))}
     </div>
   )
 }
 
-function PluginCard({ plugin: p }: { plugin: Plugin }) {
+/** Search covers what a plugin DOES, not only what it is called.
+ *
+ * "who overrode my gear row" is the question somebody actually arrives with,
+ * and a name-only search cannot answer it. */
+function filterAndSort(plugins: Plugin[], query: string, sort: Sort): Plugin[] {
+  const q = query.trim().toLowerCase()
+  const matched = q
+    ? plugins.filter((p) =>
+        [
+          p.id,
+          p.name,
+          ...(p.overrides ?? []),
+          ...(p.adds ?? []),
+          ...(p.extends ?? []),
+          ...(p.pages ?? []).map((pg) => pg.path),
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(q),
+      )
+    : plugins.slice()
+
+  return matched.sort((a, b) => {
+    if (sort === 'name') return (a.name || a.id).localeCompare(b.name || b.id)
+    if (sort === 'order') {
+      // Disabled plugins have no position, so they follow the ordered ones
+      // rather than crowding the front with zeroes.
+      const ao = a.order || Number.MAX_SAFE_INTEGER
+      const bo = b.order || Number.MAX_SAFE_INTEGER
+      return ao - bo || (a.name || a.id).localeCompare(b.name || b.id)
+    }
+    return attention(a) - attention(b) || (a.name || a.id).localeCompare(b.name || b.id)
+  })
+}
+
+/** Lower sorts first. Broken and on-but-not-loading are what somebody came for. */
+function attention(p: Plugin): number {
+  if (p.problem) return 0
+  if (!p.available) return 1
+  if (p.enabled && !p.live) return 0
+  if ((p.inert?.length ?? 0) > 0) return 2
+  if (p.enabled) return 3
+  return 4
+}
+
+/** moved returns the whole enable list with one plugin shifted by a place.
+ *  The server takes the list rather than a delta, so precedence is never
+ *  half-applied. */
+function moved(plugins: Plugin[], id: string, dir: -1 | 1): string[] {
+  const order = plugins
+    .filter((p) => p.enabled)
+    .sort((a, b) => a.order - b.order)
+    .map((p) => p.id)
+  const i = order.indexOf(id)
+  const j = i + dir
+  if (i < 0 || j < 0 || j >= order.length) return order
+  const out = order.slice()
+  ;[out[i], out[j]] = [out[j], out[i]]
+  return out
+}
+
+function Upload({
+  onDone,
+  onError,
+}: {
+  onDone: (res: PluginAction) => void
+  onError: (msg: string) => void
+}) {
+  const [over, setOver] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const input = useRef<HTMLInputElement>(null)
+
+  const send = (file: File | undefined) => {
+    if (!file) return
+    setBusy(true)
+    api.plugins
+      .upload(file)
+      .then(onDone)
+      .catch((e: Error) => onError(e.message))
+      .finally(() => {
+        setBusy(false)
+        if (input.current) input.current.value = ''
+      })
+  }
+
+  return (
+    <div
+      className={`plugin-drop${over ? ' is-over' : ''}`}
+      onDragOver={(e) => {
+        e.preventDefault()
+        setOver(true)
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setOver(false)
+        send(e.dataTransfer.files[0])
+      }}
+    >
+      <input
+        ref={input}
+        type="file"
+        accept=".zip,application/zip"
+        onChange={(e) => send(e.target.files?.[0])}
+        disabled={busy}
+      />
+      <span className="hint">
+        {busy ? 'Installing…' : 'Drop a plugin bundle here, or choose one. It arrives switched off.'}
+      </span>
+    </div>
+  )
+}
+
+function PluginCard({
+  plugin: p,
+  busy,
+  onEnable,
+  onDisable,
+  onRemove,
+  onMove,
+}: {
+  plugin: Plugin
+  busy: boolean
+  onEnable: () => void
+  onDisable: () => void
+  onRemove: () => void
+  onMove: (dir: -1 | 1) => void
+}) {
   return (
     <section className="card">
       <header className="plugin-head">
@@ -65,14 +273,17 @@ function PluginCard({ plugin: p }: { plugin: Plugin }) {
         <State plugin={p} />
       </header>
 
-      {p.problem && <p className="error">{p.problem}</p>}
-
-      {/* An unavailable tier is a fact about this install, not about the
-          plugin, so it is stated where an operator is deciding what to do
-          rather than left in a log they would have to go and find. */}
+      {/* When it is off, this is history rather than a current fault — and it
+          is exactly what somebody needs to read before switching it back on. */}
+      {p.problem && (
+        <p className="error">
+          {p.readable && !p.enabled ? 'Last time it was enabled: ' : ''}
+          {p.problem}
+        </p>
+      )}
       {!p.available && p.refusal && <p className="error">{p.refusal}</p>}
 
-      {p.enabled && p.live && (
+      {p.enabled && (
         <p className="hint">
           Layer {p.order} — a plugin later in the order renders instead of an earlier one when both
           define the same name.
@@ -82,14 +293,7 @@ function PluginCard({ plugin: p }: { plugin: Plugin }) {
       <Names label="Overrides" names={p.overrides} />
       <Names label="Adds" names={p.adds} />
       <Names label="Extends" names={p.extends} />
-
-      {/* Not an error. Declaring an override earns nothing and is not
-          required — but the difference between what an operator approved and
-          what is actually happening is worth being able to see. */}
       <Names label="Overridden without declaring" names={p.undeclared} tone="warn" />
-
-      {/* A definition nobody owns never renders. Silently inert is the
-          hardest kind of plugin bug to find, so it is named here. */}
       <Names label="Inert — nothing installed owns that namespace" names={p.inert} tone="warn" />
 
       {p.pages && p.pages.length > 0 && (
@@ -110,42 +314,63 @@ function PluginCard({ plugin: p }: { plugin: Plugin }) {
 
       <Grants plugin={p} />
 
-      {(p.docs || p.source) && (
-        <p className="hint">
-          {p.docs && (
-            <a href={p.docs} target="_blank" rel="noreferrer noopener">
-              Documentation
-            </a>
-          )}
-          {p.docs && p.source && ' · '}
-          {p.source && (
-            <a href={p.source} target="_blank" rel="noreferrer noopener">
-              Source
-            </a>
-          )}
-        </p>
-      )}
+      <div className="plugin-actions">
+        {/* An unreadable directory has no manifest anybody could trust, so the
+            only thing offered is taking it away. Everything else can be
+            switched, including something that failed to load — refusing that
+            would strand it off with no way back. */}
+        {p.readable ? (
+          p.enabled ? (
+            <>
+              <button onClick={onDisable} disabled={busy}>
+                Disable
+              </button>
+              <button onClick={() => onMove(-1)} disabled={busy || p.order <= 1} title="Earlier layer">
+                ↑
+              </button>
+              <button onClick={() => onMove(1)} disabled={busy} title="Later layer">
+                ↓
+              </button>
+            </>
+          ) : (
+            <button onClick={onEnable} disabled={busy}>
+              Enable
+            </button>
+          )
+        ) : null}
+        <button className="danger" onClick={onRemove} disabled={busy}>
+          Remove
+        </button>
+        {(p.docs || p.source) && (
+          <span className="hint">
+            {p.docs && (
+              <a href={p.docs} target="_blank" rel="noreferrer noopener">
+                Documentation
+              </a>
+            )}
+            {p.docs && p.source && ' · '}
+            {p.source && (
+              <a href={p.source} target="_blank" rel="noreferrer noopener">
+                Source
+              </a>
+            )}
+          </span>
+        )}
+      </div>
     </section>
   )
 }
 
-/** The state, and the whole reason this column is not a checkbox. */
 function State({ plugin: p }: { plugin: Plugin }) {
-  if (p.problem && !p.enabled) return <span className="badge is-danger">broken</span>
+  // Unreadable and switched-off are different states and used to render the
+  // same, which left a working plugin labelled broken and with no way back on.
+  if (!p.readable) return <span className="badge is-danger">unreadable</span>
   if (!p.enabled) return <span className="badge">off</span>
   if (!p.live) return <span className="badge is-danger">on, not loading</span>
   return <span className="badge is-ok">live</span>
 }
 
-function Names({
-  label,
-  names,
-  tone,
-}: {
-  label: string
-  names?: string[]
-  tone?: 'warn'
-}) {
+function Names({ label, names, tone }: { label: string; names?: string[]; tone?: 'warn' }) {
   if (!names || names.length === 0) return null
   return (
     <div className="plugin-rows">
@@ -161,9 +386,6 @@ function Names({
   )
 }
 
-/** What it asked for. Grouped away from what it contributes, because these are
- *  the lines an operator is agreeing to rather than the ones describing what
- *  they get. */
 function Grants({ plugin: p }: { plugin: Plugin }) {
   const has = (p.hosts?.length ?? 0) + (p.secrets?.length ?? 0) + (p.api?.length ?? 0)
   if (has === 0) return null
@@ -178,7 +400,8 @@ function Grants({ plugin: p }: { plugin: Plugin }) {
         ))}
         {p.secrets?.map((s) => (
           <li key={`s-${s}`}>
-            secret <code>{s}</code> <span className="hint">(the name; the value is never handed over)</span>
+            secret <code>{s}</code>{' '}
+            <span className="hint">(the name; the value is never handed over)</span>
           </li>
         ))}
         {p.api?.map((a) => (

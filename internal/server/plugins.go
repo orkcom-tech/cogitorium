@@ -371,6 +371,12 @@ type PluginView struct {
 	Docs    string `json:"docs,omitempty"`
 	Source  string `json:"source,omitempty"`
 
+	// Readable is false only when the directory itself could not be read as a
+	// plugin. That is a different thing from a plugin whose templates failed,
+	// and conflating them costs an operator the ability to switch a
+	// still-installed plugin back on.
+	Readable bool `json:"readable"`
+
 	Enabled bool `json:"enabled"`
 	// Order is the position in the enable list, 1-based, or 0 when off.
 	// Position is precedence: a plugin later in the list renders instead of
@@ -381,7 +387,9 @@ type PluginView struct {
 	// reason somebody is looking at this screen.
 	Live bool `json:"live"`
 	// Problem is why it is not live, in the words the operator needs: which
-	// plugin, which template, which field.
+	// plugin, which template, which field. It survives being switched off,
+	// because it is what somebody needs to read BEFORE switching it back on —
+	// the screen says when it applies.
 	Problem string `json:"problem,omitempty"`
 
 	Tier      string `json:"tier"`
@@ -436,7 +444,7 @@ func (s *Server) handleListPlugins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	caps := plugin.Capabilities{Profile: channel.Detect(s.dataDir)}
+	caps := s.pluginCaps()
 	out := make([]PluginView, 0, len(all))
 	for _, in := range all {
 		out = append(out, s.pluginView(in, caps))
@@ -444,16 +452,23 @@ func (s *Server) handleListPlugins(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// pluginCaps is what this install can run, asked once per request rather than
+// once per plugin: the channel probe is cached, but the intent is that a list
+// of forty plugins does not look like forty separate decisions.
+func (s *Server) pluginCaps() plugin.Capabilities {
+	return plugin.Capabilities{Profile: channel.Detect(s.dataDir)}
+}
+
 func (s *Server) pluginView(in plugin.Installed, caps plugin.Capabilities) PluginView {
 	if in.Broken != nil {
 		// Everything except the id is unreliable for a broken install, so
 		// nothing else is claimed about it.
-		return PluginView{ID: in.ID, Problem: in.Broken.Error()}
+		return PluginView{ID: in.ID, Readable: false, Problem: in.Broken.Error()}
 	}
 
 	m := in.Manifest
 	v := PluginView{
-		ID: m.ID, Name: m.Name, Version: in.Version,
+		ID: m.ID, Name: m.Name, Version: in.Version, Readable: true,
 		Docs: m.Docs, Source: m.Source,
 		Enabled: in.Enabled,
 		Hosts:   m.Hosts, Secrets: m.Secrets, API: m.API,
