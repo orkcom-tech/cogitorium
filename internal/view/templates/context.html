@@ -63,6 +63,20 @@
             <input type="hidden" name="version" value="{{.OpenedAt}}">
             <textarea name="text" spellcheck="false">{{.Text}}</textarea>
           </form>
+
+          {{/* Removing it is a SOFT delete: contextd keeps every version and
+               `contextd file undelete` brings it back. Said here rather than
+               implying an erasure that did not happen.
+
+               Its own form, so the version it carries is the one that was
+               read — removing a document somebody has just rewritten is
+               refused for the same reason overwriting it is. */}}
+          <form class="row context-remove" method="post" action="/context/delete">
+            <input type="hidden" name="path" value="{{.Open}}">
+            <input type="hidden" name="version" value="{{.OpenedAt}}">
+            <button type="submit" class="danger">Remove it</button>
+            <span class="hint">Its versions stay in Contextverse and it can be brought back.</span>
+          </form>
         {{else}}
           <p class="hint">Pick a file to view or edit it.</p>
         {{end}}

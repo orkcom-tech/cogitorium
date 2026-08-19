@@ -630,6 +630,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.page(mux, "GET /env", s.handleVariablesPage)
 	s.page(mux, "GET /context", s.handleContextPage)
 	s.page(mux, "POST /context/save", s.handleSaveContextForm)
+	s.page(mux, "POST /context/delete", s.handleDeleteContextForm)
 
 	s.page(mux, "GET /models", s.handleModelsPage)
 	s.page(mux, "POST /models/providers", s.handleCreateProviderForm)

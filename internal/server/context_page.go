@@ -145,3 +145,26 @@ func (s *Server) contextModel(r *http.Request, problem, notice string) view.Cont
 // would be a page nobody can read; the model says when it was cut, which is
 // the part that matters.
 const contextSearchLimit = 100
+
+// handleDeleteContextForm removes a file from the space.
+//
+// Soft, like the API's: contextd keeps every version and `contextd file
+// undelete` brings it back — so the screen says that rather than implying an
+// erasure that did not happen.
+func (s *Server) handleDeleteContextForm(w http.ResponseWriter, r *http.Request) {
+	if !s.pageAdmin(w, r) {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.renderContext(w, r, "that form could not be read", "")
+		return
+	}
+	path := r.PostFormValue("path")
+	// The version that was read travels with it. Removing a document somebody
+	// has rewritten since is refused for the same reason overwriting it is.
+	if err := s.context.Delete(r.Context(), path, r.PostFormValue("version")); err != nil {
+		s.renderContext(w, r, err.Error(), "")
+		return
+	}
+	s.done(w, r, "/context")
+}
