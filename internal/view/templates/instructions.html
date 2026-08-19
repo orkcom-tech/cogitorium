@@ -73,3 +73,21 @@
 {{define "cog.empty.instructions"}}<p class="hint">
 {{if .Narrowed}}Nothing in the library matches that.{{else}}The library is empty. An instruction is text an agent pins — write one above, or an agent will when it needs to remember something.{{end}}
 </p>{{end}}
+
+{{/*
+  The library as a drawer inside a workspace.
+
+  The same list and rows as the page, without the frame around them: a drawer
+  crawls out over the work rather than replacing it, so a second <main> and a
+  second heading would be two pages on one screen.
+*/}}
+{{define "cog.drawer.instructions"}}<div class="dk-body library">
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  <form class="library-filters" method="get" action="/instructions"
+        hx-get="/instructions" hx-target="#library-list" hx-swap="outerHTML"
+        hx-trigger="submit, input from:input[name='q'] delay:250ms">
+    <input type="search" name="q" value="{{.Query}}" placeholder="Search names, descriptions and text"
+           aria-label="Search the library">
+  </form>
+  {{template "cog.list.instructions" .}}
+</div>{{end}}

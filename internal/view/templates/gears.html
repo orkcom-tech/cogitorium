@@ -219,3 +219,22 @@
 {{define "cog.empty.gears"}}<p class="hint">
 {{if .Narrowed}}Nothing here matches that.{{else}}Nothing here yet. Agents forge gears when they need a capability that doesn't exist — or you can write one yourself.{{end}}
 </p>{{end}}
+
+{{/*
+  The gear catalogue as a drawer — where it is actually met.
+
+  It has a standalone page as well, and the drawer is the one an operator
+  reaches from the rail while looking at the work the gear belongs to. Same
+  list, same rows, no frame.
+*/}}
+{{define "cog.drawer.gears"}}<div class="dk-body gears">
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  {{if .Notice}}<p class="hint">✓ {{.Notice}}</p>{{end}}
+  {{if .Pending}}<p class="notice">{{.Pending}} awaiting your review.</p>{{end}}
+  <form class="row" method="get" action="/gears"
+        hx-get="/gears" hx-target="#gear-list" hx-swap="outerHTML"
+        hx-trigger="submit, input from:input[name='q'] delay:250ms">
+    <input class="grow" name="q" value="{{.Query}}" placeholder="search by name or description…">
+  </form>
+  {{template "cog.list.gears" .}}
+</div>{{end}}

@@ -11,10 +11,7 @@ import QueuePanel from './QueuePanel'
 import EnvPanel from './EnvPanel'
 import { Select } from './Select'
 import { Deck, ShellGate, Workbench } from '../deck/Deck'
-import GearsPage from './GearsPage'
 import McpPage from './McpPage'
-import LibraryPage from './LibraryPage'
-import ContextPage from './ContextPage'
 import { Drawer, type Edge } from '../deck/Drawer'
 import { useDeck } from '../deck/store'
 import type { OverlayId, ViewId } from '../deck/types'
@@ -566,19 +563,27 @@ export default function WorkspacePage({ me }: { me: User }) {
             </div>
           </ShellGate>
         )}
-        {overlay === 'gears' && <GearsPage me={me} review={reviewGear} />}
-        {overlay === 'mcp' && <McpPage me={me} />}
-        {overlay === 'instructions' && <LibraryPage />}
-        {/* The space itself, where the memory being searched and edited is —
-            a drawer rather than a page you leave the work for, which is the
-            rule the rest of this rail already follows. It stays admin-only:
-            it reads and writes every document in the install. */}
-        {overlay === 'context' && me.role === 'admin' && <ContextPage />}
-        {overlay === 'context' && me.role !== 'admin' && (
-          <p className="hint">
-            The context space is an administrator's. What THIS workspace's agents read is in Memory, on each agent.
-          </p>
+        {/* Three panels the SERVER renders now, swapped in by htmx.
+            This is the seam the conversion is happening on: the workspace —
+            its chat, its blueprint, its editor — is still the client's, and
+            these are templates going through the composed stack. A plugin
+            overriding cog.drawer.gears changes what somebody sees in here,
+            without this page having to become a template first.
+
+            The context drawer keeps its admin rule; the server applies it, so
+            a rule that lives in one place cannot disagree with itself. */}
+        {(overlay === 'gears' || overlay === 'instructions' || overlay === 'context') && (
+          <div
+            key={overlay}
+            className="dk-body"
+            hx-get={`/workspaces/${wsId}/drawers/${overlay}${
+              overlay === 'gears' && reviewGear ? `?open=${reviewGear}` : ''
+            }`}
+            hx-trigger="load"
+            hx-swap="innerHTML"
+          />
         )}
+        {overlay === 'mcp' && <McpPage me={me} />}
         {overlay === 'memory' &&
           (selectedAgent ? (
             <AgentMemory agent={selectedAgent} onChanged={() => void reloadAgents()} onError={setError} />

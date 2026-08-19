@@ -82,6 +82,13 @@ func (s *Server) handleDeleteInstructionForm(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) renderInstructions(w http.ResponseWriter, r *http.Request, problem string) {
+	s.renderPage(w, r, "cog.page.instructions", "cog.list.instructions", "Instructions",
+		s.instructionsModel(r, problem))
+}
+
+// instructionsModel is the page and the drawer's shared shape. Split out so a
+// panel and a page cannot drift into showing different things.
+func (s *Server) instructionsModel(r *http.Request, problem string) view.Instructions {
 	caller := callerFrom(r.Context())
 	q := r.URL.Query()
 
@@ -135,7 +142,7 @@ func (s *Server) renderInstructions(w http.ResponseWriter, r *http.Request, prob
 	// page and letting htmx cut the list out of it works and is wasteful: the
 	// server would draw a form, a filter and a rail on every keystroke for a
 	// client that throws all of it away.
-	s.renderPage(w, r, "cog.page.instructions", "cog.list.instructions", "Instructions", model)
+	return model
 }
 
 // renderPage puts a template through the composed stack and into the shell.

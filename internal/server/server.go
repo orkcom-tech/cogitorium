@@ -548,6 +548,13 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// application. Its own paths rather than /api/v1 ones: these answer with
 	// HTML, and the described API is a JSON surface — putting a page in it
 	// would make every generated client expect a document.
+	// A panel the server renders, swapped into a page the client still owns.
+	// The seam the conversion is happening on: the workspace is the
+	// application's and the drawers inside it are becoming templates, so
+	// something inside a workspace is overridable before the workspace itself
+	// has to be.
+	s.page(mux, "GET /workspaces/{id}/drawers/{name}", s.handleWorkspaceDrawer)
+
 	s.page(mux, "GET /workspaces", s.handleWorkspacesPage)
 	s.page(mux, "POST /workspaces", s.handleCreateWorkspaceForm)
 	s.page(mux, "POST /workspaces/import", s.handleImportWorkspaceForm)

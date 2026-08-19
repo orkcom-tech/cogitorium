@@ -57,6 +57,18 @@ func (s *Server) handleSaveContextForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderContext(w http.ResponseWriter, r *http.Request, problem, notice string) {
+	model := s.contextModel(r, problem, notice)
+	if !model.Available {
+		// Nothing else here is meaningful. Drawing an empty file list beside a
+		// broken contextd would look exactly like a space with nothing in it.
+		s.renderPage(w, r, "cog.page.context", "", "Context", model)
+		return
+	}
+	s.renderPage(w, r, "cog.page.context", "cog.list.context", "Context", model)
+}
+
+// contextModel is what the page and the drawer both render.
+func (s *Server) contextModel(r *http.Request, problem, notice string) view.Context {
 	model := view.Context{
 		Ctx:    s.viewCtx(r, callerFrom(r.Context())),
 		Error:  problem,
@@ -66,10 +78,7 @@ func (s *Server) renderContext(w http.ResponseWriter, r *http.Request, problem, 
 	status := s.context.CheckStatus(r.Context())
 	model.Available, model.Unusable, model.SpaceRoot = status.Available, status.Error, status.SpaceRoot
 	if !model.Available {
-		// Nothing else here is meaningful. Drawing an empty file list beside a
-		// broken contextd would look exactly like a space with nothing in it.
-		s.renderPage(w, r, "cog.page.context", "", "Context", model)
-		return
+		return model
 	}
 
 	open := r.URL.Query().Get("open")
@@ -124,7 +133,7 @@ func (s *Server) renderContext(w http.ResponseWriter, r *http.Request, problem, 
 		}
 	}
 
-	s.renderPage(w, r, "cog.page.context", "cog.list.context", "Context", model)
+	return model
 }
 
 // contextSearchLimit bounds one answer. A search that returned everything

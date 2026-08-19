@@ -23,6 +23,15 @@
          light-dark() for a meta tag. -->
     <meta name="theme-color" content="#faf7f0" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0B0B0C" media="(prefers-color-scheme: dark)" />
+    <!--
+      The hypermedia layer, served from the binary like everything else here.
+
+      In the application's own document as well as the plugin shell's, because
+      a drawer this server renders is swapped into THIS page: the workspace is
+      still the client's, and the panels inside it are the server's. That seam
+      is where the conversion is happening, and it needs both halves loaded.
+    -->
+    <script src="/cog/htmx.min.js" defer></script>
   </head>
   <body>
     <div id="root"></div>

@@ -341,3 +341,53 @@ describe('a screen the server renders', () => {
     assert.equal(res.status, 401)
   })
 })
+
+// A panel the server renders, inside a page the client still owns.
+//
+// This is the seam the conversion is happening on. The workspace — its chat,
+// its blueprint, its editor — is still the application's, and converting all
+// of it before anything inside could be overridden would mean nothing was
+// overridable for a long time. A drawer is self-contained, which makes it the
+// right size to move first.
+describe('a drawer the server renders', () => {
+  let binary, server, ui
+
+  before(async () => {
+    binary = build()
+    const p = bundle('drskin', {
+      'plugin.yaml': [
+        'schema: 1', 'id: drskin', 'name: Drawer Skin', 'version: 1.0.0',
+        'host:', '  contract: 1', 'overrides:', '  - cog.row.gear', '',
+      ].join('\n'),
+      'templates/row.html':
+        '{{define "cog.row.gear"}}<article class="card skinned">{{.Name}}</article>{{end}}',
+    })
+    server = await start(binary, { plugins: [p] })
+    ui = await session(server)
+  })
+
+  after(async () => {
+    await ui?.close()
+    await server?.stop()
+  })
+
+  test('it is a fragment, never a document', async () => {
+    const res = await ui.page.request.get(`${server.url}/workspaces/1/drawers/gears`)
+    assert.equal(res.status(), 200)
+    const html = await res.text()
+    assert.ok(!/<html|doctype/i.test(html), 'a drawer came back wrapped in a document')
+    assert.match(html, /dk-body/)
+  })
+
+  // Named rather than derived from the path: turning a URL segment into a
+  // template name would let a request render anything the stack defines.
+  test('a name nobody declared is a 404', async () => {
+    const res = await ui.page.request.get(`${server.url}/workspaces/1/drawers/whatever`)
+    assert.equal(res.status(), 404)
+  })
+
+  test('the application loads htmx, or no drawer would ever arrive', async () => {
+    const res = await ui.page.request.get(`${server.url}/`)
+    assert.match(await res.text(), /\/cog\/htmx\.min\.js/)
+  })
+})

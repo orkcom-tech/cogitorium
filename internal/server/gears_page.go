@@ -184,6 +184,13 @@ func (s *Server) renderGears(w http.ResponseWriter, r *http.Request, problem, no
 }
 
 func (s *Server) renderGearsWith(w http.ResponseWriter, r *http.Request, problem, notice string, dry *dryRun) {
+	s.renderPage(w, r, "cog.page.gears", "cog.list.gears", "Gears",
+		s.gearsModel(r, problem, notice, dry))
+}
+
+// gearsModel is what the page and the drawer both render. Split out so a panel
+// and a page cannot drift into showing different things about the same gear.
+func (s *Server) gearsModel(r *http.Request, problem, notice string, dry *dryRun) view.Gears {
 	caller := callerFrom(r.Context())
 	q := r.URL.Query()
 
@@ -251,7 +258,7 @@ func (s *Server) renderGearsWith(w http.ResponseWriter, r *http.Request, problem
 		model.Items = append(model.Items, row)
 	}
 
-	s.renderPage(w, r, "cog.page.gears", "cog.list.gears", "Gears", model)
+	return model
 }
 
 // fillGearDetail reads what only an open row needs.

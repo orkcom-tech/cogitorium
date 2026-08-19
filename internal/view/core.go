@@ -241,6 +241,14 @@ func CoreModels() Models {
 		// The context space: a list of files, a search across them, and one
 		// file open for editing.
 		// The landing screen.
+		// Drawers. A drawer crawls out over the work rather than replacing
+		// it, so it is the same list without the page frame — and its own
+		// name, because a plugin overriding the drawer should not have to take
+		// the page with it.
+		"cog.drawer.instructions": Instructions{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.drawer.gears":        Gears{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.drawer.context":      Context{Ctx: Ctx{T: DefaultStrings()}},
+
 		"cog.page.workspaces":  Workspaces{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.list.workspaces":  Workspaces{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.workspace":    WorkspaceRow{},
@@ -722,6 +730,10 @@ func Exemplars() Models {
 		"cog.row.provider":   exampleModels(ctx).Providers[0],
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
+
+		"cog.drawer.instructions": exampleLibrary(ctx),
+		"cog.drawer.gears":        exampleGears(ctx),
+		"cog.drawer.context":      exampleContext(ctx),
 
 		"cog.page.workspaces":  exampleWorkspaces(ctx),
 		"cog.list.workspaces":  exampleWorkspaces(ctx),

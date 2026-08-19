@@ -94,3 +94,27 @@
 </a>{{end}}
 
 {{define "cog.empty.context"}}<p class="hint">space is empty</p>{{end}}
+
+{{/*
+  The context space as a drawer.
+
+  Admin-only, like the page: it reads and writes every document in the install.
+  What THIS workspace's agents read is Memory, on each agent, which is a
+  different drawer and a different question.
+*/}}
+{{define "cog.drawer.context"}}<div class="dk-body context">
+  {{if .Available}}
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+    {{if .Notice}}<p class="hint">✓ {{.Notice}}</p>{{end}}
+    <form class="row" method="get" action="/context">
+      <input class="grow" name="q" value="{{.Query}}" placeholder="search inside the files…">
+      <button type="submit">search</button>
+    </form>
+    {{if .Searched}}<p class="hint">
+      {{if .Hits}}{{.Matches}} lines in {{.FilesMatched}} of {{.FilesScanned}} files.{{else}}Nothing in {{.FilesScanned}} files mentions “{{.Query}}”.{{end}}
+    </p>{{end}}
+    {{template "cog.list.context" .}}
+  {{else}}
+    <p class="error">{{.Unusable}}</p>
+  {{end}}
+</div>{{end}}
