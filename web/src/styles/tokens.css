@@ -965,3 +965,219 @@ pre,
   border-color: transparent;
   border-radius: 999px;
 }
+
+/* An action that is a link.
+ *
+ * A screen the server renders reaches its actions by going somewhere: a form
+ * opens at a URL, a row is removed by posting to one. So the element is an
+ * anchor, and every rule above selects the tag `button` — which left the two
+ * most-used controls on the workspaces screen rendered as underlined blue
+ * words in the middle of a dark product.
+ *
+ * The class rather than the tag, for the reason the block above spells out:
+ * these select on what a thing IS. An anchor that is a destination stays a
+ * destination and gets none of this.
+ */
+.action {
+  display: inline-flex;
+  align-items: center;
+  /* A flex column stretches its children, and an empty state is one — which
+     turned the one button on the screen into a bar the width of the card. */
+  align-self: flex-start;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+  font-size: var(--t-ui);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.action:hover {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.action.is-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.action.is-primary:hover {
+  background: color-mix(in srgb, var(--accent) 85%, black);
+}
+
+.action.is-danger {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.action.is-danger:hover {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
+/* A tab that is a link.
+ *
+ * Same shape as the pill above, and the same reason as .action: on a screen
+ * the server renders, switching views is going somewhere, so the element is an
+ * anchor and every tab rule in this file selects a button. The switch between
+ * what is installed and what the library offers rendered as two blue words.
+ */
+[role='tablist'] {
+  display: flex;
+  gap: var(--s2);
+  align-items: center;
+}
+
+a[role='tab'] {
+  padding: var(--s2) var(--s3);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text-dim);
+  font-size: var(--t-ui);
+  text-decoration: none;
+}
+
+a[role='tab']:hover {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text);
+}
+
+a[role='tab'].is-current {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: color-mix(in srgb, var(--accent) 80%, var(--text));
+}
+
+/* The approval preview: somebody else's markup, in a box that says so. */
+.preview-frame {
+  width: 100%;
+  height: 220px;
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: var(--r2);
+  background: var(--bg);
+}
+
+.preview-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  align-items: center;
+}
+
+/* What a plugin's author ships to show what it does. Theirs, not the
+   product's: it is shown, not rendered, and it is bounded so a card stays a
+   card whatever they shipped. */
+.plugin-media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  margin: var(--s3) 0;
+}
+
+.plugin-media figure {
+  margin: 0;
+  max-width: 320px;
+}
+
+.plugin-media img,
+.plugin-media video,
+.catalog-cover {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: var(--r2);
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  background: var(--bg);
+}
+
+.plugin-media figcaption {
+  margin-top: var(--s1);
+  font-size: var(--t-micro);
+  color: var(--text-dim);
+}
+
+.catalog-cover {
+  max-height: 160px;
+  margin-bottom: var(--s3);
+}
+
+/* A form on a screen the server renders.
+ *
+ * The markup is labels wrapping their inputs, which is the right shape and has
+ * no layout of its own: inline labels sprayed across the full width, and on
+ * the gear form a submit button 1400 pixels below anything visible. A person
+ * filled it in and could not find the button.
+ *
+ * One column, because these are forms somebody reads top to bottom.
+ */
+.library-write form,
+.author-gear form,
+.account form,
+.instruction-edit,
+.author-gear-edit,
+.plugin-drop form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  margin-top: var(--s3);
+}
+
+.library-write form label,
+.author-gear form label,
+.account form label,
+.instruction-edit label,
+.author-gear-edit label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  font-size: var(--t-ui);
+  color: var(--text-dim);
+}
+
+.library-write form label input,
+.library-write form label textarea,
+.library-write form label select,
+.author-gear form label input,
+.author-gear form label textarea,
+.author-gear form label select,
+.account form label input,
+.instruction-edit input,
+.instruction-edit textarea,
+.author-gear-edit input,
+.author-gear-edit textarea {
+  color: var(--text);
+  font-size: var(--t-ui);
+}
+
+.library-write form button[type='submit'],
+.author-gear form button[type='submit'],
+.account form button[type='submit'],
+.instruction-edit button[type='submit'],
+.author-gear-edit button[type='submit'] {
+  align-self: flex-start;
+}
+
+/* A panel on a screen the server renders: its own block, with room in it. */
+.account .panel {
+  padding: var(--s4);
+  margin-top: var(--s4);
+  max-width: 34rem;
+}
+
+/* A screen the server renders, inside the cavity.
+ *
+ * The cavity clips — that is what makes the rounded corner a corner rather
+ * than a suggestion — so whatever it holds has to do its own scrolling. The
+ * client's screens each arrange that for themselves; a server-rendered page is
+ * one element and had nothing, so anything past the first screenful was simply
+ * cut off. The gear form's submit button sat a thousand pixels below a page
+ * that would not move.
+ */
+.cavity > main.page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s5);
+}

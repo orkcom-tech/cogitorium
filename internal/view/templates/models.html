@@ -1,0 +1,107 @@
+{{/*
+  The model catalog.
+
+  Two lists on one page because they are two decisions: where models come from,
+  and which of them this install offers an agent. A plugin can take over either
+  without touching the other.
+
+  No key is ever rendered. The model carries whether one is stored and never
+  the value, so a template that could show a credential does not exist — which
+  is a stronger guarantee than a template that chooses not to.
+*/}}
+
+{{define "cog.page.models"}}
+<main class="page catalogue">
+  <h2>{{.Ctx.T.Models}}</h2>
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+
+  <section>
+    <h3>Providers</h3>
+    <details class="add-provider">
+      <summary>Add one</summary>
+      <form method="post" action="/models/providers">
+        <label>Name <input name="name" required placeholder="What you will call it"></label>
+        <label>Kind
+          <select name="kind">
+            <option value="anthropic">Anthropic</option>
+            <option value="openai-compatible">OpenAI-compatible</option>
+          </select>
+        </label>
+        <label>Address <input name="base_url" placeholder="Empty for Anthropic's own; a URL for anything else"></label>
+        <label>Key <input name="api_key" type="password" autocomplete="off"
+                          placeholder="Stored, and never shown again"></label>
+        <button type="submit">Add it</button>
+      </form>
+    </details>
+    {{template "cog.list.providers" .}}
+  </section>
+
+  <section>
+    <h3>Catalog</h3>
+    {{template "cog.list.models" .}}
+  </section>
+</main>
+{{end}}
+
+{{define "cog.list.providers"}}<div id="providers" class="provider-list">
+{{if .Providers}}{{range .Providers}}{{template "cog.row.provider" .}}{{end}}{{else}}<p class="hint">
+No providers yet. A provider is where models come from — Anthropic, or anything that speaks its
+OpenAI-compatible shape, which is how Ollama, LM Studio, vLLM and llama.cpp are reached.
+</p>{{end}}
+</div>{{end}}
+
+{{define "cog.row.provider"}}<article class="card provider">
+  <header class="provider-head">
+    <h4>{{.Name}}</h4>
+    <span class="badge">{{.Kind}}</span>
+    {{if .HasKey}}<span class="badge is-ok">key stored</span>{{else}}<span class="badge">no key</span>{{end}}
+  </header>
+  {{if .BaseURL}}<p class="hint"><code>{{.BaseURL}}</code></p>{{end}}
+
+  {{/* The result of a check somebody just made, not a property of the row. A
+       connection that worked an hour ago is not a fact about now. */}}
+  {{if .Tested}}
+    {{if .TestOK}}<p class="hint">It answered. It offers: {{range .Offers}}<code>{{.}}</code> {{end}}</p>
+    {{else}}<p class="error">{{.TestError}}</p>{{end}}
+  {{end}}
+
+  <div class="provider-models">
+    {{range .Models}}<span class="badge">{{.Name}}</span>{{end}}
+  </div>
+
+  <form class="provider-add" method="post" action="/models/providers/{{.ID}}/models">
+    <input name="model_name" required placeholder="A model this provider serves">
+    <input name="label" placeholder="What you will read on a screen">
+    <button type="submit">Offer it</button>
+  </form>
+
+  <div class="provider-actions">
+    <form method="post" action="/models/providers/{{.ID}}/test">
+      <button type="submit">Test the connection</button>
+    </form>
+    <form method="post" action="/models/providers/{{.ID}}/delete">
+      <button type="submit" class="danger">Remove</button>
+    </form>
+  </div>
+</article>{{end}}
+
+{{define "cog.list.models"}}<div id="catalogue" class="model-list">
+{{if .Models}}<table>
+  <thead><tr><th>Model</th><th>Label</th><th>Provider</th><th></th></tr></thead>
+  <tbody>{{range .Models}}{{template "cog.row.model" .}}{{end}}</tbody>
+</table>{{else}}{{template "cog.empty.models" .}}{{end}}
+</div>{{end}}
+
+{{define "cog.row.model"}}<tr class="model">
+  <td><code>{{.Name}}</code></td>
+  <td>{{.Label}}</td>
+  <td>{{.Provider}} <span class="hint">{{.Kind}}</span></td>
+  <td><form method="post" action="/models/{{.ID}}/delete"
+            hx-post="/models/{{.ID}}/delete" hx-target="#catalogue" hx-swap="outerHTML">
+    <button type="submit" class="danger">Remove</button>
+  </form></td>
+</tr>{{end}}
+
+{{define "cog.empty.models"}}<p class="hint">
+Nothing here yet. Add a model from a provider above — until there is one, an agent has nothing to think with.
+</p>{{end}}

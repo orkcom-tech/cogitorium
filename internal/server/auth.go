@@ -22,6 +22,17 @@ func callerFrom(ctx context.Context) identity.User {
 	return u
 }
 
+// withCaller puts an identity on a context.
+//
+// Used by the one caller that does not arrive over the network: a plugin's
+// cog.api call is served in-process through the same mux, so it needs the same
+// thing the auth middleware would have put there. Unexported, because a
+// request that could name its own user would make every other check here
+// decorative.
+func withCaller(ctx context.Context, u identity.User) context.Context {
+	return context.WithValue(ctx, userKey, u)
+}
+
 // authenticate resolves every request to a user, and there are two ways to be
 // resolved — a bearer token or a session cookie. See internal/server/session.go
 // for why a browser gets a different one from a script, and why neither is
@@ -56,7 +67,46 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 		// must not be exempt only as a side effect of a rule about static
 		// files, which somebody tightening the SPA fallback would take away
 		// without ever seeing an inlet.
-		if openToAnyone(r.URL.Path) {
+		// Plugin space is decided by DECLARATION, not by the shape of the
+		// path, and it is decided before the derived rules get a look in. A
+		// plugin saying its page is open is somebody's decision about their
+		// own plugin; a rule about where a URL sits cannot express that, and
+		// letting the derived rule answer here would either close a page an
+		// operator approved as open or open one nobody did.
+		if strings.HasPrefix(r.URL.Path, pluginPagePrefix) {
+			// A declared asset is readable without a credential, and that is a
+			// decision rather than an oversight: these files are the styles and
+			// modules of pages that may themselves be open, they are published
+			// in a public catalog anyway, and a stylesheet that answered 401
+			// would leave an open page rendering unstyled with nothing to
+			// explain it. Only what a manifest named is reachable — never the
+			// bundle directory.
+			if s.plugins.isAsset(r.URL.Path) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			auth, declared := s.plugins.pageAuth(r.URL.Path)
+			if !declared {
+				// Not a page anybody declared. A 404 here rather than a walk
+				// through the credential machinery, so an unknown plugin path
+				// cannot be probed for whether it exists by watching which
+				// refusal comes back.
+				http.NotFound(w, r)
+				return
+			}
+			if auth == "none" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			// Everything else resolves a credential below, and "admin" is
+			// answered by the handler once there is somebody to check.
+		} else if s.inPageSpace(r.URL.Path) {
+			// A screen this server renders. It holds data, so it resolves a
+			// credential below like every other route that does — the
+			// "everything outside /api/ is open" rule was written when
+			// everything outside /api/ was the application's shell and its
+			// static files, which hold none.
+		} else if openToAnyone(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -96,6 +146,15 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, user)))
+			return
+		}
+
+		// A screen, opened by a person with no session. Sending them a JSON
+		// 401 would be technically correct and useless: they are looking at a
+		// browser, and what they need is the place to sign in. The API keeps
+		// the 401, because a script needs the status rather than a page.
+		if s.inPageSpace(r.URL.Path) {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
 

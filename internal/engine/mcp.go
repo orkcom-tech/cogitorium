@@ -155,7 +155,7 @@ func (e *Engine) mcpSpec(ctx context.Context, wsID int64, srv mcpstore.Server) (
 // header with no value reads to the far end as a malformed request, and the
 // operator gets a 401 that says nothing about the missing variable.
 func (e *Engine) mcpHeaders(ctx context.Context, wsID int64, srv mcpstore.Server) (map[string]string, error) {
-	if len(srv.HeaderNames) == 0 || e.mcpSecrets == nil {
+	if len(srv.HeaderNames) == 0 || e.env == nil {
 		// Still gives the sign-in a chance: a server reached purely through
 		// OAuth names no header at all.
 		if e.mcpOAuth != nil {
@@ -169,7 +169,7 @@ func (e *Engine) mcpHeaders(ctx context.Context, wsID int64, srv mcpstore.Server
 	for _, named := range srv.HeaderNames {
 		wanted = append(wanted, named)
 	}
-	values, err := e.mcpSecrets.Resolve(ctx, &wsID, wanted)
+	values, err := e.env.Resolve(ctx, &wsID, wanted)
 	if err != nil {
 		return nil, fmt.Errorf("the MCP server %q cannot be given what it was granted: %w", srv.Name, err)
 	}
@@ -219,10 +219,10 @@ func (e *Engine) mcpEnv(ctx context.Context, wsID int64, srv mcpstore.Server) (m
 		"PATH": os.Getenv("PATH"),
 		"HOME": "/tmp",
 	}
-	if len(srv.EnvNames) == 0 || e.mcpSecrets == nil {
+	if len(srv.EnvNames) == 0 || e.env == nil {
 		return env, nil
 	}
-	values, err := e.mcpSecrets.Resolve(ctx, &wsID, srv.EnvNames)
+	values, err := e.env.Resolve(ctx, &wsID, srv.EnvNames)
 	if err != nil {
 		return nil, fmt.Errorf("the MCP server %q cannot be given what it was granted: %w", srv.Name, err)
 	}
@@ -246,7 +246,9 @@ func (e *Engine) SetMetrics(m *metrics.Set) { e.metrics = m }
 
 func (e *Engine) SetMCP(store *mcpstore.Store, resolver *secrets.Resolver) {
 	e.mcp = store
-	e.mcpSecrets = resolver
+	// The same resolver SetSecrets holds. Assigned again rather than skipped,
+	// so an embedding that wires MCP and nothing else still resolves names.
+	e.env = resolver
 }
 
 // The two tools a server's documents and prompt templates reach the model

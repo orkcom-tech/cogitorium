@@ -243,7 +243,7 @@ func TestSearchIsOfferedOnlyWhereItWillBeAccepted(t *testing.T) {
 	worker := f.agents[0]
 
 	offered := func(a workspace.Agent, unattended bool) bool {
-		for _, tl := range f.engine.toolsFor(a, nil, nil, nil, false, unattended) {
+		for _, tl := range f.engine.toolsFor(a, nil, nil, nil, false, false, unattended) {
 			if tl.Name == "context_search" {
 				return true
 			}

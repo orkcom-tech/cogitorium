@@ -32,6 +32,7 @@ export type OverlayId =
   | 'memory'
   | 'inlets'
   | 'queue'
+  | 'versions'
   | 'env'
   | 'context'
   | 'terminal'
@@ -51,6 +52,7 @@ export const OVERLAY_ORDER: OverlayId[] = [
   'env',
   'context',
   'terminal',
+  'versions',
 ]
 
 export type Deck = {

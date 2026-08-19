@@ -1,0 +1,13 @@
+schema: 1
+id: ticker
+name: Ticker
+version: 1.0.0
+license: Apache-2.0
+needs: python
+host:
+  contract: 1
+pages:
+  - path: /p/ticker/
+    template: ticker.page.home
+    title: Ticker
+    provider: home

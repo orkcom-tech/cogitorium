@@ -183,8 +183,40 @@ func (s *Server) runWorkOf(ctx context.Context, u work.Unit) error {
 		return s.runDelivery(ctx, u)
 	case work.KindCallback:
 		return s.runCallback(ctx, u)
+	case work.KindPlugin:
+		return s.runPluginTask(ctx, u)
 	}
 	return fmt.Errorf("nothing in this server knows how to run a %q unit", u.Kind)
+}
+
+// runPluginTask runs work a plugin scheduled for itself.
+//
+// max_attempts is 1 like everything else on this queue, and for the same
+// reason: re-running work that may already have sent something outward is a
+// second execution nobody asked for, not a recovery. A plugin that wants a
+// retry enqueues one, which is a decision its author made rather than one this
+// server made for them.
+func (s *Server) runPluginTask(ctx context.Context, u work.Unit) error {
+	var args struct {
+		Plugin string          `json:"plugin"`
+		Export string          `json:"export"`
+		Args   json.RawMessage `json:"args"`
+	}
+	if err := json.Unmarshal([]byte(u.Args), &args); err != nil {
+		return fmt.Errorf("this unit's arguments are not readable: %w", err)
+	}
+	if args.Plugin == "" || args.Export == "" {
+		return fmt.Errorf("a plugin unit needs a plugin and an export")
+	}
+
+	// A plugin that was disabled or removed between enqueue and now. Not an
+	// error worth alarming about: the operator switched it off, and the unit
+	// dying quietly with a reason is what should happen.
+	if s.backends == nil {
+		return fmt.Errorf("this install runs no plugin backends")
+	}
+	slog.Info("running a plugin's own task", "plugin", args.Plugin, "export", args.Export, "unit", u.ID)
+	return s.backends.invoke(ctx, args.Plugin, args.Export, args.Args)
 }
 
 // runScheduledGear is a gear firing with nobody watching.

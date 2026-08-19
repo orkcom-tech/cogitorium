@@ -1,0 +1,13 @@
+/* Scoped under .pulse, because this renders in a panel beside the product's
+   own interface and a bare element rule would reach into it. */
+.pulse { font: 13px/1.5 system-ui, sans-serif; padding: 1rem; color: inherit; }
+.pulse h1 { font-size: 1.1rem; margin: 0; }
+.pulse h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.6; margin: 1.25rem 0 0.5rem; }
+.pulse .sub { opacity: 0.6; margin: 0.15rem 0 0; }
+.pulse .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin-top: 1rem; }
+.pulse .tile { border: 1px solid currentColor; border-radius: 8px; padding: 0.6rem 0.7rem; opacity: 0.95; }
+.pulse .n { display: block; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.pulse .k { display: block; font-size: 0.72rem; opacity: 0.6; }
+.pulse .plot svg { width: 100%; height: auto; display: block; }
+.pulse .note { font-size: 0.72rem; opacity: 0.6; margin: 0.35rem 0 0; }
+.pulse .err { color: #b3261e; }

@@ -1,0 +1,73 @@
+{{/*
+  The transcript: the conversation as it is replayed to the model on every
+  turn.
+
+  What is here is the SETTLED conversation. A turn in flight is a stream of
+  deltas the client paints as they arrive, and it stays there deliberately: a
+  template renders a thing that exists, and a half-written sentence does not
+  exist yet. When the turn lands, its message is a row like every other one —
+  so there is exactly one rendering of a message anybody can point at.
+*/}}
+
+{{define "cog.stage.chat"}}<div class="transcript">
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  {{if .Empty}}
+    {{/* Centred, because an empty transcript is a whole screen and a line of
+         grey text jammed into its top-left corner reads as something left
+         behind rather than as an invitation. */}}
+    <p class="hint empty-note">
+      This is the workspace entry point: talk to the orchestrator. It can create agents, configure
+      them, and delegate work.
+    </p>
+  {{end}}
+  {{template "cog.list.messages" .}}
+</div>{{end}}
+
+{{define "cog.list.messages"}}<div id="messages">
+{{range .Messages}}<div class="timeline-entry">
+  {{template "cog.row.message" .}}
+  <form method="post" action="/messages/{{.ID}}/forget"
+        hx-confirm="Forget this? It is replayed to the model on every turn.">
+    <button type="submit" class="forget" title="Forget this — it is replayed to the model on every turn">forget</button>
+  </form>
+</div>{{end}}
+</div>{{end}}
+
+{{define "cog.row.message"}}
+{{if .IsUser}}
+  <div class="msg user">
+    <div class="msg-body">{{.Content}}</div>
+    {{if .Attachments}}<div class="attachments">
+      {{range .Attachments}}<span class="attachment{{if .ToGear}} to-gear{{end}}" title="{{.Title}}">
+        <span class="attachment-name">{{.Name}}</span>
+        <span class="muted">{{.Bytes}}</span>
+        {{if .ToGear}}<span class="muted">→ gear</span>{{end}}
+      </span>{{end}}
+    </div>{{end}}
+  </div>
+{{else if .IsAssistant}}
+  <div class="msg assistant">
+    <div class="msg-body">
+      {{/* Only a delegate is named. The orchestrator is the voice of the
+           workspace, so labelling every one of its replies is the same noise
+           as labelling your own. */}}
+      {{if .Named}}<span class="who">{{.Who}}</span>{{end}}
+      {{.Content}}
+      {{if .Calls}}<span class="tool-chips">
+        {{range .Calls}}<code class="chip">⚙ {{.Name}}</code>{{end}}
+      </span>{{end}}
+    </div>
+  </div>
+{{else if .IsToolResult}}
+  <details class="msg-tool{{if .ToolFailed}} tool-error{{end}}">
+    <summary>{{if .ToolFailed}}✗{{else}}✓{{end}} {{.ToolName}}</summary>
+    <pre>{{.Content}}</pre>
+  </details>
+{{else if .IsDelegation}}
+  <div class="msg delegation">
+    <div class="msg-body"><span class="who">{{.Who}}</span>{{.Content}}</div>
+  </div>
+{{else}}
+  <div class="msg {{.Kind}}"><div class="msg-body">{{.Content}}</div></div>
+{{end}}
+{{end}}

@@ -3554,3 +3554,204 @@ button.big {
     flex: 1 1 100%;
   }
 }
+
+/* The library.
+ *
+ * The card is deliberately plain: what matters on this screen is which of the
+ * two states a plugin is in and which template names it took over, and any
+ * decoration competing with those is decoration in the way. */
+.plugin-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.plugin-head h3 {
+  margin: 0;
+}
+.plugin-rows {
+  display: grid;
+  grid-template-columns: minmax(8rem, max-content) 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0.5rem 0;
+}
+.plugin-rows .label {
+  color: var(--ink-dim, inherit);
+  font-size: 0.85em;
+}
+.plugin-rows ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.plugin-rows li {
+  margin: 0 0 0.15rem;
+}
+.badge {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.05rem 0.55rem;
+  font-size: 0.8em;
+  white-space: nowrap;
+}
+.badge.is-ok {
+  color: var(--ok, #2e7d32);
+}
+/* "on, not loading" has to read as loudly as broken does. A plugin an
+   operator switched on that is silently not rendering is the state this
+   screen exists to surface. */
+.badge.is-danger {
+  color: var(--danger, #b3261e);
+}
+/* Waiting on a person is not a fault, so it does not borrow the danger
+   colour — but it is the one state on this screen that will not resolve
+   without somebody acting, which is why it is not the plain badge either. */
+.badge.is-warn {
+  color: var(--warn, #b26a00);
+}
+
+.banner {
+  border: 1px solid var(--danger, #b3261e);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  margin: 0 0 0.75rem;
+}
+.plugin-filters {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin: 0.75rem 0;
+}
+.plugin-filters input[type='search'] {
+  flex: 1;
+}
+.plugin-filters label {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  white-space: nowrap;
+}
+.plugin-drop {
+  border: 1px dashed currentColor;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.plugin-drop.is-over {
+  border-style: solid;
+  border-color: var(--ok, #2e7d32);
+}
+.plugin-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+.plugin-actions .danger {
+  margin-left: auto;
+}
+
+/* A plugin's panel. It is an iframe, so it needs a box rather than styling —
+   what is inside is the plugin's own page and its styles are its own. */
+.plugin-panel {
+  border: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Installed and Library are two views of one question, so they sit on one
+   screen with a switch rather than on two routes with navigation between. */
+.plugin-views {
+  display: flex;
+  gap: 0.35rem;
+  margin: 0.75rem 0;
+}
+.plugin-views button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.65;
+}
+.plugin-views button.is-current {
+  border-color: currentColor;
+  opacity: 1;
+}
+
+/* Inside the banner rather than beside it: the sentence says a restart is
+   owed, and the thing that does it belongs in the same breath. */
+.banner-act {
+  margin-left: 0.5rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  padding: 0.1rem 0.7rem;
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+.banner-act:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.plugin-preview {
+  margin-top: 0.6rem;
+}
+.preview-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.preview-names button {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8em;
+  padding: 0.1rem 0.7rem;
+  cursor: pointer;
+  opacity: 0.75;
+}
+.preview-names button.is-current {
+  opacity: 1;
+}
+/* Somebody else's markup, on its own origin with no scripts. Rendering it
+   inline would let a plugin restyle the screen you are deciding on it from. */
+.preview-frame {
+  width: 100%;
+  min-height: 120px;
+  margin-top: 0.5rem;
+  border: 1px dashed currentColor;
+  border-radius: 8px;
+  background: #fff;
+}
+
+/* A comparison, coloured by what moved. The whole point of showing one at
+   review time is that an approval covers exact content, so the eye needs to
+   land on the changed lines rather than re-read the file. */
+.prompt-preview.diff .d-added {
+  display: block;
+  background: color-mix(in srgb, var(--ok, #2e7d32) 14%, transparent);
+}
+.prompt-preview.diff .d-removed {
+  display: block;
+  background: color-mix(in srgb, var(--danger, #b3261e) 14%, transparent);
+  opacity: 0.75;
+}
+.prompt-preview.diff .d-same {
+  display: block;
+}

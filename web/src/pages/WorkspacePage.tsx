@@ -1,20 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
+import { useHtmx } from '../htmx'
+import { dragging } from '../dnd'
 import BlueprintEditor from './BlueprintEditor'
 import TerminalPage from './TerminalPage'
-import AgentMemory from './AgentMemory'
 import FilesPage from './FilesPage'
 import CodeEditor from './CodeEditor'
 import ApprovalDialog from './ApprovalDialog'
-import InletsPanel from './InletsPanel'
-import QueuePanel from './QueuePanel'
-import EnvPanel from './EnvPanel'
 import { Select } from './Select'
-import { Deck, ShellGate, Workbench } from '../deck/Deck'
-import GearsPage from './GearsPage'
-import McpPage from './McpPage'
-import LibraryPage from './LibraryPage'
-import ContextPage from './ContextPage'
+import { Deck, Workbench } from '../deck/Deck'
 import { Drawer, type Edge } from '../deck/Drawer'
 import { useDeck } from '../deck/store'
 import type { OverlayId, ViewId } from '../deck/types'
@@ -36,6 +30,7 @@ import {
   type User,
   type WSMessage,
   type Workspace,
+  contributions,
 } from '../api'
 
 export default function WorkspacePage({ me }: { me: User }) {
@@ -55,7 +50,6 @@ export default function WorkspacePage({ me }: { me: User }) {
   // Bumped on every save so the tree can re-read the directory and stop
   // reporting a stale size.
   const [savedTick, setSavedTick] = useState(0)
-  const [usage, setUsage] = useState<Map<number, AgentUsage>>(new Map())
   // A paused turn waiting for permission to search the web. The SSE event is
   // a latency optimisation; the poll below is the mechanism, so a buffering
   // proxy that swallows the stream costs a second rather than the feature.
@@ -69,14 +63,6 @@ export default function WorkspacePage({ me }: { me: User }) {
   // would refetch on every status event of a newly created agent.
   const agentIdsRef = useRef<Set<number>>(new Set())
 
-  const reloadUsage = useCallback(
-    () =>
-      api.usage
-        .workspace(wsId)
-        .then((u) => setUsage(new Map(u.map((x) => [x.agent_id, x]))))
-        .catch((e: Error) => setError(e.message)),
-    [wsId],
-  )
 
   const reloadAgents = useCallback(
     () =>
@@ -97,16 +83,14 @@ export default function WorkspacePage({ me }: { me: User }) {
       api.models.list(),
       api.workspaces.messages(wsId),
       api.workspaces.status(wsId),
-      api.usage.workspace(wsId),
     ])
-      .then(([w, a, m, msgs, sts, u]) => {
+      .then(([w, a, m, msgs, sts]) => {
         setWorkspace(w)
         agentIdsRef.current = new Set(a.map((x) => x.id))
         setAgents(a)
         setModels(m)
         setMessages(msgs)
         setStatuses(new Map(sts.map((s) => [s.agent_id, s])))
-        setUsage(new Map(u.map((x) => [x.agent_id, x])))
       })
       .catch((e: Error) => setError(e.message))
   }, [wsId])
@@ -201,7 +185,6 @@ export default function WorkspacePage({ me }: { me: User }) {
       setBusy(false)
       setStreams(new Map())
       void reloadAgents()
-      void reloadUsage()
       void api.workspaces.status(wsId).then((sts) => setStatuses(new Map(sts.map((s) => [s.agent_id, s]))))
     }
   }
@@ -221,13 +204,35 @@ export default function WorkspacePage({ me }: { me: User }) {
   // overlay is something you consulted a minute ago, not part of how the
   // workspace is arranged, and restoring one on load would put a panel over
   // the operator's work for a question they already had answered.
-  const [overlay, setOverlay] = useState<OverlayId | null>(null)
+  // A plugin's panel is identified by "plugin:<id>", which cannot collide with
+  // an OverlayId because none of those contains a colon. Widening the state's
+  // type rather than the union keeps the host's own overlays exhaustively
+  // checked by the compiler, which is what stops a new one being forgotten in
+  // the switch below.
+  const [overlay, setOverlay] = useState<OverlayId | `plugin:${string}` | null>(null)
+  const mounts = useMemo(
+    () => contributions().mounts.filter((m) => m.point === 'workspace.drawer'),
+    [],
+  )
+  const openMount = typeof overlay === 'string' && overlay.startsWith('plugin:')
+    ? mounts.find((m) => `plugin:${m.from}` === overlay)
+    : undefined
   // A gear the operator asked to see the source of, from somewhere that is not
   // the gear list — today, the note a blueprint drop leaves when the gear that
   // landed has never been approved. It opens the card; it approves nothing.
   const [reviewGear, setReviewGear] = useState<number | null>(null)
+
+  // Every panel below whose body the server renders. React mounts the
+  // container and htmx scans the document only once, at load — so without
+  // these, each one opened empty while the server sat there answering 200.
+  // Keyed on what the container asks for, because the same element is reused
+  // for a different agent or a different drawer.
+  const terminalGate = useHtmx<HTMLDivElement>(`terminal-${wsId}`)
+  const agentsPanel = useHtmx<HTMLDivElement>(`agents-${wsId}-${selectedAgent?.id ?? 0}`)
+  const overlayPanel = useHtmx<HTMLDivElement>(`overlay-${wsId}-${overlay}-${reviewGear ?? 0}`)
+  const memoryPanel = useHtmx<HTMLDivElement>(`memory-${wsId}-${selectedAgent?.id ?? 0}`)
   // Whether the operator has asked for a shell IN THIS SESSION. Never
-  // persisted: see ShellGate.
+  // persisted: a shell is not reconnected, and the gate says so.
   const [shell, setShell] = useState(false)
 
   // Opening a file goes to the workbench, which is the view a file lives in.
@@ -296,6 +301,9 @@ export default function WorkspacePage({ me }: { me: User }) {
     { id: 'inlets', title: 'Receivers' },
     { id: 'queue', title: 'Queue' },
     { id: 'env', title: 'Variables' },
+    // The workflow's history. A drawer rather than a page because rolling back
+    // is something you do while looking at what you are rolling back from.
+    { id: 'versions', title: 'Versions' },
     // The context space, admin-only, and a drawer for the same reason
     // everything else here is one: it is consulted while you work, not a place
     // you go instead of working. It was the last thing that existed only as a
@@ -326,9 +334,19 @@ export default function WorkspacePage({ me }: { me: User }) {
               go: (id: string) => deck.go(id as ViewId),
             },
             drawers: {
-              items: OVERLAY_ITEMS.map((o) => ({ id: o.id, title: o.title, icon: DRAWER_ICON[o.id] })),
+              items: [
+                ...OVERLAY_ITEMS.map((o) => ({ id: o.id, title: o.title, icon: DRAWER_ICON[o.id] })),
+                // After the host's own, because a plugin adding a panel is
+                // adding to this workspace rather than rearranging it.
+                ...mounts.map((m) => ({
+                  id: `plugin:${m.from}`,
+                  title: m.title,
+                  icon: DRAWER_ICON.gears,
+                })),
+              ],
               open: overlay,
-              toggle: (id: string | null) => setOverlay(id as OverlayId | null),
+              toggle: (id: string | null) =>
+                setOverlay(id as OverlayId | `plugin:${string}` | null),
             },
             action: {
               label: 'export',
@@ -337,7 +355,7 @@ export default function WorkspacePage({ me }: { me: User }) {
             },
           }
         : null,
-    [workspace?.name, workspace?.description, busy, deck.deck.view, overlay],
+    [workspace?.name, workspace?.description, busy, deck.deck.view, overlay, mounts],
   )
 
   if (!workspace) {
@@ -360,53 +378,13 @@ export default function WorkspacePage({ me }: { me: User }) {
   // invariant. The nodes below are rebuilt on each render and that is fine;
   // what matters is that the tree shape never changes, so the terminal's
   // socket and the blueprint's canvas are never torn down.
-  const roster = (
-    <div className="dk-body agent-cards">
-      {agents.map((a) => {
-        const st = statuses.get(a.id)
-        const state = st?.state ?? 'idle'
-        const u = usage.get(a.id)
-        // The bar is this agent's share of the workspace's spend, not a
-        // percentage of some invented budget. A number nobody can act on is
-        // decoration; a share tells you where the money went.
-        const total = [...usage.values()].reduce((n, x) => n + x.input_tokens + x.output_tokens, 0)
-        const mine = u ? u.input_tokens + u.output_tokens : 0
-        const share = total > 0 ? Math.round((mine / total) * 100) : 0
-        return (
-          <button
-            key={a.id}
-            className={`agent-card ${selectedAgent?.id === a.id ? 'selected' : ''}`}
-            onClick={() => {
-              setSelectedAgent(a)
-              setOverlay('agent')
-            }}
-          >
-            <span className="agent-card-head">
-              <span className={`dot ${state}`} title={state + (st?.detail ? `: ${st.detail}` : '')} />
-              <span className="agent-name">{a.name}</span>
-              {a.is_orchestrator && <span className="star" title="the workspace entry point">★</span>}
-            </span>
-            <span className={`agent-spend-big ${total > 0 ? '' : 'idle'}`} title={spendTitle(u)}>
-              {spendLabel(u)}
-            </span>
-            <span className="agent-model muted">{a.model_label || 'no model'}</span>
-            {/* No meter before there is anything to meter. An empty track
-                across a card is a hairline rule that means nothing, and every
-                card in a fresh workspace carried one. */}
-            {total > 0 && (
-              <>
-                <span className="share-bar" aria-hidden>
-                  <span style={{ width: `${share}%` }} />
-                </span>
-                <span className="muted share-label">{share}% of this workspace</span>
-              </>
-            )}
-            {total === 0 && <span className="muted share-label">no spend yet</span>}
-          </button>
-        )
-      })}
-    </div>
-  )
+  /** The rail's name for a drawer, as the server knows it.
+   *
+   *  The two differ for two of them, and they are mapped here rather than by
+   *  renaming either: the word on screen is what somebody reads, and the word
+   *  in the code is what the rest of this file already uses. */
+  const drawerName = (o: string) =>
+    o === 'env' ? 'variables' : o === 'inlets' ? 'receivers' : o
 
   // An overlay that is shut does not load and does not poll. The receivers
   // cost two queries, the queue runs a timer, and a workspace using neither
@@ -519,33 +497,125 @@ export default function WorkspacePage({ me }: { me: User }) {
           setReviewGear(null)
         }}
       >
-        {overlay === 'agents' && roster}
-        {overlay === 'inlets' && <InletsPanel wsId={wsId} agents={agents} shown onError={setError} />}
-        {overlay === 'queue' && <QueuePanel wsId={wsId} shown onError={setError} />}
-        {overlay === 'env' && <EnvPanel wsId={wsId} shown onError={setError} />}
-        {overlay === 'terminal' && (
-          <ShellGate started={shell} onStart={() => setShell(true)}>
+        {openMount && (
+          /* An iframe rather than injected markup, and deliberately so: the
+             panel is the plugin's own page, served by the server at its own
+             URL, so what renders here is exactly what renders when somebody
+             opens that URL in a tab. One implementation, one thing to test,
+             and the plugin's styles cannot leak into the workspace around it. */
+          <iframe
+            className="dk-body plugin-panel"
+            src={openMount.page}
+            title={openMount.title}
+            sandbox="allow-scripts allow-same-origin"
+          />
+        )}
+        {overlay === 'terminal' &&
+          (shell ? (
             <div className="dk-body">
               <TerminalPage workspaceId={wsId} />
             </div>
-          </ShellGate>
+          ) : (
+            /* The gate is the server's, the session is the socket's. What a
+               template can render here is why there is or is not a shell and
+               what starting one costs — including the case the client never
+               showed: an install with no sandbox, which says so instead of
+               offering a button that fails. */
+            <div
+              key="terminal-gate"
+              ref={terminalGate}
+              hx-get={`/workspaces/${wsId}/drawers/terminal`}
+              hx-trigger="load"
+              hx-swap="innerHTML"
+              onClick={(e) => {
+                if ((e.target as HTMLElement).closest('[data-start-shell]')) setShell(true)
+              }}
+            />
+          ))}
+        {/* Three panels the SERVER renders now, swapped in by htmx.
+            This is the seam the conversion is happening on: the workspace —
+            its chat, its blueprint, its editor — is still the client's, and
+            these are templates going through the composed stack. A plugin
+            overriding cog.drawer.gears changes what somebody sees in here,
+            without this page having to become a template first.
+
+            The context drawer keeps its admin rule; the server applies it, so
+            a rule that lives in one place cannot disagree with itself. */}
+        {/* The roster is the one panel whose rows drive this page: picking an
+            agent opens a different drawer, and which drawer is open is this
+            component's state. So the server renders the markup and the click
+            stays here — a delegated listener on the container, reading the id
+            the row carries. That is the seam that let the roster become a
+            template without the workspace around it having to be one. */}
+        {overlay === 'agents' && (
+          <div
+            key="agents"
+            className="dk-body"
+            ref={agentsPanel}
+            hx-get={`/workspaces/${wsId}/drawers/agents${
+              selectedAgent ? `?selected=${selectedAgent.id}` : ''
+            }`}
+            hx-trigger="load"
+            hx-swap="innerHTML"
+            onClick={(e) => {
+              const card = (e.target as HTMLElement).closest('[data-agent-id]')
+              if (!card) return
+              const id = Number(card.getAttribute('data-agent-id'))
+              const picked = agents.find((a) => a.id === id)
+              if (picked) {
+                setSelectedAgent(picked)
+                setOverlay('agent')
+              }
+            }}
+          />
         )}
-        {overlay === 'gears' && <GearsPage me={me} review={reviewGear} />}
-        {overlay === 'mcp' && <McpPage me={me} />}
-        {overlay === 'instructions' && <LibraryPage />}
-        {/* The space itself, where the memory being searched and edited is —
-            a drawer rather than a page you leave the work for, which is the
-            rule the rest of this rail already follows. It stays admin-only:
-            it reads and writes every document in the install. */}
-        {overlay === 'context' && me.role === 'admin' && <ContextPage />}
-        {overlay === 'context' && me.role !== 'admin' && (
-          <p className="hint">
-            The context space is an administrator's. What THIS workspace's agents read is in Memory, on each agent.
-          </p>
+
+        {(overlay === 'gears' ||
+          overlay === 'instructions' ||
+          overlay === 'context' ||
+          overlay === 'env' ||
+          overlay === 'inlets' ||
+          overlay === 'mcp' ||
+          overlay === 'queue' ||
+          overlay === 'versions') && (
+          <div
+            key={overlay}
+            className="dk-body"
+            ref={overlayPanel}
+            hx-get={`/workspaces/${wsId}/drawers/${drawerName(overlay)}${
+              overlay === 'gears' && reviewGear ? `?open=${reviewGear}` : ''
+            }`}
+            hx-trigger="load"
+            hx-swap="innerHTML"
+            /* Picking a card up. The payload used to be attached by the
+               component that drew it; a template draws no handlers, so the
+               card states what it is in data attributes and this listens once
+               on the container — the same delegation the clicks above use. */
+            onDragStart={(e) => {
+              const card = (e.target as HTMLElement).closest('[data-instruction-id]')
+              if (!card) return
+              dragging({
+                kind: 'instruction',
+                id: Number(card.getAttribute('data-instruction-id')),
+                name: card.getAttribute('data-instruction-name') ?? '',
+                path: card.getAttribute('data-instruction-path') ?? '',
+              })(e)
+            }}
+          />
         )}
         {overlay === 'memory' &&
           (selectedAgent ? (
-            <AgentMemory agent={selectedAgent} onChanged={() => void reloadAgents()} onError={setError} />
+            /* The agent travels in the URL rather than being held by the
+               server, which keeps the panel a pure function of its request:
+               a refresh, a reload and a link all show the same thing. */
+            <div
+              key={`memory-${selectedAgent.id}`}
+              className="dk-body"
+              ref={memoryPanel}
+              hx-get={`/workspaces/${wsId}/drawers/memory?agent=${selectedAgent.id}`}
+              hx-trigger="load"
+              hx-swap="innerHTML"
+            />
           ) : (
             <p className="hint">
               Memory belongs to one agent. Pick one in Agents, and it opens here.
@@ -704,34 +774,8 @@ function Spend({ agentId }: { agentId: number }) {
 // Spend is shown compactly in the list and in full on hover. Rounding to "k"
 // is fine for a glance; the tooltip carries the exact figures because the
 // point of the display is comparing what each agent actually costs.
-function compact(n: number) {
-  if (n < 1000) return String(n)
-  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`
-  return `${(n / 1_000_000).toFixed(1)}M`
-}
 
-function spendLabel(u?: AgentUsage) {
-  // Nothing, not an em dash. Set at the size of a number, a dash reads as a
-  // broken element — five of them down a fresh roster looked like five failed
-  // fields — and the line under it already says "no spend yet".
-  if (!u || u.turns === 0) return ''
-  const total = u.input_tokens + u.output_tokens
-  // A provider that reports nothing would otherwise show a confident 0.
-  if (total === 0 && u.unreported_turns === u.turns) return 'n/a'
-  return compact(total)
-}
 
-function spendTitle(u?: AgentUsage) {
-  if (!u || u.turns === 0) return 'has not run yet'
-  const lines = [
-    `${u.input_tokens.toLocaleString()} in + ${u.output_tokens.toLocaleString()} out`,
-    `${u.turns} model ${u.turns === 1 ? 'call' : 'calls'}`,
-  ]
-  if (u.unreported_turns > 0) {
-    lines.push(`${u.unreported_turns} of them reported no usage — the real spend is higher`)
-  }
-  return lines.join('\n')
-}
 
 function Timeline({
   messages,
@@ -1063,6 +1107,7 @@ function AgentPanel({
   onChanged: (a: Agent) => void
   onError: (msg: string) => void
 }) {
+  const agentMemory = useHtmx<HTMLDivElement>(`agent-memory-${agent.id}`)
   const [role, setRole] = useState(agent.role)
   const [avoid, setAvoid] = useState(agent.avoid)
   const [modelId, setModelId] = useState<number | ''>(agent.model_id ?? '')
@@ -1214,7 +1259,16 @@ function AgentPanel({
       </div>
 
       <h3>Memory</h3>
-      <AgentMemory agent={agent} onChanged={() => setPrompt(null)} onError={onError} />
+      {/* The same panel the Memory drawer shows, from the same template. Two
+          renderings of one thing is two things that disagree eventually, and
+          the one nobody is looking at is the one that drifts. */}
+      <div
+        key={`agent-memory-${agent.id}`}
+        ref={agentMemory}
+        hx-get={`/workspaces/${agent.workspace_id}/drawers/memory?agent=${agent.id}`}
+        hx-trigger="load"
+        hx-swap="innerHTML"
+      />
 
       <h3>Add context</h3>
       {contextUnavailable ? (
@@ -1486,4 +1540,16 @@ function BindForm({
       </button>
     </form>
   )
+}
+
+function spendTitle(u?: AgentUsage) {
+  if (!u || u.turns === 0) return 'has not run yet'
+  const lines = [
+    `${u.input_tokens.toLocaleString()} in + ${u.output_tokens.toLocaleString()} out`,
+    `${u.turns} model ${u.turns === 1 ? 'call' : 'calls'}`,
+  ]
+  if (u.unreported_turns > 0) {
+    lines.push(`${u.unreported_turns} of them reported no usage — the real spend is higher`)
+  }
+  return lines.join('\n')
 }

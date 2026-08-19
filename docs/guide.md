@@ -1903,6 +1903,227 @@ on it. A slow or unreachable GitHub is not a reason for a workspace to be slow.
 
 ---
 
+## Versions
+
+A workflow you cannot get back to is one you stop changing. So save it: the
+**Versions** drawer, in the workspace rail beside Agents and Gears.
+
+![A workflow's history, beside the blueprint it describes](assets/23-versions.png)
+
+### What a version holds
+
+Everything that decides what a run does — the agents, the wires between them,
+the gears they may call **pinned to the version they were pinned to**, what each
+one reads, and the clocks that start them. Not some of it: a blueprint saved
+without the instruction an agent reads is a number that does not say how the
+thing will behave.
+
+Two things are deliberately not in it.
+
+**The conversation.** The transcript is work, not configuration. Rolling back to
+last week must not delete what was said since.
+
+**Approvals are not dropped**, unlike an export. A bundle crosses to another
+machine, so it carries no approvals and no credentials; a version stays here,
+and a rollback that quietly un-approved every gear would not be a rollback.
+
+### Saving one
+
+Write what changed and press **Save this version**. The message is required —
+a version with no message is a date, and a list of dates does not tell you which
+one to go back to. If nothing has changed since the newest version, it says so
+rather than recording a duplicate.
+
+### Going back
+
+Every version except the current one offers **Roll back to this**. What happens
+next is three things, and it is worth knowing all three:
+
+1. What is there **now** is saved first, as its own version, so nothing you had
+   not saved is lost.
+2. The workflow is put back — agents, wires, grants, bindings and clocks. What
+   is not in the version goes.
+3. The rollback is recorded as a **new version**, marked as a rollback and
+   saying which one it went to.
+
+Numbers are never reused. A history that can be rewritten is a history nobody
+can point at in an argument about what actually ran.
+
+### When something cannot come back
+
+A gear the catalogue no longer has cannot be conjured back by a rollback. So
+everything else is restored and the gap is **named** — and a gear that has moved
+on to a later version says so too, because that is exactly the thing a version
+exists to make visible.
+
+### On the list
+
+Each workflow on the Workspaces screen shows its newest version, and says
+**unsaved changes** when what is running has drifted from it.
+
+## Plugins
+
+A gear adds a tool. A plugin adds a **screen** — and can change the ones already
+there. It can put an entry in the rail, hang a panel inside every workspace,
+take over a row the core draws, and run code of its own on your machine. That is
+a much larger thing to say yes to than a gear, and the screen is built around
+the moment you say it.
+
+Everything about plugins is under **Plugins** in the rail. It is admin-only.
+
+![The plugins screen: what is installed, what it takes over, and the library beside it](assets/22-plugins.png)
+
+### Getting one in
+
+At the top of the screen is a drop zone: drag a `.zip` onto it, or click to
+choose one. Under the drop zone are two tabs.
+
+- **Installed** — what this machine has. This is where you approve, enable,
+  reorder and remove.
+- **Library** — the shared catalog, searchable. Nothing here is on your machine;
+  "Install" fetches it and puts it in Installed, still switched off.
+
+The command line does the same thing:
+
+```bash
+cogitorium plugins install mine.zip
+```
+
+And if you are writing one, point the server at the directory instead of
+building a bundle for every edit:
+
+```bash
+cogitorium plugins dev .
+```
+
+A development directory is listed as such everywhere it appears. It has no
+version directory, no digest and no signature, because there is nothing stable
+to take one of.
+
+### It arrives switched off
+
+Three separate things have to be true before a plugin does anything, and they
+are separate on purpose.
+
+1. **Installed** — the files are on the machine. Nothing has run.
+2. **Approved** — somebody read it and said yes. Still nothing has run.
+3. **Enabled** — it is in the stack. It runs after the next restart.
+
+The screen will offer to restart when a change is waiting.
+
+**Approval is bound to the bytes, not the name.** The digest is taken from what
+is on disk, so what you approved is what you could have read. Rebuild the plugin
+and it drops back to pending by itself — not as a nuisance, but because the
+thing you approved no longer exists.
+
+### Reading the approval card
+
+The card is the whole point of the feature, so it is worth knowing what each
+part is telling you.
+
+- **What it overrides**, with a **picture of each one**. "It overrides
+  `cog.row.nav`" is not something anyone can evaluate. The card renders that
+  row, through the composed stack, against an example — so you are looking at
+  what you would get.
+- **Which hosts it wants to reach.** It reaches those and nothing else, through
+  the same gate gears use: a row is written before the socket opens, and
+  loopback and link-local are refused regardless of what was granted.
+- **Which secrets it names**, by name. It never sees a value you did not name.
+- **Which parts of your own API it asks for.** It calls them as `plugin:<id>`,
+  never as you — so a grant it does not have is a grant it does not get, even
+  though the call is in-process.
+- **Whatever the author shipped to show you.** Screenshots, a gif, a short
+  clip — if they chose to include any. This is the author's own material, not
+  something the product generated: it shows what they want you to see. It
+  travels inside the bundle rather than as a link, so it is covered by the same
+  digest you are approving, it works with no network, and it cannot be swapped
+  for something else the day after you looked at it. A plugin that ships none
+  is not worse off; most will ship none.
+- **How it runs.** Five ways, and one of them is different in kind:
+
+| It runs as | What that means for your machine |
+|---|---|
+| templates only | nothing executes; it is words and CSS |
+| WebAssembly | sandboxed by the runtime, no filesystem, no network except through the gate |
+| a fetched interpreter | an interpreter downloaded once and shared; a child process running as this server's user |
+| a container | isolated, on the same sandbox your gears already use; costs a container start per call |
+| **a native binary** | **your machine code, as this server's user, with no isolation at all** |
+
+The last row is shown in red on the card. It is not forbidden — an operator who
+wants it is entitled to it, and some things genuinely need it — but it is the
+one where "I read the manifest" is not enough, and the card says so rather than
+letting the choice look like the others.
+
+**`auth: none` is also shown in red.** A plugin's own pages require a signed-in
+person by default; a plugin can ask for a page that does not, and that is a page
+on your server open to anybody who can reach it.
+
+### When two plugins want the same thing
+
+They stack, in an order you set. Later layers win, and each row on the Installed
+tab has arrows to move it earlier or later.
+
+This matters more than it sounds. Two plugins that both draw the workspace
+header do not conflict and do not error — the later one is simply what you see.
+If a plugin you installed seems to have done nothing, check whether something
+below it is drawing the same thing.
+
+```bash
+cogitorium plugins order first second third
+```
+
+### Turning one off
+
+- **Disable** takes it out of the stack and leaves the approval standing. Use
+  this to find out whether a plugin is what broke something.
+- **Withdraw approval** switches it off *and* forgets that anybody said yes. It
+  has to be read and approved again.
+- **Remove** deletes it.
+
+If a plugin cannot load — its templates do not compile, it names something that
+is not there — it is **dropped and the rest are composed without it**, and the
+screen says which one and why. The install comes up. One broken plugin does not
+take the product down with it.
+
+### Where they come from
+
+The library is
+[`orkcom-tech/cogitorium-plugins`](https://github.com/orkcom-tech/cogitorium-plugins),
+an index of five fields per plugin saying where it lives. The bundles stay in
+their authors' own repositories.
+
+An entry may carry one picture, and the catalog pins it to a file in the
+author's own repository — the same host the catalog itself is read from. An
+address anywhere else is refused, because browsing a library should not tell a
+stranger who is looking.
+
+Each entry shows one of three things, and the third is the ordinary one:
+
+- **the team read the version you have**
+- **the team read a different version** — not an accusation, just a different
+  number
+- **nobody has looked**
+
+Verified means somebody read that version. It is not an audit and it does not
+replace the approval step on your own install — that is the one performed by
+somebody who can actually see your data.
+
+Checking for updates costs you nothing in privacy: the catalog's CI publishes an
+index with the versions in it, your install fetches the whole file, and the
+comparison happens locally. No query string, no install id, no list of what you
+have.
+
+### Writing one
+
+`cogitorium plugins names` prints every template you can override, what model it
+renders against, and what the core's own version of it is today — offline, from
+the binary you are running. There are SDKs for Python, Go, TinyGo and Rust, and
+`needs: js` needs no SDK at all: the engine is compiled into the server and you
+ship one file.
+
+The full account is in the reference, under Plugins.
+
+
 ## Watching it
 
 Nothing here is a screen — it is what an install looks like to Prometheus,

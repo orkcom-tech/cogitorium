@@ -1,0 +1,27 @@
+{{define "pulse.page.panel"}}
+<main class="pulse" data-workspace="">
+  <header>
+    <h1>Pulse</h1>
+    <p class="sub">What this workspace is spending and doing.</p>
+  </header>
+
+  <section class="tiles">
+    <div class="tile"><span class="n" id="tokens-total">—</span><span class="k">tokens, 14 days</span></div>
+    <div class="tile"><span class="n" id="agents-running">—</span><span class="k">agents working</span></div>
+    <div class="tile"><span class="n" id="net-requests">—</span><span class="k">outbound requests</span></div>
+  </section>
+
+  <section class="chart">
+    <h2>Token spend</h2>
+    <div id="tokens-chart" class="plot"></div>
+    <p class="note" id="tokens-note"></p>
+  </section>
+
+  <section class="chart">
+    <h2>Network</h2>
+    <div id="net-chart" class="plot"></div>
+  </section>
+
+  <p class="err" id="err" hidden></p>
+</main>
+{{end}}

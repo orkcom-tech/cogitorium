@@ -1,0 +1,45 @@
+{{/*
+  The signed-in person's own screen.
+
+  It exists because the rail a server-rendered page draws had no account on it:
+  from the screen somebody lands on after signing in there was no way to sign
+  out or change a password. The client draws a menu for this, and a menu is a
+  thing only the client can draw — so on this side it is a page.
+*/}}
+
+{{define "cog.page.account"}}
+<main class="page account">
+  <h2>{{.Name}}</h2>
+  <p class="hint">{{if .IsAdmin}}An administrator of this install.{{else}}A member of this install.{{end}}</p>
+
+  {{if .Problem}}<p class="error">{{.Problem}}</p>{{end}}
+  {{if .Notice}}<p class="hint">✓ {{.Notice}}</p>{{end}}
+
+  {{template "cog.frag.password" .}}
+
+  <section class="panel">
+    <h3>Sign out</h3>
+    {{/* Ends THIS session. The others keep working — a person signing out of a
+         borrowed machine has not asked to be signed out of their own. */}}
+    <p class="hint">Ends this session on this device. Anywhere else you are signed in keeps working.</p>
+    <form method="post" action="/account/signout">
+      <button type="submit" class="danger">Sign out</button>
+    </form>
+  </section>
+</main>
+{{end}}
+
+{{define "cog.frag.password"}}
+<section class="panel">
+  <h3>Change your password</h3>
+  {{/* The current one is asked for. It was not, and that made a password a
+       thing anybody who found an unlocked screen could replace — the session
+       proves somebody sat down, not that they are who the account is. */}}
+  <form method="post" action="/account/password">
+    <label>Current password <input type="password" name="current" required autocomplete="current-password"></label>
+    <label>New password <input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
+    <label>New password again <input type="password" name="again" required minlength="8" autocomplete="new-password"></label>
+    <button type="submit">Change it</button>
+  </form>
+</section>
+{{end}}

@@ -29,6 +29,16 @@ import (
 const DefaultBrowserImage = "mcr.microsoft.com/playwright:v1.56.0-noble"
 
 type Config struct {
+	// Plugins is per-plugin settings, keyed by plugin id. Read-only from a
+	// plugin's side: what a plugin wants to remember goes in its own storage,
+	// and a plugin writing its own configuration would be a plugin granting
+	// itself something.
+	//
+	// Untyped on purpose. The host has no idea what any given plugin's
+	// settings mean and should not pretend to — validating them here would
+	// mean every plugin's schema living in this repository.
+	Plugins map[string]map[string]any `yaml:"plugins"`
+
 	// Listen is the HTTP listen address, e.g. "127.0.0.1:8688".
 	Listen string `yaml:"listen"`
 	// DataDir holds the SQLite database and everything the server owns on disk.
@@ -141,6 +151,26 @@ type Config struct {
 	// and refuses "check now", and the interface cannot undo it — see
 	// update.Checker.SetMode.
 	UpdateCheck string `yaml:"update_check"`
+
+	// OrchestratorSecrets decides whether the orchestrator may read and write
+	// the operator's named values: "on" (default) or "off".
+	//
+	// On by default, and that is a considered exception rather than an
+	// oversight. An orchestrator that can create an agent and forge a gear but
+	// cannot give either the credential they need hands the job back at the
+	// last step, which is the one thing it exists not to do.
+	//
+	// What "on" costs is not hidden: reading a secret puts its plaintext into
+	// a model's context, where it stays for that conversation. No arrangement
+	// of this code removes that — a value the model can use is a value the
+	// model has seen. "off" is for an operator who would rather type
+	// credentials themselves, and it takes effect on the orchestrator's next
+	// turn rather than at the next restart.
+	//
+	// Names are not gated either way. An orchestrator that cannot see WHICH
+	// names exist cannot tell an agent which one to declare, and a name is not
+	// a secret.
+	OrchestratorSecrets string `yaml:"orchestrator_secrets"`
 
 	// Egress is the master switch for agents reaching the internet. Off by
 	// default, and deliberately reachable ONLY from this file and the
@@ -412,6 +442,9 @@ func Load(path, dataDirOverride string) (Config, error) {
 	}
 	if v := os.Getenv("COGITORIUM_LOG_FORMAT"); v != "" {
 		cfg.LogFormat = strings.ToLower(strings.TrimSpace(v))
+	}
+	if v := os.Getenv("COGITORIUM_ORCHESTRATOR_SECRETS"); v != "" {
+		cfg.OrchestratorSecrets = strings.ToLower(strings.TrimSpace(v))
 	}
 	// Not a bool: "ask" is a real value and spelling it as a third state of a
 	// flag would make an unanswered question look like a refusal.

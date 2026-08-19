@@ -17,6 +17,179 @@ export type Model = {
 
 export type TestResult = { ok: boolean; models?: string[]; error?: string }
 
+export type PluginPage = { path: string; title?: string; auth: string }
+
+/** One rail destination a plugin contributed. */
+export type PluginNavItem = {
+  label: string
+  icon?: string
+  href: string
+  order: number
+  /** always | workspace | admin — decided here, because this is where the
+   *  viewer's role is already known. */
+  when?: string
+  /** Which plugin contributed it, so a rail entry can be traced without
+   *  reading manifests. */
+  from: string
+}
+
+/** What the plugins add to this interface.
+ *
+ * Delivered in the document at boot rather than fetched, because a rail that
+ * gains entries a moment after it renders is a rail that moves under
+ * somebody's cursor.
+ */
+/** One panel a plugin contributes inside the workspace. */
+export type PluginMount = {
+  point: string
+  title: string
+  icon?: string
+  /** The URL the panel shows. A URL rather than markup, so the panel and a
+   *  full-window view of the same thing are one implementation. */
+  page: string
+  from: string
+}
+
+export type PluginContribution = {
+  nav: PluginNavItem[]
+  mounts: PluginMount[]
+  styles: string[]
+  scripts: string[]
+}
+
+declare global {
+  interface Window {
+    __COG_PLUGINS__?: PluginContribution
+  }
+}
+
+/** contributions reads what the server put in the document.
+ *
+ * Absent is the ordinary case — no plugins, or none that contribute anything —
+ * and it reads as empty rather than as an error.
+ */
+export function contributions(): PluginContribution {
+  const c = window.__COG_PLUGINS__
+  return {
+    nav: Array.isArray(c?.nav) ? c.nav : [],
+    mounts: Array.isArray(c?.mounts) ? c.mounts : [],
+    styles: Array.isArray(c?.styles) ? c.styles : [],
+    scripts: Array.isArray(c?.scripts) ? c.scripts : [],
+  }
+}
+
+/** What an action changed.
+ *
+ * `restart_required` is computed, not assumed: installing arrives switched off
+ * and needs nothing, and enabling something already enabled changes nothing
+ * either. Saying it every time would teach an operator to ignore it.
+ */
+/** One entry in the shared catalog, as the library screen sees it. */
+export type CatalogEntry = {
+  id: string
+  name: string
+  author: string
+  description: string
+  repo: string
+  /** Where a person goes to read the code BEFORE approving it. */
+  source: string
+  installed: boolean
+  installed_version?: string
+  /** Three states rather than a badge, because a badge that survives a version
+   *  change is a badge about a name rather than about code:
+   *  'verified' — the team read the version you have.
+   *  'verified-other-version' — they read a different one, and it says which.
+   *  'unchecked' — nobody has looked. The ordinary state, not an accusation. */
+  verified: 'verified' | 'verified-other-version' | 'unchecked'
+  verified_version?: string
+  verified_by?: string
+  verified_note?: string
+  /** What the catalog currently offers. Absent when no index has been
+   *  published, and absence is shown as "cannot tell" rather than guessed. */
+  version?: string
+  update?: boolean
+}
+
+export type CatalogUpdate = {
+  id: string
+  name: string
+  installed: string
+  available: string
+}
+
+export type CatalogListing = {
+  entries: CatalogEntry[]
+  updates: CatalogUpdate[]
+  /** Whether the catalog told us any versions at all. Without this an empty
+   *  updates list is ambiguous, and the ambiguity resolves flatteringly. */
+  versioned: boolean
+  /** A cached list is not a current one, and presenting yesterday's as
+   *  today's is how somebody installs a version withdrawn yesterday. */
+  cached: boolean
+  fetched?: string
+}
+
+export type PluginAction = {
+  restart_required: boolean
+  plugin?: Plugin
+  message: string
+}
+
+/** One plugin as the library screen sees it.
+ *
+ * Everything under `overrides`/`adds`/`extends`/`inert` is computed by the
+ * server from the templates a plugin ships, never from what its manifest
+ * claimed — so nothing here can be improved by writing a nicer manifest.
+ */
+export type Plugin = {
+  id: string
+  name: string
+  version: string
+  author?: string
+  docs?: string
+  source?: string
+  /** False only when the directory could not be read as a plugin at all — a
+   *  different thing from a plugin whose templates failed, and conflating the
+   *  two costs the operator the ability to switch one back on. */
+  readable: boolean
+  /** Why this plugin may not be enabled yet, empty when it may. Installing is
+   *  not a decision and approval is, so a freshly uploaded plugin arrives with
+   *  this set and stays off until somebody has read what it does. */
+  pending?: string
+  /** Who decided, and when. Present only once somebody has. */
+  approved_by?: string
+  approved_at?: string
+  /** A working directory rather than an installed version. Nobody should have
+   *  to wonder whether they are looking at somebody's working copy. */
+  dev: boolean
+  enabled: boolean
+  /** Position in the enable list, 1-based. Position is precedence. */
+  order: number
+  /** Whether it is actually rendering. Enabled and live are different
+   *  questions, and the gap between them is why this screen exists. */
+  live: boolean
+  problem?: string
+  tier: string
+  available: boolean
+  refusal?: string
+  overrides?: string[]
+  adds?: string[]
+  extends?: string[]
+  /** Defined in a namespace nothing installed owns, so it never renders. */
+  inert?: string[]
+  /** Overridden without saying so in the manifest. Allowed by design; shown
+   *  because it is the difference between what was approved and what happens. */
+  undeclared?: string[]
+  pages?: PluginPage[]
+  hosts?: string[]
+  secrets?: string[]
+  api?: string[]
+  /** Names this plugin overrides that render EMPTY against an example — it
+   *  loaded, it reported itself live, and that region is now blank. The
+   *  zero-value pass cannot see this: ranging over an empty slice succeeds. */
+  silent?: string[]
+}
+
 export class Unauthorized extends Error {}
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
@@ -146,6 +319,10 @@ export type UpdateReport = {
 }
 
 export type EgressStatus = {
+  /** False only when the directory could not be read as a plugin at all — a
+   *  different thing from a plugin whose templates failed, and conflating the
+   *  two costs the operator the ability to switch one back on. */
+  readable: boolean
   enabled: boolean
   reason: string
   destination: string
@@ -374,6 +551,10 @@ export type Schedule = {
   spec: string
   tz: string
   payload: string
+  /** False only when the directory could not be read as a plugin at all — a
+   *  different thing from a plugin whose templates failed, and conflating the
+   *  two costs the operator the ability to switch one back on. */
+  readable: boolean
   enabled: boolean
   on_miss: 'skip' | 'run'
   next_at: string
@@ -607,6 +788,64 @@ export type MCPCatalogEntry = {
 }
 
 export const api = {
+  plugins: {
+    list: () => req<Plugin[]>('/api/v1/plugins'),
+    /** Upload a bundle from the operator's own machine. The path somebody
+     *  developing a plugin actually uses: build a zip, drop it, reload. */
+    upload: (file: File) =>
+      fetch(session.url('/api/v1/plugins'), {
+        method: 'POST',
+        headers: session.headers(),
+        body: form(file),
+      }).then(async (r) => {
+        if (r.status === 401) throw new Unauthorized('sign in required')
+        const body = await r.json().catch(() => null)
+        if (!r.ok) throw new Error(body?.error?.message ?? `${r.status} ${r.statusText}`)
+        return body as PluginAction
+      }),
+    /** Approve the CONTENT on disk, not the name. The server reads the digest
+     *  from what this machine holds rather than from the request, so a
+     *  decision can only ever be about bytes somebody could have looked at —
+     *  and a rebuilt plugin drops back to pending on its own. */
+    /** What an overridden name will actually look like, rendered through the
+     *  composed stack rather than the plugin's own file — so it includes
+     *  anything layered over it. "It overrides cog.row.nav" is not something
+     *  an operator can evaluate; a picture of the row is. */
+    preview: (id: string, name: string) =>
+      req<{ name: string; html: string; empty: boolean }>(
+        `/api/v1/plugins/${id}/preview?name=${encodeURIComponent(name)}`,
+      ),
+    approve: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}/approve`, { method: 'POST' }),
+    /** Withdraw the decision. This also switches the plugin off, because an
+     *  approval that no longer stands cannot be left rendering. */
+    revoke: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}/revoke`, { method: 'POST' }),
+    enable: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}/enable`, { method: 'POST' }),
+    disable: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}/disable`, { method: 'POST' }),
+    /** Position is precedence: a plugin later in this list renders instead of
+     *  one earlier when both define the same template name. */
+    order: (order: string[]) =>
+      req<PluginAction>('/api/v1/plugins/order', { method: 'PUT', body: JSON.stringify({ order }) }),
+    remove: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}`, { method: 'DELETE' }),
+  },
+  /** Restart-to-activate is the model, so the product has to be able to do
+   *  it. Every screen that changes the plugin set ends by saying "restart
+   *  Cogitorium", and until this existed there was nothing to press. */
+  restart: () => req<{ restarting: boolean; message: string }>('/api/v1/restart', { method: 'POST' }),
+  catalog: {
+    /** Search runs on the server, over the whole catalog, rather than
+     *  filtering a list the browser already holds — the list is one file and
+     *  the server has just read it. */
+    browse: (q: string) =>
+      req<CatalogListing>(`/api/v1/plugin-catalog${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+    /** Installs switched OFF and unapproved, like every other route in. There
+     *  is no "install and enable" here on purpose: being listed in a catalog
+     *  is not a decision anybody on this install made. */
+    install: (id: string, version?: string) =>
+      req<PluginAction>(
+        `/api/v1/plugin-catalog/${id}${version ? `?version=${encodeURIComponent(version)}` : ''}`,
+        { method: 'POST' },
+      ),
+  },
   providers: {
     list: () => req<Provider[]>('/api/v1/providers'),
     create: (p: { name: string; type: string; base_url: string; api_key: string }) =>

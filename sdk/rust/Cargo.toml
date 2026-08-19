@@ -1,0 +1,20 @@
+[package]
+name = "cogitorium"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "Apache-2.0"
+description = "Write a Cogitorium plugin in Rust."
+repository = "https://github.com/orkcom-tech/cogitorium"
+
+[dependencies]
+# serde and serde_json, and nothing else.
+#
+# The Python SDK takes no dependencies at all, for a reason that does not carry
+# over: a Python plugin ships source, so its dependencies are read by whoever
+# approves the install. A Rust plugin ships a compiled module, so what an
+# operator reads is this repository — and a hand-written JSON parser here would
+# be far more to review, and far less reviewed already, than the two crates
+# every Rust program in the world already links.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

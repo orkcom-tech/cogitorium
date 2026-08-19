@@ -1,0 +1,12 @@
+{{define "gateway.page.home"}}
+<main class="page">
+  <h1>Gateway Probe</h1>
+  <p id="now">{{.Data.now}}</p>
+  <p id="rand">{{.Data.rand}}</p>
+  <p id="config">{{.Data.config}}</p>
+  <p id="visits">{{.Data.visits}}</p>
+  <p id="stored">{{.Data.stored}}</p>
+  <p id="rendered">{{.Data.rendered}}</p>
+</main>
+{{end}}
+{{define "gateway.frag.hello"}}<b>rendered through the stack</b>{{end}}

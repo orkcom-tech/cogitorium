@@ -1,0 +1,78 @@
+{{/*
+  Accounts and the groups a workspace can be shared with.
+
+  A token is shown once, in the response that issues it, and only its hash is
+  stored — so the panel says so beside the token rather than afterwards, when
+  whoever needed to copy it has already navigated away.
+*/}}
+
+{{define "cog.page.people"}}
+<div class="people-lists">
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+
+  {{if .Issued}}<div class="card">
+    <p class="hint">
+      Token for <strong>{{.IssuedTo}}</strong> — shown once, only its hash is stored. Copy it now.
+    </p>
+    <pre class="prompt-preview">{{.Issued}}</pre>
+  </div>{{end}}
+
+  <h3>Users</h3>
+  <form class="row" method="post" action="/people/users">
+    <input name="name" required placeholder="user name" aria-label="Name">
+    <input name="password" type="password" placeholder="optional" aria-label="Password"
+           autocomplete="new-password">
+    <select name="role" aria-label="Role">
+      <option value="member">member</option>
+      <option value="admin">admin — can approve code and change what runs</option>
+    </select>
+    <button type="submit">add user</button>
+  </form>
+  {{template "cog.list.users" .}}
+
+  <h3>Teams</h3>
+  <form class="row" method="post" action="/people/teams">
+    <input name="name" required placeholder="team name" aria-label="Team name">
+    <button type="submit">add team</button>
+  </form>
+  {{template "cog.list.teams" .}}
+</div>
+{{end}}
+
+{{define "cog.list.users"}}<div id="users" class="user-list">
+{{range .Users}}{{template "cog.row.person" .}}{{else}}<p class="hint">Nobody yet.</p>{{end}}
+</div>{{end}}
+
+{{define "cog.row.person"}}<div class="card person">
+  <strong>{{.Name}}</strong>
+  {{if .Admin}}<span class="badge is-warn">{{.Role}}</span>{{else}}<span class="badge">{{.Role}}</span>{{end}}
+  {{range .Teams}}<span class="team-chip">{{.}}</span>{{end}}
+  {{/* Nobody is offered a button to delete themselves: an install with nobody
+       who can administer it is an install nobody can fix. */}}
+  {{if .Self}}<span class="muted">that is you</span>{{else}}
+    <form method="post" action="/people/users/{{.ID}}/delete"
+          hx-confirm="Delete {{.Name}}? Their workspaces stay and become unowned.">
+      <button type="submit" class="danger">remove</button>
+    </form>
+  {{end}}
+</div>{{end}}
+
+{{define "cog.list.teams"}}<div id="teams" class="team-list">
+{{range .Teams}}{{template "cog.row.team" .}}{{else}}<p class="hint">No teams. A workspace can be shared with one.</p>{{end}}
+</div>{{end}}
+
+{{define "cog.row.team"}}<div class="card team">
+  <strong>{{.Name}}</strong>
+  {{range .Members}}<span class="team-chip">{{.Name}}</span>{{end}}
+  <form class="row" method="post" action="/people/teams/{{.ID}}/members">
+    <select name="user_id" aria-label="Add to team">
+      <option value="">add to team…</option>
+      {{range .Candidates}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+    </select>
+    <button type="submit">add</button>
+  </form>
+  <form method="post" action="/people/teams/{{.ID}}/delete"
+        hx-confirm="Delete {{.Name}}? Workspaces shared with it stop being shared.">
+    <button type="submit" class="danger">remove</button>
+  </form>
+</div>{{end}}

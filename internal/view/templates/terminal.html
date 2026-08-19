@@ -1,0 +1,27 @@
+{{/*
+  The gate around a shell — which is all of a terminal a template can render.
+
+  The session itself is a live PTY over a socket, redrawn as bytes arrive. A
+  template renders a thing that exists at a moment, and a terminal is the
+  opposite of that.
+
+  What IS renderable is everything around it: why there is or is not one, what
+  starting it costs, and what closing it loses. That is the half somebody reads
+  before deciding, and it is the half worth being able to override.
+*/}}
+
+{{define "cog.drawer.terminal"}}<div class="dk-gate">
+  {{if .Available}}
+    <p class="hint">
+      A shell is not reconnected automatically. Opening this again brings the panel back, not the
+      session — the previous one is gone, along with its scrollback and working directory.
+    </p>
+    <button class="primary" data-start-shell>start a shell</button>
+  {{else}}
+    {{/* Said rather than shown as a button that fails. An operator who presses
+         start and gets nothing learns only that something is broken; the
+         reason is the thing they can act on. */}}
+    <p class="hint">There is no terminal on this install.</p>
+    <p class="error">{{.Reason}}</p>
+  {{end}}
+</div>{{end}}

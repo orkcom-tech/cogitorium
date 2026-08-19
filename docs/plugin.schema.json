@@ -1,0 +1,350 @@
+{
+  "$id": "https://orkcom-tech.github.io/cogitorium/plugin.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "plugin.yaml. Shape and closed vocabularies; the server checks the rest and says why.",
+  "properties": {
+    "api": {
+      "description": "Endpoints of this server this asks to call.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "docs": {
+      "format": "uri",
+      "type": "string"
+    },
+    "host": {
+      "additionalProperties": false,
+      "description": "What this plugin needs of the host.",
+      "properties": {
+        "cogitorium": {
+          "description": "A version range, when this needs one. Absent means any.",
+          "type": "string"
+        },
+        "contract": {
+          "description": "The ABI generation this was written against.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "contract"
+      ],
+      "type": "object"
+    },
+    "hosts": {
+      "description": "Hosts this asks to reach. A grant an operator sees before approving, never a permission this file confers. Wildcards as *.example.com; ports are refused.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "id": {
+      "description": "3–48 lowercase characters. Becomes a template namespace and a URL prefix, so it is not free-form.",
+      "not": {
+        "enum": [
+          "admin",
+          "api",
+          "assets",
+          "cog",
+          "cogitorium",
+          "core",
+          "host",
+          "plugin",
+          "plugins",
+          "static",
+          "under"
+        ]
+      },
+      "pattern": "^[a-z][a-z0-9-]{2,47}$",
+      "type": "string"
+    },
+    "license": {
+      "description": "SPDX identifier.",
+      "type": "string"
+    },
+    "media": {
+      "description": "What the author wants somebody to see before deciding. Shipped in the bundle rather than linked, so it is covered by the digest the operator approves, works offline, and cannot change after they looked.",
+      "items": {
+        "additionalProperties": false,
+        "description": "A picture or a clip showing what this does.",
+        "properties": {
+          "caption": {
+            "description": "What somebody is looking at.",
+            "type": "string"
+          },
+          "file": {
+            "description": "Inside the bundle. png, jpg, webp, gif, avif, mp4 or webm.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "mounts": {
+      "description": "Where this plugin hangs a panel.",
+      "items": {
+        "additionalProperties": false,
+        "description": "A panel inside one of the product's own screens.",
+        "properties": {
+          "icon": {
+            "description": "",
+            "type": "string"
+          },
+          "page": {
+            "description": "One of this plugin's own pages. A mount opening somebody else's page is refused.",
+            "type": "string"
+          },
+          "point": {
+            "description": "The only mount points that exist. An unknown one is refused at install rather than ignored.",
+            "enum": [
+              "workspace.drawer"
+            ]
+          },
+          "title": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "point",
+          "title",
+          "page"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "name": {
+      "description": "What a person reads on the plugins screen.",
+      "type": "string"
+    },
+    "native": {
+      "description": "Only for needs: native.",
+      "items": {
+        "additionalProperties": false,
+        "description": "One prebuilt binary and the machine it is for.",
+        "properties": {
+          "arch": {
+            "enum": [
+              "amd64",
+              "arm64"
+            ]
+          },
+          "libc": {
+            "description": "Linux only, and only when it matters.",
+            "enum": [
+              "glibc",
+              "musl"
+            ]
+          },
+          "os": {
+            "enum": [
+              "linux",
+              "darwin",
+              "windows"
+            ]
+          },
+          "path": {
+            "description": "Inside the bundle.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "os",
+          "arch",
+          "path"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "nav": {
+      "description": "Rail entries.",
+      "items": {
+        "additionalProperties": false,
+        "description": "An entry on the rail.",
+        "properties": {
+          "area": {
+            "enum": [
+              "rail"
+            ]
+          },
+          "href": {
+            "description": "An absolute path.",
+            "pattern": "^/",
+            "type": "string"
+          },
+          "icon": {
+            "description": "",
+            "type": "string"
+          },
+          "label": {
+            "description": "",
+            "type": "string"
+          },
+          "order": {
+            "type": "integer"
+          },
+          "when": {
+            "default": "always",
+            "enum": [
+              "always",
+              "workspace",
+              "admin"
+            ]
+          }
+        },
+        "required": [
+          "area",
+          "label",
+          "href"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "needs": {
+      "description": "The technology you wrote it in. You declare this; the host decides the tier, and which tier it picked is never your problem.",
+      "enum": [
+        "bun",
+        "c",
+        "deno",
+        "go",
+        "javascript",
+        "js",
+        "native",
+        "node",
+        "python",
+        "rust",
+        "tinygo",
+        "wasm",
+        "zig"
+      ],
+      "type": "string"
+    },
+    "overrides": {
+      "description": "Template names you mean to take over. Advisory: the host computes what you actually override from what you ship, and declaring earns nothing. It is here so the approval screen can show intent beside effect.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "pages": {
+      "description": "Pages, served by the host at the plugin's own URLs.",
+      "items": {
+        "additionalProperties": false,
+        "description": "A page this plugin serves under /p/.",
+        "properties": {
+          "auth": {
+            "default": "token",
+            "description": "Defaults to token. \"none\" is allowed and is shown in red on the approval screen.",
+            "enum": [
+              "token",
+              "admin",
+              "none"
+            ]
+          },
+          "path": {
+            "description": "Must live under /p/\u003cid\u003e/.",
+            "pattern": "^/p/",
+            "type": "string"
+          },
+          "provider": {
+            "description": "An export of this plugin's own code supplying the page's model.",
+            "type": "string"
+          },
+          "template": {
+            "description": "A template this plugin ships.",
+            "type": "string"
+          },
+          "title": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "template"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "requires": {
+      "description": "Plugins this one must layer after. Position is precedence, so a plugin that wraps another's template has to come later or its wrapper is the thing being wrapped. Naming one that is not installed is fine; naming yourself, or forming a loop, is not.",
+      "items": {
+        "pattern": "^[a-z][a-z0-9-]{2,47}$",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "schema": {
+      "const": 1,
+      "description": "The manifest format. One value today; a second would mean a second reader."
+    },
+    "scripts": {
+      "description": "Modules.",
+      "items": {
+        "additionalProperties": false,
+        "description": "A module injected into every screen.",
+        "properties": {
+          "src": {
+            "description": "",
+            "type": "string"
+          },
+          "type": {
+            "default": "module",
+            "enum": [
+              "module"
+            ]
+          }
+        },
+        "required": [
+          "src"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "secrets": {
+      "description": "Named values this asks for.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "source": {
+      "description": "Where somebody reads the code before approving it.",
+      "format": "uri",
+      "type": "string"
+    },
+    "styles": {
+      "description": "Stylesheets, injected into every screen after the product's own.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "version": {
+      "description": "Semantic version. Approval is bound to content, not to this — but an update is detected by it.",
+      "pattern": "^v?\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "name",
+    "version",
+    "host"
+  ],
+  "title": "Cogitorium plugin manifest",
+  "type": "object"
+}

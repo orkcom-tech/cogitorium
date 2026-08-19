@@ -4,8 +4,14 @@
 
 # Cogitorium
 
-**A workbench for running teams of models — on your machine, in your cluster, or
-between departments.**
+**Our magnum opus of running agents and the workflows they live in** — a harness
+and platform ops in the same binary, built on graph engineering and context
+engineering.
+
+Memory and context, managed, indexed and versioned. A dependency graph in which
+every edge is a permission the runtime checks on the call. And a thing that bends
+at both levels: the toolkit inside it — gears, instructions, MCP servers — and
+the platform around them, through plugins.
 
 One Go binary, your own models, no telemetry, ever.
 
@@ -18,11 +24,19 @@ One Go binary, your own models, no telemetry, ever.
 
 ---
 
+It is a sandbox you are meant to rebuild from the inside. Run it on a laptop as
+the thing that remembers between sessions, or behind an API as a department's
+infrastructure — the same product either way, with nothing bolted on for the
+larger use. Shape the workflows however you want them. And when the platform
+itself is what is in the way, change that too: a plugin can add a screen,
+override one that shipped, or give the interface something it never had.
+
 You describe a team: who thinks, who checks, who is allowed to run code, and
 what each of them may reach. Cogitorium runs it and shows you what happened —
 every wire a capability somebody granted, every gear a piece of code you read
 before it was allowed to run, every token spent attributed to the agent that
-spent it.
+spent it. And when it does what you meant, **save it as a version** — the whole
+workflow, so you can get back to it after an afternoon of changing your mind.
 
 ![The workspace: the stages on the rail, the drawers beside them](docs/assets/02-workspace-chat.png)
 
@@ -68,7 +82,7 @@ spent it.
   workspace is how a metrics database runs out of memory.
   [→](https://orkcom-tech.github.io/cogitorium/#metrics--what-an-operator-can-alert-on)
 - 📐 **A described API** — `docs/openapi.yaml` is generated from the server's own
-  route table by a test that fails when the two disagree — **97 paths, 130
+  route table by a test that fails when the two disagree — **113 paths, 150
   operations** — so a route cannot exist without appearing in it.
   [→](https://orkcom-tech.github.io/cogitorium/#the-api-description)
 - 🔌 **Speaks MCP** — `cogitorium mcp` serves your approved gears and receiver
@@ -118,10 +132,82 @@ spent it.
   a per-agent grant, and every search still stops for a human to approve that
   exact query.
   [→](https://orkcom-tech.github.io/cogitorium/#letting-agents-reach-the-web)
+- 🧩 **Plugins: change the platform, not just what runs on it** — a plugin adds a
+  screen, hangs a panel inside every workspace, **takes over a screen that
+  shipped**, and runs code of its own. Every product screen is a template
+  addressable by name, so overriding one is a file rather than a fork. Five
+  tiers — templates, WebAssembly, a fetched interpreter, a container, a native
+  binary — and the author declares a technology while the host picks the lane.
+  Nine host calls, identical on every tier. SDKs for Python, Go, TinyGo and
+  Rust; `needs: js` needs no SDK at all. It arrives switched off, and approval
+  is bound to the sha256 of the bytes on disk — rebuild it and it drops back to
+  pending by itself.
+  [→](https://orkcom-tech.github.io/cogitorium/plugins/)
+- 🎨 **Which is why the look is yours too** — one template name is the palette,
+  and overriding it restyles the whole product in both appearances with no code
+  at all. The cheapest thing a plugin can do and the most visible.
+  [→](https://orkcom-tech.github.io/cogitorium/plugins/#the-cheapest-override-there-is)
+- 🕰 **Versions of a workflow** — save what a workflow is, with a message, and
+  get back to it. A version is the whole of it: the agents, the wires, the gears
+  they may call **pinned to the version they were pinned to**, what each reads,
+  and the clocks that start them. Rolling back keeps what it replaces — the
+  current state is saved first and the rollback is recorded as its own version,
+  because a history that can be rewritten cannot be produced in an argument
+  about what ran.
+  [→](https://orkcom-tech.github.io/cogitorium/guide/#versions)
 - 📦 **Portable and local-first** — a workspace exports as one JSON document you
   can hand to another install, from the interface or the command line. Everything
   runs on your machine.
   [→](#no-telemetry)
+
+![A workflow's history: what it was, and the way back](docs/assets/23-versions.png)
+
+## How it compares
+
+The field is young enough that most comparisons are between things that are not
+really alternatives. These four are: an agent workspace you can host, an agent
+harness where everything is a plugin, and the self-hosted workflow builders
+people already run. Each row is a structural difference, not a feature tick.
+
+| | Cogitorium | [Cloudflare OS](https://github.com/cloudflare/cloudflare-os) | [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) | Dify · n8n · Flowise |
+|---|---|---|---|---|
+| **What you install** | one Go binary with the interface inside it | a pnpm workspace of Workers | an npm package, Node 22+ | containers, with Postgres and Redis beside them |
+| **Where it actually runs** | your laptop, your Docker, your cluster | Cloudflare Workers and Durable Objects; `workerd` locally | one Node process on your machine | your host, plus its datastores |
+| **Who may change the interface** | anyone — a plugin installs into a running server, and every product screen is a template it can take over by name | whoever owns the deployment repository | anyone — the UI is itself a swappable plugin row | node and component authors, through a review you do not control |
+| **What isolates a third party's code** | tiered and running: WebAssembly, a fetched interpreter, a container, or native with no isolation and said so in red | Workers isolates; agent frames with outbound networking off | nothing — plugins mount in-process with full host rights | nothing to partial, depending on product and mode |
+| **Before an extension runs** | approval bound to the sha256 of the bytes on disk; a new build drops back to pending | review of the deployment repository | no manifest, no prompt, no signature | install and it runs |
+| **Code an agent wrote for itself** | will not execute until a person approves that exact version | gadgets run in sandboxed frames | registered by a plugin, runs unsandboxed | executes when saved |
+| **Outbound: an allowlist *and* a record** | per-host at approval, and a row per connection — allowed and refused alike | Gatekeepers mediate per resource and operation, and every resource an agent observes is recorded | neither; the docs put network "outside this vocabulary" | Dify: Squid ACL with a log. n8n: off unless switched on. Flowise: a denylist, empty, no log |
+| **Governance without paying** | accounts, teams, workspace sharing and per-host records, Apache-2.0, no licence key | Apache-2.0 | MIT | SSO, roles and audit behind a paid licence in five of six |
+| **Maturity** | v3.0.0; the plugin system ships, with four SDKs and a catalog | 8.6k stars, run daily inside Cloudflare | developer preview at `rc.7`, warning of breaking changes | years in production |
+
+### Where it loses
+
+A table with no losses in it is an advertisement, so:
+
+- **No SSO, and only one real role.** There is no SAML, OIDC or SCIM anywhere in
+  this codebase, and every access check is admin-or-not plus team membership.
+  The workflow builders ship all of it — behind a paid licence, but shipping. If
+  SSO is a requirement, Cogitorium does not meet it at any price today.
+- **The host allowlist is cooperative.** Whether a gear gets a network at all is
+  enforced by the container runtime, and that part is real. *Which hosts* it may
+  reach is enforced by proxy variables an obliging client honours — so a gear
+  that opens its own socket reaches the network and leaves no row. Modal, E2B and
+  Cloudflare enforce outside the process, where the code's cooperation does not
+  matter. This is stated in the source rather than hidden.
+- **A killed run does not restart itself.** Every turn and tool result is
+  journaled and replayed, and nothing already spent is paid twice — but
+  interrupted work is marked dead rather than requeued, on purpose, because
+  re-running something that may already have sent an email is a second execution
+  nobody asked for. If you want automatic resume, that is Temporal's job.
+- **A plugin still cannot hand an agent a tool.** It adds screens, takes over the
+  product's own, reaches the network through the host's gate and calls this
+  server's API as itself — but a gear is what an agent calls, and a plugin
+  cannot contribute one. The two extension systems do not meet yet.
+- **Cloudflare OS is ahead on data flow.** Recording every resource an agent
+  observed, and deciding policy on that record, is a stronger question than the
+  one an egress allowlist answers. Cogitorium controls where an agent reaches,
+  not what it has already read.
 
 ## You can use it like…
 

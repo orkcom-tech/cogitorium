@@ -302,7 +302,7 @@ func TestMCPToolsAreOfferedBesideGearsWithADisjointPrefix(t *testing.T) {
 	if len(tools) != 1 {
 		t.Fatalf("the granted tool is not offered: %+v", tools)
 	}
-	offered := m.e.toolsFor(m.orch, nil, nil, tools, false, true)
+	offered := m.e.toolsFor(m.orch, nil, nil, tools, false, false, true)
 	var found bool
 	for _, tool := range offered {
 		if tool.Name == m.tool.OfferedName {

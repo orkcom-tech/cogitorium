@@ -1,0 +1,93 @@
+{
+  "note": "Pinned rows, never a live query. See internal/runtimes/index.go for why.",
+  "rows": [
+    {
+      "technology": "python",
+      "version": "3.13.15",
+      "os": "darwin",
+      "arch": "arm64",
+      "libc": "",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260814/cpython-3.13.15%2B20260814-aarch64-apple-darwin-install_only.tar.gz",
+      "sha256": "7d50bb42813a5644db7c40d3ad79361d0b724bb29d25a91fab1048c2c5c6a8c5",
+      "root": "python",
+      "exe": "python/bin/python3"
+    },
+    {
+      "technology": "python",
+      "version": "3.13.15",
+      "os": "windows",
+      "arch": "arm64",
+      "libc": "",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260814/cpython-3.13.15%2B20260814-aarch64-pc-windows-msvc-install_only.tar.gz",
+      "sha256": "b75b76d7d5ce6db7af426de8ea09d587fe6ac01d1f4238fb6fccda64bf01aee7",
+      "root": "python",
+      "exe": "python/python.exe"
+    },
+    {
+      "technology": "python",
+      "version": "3.13.15",
+      "os": "linux",
+      "arch": "arm64",
+      "libc": "glibc",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260814/cpython-3.13.15%2B20260814-aarch64-unknown-linux-gnu-install_only.tar.gz",
+      "sha256": "303efcce34b86fd8b0d8a260327dbf8d0d4fba6d2d77b2bca311e8bbd19265e1",
+      "root": "python",
+      "exe": "python/bin/python3"
+    },
+    {
+      "technology": "python",
+      "version": "3.13.15",
+      "os": "linux",
+      "arch": "arm64",
+      "libc": "musl",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260814/cpython-3.13.15%2B20260814-aarch64-unknown-linux-musl-install_only.tar.gz",
+      "sha256": "048d666295c4aa3b063825c8a3db3276082314a0bf304bb742ca87de5a78188b",
+      "root": "python",
+      "exe": "python/bin/python3"
+    },
+    {
+      "technology": "python",
+      "version": "3.13.15",
+      "os": "darwin",
+      "arch": "amd64",
+      "libc": "",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260814/cpython-3.13.15%2B20260814-x86_64-apple-darwin-install_only.tar.gz",
+      "sha256": "44bb8a1d97c070deb30880b2b7fe681c1e9cf727cb950709e022dc195cdfdf4f",
+      "root": "python",
+      "exe": "python/bin/python3"
+    },
+    {
+      "technology": "python",
+      "version": "3.13.15",
+      "os": "windows",
+      "arch": "amd64",
+      "libc": "",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260814/cpython-3.13.15%2B20260814-x86_64-pc-windows-msvc-install_only.tar.gz",
+      "sha256": "4ca61e4b09c2240cc50cc6910c90664051e93ab7caa2f48b3c6b3c070670c0bd",
+      "root": "python",
+      "exe": "python/python.exe"
+    },
+    {
+      "technology": "python",
+      "version": "3.13.15",
+      "os": "linux",
+      "arch": "amd64",
+      "libc": "glibc",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260814/cpython-3.13.15%2B20260814-x86_64-unknown-linux-gnu-install_only.tar.gz",
+      "sha256": "45816a2653b47a6cc48d8ada4ea1185758a4c2db389d012b31e0205e5ccb548b",
+      "root": "python",
+      "exe": "python/bin/python3"
+    },
+    {
+      "technology": "python",
+      "version": "3.13.15",
+      "os": "linux",
+      "arch": "amd64",
+      "libc": "musl",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260814/cpython-3.13.15%2B20260814-x86_64-unknown-linux-musl-install_only.tar.gz",
+      "sha256": "7d88e02da23ca035f7ad70769cda14881002e199125997a8ef1fe646468e619e",
+      "root": "python",
+      "exe": "python/bin/python3"
+    }
+  ]
+}

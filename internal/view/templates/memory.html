@@ -1,0 +1,61 @@
+{{/*
+  Everything one agent remembers, in the order it reaches the model.
+
+  The point is not tidiness. An agent that quietly carries something it picked
+  up once will keep steering by it, and the only way to stop that is to be able
+  to see it. So nothing here is behind a summary: the text is the text, and
+  next to it is the way to change or drop it.
+*/}}
+
+{{define "cog.drawer.memory"}}<div class="dk-body memory">
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  <p class="hint">
+    Everything below reaches the model on every turn, in this order. If an agent behaves in a way you
+    did not ask for, the reason is here — change it or drop it.
+  </p>
+
+  {{range .Items}}{{template "cog.row.memory" .}}{{else}}
+  <p class="hint">This agent carries nothing but its role.</p>
+  {{end}}
+
+  <p class="hint">
+    The conversation is memory too: it is replayed on every turn. Anything wrong in it can be dropped
+    from the chat, entry by entry.
+  </p>
+</div>{{end}}
+
+{{define "cog.row.memory"}}<div class="card memory-item">
+  <div class="card-head">
+    <span class="status {{if .IsRole}}approved{{else}}pending{{end}}">{{.Label}}</span>
+    <code>{{.Source}}</code>
+    <span class="muted">{{.Description}}</span>
+    <span class="spacer"></span>
+    {{if .Editing}}
+      <button type="submit" form="edit-{{.BindingID}}{{.Source}}">save</button>
+      <a class="action" href="?">cancel</a>
+    {{else if .Editable}}
+      <a class="action" href="?edit={{.Source}}">edit</a>
+    {{end}}
+    {{/* A role is neither editable away nor droppable: it is what the agent
+         is, and removing it leaves an agent with no answer to what it is
+         for. */}}
+    {{if .IsRole}}{{else}}
+      <form method="post" action="/memory/forget"
+            hx-confirm="{{if .Removable}}Stop this agent reading {{.Source}}? The document itself stays.{{else}}Forget {{.Source}}?&#10;&#10;It is removed from the space, so no agent is told it again. Contextverse keeps its history and can restore it.{{end}}">
+        <input type="hidden" name="source" value="{{.Source}}">
+        <input type="hidden" name="binding_id" value="{{.BindingID}}">
+        <input type="hidden" name="version" value="{{.Version}}">
+        <button type="submit" class="danger">{{if .Removable}}unbind{{else}}forget{{end}}</button>
+      </form>
+    {{end}}
+  </div>
+  {{if .Editing}}
+    <form id="edit-{{.BindingID}}{{.Source}}" method="post" action="/memory/save">
+      <input type="hidden" name="source" value="{{.Source}}">
+      <input type="hidden" name="version" value="{{.Version}}">
+      <textarea name="content" rows="10" spellcheck="false">{{.Content}}</textarea>
+    </form>
+  {{else}}
+    <pre class="prompt-preview">{{if .Content}}{{.Content}}{{else}}(empty — nothing reaches the model from this){{end}}</pre>
+  {{end}}
+</div>{{end}}

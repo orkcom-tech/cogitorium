@@ -180,6 +180,21 @@ func (s *Server) fire(ctx context.Context, sc schedule.Schedule) {
 			schedule.Schedule{ID: sc.ID, NextAt: next}, next, schedule.OutcomeFailed, sc.LastWorkID); aErr != nil {
 			slog.Error("could not record a failed firing", "schedule", sc.ID, "err", aErr)
 		}
+		// A target that was deleted will not come back on its own, so this
+		// failure is not one of many — it is the same failure forever. Record
+		// it once, which is the evidence, then switch the clock off.
+		//
+		// Off rather than removed: the row is what lets somebody point it at
+		// another agent and start it again. Left running, a clock set to a
+		// minute wrote a failure a minute, none of which said anything the
+		// first one had not.
+		if sc.Broken() {
+			slog.Warn("a schedule's target was deleted; switching it off until it is repointed",
+				"schedule", sc.ID, "name", sc.Name, "target", sc.TargetKind)
+			if _, dErr := s.schedules.SetEnabled(context.WithoutCancel(ctx), sc.ID, false); dErr != nil {
+				slog.Error("could not switch off a broken schedule", "schedule", sc.ID, "err", dErr)
+			}
+		}
 		// The one this whole metric exists for: a nightly job that has been
 		// failing every night for a week, which nothing could tell anybody.
 		s.metrics.ScheduleFires.Inc(map[string]string{"outcome": schedule.OutcomeFailed})

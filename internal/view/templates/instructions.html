@@ -1,0 +1,129 @@
+{{/*
+  The instruction library — the first screen of the product served as a
+  template rather than by the application.
+
+  Four names, not one. A plugin that wants a different row should not have to
+  reproduce the page around it, and a plugin that wants a different empty state
+  should not have to own the list. Each of these is a place somebody can stand.
+
+  The controls are ordinary HTML that works with JavaScript switched off: the
+  search is a GET form, the delete is a POST. htmx makes each of them swap the
+  list instead of reloading the page, and takes nothing away when it is absent.
+*/}}
+
+{{define "cog.page.instructions"}}
+<main class="page library">
+  <h2>{{.Ctx.T.Instructions}}</h2>
+
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+
+  <details class="library-write">
+    <summary>Write one</summary>
+    {{/* A plain POST to this page. The answer is the page again, which is what
+         makes it work with nothing loaded. */}}
+    <form method="post" action="/instructions">
+      <label>Name <input name="name" required pattern="[a-z][a-z0-9-]*"
+                         placeholder="lowercase-with-dashes"></label>
+      <label>Description <input name="description" placeholder="What it is for, in one line"></label>
+      <label>Tags <input name="tags" placeholder="comma, separated"></label>
+      <label>Text <textarea name="text" rows="8" required
+                            placeholder="The instruction itself. It is versioned in Contextverse."></textarea></label>
+      <button type="submit">Save it</button>
+    </form>
+  </details>
+
+  {{template "cog.frag.library" .}}
+</main>
+{{end}}
+
+{{/*
+  The filter and the rows together, because the filter's options are BUILT from
+  the rows. Swapping the rows alone left the tag list offering a tag that
+  belonged to the instruction just deleted — a filter that finds nothing and
+  cannot be got out of except by reloading.
+
+  The write form stays outside it, so searching does not fold it shut mid-typing.
+*/}}
+{{define "cog.frag.library"}}<div id="library-panel">
+  <form class="library-filters" method="get" action="/instructions"
+        hx-get="/instructions" hx-target="#library-panel" hx-swap="outerHTML"
+        hx-trigger="submit, input from:input[name='q'] delay:250ms, change from:select">
+    <input type="search" name="q" value="{{.Query}}" placeholder="Search names, descriptions and text"
+           aria-label="Search the library">
+    <select name="tag" aria-label="Filter by tag">
+      <option value="">every tag</option>
+      {{range .Tags}}<option value="{{.Name}}"{{if .Selected}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+    <noscript><button type="submit">Search</button></noscript>
+  </form>
+
+  {{template "cog.list.instructions" .}}
+</div>{{end}}
+
+{{define "cog.list.instructions"}}<div id="library-list" class="library-list">
+{{if .Items}}{{range .Items}}{{template "cog.row.instruction" .}}{{end}}{{else}}{{template "cog.empty.instructions" .}}{{end}}
+</div>{{end}}
+
+{{/*
+  The row carries what it is, so it can be picked up.
+
+  Dragging one onto the blueprint is how an instruction is given to an agent,
+  and it stopped working when this became a template: the payload used to be
+  attached by the component that drew the card, and a template draws no
+  handlers. So the card states itself in data attributes and the workspace
+  listens once on the container — the same delegation its clicks already use.
+*/}}
+{{define "cog.row.instruction"}}<article class="card instruction{{if .Open}} is-open{{end}}"
+  {{if .Draggable}}draggable="true" title="Drag onto the blueprint to give this to an agent"{{end}}
+  data-instruction-id="{{.ID}}" data-instruction-name="{{.Name}}" data-instruction-path="{{.Path}}">
+  <header class="instruction-head">
+    <h3>{{.Name}}</h3>
+    {{range .Tags}}<span class="badge">{{.}}</span>{{end}}
+  </header>
+  {{if .Description}}<p class="hint">{{.Description}}</p>{{end}}
+  {{if .Open}}
+  {{/* Editable, because an instruction nobody can correct is one somebody
+       rewrites under a second name and then has two of. Posting where a new
+       one goes: saving by name updates what is there and versions the text in
+       Contextverse, so there is one way in and one history. */}}
+  <form class="instruction-edit" method="post" action="/instructions">
+    <input type="hidden" name="name" value="{{.Name}}">
+    <label>Description <input name="description" value="{{.Description}}"
+                              placeholder="What it is for, in one line"></label>
+    <label>Tags <input name="tags" value="{{.TagList}}" placeholder="comma, separated"></label>
+    <label>Text <textarea name="text" rows="12" spellcheck="false">{{.Text}}</textarea></label>
+    <button type="submit">Save changes</button>
+  </form>
+  {{end}}
+  <div class="instruction-actions">
+    <a class="action" href="/instructions?open={{.ID}}">{{if .Open}}Hide{{else}}Read{{end}}</a>
+    <form method="post" action="/instructions/{{.ID}}/delete"
+          hx-post="/instructions/{{.ID}}/delete" hx-target="#library-panel" hx-swap="outerHTML"
+          hx-confirm="Delete {{.Name}}? Its text stays in Contextverse; the entry goes.">
+      <button type="submit" class="danger">Delete</button>
+    </form>
+    {{if .UpdatedAt}}<span class="hint">{{.UpdatedAt}}</span>{{end}}
+  </div>
+</article>{{end}}
+
+{{define "cog.empty.instructions"}}<p class="hint">
+{{if .Narrowed}}Nothing in the library matches that.{{else}}The library is empty. An instruction is text an agent pins — write one above, or an agent will when it needs to remember something.{{end}}
+</p>{{end}}
+
+{{/*
+  The library as a drawer inside a workspace.
+
+  The same list and rows as the page, without the frame around them: a drawer
+  crawls out over the work rather than replacing it, so a second <main> and a
+  second heading would be two pages on one screen.
+*/}}
+{{define "cog.drawer.instructions"}}<div class="dk-body library">
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  <form class="library-filters" method="get" action="/instructions"
+        hx-get="/instructions" hx-target="#library-panel" hx-swap="outerHTML"
+        hx-trigger="submit, input from:input[name='q'] delay:250ms">
+    <input type="search" name="q" value="{{.Query}}" placeholder="Search names, descriptions and text"
+           aria-label="Search the library">
+  </form>
+  {{template "cog.list.instructions" .}}
+</div>{{end}}

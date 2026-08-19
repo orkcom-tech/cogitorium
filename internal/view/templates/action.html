@@ -1,0 +1,14 @@
+{{/*
+  Actions are data in the model, not markup in a template.
+
+  That is what lets the host add a button to a screen a plugin has overridden:
+  the plugin ranges over .Actions and the new one appears INSIDE their
+  override, instead of the override being the reason it never shows up.
+*/}}
+
+{{define "cog.action.button"}}<a class="action{{if .Danger}} is-danger{{end}}" href="{{.Href}}"
+  data-method="{{.Method}}"{{if .Confirm}} data-confirm="{{.Confirm}}"{{end}}{{if .Target}} data-target="{{.Target}}"{{end}}>{{.Label}}</a>{{end}}
+
+{{define "cog.list.actions"}}{{range .}}{{template "cog.action.button" .}}{{end}}{{end}}
+
+{{define "cog.empty.default"}}<p class="empty">{{.}}</p>{{end}}

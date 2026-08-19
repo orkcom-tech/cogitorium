@@ -1,0 +1,854 @@
+// Package plugin owns what a plugin declares about itself.
+//
+// One file, one format, one name: plugin.yaml sits at the bundle root and at
+// the author's repository root, byte-identical, so the catalog reads exactly
+// the file this server parses. A second copy is a second thing to drift.
+//
+// Everything a manifest can say is platform-free except the native tier. That
+// is not a style preference — it is the parity guarantee written as a rule.
+// A template is data and a WebAssembly module is data with an entry point, so
+// a plugin that is only those is byte-identical on every target because it
+// never had a platform to lose.
+package plugin
+
+import (
+	"fmt"
+	"path"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+
+	"github.com/orkcom-tech/cogitorium/internal/abi"
+)
+
+// Contract is the integer this build speaks. It is the real compatibility
+// gate, and it moves only when the template model or the host ABI breaks —
+// never for a feature addition, because a plugin that would still work must
+// not be refused.
+//
+// Defined by the ABI rather than restated here. A manifest's declaration and
+// the vocabulary its code speaks are the same promise, and two constants for
+// one promise is one of them eventually being wrong.
+const Contract = abi.Version
+
+// SchemaVersion is the manifest's own shape, which is a different question
+// from the contract. A manifest can gain optional fields without the host ABI
+// moving at all.
+const SchemaVersion = 1
+
+// Manifest is plugin.yaml.
+//
+// Field order here is the order an author reads: who am I, what do I need from
+// the host, what do I contribute to the interface, what do I need to run, and
+// what am I asking permission for. That last group is deliberately last and
+// deliberately separate — it is what the operator's approval screen is built
+// from, and burying a grant among contributions would be a way to smuggle one.
+type Manifest struct {
+	Schema  int    `yaml:"schema"`
+	ID      string `yaml:"id"`
+	Name    string `yaml:"name"`
+	Version string `yaml:"version"`
+	License string `yaml:"license"`
+	Docs    string `yaml:"docs"`
+	Source  string `yaml:"source"`
+
+	Host Host `yaml:"host"`
+
+	// ── interface: tier 0, needs no backend, works on every channel ──
+
+	Pages   []Page   `yaml:"pages"`
+	Nav     []Nav    `yaml:"nav"`
+	Styles  []string `yaml:"styles"`
+	Scripts []Script `yaml:"scripts"`
+
+	// Media is what the author wants somebody to see before deciding.
+	//
+	// Files in the bundle rather than links to their site, and that is the
+	// whole point of the field: what ships here is covered by the sha256 an
+	// operator approves, works with no network, and cannot be swapped for
+	// something else the day after somebody looked at it. A URL can be all
+	// three of those things and is none of them.
+	Media []Medium `yaml:"media"`
+
+	// Mounts are places inside the application a plugin's own surface appears.
+	// Distinct from pages: a page is a destination somebody navigates to, and
+	// a mount is a panel that opens over the work without leaving it.
+	Mounts []Mount `yaml:"mounts"`
+
+	// Overrides is ADVISORY and the system does not rely on it. What a plugin
+	// actually overrides is computed from the templates it ships, because a
+	// manifest can lie and parsed bytes cannot. Declaring accurately unlocks
+	// nothing; it earns a quiet "manifest matches" line on the approval screen
+	// and nothing more.
+	Overrides []string `yaml:"overrides"`
+
+	// Requires names plugins this one must layer AFTER.
+	//
+	// Position is precedence, so a plugin that wraps another's template has to
+	// come later or its wrapper is the thing being wrapped. Until this
+	// existed, that ordering was the operator's problem — expressed by hand in
+	// plugins.order, discoverable only by noticing the wrong body rendering.
+	//
+	// It is a soft edge: naming a plugin that is not installed is not an
+	// error, because the ordinary case is an optional companion. What it
+	// cannot do is name itself or form a cycle.
+	Requires []string `yaml:"requires"`
+
+	// ── behaviour ──
+
+	// Needs is a technology and an optional constraint — "js", "python@>=3.11".
+	// An author never writes a URL, an architecture, a platform, or the word
+	// wasm. The host maps the technology to a tier and reports which it picked.
+	Needs string `yaml:"needs"`
+
+	// Native is the ONLY platform-keyed structure in this manifest, and an
+	// author reaches it by typing "native" in needs: on purpose. Everything
+	// else here is platform-free, which is the parity guarantee written as a
+	// rule — so the cost of choosing a native binary lands visibly on the
+	// author who chose it rather than invisibly on everyone.
+	Native []Native `yaml:"native"`
+
+	// ── grants: what the operator is being asked to approve ──
+
+	Hosts   []string `yaml:"hosts"`
+	Secrets []string `yaml:"secrets"`
+	API     []string `yaml:"api"`
+}
+
+// Host is what the plugin requires of this server.
+type Host struct {
+	// Contract is the integer gate. It is also checked against the backend
+	// artifact's own exported ABI marker, so a manifest claiming a contract
+	// its code does not speak is caught by the artifact rather than believed.
+	Contract int `yaml:"contract"`
+	// Cogitorium optionally narrows further — ">=1.9". An author uses this to
+	// say "I depend on something added in 1.9" without the contract moving.
+	Cogitorium string `yaml:"cogitorium"`
+}
+
+// Page is a route the host registers and renders from a named template.
+//
+// With no backend at all this already produces a working page: the host
+// renders the template against a standard model. Adding a provider export
+// later makes the same page dynamic without changing the route, the template
+// name, or the URL — which is what keeps tier 0 a real destination rather
+// than a waiting room.
+type Page struct {
+	Path     string `yaml:"path"`
+	Template string `yaml:"template"`
+	Title    string `yaml:"title"`
+	// Provider is an export that supplies this page's model. Optional, and its
+	// absence is what makes a template-only plugin complete rather than a
+	// waiting room: the page renders against the standard model until an
+	// author adds one, and adding one changes neither the route, the template
+	// name nor the URL.
+	Provider string `yaml:"provider"`
+	// Auth defaults to "token". Writing "none" is allowed and is shown in red
+	// on the approval screen beside the path, because every non-/api/ path in
+	// this server is anonymous by construction and a plugin route is the first
+	// time that default has been somebody else's to choose.
+	Auth string `yaml:"auth"`
+}
+
+// Nav is the declarative way to add a destination.
+//
+// It exists because the template route to the same result is an append slot,
+// and an author who reached for a plain override would define the rail's own
+// name and silently erase every other plugin's entry. Four lines of YAML that
+// compose is a better default than a correct template somebody has to know to
+// write.
+type Nav struct {
+	Area  string `yaml:"area"`
+	Label string `yaml:"label"`
+	Icon  string `yaml:"icon"`
+	Href  string `yaml:"href"`
+	Order int    `yaml:"order"`
+	When  string `yaml:"when"`
+}
+
+// Native is one published binary, for one target.
+//
+// Keyed on libc as well as os and arch, because a glibc build does not start
+// on the Alpine image and the failure is a missing-interpreter error that says
+// nothing about the cause.
+type Native struct {
+	OS   string `yaml:"os"`
+	Arch string `yaml:"arch"`
+	// Libc is "glibc", "musl", or "any" — and "any" may be claimed only for a
+	// binary proved static, because a build that merely happens to work on the
+	// author's machine is not one that works on somebody's Alpine image.
+	Libc string `yaml:"libc"`
+	// Path is the binary inside the bundle.
+	Path string `yaml:"path"`
+}
+
+// Target is the tuple this row answers for.
+func (n Native) Target() string {
+	libc := n.Libc
+	if libc == "" {
+		libc = "any"
+	}
+	return n.OS + "/" + n.Arch + "/" + libc
+}
+
+// Mount is one panel a plugin contributes inside the application.
+//
+// The only point today is the workspace drawer, and the vocabulary is closed
+// for the same reason the template areas are: an open set of mount points
+// drifts into a second, undocumented layout system, and every point is a
+// promise the host has to keep rendering somewhere.
+type Mount struct {
+	// Point is where it appears. Only "workspace.drawer" for now.
+	Point string `yaml:"point"`
+	// Title is the label on the button that opens it.
+	Title string `yaml:"title"`
+	// Icon names one of the host's own glyphs, empty for a plain label.
+	Icon string `yaml:"icon"`
+	// Page is the plugin page rendered inside the panel. A page rather than a
+	// separate template, so a panel and a full-window view of the same thing
+	// are one implementation and one URL — and so a person can open it in a
+	// tab when the drawer is too small for what they are reading.
+	Page string `yaml:"page"`
+}
+
+// Script is a head-injected module. Integrity is computed from the bundle at
+// install, never declared here — a digest an author types is a digest an
+// author can get wrong, and one that disagrees with the file is worse than
+// none.
+type Script struct {
+	Src  string `yaml:"src"`
+	Type string `yaml:"type"`
+}
+
+// Medium is one picture or clip an author ships to show what their plugin does.
+type Medium struct {
+	File    string `yaml:"file"`
+	Caption string `yaml:"caption"`
+}
+
+// mediaKinds is what a medium may be, and what it is played as.
+//
+// A closed list rather than "whatever the browser takes", because this file is
+// how a bundle gets a browser to open a file the operator has not looked at.
+// Everything here is a still or a clip that plays without script.
+var mediaKinds = map[string]string{
+	".png": "image", ".jpg": "image", ".jpeg": "image",
+	".webp": "image", ".gif": "image", ".avif": "image",
+	".mp4": "video", ".webm": "video",
+}
+
+// MediaKind reports how a file is shown, or "" when it is not something this
+// build will put in front of somebody.
+func MediaKind(file string) string {
+	return mediaKinds[strings.ToLower(path.Ext(file))]
+}
+
+// mediaKindList is the vocabulary, for a refusal that says what would work.
+func mediaKindList() []string {
+	out := make([]string, 0, len(mediaKinds))
+	for ext := range mediaKinds {
+		out = append(out, ext)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// maxMedia bounds the set.
+//
+// Not a technical limit: it is a card on a screen somebody is reading to make
+// a decision, and forty screenshots is not a case for a bigger card.
+const maxMedia = 8
+
+// Problem is one thing wrong with a manifest.
+//
+// Validation returns all of them rather than the first, because an author
+// fixing a manifest wants the list, not a game where each run reveals one
+// more. Field is the YAML path so an editor can be pointed at it.
+type Problem struct {
+	Field   string
+	Message string
+}
+
+func (p Problem) Error() string { return p.Field + ": " + p.Message }
+
+// Problems is the whole set, rendered as one message when treated as an error.
+type Problems []Problem
+
+func (ps Problems) Error() string {
+	if len(ps) == 1 {
+		return ps[0].Error()
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d problems in plugin.yaml:", len(ps))
+	for _, p := range ps {
+		b.WriteString("\n  " + p.Error())
+	}
+	return b.String()
+}
+
+// Parse reads plugin.yaml strictly.
+//
+// Unknown fields are an error rather than ignored. A typo'd key that parses
+// silently is a contribution the author believes they made and the operator
+// never sees, and the manifest is small enough that no field is optional by
+// accident.
+func Parse(b []byte) (Manifest, error) {
+	var m Manifest
+	dec := yaml.NewDecoder(strings.NewReader(string(b)))
+	dec.KnownFields(true)
+	if err := dec.Decode(&m); err != nil {
+		return Manifest{}, fmt.Errorf("plugin.yaml could not be read: %w", err)
+	}
+	return m, nil
+}
+
+var (
+	idRe  = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+	envRe = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
+	// An export name is what an author writes in two places — their code and
+	// their manifest — so it is kept to what every language can spell.
+	exportRe = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+	// Exactly what the gate accepts, and nothing more: a hostname, optionally
+	// with the gate's own *. wildcard, and never a port. The gate refuses a
+	// port outright — a grant names hosts — so accepting one here would let an
+	// author write a grant that reads fine and fails when it is resolved.
+	hostRe = regexp.MustCompile(`^(\*\.)?[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`)
+)
+
+// reserved ids would collide with the host's own namespace or with a path the
+// server already owns. Refused at parse rather than at install, so an author
+// learns before they have written anything against the name.
+var reservedIDs = map[string]bool{
+	"cog": true, "cogitorium": true, "core": true, "host": true,
+	"plugin": true, "plugins": true, "api": true, "admin": true,
+	"under": true, "static": true, "assets": true,
+}
+
+// Validate reports everything wrong with the manifest. An empty result means
+// the manifest is well-formed — it does not mean the plugin works, which is
+// what template validation and the tier resolver answer later.
+func (m Manifest) Validate() Problems {
+	var ps Problems
+	add := func(field, msg string, a ...any) {
+		ps = append(ps, Problem{Field: field, Message: fmt.Sprintf(msg, a...)})
+	}
+
+	if m.Schema != SchemaVersion {
+		add("schema", "must be %d, got %d", SchemaVersion, m.Schema)
+	}
+
+	switch {
+	case m.ID == "":
+		add("id", "is required — it is the plugin's permanent name and its template namespace")
+	case len(m.ID) < 3 || len(m.ID) > 48:
+		add("id", "must be 3 to 48 characters, got %d", len(m.ID))
+	case !idRe.MatchString(m.ID):
+		add("id", "must be lowercase letters, digits and hyphens, and may not start or end with a hyphen")
+	case reservedIDs[m.ID]:
+		add("id", "%q is reserved by the host", m.ID)
+	}
+
+	if m.Name == "" {
+		add("name", "is required — it is what an operator sees in the library")
+	}
+	if _, ok := parseVersion(m.Version); !ok {
+		add("version", "must be semver like 1.4.0 or 1.4.0-beta.1, got %q", m.Version)
+	}
+
+	switch {
+	case m.Host.Contract == 0:
+		add("host.contract", "is required — it is the compatibility gate")
+	case m.Host.Contract > Contract:
+		add("host.contract", "asks for contract %d; this build speaks %d", m.Host.Contract, Contract)
+	case m.Host.Contract < 1:
+		add("host.contract", "must be a positive integer, got %d", m.Host.Contract)
+	}
+	if m.Host.Cogitorium != "" {
+		if _, err := ParseConstraint(m.Host.Cogitorium); err != nil {
+			add("host.cogitorium", "%v", err)
+		}
+	}
+
+	// An OCI reference is a legitimate `needs` and does not follow the
+	// technology grammar, so it is recognised before that grammar is applied.
+	if m.Needs != "" && !looksLikeImage(m.Needs) {
+		if _, err := ParseNeeds(m.Needs); err != nil {
+			add("needs", "%v", err)
+		}
+	}
+
+	m.validatePages(add)
+	m.validateNav(add)
+	m.validateAssets(add)
+	m.validateOverrides(add)
+	m.validateRequires(add)
+	m.validateMounts(add)
+	m.validateNative(add)
+	m.validateGrants(add)
+
+	return ps
+}
+
+func (m Manifest) validatePages(add func(string, string, ...any)) {
+	prefix := m.PagePrefix()
+	seen := map[string]bool{}
+	for i, p := range m.Pages {
+		f := fmt.Sprintf("pages[%d]", i)
+		switch {
+		case p.Path == "":
+			add(f+".path", "is required")
+		case !strings.HasPrefix(p.Path, prefix):
+			add(f+".path", "must be under %s so two plugins can never collide, got %q", prefix, p.Path)
+		case p.Path != path.Clean(p.Path) && p.Path != path.Clean(p.Path)+"/":
+			add(f+".path", "must be a clean path, got %q", p.Path)
+		case seen[p.Path]:
+			add(f+".path", "%q is declared twice", p.Path)
+		default:
+			seen[p.Path] = true
+		}
+
+		if p.Template == "" {
+			add(f+".template", "is required")
+		} else if err := m.checkTemplateName(p.Template); err != nil {
+			add(f+".template", "%v", err)
+		}
+
+		switch p.Auth {
+		case "", "token", "admin", "none":
+		default:
+			add(f+".auth", "must be token, admin or none, got %q", p.Auth)
+		}
+
+		if p.Provider != "" {
+			if m.Needs == "" {
+				add(f+".provider", "names an export, but this plugin declares no `needs:` "+
+					"and so has no backend to export it")
+			}
+			if !exportRe.MatchString(p.Provider) {
+				add(f+".provider", "must be a name like latest_release, got %q", p.Provider)
+			}
+		}
+	}
+}
+
+func (m Manifest) validateNav(add func(string, string, ...any)) {
+	for i, n := range m.Nav {
+		f := fmt.Sprintf("nav[%d]", i)
+		switch n.Area {
+		case "", "rail":
+		default:
+			add(f+".area", "must be rail, got %q", n.Area)
+		}
+		if n.Label == "" {
+			add(f+".label", "is required")
+		}
+		if n.Href == "" {
+			add(f+".href", "is required")
+		} else if !strings.HasPrefix(n.Href, "/") {
+			add(f+".href", "must be an absolute path, got %q", n.Href)
+		}
+		switch n.When {
+		case "", "always", "workspace", "admin":
+		default:
+			add(f+".when", "must be always, workspace or admin, got %q", n.When)
+		}
+	}
+}
+
+func (m Manifest) validateAssets(add func(string, string, ...any)) {
+	check := func(field, p string) {
+		switch {
+		case p == "":
+			add(field, "is required")
+		case strings.HasPrefix(p, "/"):
+			add(field, "must be relative to the bundle, got %q", p)
+		case strings.Contains(p, ".."):
+			add(field, "must not escape the bundle, got %q", p)
+		}
+	}
+	for i, s := range m.Styles {
+		check(fmt.Sprintf("styles[%d]", i), s)
+	}
+	if len(m.Media) > maxMedia {
+		add("media", "holds %d items and at most %d are shown; this is a card somebody reads to decide, not a gallery",
+			len(m.Media), maxMedia)
+	}
+	for i, md := range m.Media {
+		f := fmt.Sprintf("media[%d].file", i)
+		check(f, md.File)
+		if md.File != "" && MediaKind(md.File) == "" {
+			add(f, "is %q, which this build will not show; it must be one of: %s",
+				md.File, strings.Join(mediaKindList(), " "))
+		}
+	}
+	for i, s := range m.Scripts {
+		check(fmt.Sprintf("scripts[%d].src", i), s.Src)
+		switch s.Type {
+		case "", "module":
+		default:
+			add(fmt.Sprintf("scripts[%d].type", i), "must be module, got %q", s.Type)
+		}
+	}
+}
+
+func (m Manifest) validateRequires(add func(string, string, ...any)) {
+	seen := map[string]bool{}
+	for i, id := range m.Requires {
+		f := fmt.Sprintf("requires[%d]", i)
+		switch {
+		case id == "":
+			add(f, "is empty")
+		case id == m.ID:
+			// Not pedantry: a self-edge is a cycle, and a cycle refuses the
+			// whole load. Caught here it is one line in one manifest.
+			add(f, "names this plugin itself")
+		case !idRe.MatchString(id):
+			add(f, "%q is not a usable plugin id", id)
+		case seen[id]:
+			add(f, "names %q twice", id)
+		}
+		seen[id] = true
+	}
+}
+
+func (m Manifest) validateOverrides(add func(string, string, ...any)) {
+	for i, n := range m.Overrides {
+		f := fmt.Sprintf("overrides[%d]", i)
+		name, err := ParseName(n)
+		if err != nil {
+			add(f, "%v", err)
+			continue
+		}
+		// Declaring a name you own is not an override, and an author who wrote
+		// one has misunderstood the mechanism in a way worth naming now.
+		if name.Namespace == m.ID {
+			add(f, "%q is in your own namespace, so it adds rather than overrides — "+
+				"remove it from overrides", n)
+		}
+	}
+}
+
+// knownOS and knownArch are what this product is built for. A row for
+// something else is refused rather than stored: an author publishing for a
+// target nobody can run has published nothing, and learning that at install
+// time on somebody else's machine is too late.
+var knownOS = map[string]bool{"linux": true, "darwin": true, "windows": true}
+var knownArch = map[string]bool{"amd64": true, "arm64": true}
+
+// mountPoints is the closed set. Named here so an unknown one is refused with
+// the list rather than accepted and never rendered.
+var mountPoints = map[string]bool{"workspace.drawer": true}
+
+func (m Manifest) validateMounts(add func(string, string, ...any)) {
+	paths := map[string]bool{}
+	for _, p := range m.Pages {
+		paths[p.Path] = true
+	}
+	for i, mt := range m.Mounts {
+		f := fmt.Sprintf("mounts[%d]", i)
+		if !mountPoints[mt.Point] {
+			add(f+".point", "must be workspace.drawer, got %q", mt.Point)
+		}
+		if mt.Title == "" {
+			add(f+".title", "is required — it is the label on the button that opens it")
+		}
+		switch {
+		case mt.Page == "":
+			add(f+".page", "is required")
+		case !paths[mt.Page]:
+			// Caught here rather than at render, where it would be a panel
+			// that opens on nothing.
+			add(f+".page", "names %q, which is not one of this plugin's pages", mt.Page)
+		}
+	}
+}
+
+func (m Manifest) validateNative(add func(string, string, ...any)) {
+	seen := map[string]bool{}
+	for i, n := range m.Native {
+		f := fmt.Sprintf("native[%d]", i)
+		if !knownOS[n.OS] {
+			add(f+".os", "must be linux, darwin or windows, got %q", n.OS)
+		}
+		if !knownArch[n.Arch] {
+			add(f+".arch", "must be amd64 or arm64, got %q", n.Arch)
+		}
+		switch n.Libc {
+		case "", "any", "glibc", "musl":
+		default:
+			add(f+".libc", "must be glibc, musl or any, got %q", n.Libc)
+		}
+		if n.OS != "linux" && n.Libc != "" && n.Libc != "any" {
+			add(f+".libc", "is meaningless on %s — leave it out", n.OS)
+		}
+		switch {
+		case n.Path == "":
+			add(f+".path", "is required")
+		case strings.HasPrefix(n.Path, "/"):
+			add(f+".path", "must be relative to the bundle, got %q", n.Path)
+		case strings.Contains(n.Path, ".."):
+			add(f+".path", "must not escape the bundle, got %q", n.Path)
+		}
+		if seen[n.Target()] {
+			add(f, "%s is published twice", n.Target())
+		}
+		seen[n.Target()] = true
+	}
+	if len(m.Native) > 0 && !looksLikeImage(m.Needs) && m.Needs != "native" {
+		add("native", "is only read when needs: is \"native\" — this plugin needs %q, "+
+			"so these rows would never be used", m.Needs)
+	}
+}
+
+func (m Manifest) validateGrants(add func(string, string, ...any)) {
+	for i, h := range m.Hosts {
+		if !hostRe.MatchString(h) {
+			add(fmt.Sprintf("hosts[%d]", i),
+				"must be a hostname, optionally with a leading *. — and never a port, "+
+					"because a grant names hosts. Got %q", h)
+		}
+	}
+	for i, s := range m.Secrets {
+		if !envRe.MatchString(s) {
+			add(fmt.Sprintf("secrets[%d]", i),
+				"must be an environment variable NAME, got %q — a manifest never carries a value", s)
+		}
+	}
+	for i, s := range m.API {
+		if !strings.Contains(s, ":") {
+			add(fmt.Sprintf("api[%d]", i), "must be scope:action like runs:read, got %q", s)
+		}
+	}
+}
+
+// AuthDefault is what a page gets when its manifest says nothing. Closed, so
+// forgetting the field is never the thing that opens a page.
+const AuthDefault = "token"
+
+// PagePrefix is the path space this plugin owns. Every page it registers lives
+// under here, which is why no plugin can ever collide with another or with a
+// route the server already serves.
+func (m Manifest) PagePrefix() string { return "/p/" + m.ID + "/" }
+
+// Namespace is the template prefix this plugin owns. Defining a name inside it
+// adds; defining a name inside somebody else's overrides.
+func (m Manifest) Namespace() string { return m.ID }
+
+// checkTemplateName rejects a plugin's own page pointing at a name it does not
+// own. Overriding somebody else's template is allowed and expected, but a page
+// rendering a name the plugin did not ship is a dangling reference dressed up
+// as a contribution.
+func (m Manifest) checkTemplateName(s string) error {
+	n, err := ParseName(s)
+	if err != nil {
+		return err
+	}
+	if n.Namespace != m.ID {
+		return fmt.Errorf("a page must render a template you own; %q is in the %q namespace", s, n.Namespace)
+	}
+	return nil
+}
+
+// ── needs ─────────────────────────────────────────────────────────────────
+
+// Needs is a parsed technology declaration. The tier it maps to is the host's
+// decision and lives in the resolver, not here — this type only says what the
+// author asked for.
+type Need struct {
+	Technology string
+	Constraint Constraint
+}
+
+// ParseNeeds reads "python@>=3.11", or a bare "js" meaning any version.
+func ParseNeeds(s string) (Need, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return Need{}, nil
+	}
+	tech, rest, hasConstraint := strings.Cut(s, "@")
+	tech = strings.TrimSpace(tech)
+	if !idRe.MatchString(tech) {
+		return Need{}, fmt.Errorf("technology must be lowercase letters, digits and hyphens, got %q", tech)
+	}
+	n := Need{Technology: tech}
+	if hasConstraint {
+		c, err := ParseConstraint(rest)
+		if err != nil {
+			return Need{}, err
+		}
+		n.Constraint = c
+	}
+	return n, nil
+}
+
+func (n Need) String() string {
+	if n.Constraint.IsZero() {
+		return n.Technology
+	}
+	return n.Technology + "@" + n.Constraint.String()
+}
+
+// ── versions and constraints ──────────────────────────────────────────────
+
+// This is a deliberately separate parser from the one in internal/update, and
+// the reason is that they answer different questions. That one decides whether
+// a newer release exists and refuses to parse a prerelease on purpose, because
+// telling somebody 1.6.0-rc1 is 1.6.0 would be wrong. A plugin author, though,
+// legitimately ships 1.4.0-beta.1 and must be able to say so. Sharing one
+// parser would mean one of the two questions gets the wrong answer.
+
+// Version is a semver triple with an optional prerelease.
+type Version struct {
+	Major, Minor, Patch int
+	Pre                 string
+}
+
+func parseVersion(s string) (Version, bool) {
+	s = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(s), "v"))
+	if s == "" {
+		return Version{}, false
+	}
+	core, pre, _ := strings.Cut(s, "-")
+	// Build metadata does not participate in comparison, so it is dropped
+	// rather than stored — keeping it would invite somebody to compare it.
+	core, _, _ = strings.Cut(core, "+")
+	pre, _, _ = strings.Cut(pre, "+")
+
+	parts := strings.Split(core, ".")
+	if len(parts) != 3 {
+		return Version{}, false
+	}
+	var v Version
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 || (len(p) > 1 && p[0] == '0') {
+			return Version{}, false
+		}
+		switch i {
+		case 0:
+			v.Major = n
+		case 1:
+			v.Minor = n
+		case 2:
+			v.Patch = n
+		}
+	}
+	v.Pre = pre
+	return v, true
+}
+
+// ParseVersion is parseVersion with an error, for callers that report.
+func ParseVersion(s string) (Version, error) {
+	v, ok := parseVersion(s)
+	if !ok {
+		return Version{}, fmt.Errorf("%q is not a version like 1.4.0", s)
+	}
+	return v, nil
+}
+
+func (v Version) String() string {
+	s := fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
+	if v.Pre != "" {
+		s += "-" + v.Pre
+	}
+	return s
+}
+
+// Compare orders two versions. A prerelease sorts before its release, which is
+// the one rule that stops 1.4.0-beta.1 from satisfying ">=1.4.0".
+func (v Version) Compare(o Version) int {
+	switch {
+	case v.Major != o.Major:
+		return sign(v.Major - o.Major)
+	case v.Minor != o.Minor:
+		return sign(v.Minor - o.Minor)
+	case v.Patch != o.Patch:
+		return sign(v.Patch - o.Patch)
+	case v.Pre == o.Pre:
+		return 0
+	case v.Pre == "":
+		return 1
+	case o.Pre == "":
+		return -1
+	}
+	return strings.Compare(v.Pre, o.Pre)
+}
+
+func sign(n int) int {
+	if n < 0 {
+		return -1
+	}
+	if n > 0 {
+		return 1
+	}
+	return 0
+}
+
+// Constraint is a version requirement. Deliberately small: an operator reading
+// an approval screen has to understand it, and a range grammar nobody can read
+// aloud is a grammar that hides what a plugin actually demands.
+type Constraint struct {
+	Op string // "", ">=", ">", "=", "<", "<="
+	V  Version
+}
+
+func (c Constraint) IsZero() bool { return c.Op == "" }
+
+func (c Constraint) String() string {
+	if c.IsZero() {
+		return ""
+	}
+	return c.Op + c.V.String()
+}
+
+// ParseConstraint reads ">=1.9", "1.9.0", ">1.2.3", "<=2.0.0".
+//
+// A two-part version is accepted and completed with a zero patch, because
+// ">=1.9" is what an author naturally writes and refusing it would be pedantry
+// charged to the person we are trying to make comfortable.
+func ParseConstraint(s string) (Constraint, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return Constraint{}, nil
+	}
+	op := "="
+	for _, candidate := range []string{">=", "<=", ">", "<", "="} {
+		if strings.HasPrefix(s, candidate) {
+			op = candidate
+			s = strings.TrimSpace(strings.TrimPrefix(s, candidate))
+			break
+		}
+	}
+	if parts := strings.Split(strings.TrimPrefix(s, "v"), "."); len(parts) == 2 {
+		s += ".0"
+	}
+	v, err := ParseVersion(s)
+	if err != nil {
+		return Constraint{}, fmt.Errorf("%v — write it like \">=1.9\" or \"1.9.0\"", err)
+	}
+	return Constraint{Op: op, V: v}, nil
+}
+
+// Satisfied reports whether v meets the constraint. A zero constraint is
+// satisfied by anything, which is what a bare "js" means.
+func (c Constraint) Satisfied(v Version) bool {
+	if c.IsZero() {
+		return true
+	}
+	cmp := v.Compare(c.V)
+	switch c.Op {
+	case ">=":
+		return cmp >= 0
+	case ">":
+		return cmp > 0
+	case "<=":
+		return cmp <= 0
+	case "<":
+		return cmp < 0
+	default:
+		return cmp == 0
+	}
+}

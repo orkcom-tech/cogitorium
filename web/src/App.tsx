@@ -1,16 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { auth, setup, Unauthorized, type SetupState, type User } from './api'
 import { session } from './session'
 import LoginPage from './pages/LoginPage'
 import SetupPage from './pages/SetupPage'
-import ModelsPage from './pages/ModelsPage'
-import WorkspacesPage from './pages/WorkspacesPage'
 import WorkspacePage from './pages/WorkspacePage'
-import ContextPage from './pages/ContextPage'
-import GearsPage from './pages/GearsPage'
-import EnvPage from './pages/EnvPage'
-import LibraryPage from './pages/LibraryPage'
 import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
 import InstallMap from './pages/InstallMap'
@@ -19,6 +13,19 @@ import Rail from './Rail'
 import { ShellProvider } from './shell'
 
 type Health = { status: string; version: string }
+
+/** Go to a screen the server renders, by leaving this application.
+ *
+ * react-router's Navigate pushes a path and looks for a route. There is no
+ * route for a server template, so it renders nothing and the person is left
+ * looking at an empty frame with a working rail around it.
+ */
+function Leave({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.replace(to)
+  }, [to])
+  return null
+}
 
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null)
@@ -113,17 +120,23 @@ export default function App() {
         <div className="frame">
         <main className="cavity">
           <Routes>
-            <Route path="/" element={<Navigate to="/workspaces" replace />} />
-            <Route path="/workspaces" element={<WorkspacesPage me={user} />} />
+            {/* A real navigation, not a client-side one. /workspaces is a
+                server template: pushing the path would render an empty cavity,
+                which is exactly what signing in used to land on. */}
+            <Route path="/" element={<Leave to="/workspaces" />} />
+            {/* Everything not listed above is a server template: /workspaces,
+                /gears, /models, /instructions, /context, /env and /plugins.
+                The router must not claim them — a client route would shadow
+                the page and put React back over the top of it.
+
+                What is left here is what a template cannot be. /map and the
+                blueprint are drawn canvases, the editor is live text, and
+                /terminal is a socket: a template renders a thing that exists
+                at a moment, and all four exist in motion. */}
             <Route path="/map" element={<InstallMap />} />
-            <Route path="/people" element={user.role === 'admin' ? <AdminPage /> : <Navigate to="/workspaces" replace />} />
-            <Route path="/terminal" element={user.role === 'admin' ? <TerminalPage /> : <Navigate to="/workspaces" replace />} />
+            <Route path="/people" element={user.role === 'admin' ? <AdminPage /> : <Leave to="/workspaces" />} />
+            <Route path="/terminal" element={user.role === 'admin' ? <TerminalPage /> : <Leave to="/workspaces" />} />
             <Route path="/workspaces/:id" element={<WorkspacePage me={user} />} />
-            <Route path="/context" element={user.role === 'admin' ? <ContextPage /> : <Navigate to="/workspaces" replace />} />
-            <Route path="/gears" element={<GearsPage me={user} />} />
-            <Route path="/env" element={user.role === 'admin' ? <EnvPage /> : <Navigate to="/workspaces" replace />} />
-            <Route path="/instructions" element={<LibraryPage />} />
-            <Route path="/models" element={<ModelsPage />} />
           </Routes>
           </main>
         </div>

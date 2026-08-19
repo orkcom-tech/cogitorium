@@ -87,14 +87,28 @@ FROM alpine:3.21
 # is the only path that is actually consulted; putting the volume anywhere else
 # produced a container that reported context as unavailable and, worse, wrote
 # it to a layer that a rebuild throws away.
+# libstdc++ is what makes JavaScript-on-a-fetched-runtime work here at all:
+# the musl Node and Bun builds will not start without libgcc_s.so.1 and die
+# with a shared-library error that says nothing about the cause. 942 KB down,
+# under 3 MB installed, and a build-time decision because a container with a
+# read-only rootfs can never make it later.
+RUN apk add --no-cache libstdc++
 RUN adduser -D cogitorium \
- && mkdir -p /data /home/cogitorium/.context \
- && chown -R cogitorium:cogitorium /data /home/cogitorium
+ && mkdir -p /data /home/cogitorium/.context /usr/share/cogitorium/ref \
+ && chown -R cogitorium:cogitorium /data /home/cogitorium \
+ && chmod -R a+rX /usr/share/cogitorium/ref
 COPY --from=build /out/cogitorium /usr/local/bin/cogitorium
 COPY --from=contextd /out/contextd /usr/local/bin/contextd
 # The licence and its NOTICE travel with the image for the same reason they
 # travel with the archives: pulling it is a redistribution.
 COPY LICENSE NOTICE /usr/share/doc/cogitorium/
+# The ref tree is readable by MODE, never by owner, and that is the detail the
+# cluster channel turns on. There is no single runtime user: adduser above gives
+# uid 1000 and the Helm pod overrides to 65532, which has no passwd entry here.
+# An ownership-based ref tree reads fine under compose and is INVISIBLE in the
+# cluster — silently emptying the plugin set on exactly the channel where the
+# seed is the whole guarantee. The PVC only works because fsGroup chowns it, and
+# an image layer gets no fsGroup treatment.
 COPY packaging/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 USER cogitorium
 VOLUME /data /home/cogitorium/.context

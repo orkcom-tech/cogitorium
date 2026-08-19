@@ -1,0 +1,13 @@
+schema: 1
+id: gosample
+name: Go Sample
+version: 1.0.0
+license: Apache-2.0
+needs: go
+host:
+  contract: 1
+pages:
+  - path: /p/gosample/
+    template: gosample.page.home
+    title: Go Sample
+    provider: home

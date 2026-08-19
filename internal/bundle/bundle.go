@@ -70,6 +70,32 @@ type Bundle struct {
 	Gears      []Gear        `json:"gears"`
 	MCPServers []MCPServer   `json:"mcp_servers,omitempty"`
 	Context    []ContextFile `json:"context"`
+	// Reads is which document each agent was told to read.
+	//
+	// The files above are the workspace's own subtree; this is the wiring, and
+	// without it an imported workflow is agents with no instructions. A bundle
+	// used to carry the documents and lose who read them, so the same agents
+	// arrived on the far side behaving differently and nothing said why.
+	//
+	// Absent in a bundle written before this field existed, which is why
+	// nothing depends on it being there.
+	Reads []Reading `json:"reads,omitempty"`
+}
+
+// Reading is one document an agent reads.
+type Reading struct {
+	// Path is where it lives. A document of this workspace's OWN is stored
+	// relative to its branch, exactly as ContextFile is, because the branch on
+	// the far side has a different name; anything else — a library
+	// instruction, a shared document — keeps the path it has on every install.
+	Path string `json:"path"`
+	// Own says Path is relative to the workspace's branch and must be
+	// re-prefixed on arrival. Without it an imported workflow would bind a
+	// path inside the EXPORTING workspace's subtree, which on the receiving
+	// install is either nothing or somebody else's work.
+	Own bool `json:"own,omitempty"`
+	// Agent is who reads it, or empty for everybody in the workspace.
+	Agent string `json:"agent,omitempty"`
 }
 
 // MCPServer is an external MCP server this workspace granted to something.

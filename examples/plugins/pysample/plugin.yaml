@@ -1,0 +1,14 @@
+schema: 1
+id: pysample
+name: Python Sample
+version: 1.0.0
+license: Apache-2.0
+needs: python
+host:
+  contract: 1
+
+pages:
+  - path: /p/pysample/
+    template: pysample.page.home
+    title: Python Sample
+    provider: home

@@ -1,0 +1,19 @@
+schema: 1
+id: natsample
+name: Native Sample
+version: 1.0.0
+license: Apache-2.0
+needs: native
+host:
+  contract: 1
+
+native:
+  - os: darwin
+    arch: arm64
+    path: bin/natsample-darwin-arm64
+
+pages:
+  - path: /p/natsample/
+    template: natsample.page.home
+    title: Native Sample
+    provider: home

@@ -317,7 +317,7 @@ func (g *Gate) begin(t *Ticket, method, target, defaultPort string) (*attempt, i
 	ctx := context.WithoutCancel(t.ctx)
 
 	rec := Connection{
-		GearName: t.grant.GearName, Version: t.grant.Version,
+		GearName: t.grant.GearName, Source: t.grant.Source, Version: t.grant.Version,
 		WorkspaceID: t.grant.WorkspaceID, AgentID: t.grant.AgentID, AgentName: t.grant.AgentName,
 		Method: method, Allowed: t.grant.Hosts,
 	}

@@ -1,0 +1,13 @@
+schema: 1
+id: jssample
+name: JavaScript Sample
+version: 1.0.0
+license: Apache-2.0
+needs: js
+host:
+  contract: 1
+pages:
+  - path: /p/jssample/
+    template: jssample.page.home
+    title: JavaScript Sample
+    provider: home

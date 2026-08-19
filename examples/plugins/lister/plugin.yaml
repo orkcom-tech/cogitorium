@@ -1,0 +1,15 @@
+schema: 1
+id: lister
+name: Lister
+version: 1.0.0
+license: Apache-2.0
+needs: python
+host:
+  contract: 1
+api:
+  - workspaces:read
+pages:
+  - path: /p/lister/
+    template: lister.page.home
+    title: Lister
+    provider: home

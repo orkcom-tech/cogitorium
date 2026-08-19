@@ -649,7 +649,7 @@ first turn.
 
 [`docs/openapi.yaml`](https://github.com/orkcom-tech/cogitorium/blob/main/docs/openapi.yaml)
 is an OpenAPI 3.1 document listing every endpoint this server has: 97 path
-items carrying 130 operations, their path parameters, and which credential
+items carrying 150 operations, their path parameters, and which credential
 opens each — a user's token, a receiver's own key, or nothing.
 
 **It is generated from the server's own route table**, by a test that fails when
@@ -1866,6 +1866,160 @@ No agent can open either.
 
 ---
 
+## Plugins
+
+A plugin adds functionality *and* changes the interface. It can put a screen in
+the rail, hang a panel inside a workspace, take over a template the core never
+designated as extensible, and run code of its own. Restart-to-activate is the
+model, and the plugins screen can perform the restart.
+
+### Installing one
+
+Three ways in, and all three land in the same place: **switched off and
+unapproved.**
+
+- **From the library** — the Plugins screen has a Library tab listing the
+  shared catalog, searchable and sortable.
+- **From a file** — drop a `.zip` on the Plugins screen, or
+  `cogitorium plugins install <bundle.zip>`.
+- **From a directory you are editing** — `cogitorium plugins dev .`, with no
+  build step.
+
+Nothing runs until somebody approves it, and **approval is bound to the
+content, not the name**: the digest is read from what the machine holds, so a
+decision can only ever be about bytes somebody could have looked at. Rebuild
+the plugin and it drops back to pending on its own.
+
+The approval card shows what it overrides, which hosts it wants, which secrets
+it names, what API subjects it asks for — and a **preview** of each override,
+rendered against an example through the composed stack. "It overrides
+`cog.row.nav`" is not a thing anybody can evaluate; a picture of the row is.
+
+### What an author writes
+
+There is a **[full authoring guide](/cogitorium/plugins/)** — the manifest, the
+five tiers, the nine calls, overriding a screen that shipped, the SDKs and how
+to get listed. What follows is the shape of it.
+
+A directory with a `plugin.yaml`. Everything else is optional.
+
+```yaml
+schema: 1
+id: myplugin
+name: My Plugin
+version: 0.1.0
+needs: python          # or js, rust, go, node, an OCI image, native — or nothing
+host:
+  contract: 1
+pages:
+  - path: /p/myplugin/
+    template: myplugin.page.home
+    provider: home
+
+media:                 # optional, and most plugins will have none
+  - file: docs/screen.png
+    caption: The list, with two feeds watched
+```
+
+`media:` is yours to fill or leave out. It is shown on the approval card as
+what YOU wanted somebody to see — the product renders no preview of your work
+on your behalf. The files ship inside the bundle rather than as links, so they
+are covered by the digest the operator approves, they work offline, and they
+cannot change after somebody has looked at them. png, jpg, webp, gif, avif, mp4
+and webm; eight at most, because that card is something a person reads to make
+a decision.
+
+**You declare a technology. The host decides the lane.** Which of the five
+tiers it picked is never your problem — that is the whole point of declaring
+what you wrote it in instead of shipping a runtime.
+
+| Tier | You ship | Runs |
+|---|---|---|
+| **bundle** | templates, CSS, JS | everywhere, nothing fetched |
+| **wasm** | one `.wasm` | everywhere, nothing fetched |
+| **provisioned** | source | everywhere the data directory is executable; the interpreter is fetched once and shared |
+| **image** | an OCI reference | where this install has a sandbox that starts containers |
+| **native** | a binary per `{os, arch}` | where one matches. No isolation: it is your machine code as this server's user |
+
+`cogitorium plugins names` lists every template you can override, what model it
+renders against, and what the host's own body is today — offline, from the
+binary you are actually running. `docs/registry.json` is the same thing as a
+file, and `docs/plugin.schema.json` is the manifest schema, so an editor
+completes the fields and underlines a typo.
+
+### What a plugin may ask the host for
+
+Nine calls, identical on every tier, so a plugin rewritten in another language
+calls the same nine.
+
+`log` · `now` · `rand` · `config` · `render` · `http` · `api` · `enqueue` ·
+`kv`
+
+Two of them are grants rather than capabilities. **`http` reaches only hosts
+listed under `hosts:`**, through the same gate gears use — which writes a row
+before the socket opens and refuses loopback and link-local regardless. **`api`
+calls only subjects listed under `api:`**, in-process, as `plugin:<id>` and
+never as whoever installed it, so a grant is not decorative.
+
+`enqueue` puts work on the durable queue, so a background task survives a
+restart instead of being a goroutine nothing recorded.
+
+There are four SDKs, all offering those same nine calls under the same names:
+[Python](https://github.com/orkcom-tech/cogitorium/tree/main/sdk/python) — one
+file, standard library only, copied in beside your code —
+[Go](https://github.com/orkcom-tech/cogitorium/tree/main/sdk/go), which builds
+the same source to WebAssembly or to a native binary and takes TinyGo as well,
+and [Rust](https://github.com/orkcom-tech/cogitorium/tree/main/sdk/rust).
+
+`needs: js` needs no SDK at all — the engine is compiled into the server and you
+ship one `plugin.js`.
+
+### The catalog
+
+[`orkcom-tech/cogitorium-plugins`](https://github.com/orkcom-tech/cogitorium-plugins)
+is an index and nothing else: five fields saying where a plugin lives. The
+bundle stays in the author's own repository, in their releases, so listing
+costs one small file no matter how many plugins there are.
+
+An entry may also carry one picture for the library, and the catalog pins it to
+a file in your own repository rather than accepting an address: a picture on
+somebody else's host would tell them who is browsing, before anybody installed
+anything.
+
+**Adding your own entry merges on green CI.** You are not waiting for anybody.
+Editing or removing an entry that is already listed does not, and that is the
+one rule worth explaining: an edit can point an id people have already
+installed at a *different repository*, and nothing in a public JSON file can
+establish who owns an id.
+
+Verification shows as three states rather than a badge — the team read the
+version you have, they read a different one, or nobody has looked. The last is
+the ordinary state and not an accusation. **Verified means somebody read that
+version.** It is not a guarantee, not an audit, and not a substitute for the
+approval step on your own install, which is where somebody who can actually see
+your data decides.
+
+Update discovery costs nothing in privacy: the catalog's own CI publishes an
+index with versions filled in, and a client fetches the **whole file** and
+compares locally. No query string, no install id, no list of what you have.
+
+## Versions of a workflow
+
+A workspace is a workflow, and it can be saved: agents, wires, the gears they
+may call pinned to the version they were pinned to, what each reads, and the
+clocks that start them. Saved by a person, with a message.
+
+**Rolling back keeps what it replaces.** The current state is saved first, the
+rollback is recorded as a version of its own, and numbers are never reused —
+because a history that can be rewritten cannot be produced in an argument about
+what ran. What could not be restored is named rather than swallowed: a gear the
+catalogue no longer has cannot be conjured back.
+
+Not the same thing as an export. A bundle crosses a machine boundary, so it
+drops approvals and credentials and names models by shape; a version stays here
+and restores exactly, or says why it could not.
+[→](/cogitorium/guide/#versions)
+
 ## Configuration reference
 
 Configuration comes from, in order of precedence: command-line flags, then
@@ -1878,6 +2032,7 @@ then defaults.
 | `data_dir` | `COGITORIUM_DATA_DIR` | `~/.cogitorium` | SQLite database and server-owned files. |
 | `log_level` | `COGITORIUM_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
 | `contextd_path` | `COGITORIUM_CONTEXTD` | `contextd` | How to find the Contextverse CLI. |
+| `orchestrator_secrets` | `COGITORIUM_ORCHESTRATOR_SECRETS` | `on` | Whether the orchestrator may read and write your named values. On, because an orchestrator that can create an agent and forge a gear but cannot give either the credential they need hands the job back at the last step. What it costs is not hidden: reading a secret puts its plaintext into the model's context for that conversation, and no arrangement of the code removes that. `off` withholds the tools entirely rather than offering them and refusing — a tool a model can see is one it will try. Names are never gated: an orchestrator that cannot see which names exist cannot tell an agent which to declare, and a name is not a secret. Written here, `off` is absolute and no screen can lift it. |
 | `browser_image` | `COGITORIUM_BROWSER_IMAGE` | `mcr.microsoft.com/playwright:v1.56.0-noble` | What the `browser` environment resolves to. Pinned rather than a moving tag: an image that changed under an approved gear would change what it runs inside without the approval changing. |
 | `mcp_clients` | `COGITORIUM_MCP_CLIENTS` | `false` | Lets an operator install external MCP servers and grant their tools to an agent. It runs a command this install never saw the source of, on the host — read the section above before switching it on. |
 | `sandbox_pool` | `COGITORIUM_SANDBOX_POOL` | `0` | Warm containers to keep per image instead of creating one per run. Zero is off. The one setting here that trades isolation for latency — see below. |

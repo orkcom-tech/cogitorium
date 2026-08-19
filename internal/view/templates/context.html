@@ -1,0 +1,134 @@
+{{/*
+  The context space.
+
+  Its text is not stored here — Contextverse holds it, and every write goes
+  through contextd so versioning stays where the versions are. That is why this
+  page has a state most do not: contextd unreachable, which is a different
+  thing from an empty space and has to read differently or somebody concludes
+  their memory is gone.
+
+  Saving carries the version the text was READ at. A save that only carried the
+  text would silently overwrite whatever landed in between; carrying the
+  version turns that into a refusal naming both, which is the one thing the
+  person losing work needs.
+*/}}
+
+{{define "cog.page.context"}}
+<main class="page context">
+  <h2>{{.Ctx.T.Context}}</h2>
+
+  {{if .Available}}
+    <p class="hint">
+      Files in your Contextverse space{{if .SpaceRoot}} ({{.SpaceRoot}}){{end}}. Editing here writes
+      through <code>contextd</code>, so versioning stays Contextverse's.
+    </p>
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+    {{if .Notice}}<p class="hint">✓ {{.Notice}}</p>{{end}}
+
+    {{/* Finding a memory used to mean already knowing its path. */}}
+    <form class="row" method="get" action="/context">
+      <input class="grow" name="q" value="{{.Query}}" placeholder="search inside the files…">
+      <button type="submit">search</button>
+      {{if .Searched}}<a class="action" href="/context">clear</a>{{end}}
+    </form>
+
+    {{if .Searched}}
+      <div class="card">
+        <p class="hint">
+          {{if .Hits}}{{.Matches}} lines in {{.FilesMatched}} of {{.FilesScanned}} files.{{else}}Nothing in {{.FilesScanned}} files mentions “{{.Query}}”.{{end}}
+          {{if .Truncated}} There are more — narrow the search.{{end}}
+        </p>
+        {{range .Hits}}<a class="context-hit" href="/context?open={{.Path}}">
+          <code class="path">{{.Path}}:{{.Line}}</code>
+          <span class="hit-text">{{.Text}}</span>
+        </a>{{end}}
+      </div>
+    {{end}}
+
+    <div class="context-layout">
+      {{template "cog.list.context" .}}
+      <div class="context-editor">
+        {{if .Open}}
+          <form method="post" action="/context/save">
+            <div class="row">
+              <code>{{.Open}}</code>
+              {{if .OpenedAt}}<span class="muted">opened at {{.OpenedAt}}</span>{{end}}
+              <span class="spacer"></span>
+              <button type="submit">save new version</button>
+            </div>
+            {{/* The path and the version travel with the text. Without the
+                 version a save is a clobber; without the path it is a save
+                 into whatever the server last thought was open. */}}
+            <input type="hidden" name="path" value="{{.Open}}">
+            <input type="hidden" name="version" value="{{.OpenedAt}}">
+            <textarea name="text" spellcheck="false">{{.Text}}</textarea>
+          </form>
+
+          {{/* Removing it is a SOFT delete: contextd keeps every version and
+               `contextd file undelete` brings it back. Said here rather than
+               implying an erasure that did not happen.
+
+               Its own form, so the version it carries is the one that was
+               read — removing a document somebody has just rewritten is
+               refused for the same reason overwriting it is. */}}
+          <form class="row context-remove" method="post" action="/context/delete">
+            <input type="hidden" name="path" value="{{.Open}}">
+            <input type="hidden" name="version" value="{{.OpenedAt}}">
+            <button type="submit" class="danger">Remove it</button>
+            <span class="hint">Its versions stay in Contextverse and it can be brought back.</span>
+          </form>
+        {{else}}
+          <p class="hint">Pick a file to view or edit it.</p>
+        {{end}}
+      </div>
+    </div>
+  {{else}}
+    <div class="card">
+      <p>
+        Context lives in <strong>Contextverse</strong> — Cogitorium does not store it. The
+        <code>contextd</code> CLI is not usable right now:
+      </p>
+      <p class="error">{{.Unusable}}</p>
+      <p class="hint">
+        Install Contextverse and run <code>contextd init solo</code>, or point Cogitorium at the
+        binary with <code>contextd_path</code> in config.yaml (or <code>COGITORIUM_CONTEXTD</code>).
+      </p>
+    </div>
+  {{end}}
+</main>
+{{end}}
+
+{{define "cog.list.context"}}<div id="context-files" class="context-files">
+{{if .Files}}{{range .Files}}{{template "cog.row.contextfile" .}}{{end}}{{else}}{{template "cog.empty.context" .}}{{end}}
+</div>{{end}}
+
+{{define "cog.row.contextfile"}}<a class="context-file{{if .Selected}} selected{{end}}" href="/context?open={{.Path}}">
+  <span class="path">{{.Path}}</span>
+  <span class="muted">{{.Version}}</span>
+</a>{{end}}
+
+{{define "cog.empty.context"}}<p class="hint">space is empty</p>{{end}}
+
+{{/*
+  The context space as a drawer.
+
+  Admin-only, like the page: it reads and writes every document in the install.
+  What THIS workspace's agents read is Memory, on each agent, which is a
+  different drawer and a different question.
+*/}}
+{{define "cog.drawer.context"}}<div class="dk-body context">
+  {{if .Available}}
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+    {{if .Notice}}<p class="hint">✓ {{.Notice}}</p>{{end}}
+    <form class="row" method="get" action="/context">
+      <input class="grow" name="q" value="{{.Query}}" placeholder="search inside the files…">
+      <button type="submit">search</button>
+    </form>
+    {{if .Searched}}<p class="hint">
+      {{if .Hits}}{{.Matches}} lines in {{.FilesMatched}} of {{.FilesScanned}} files.{{else}}Nothing in {{.FilesScanned}} files mentions “{{.Query}}”.{{end}}
+    </p>{{end}}
+    {{template "cog.list.context" .}}
+  {{else}}
+    <p class="error">{{.Unusable}}</p>
+  {{end}}
+</div>{{end}}

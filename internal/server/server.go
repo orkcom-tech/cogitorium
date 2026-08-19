@@ -4,18 +4,23 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io/fs"
 	"log/slog"
 	"mime"
 	"net"
 	"net/http"
+	"os"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -33,14 +38,17 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/mcpoauth"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/metrics"
+	"github.com/orkcom-tech/cogitorium/internal/plugin"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/schedule"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/settings"
 	"github.com/orkcom-tech/cogitorium/internal/update"
 	"github.com/orkcom-tech/cogitorium/internal/version"
+	"github.com/orkcom-tech/cogitorium/internal/view"
 	"github.com/orkcom-tech/cogitorium/internal/websearch"
 	"github.com/orkcom-tech/cogitorium/internal/work"
+	"github.com/orkcom-tech/cogitorium/internal/workflow"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 	"github.com/orkcom-tech/cogitorium/web"
 )
@@ -78,15 +86,26 @@ type Server struct {
 	// what runs it. queueMax bounds the waiting, because a queue with no bound
 	// is a way to run a server out of disk politely.
 	schedules *schedule.Store
-	queue     *work.Store
-	pool      *work.Pool
-	stopPool  context.CancelFunc
-	queueMax  int
+	settings  *settings.Store
+	versions  *workflow.Store
+	// orchestratorSecrets is what the config file said: "off" is absolute.
+	orchestratorSecrets string
+	queue               *work.Store
+	pool                *work.Pool
+	stopPool            context.CancelFunc
+	queueMax            int
 	// callbackHosts is who this install may tell that a run finished. EMPTY
 	// MEANS OFF: a callback URL arrives in a task, and a task is editable by
 	// anyone who can reach the workspace, so defaulting to open would turn
 	// "edit a task" into "make this server call an address of my choosing".
 	callbackHosts []string
+	// backends runs plugin code. Nil when nothing enabled has any, which is
+	// the ordinary case for an install whose plugins are templates.
+	backends *backends
+	// plugins is the composed interface: the template set every page renders
+	// through, and the pages the enabled plugins declared. Nil only if
+	// composition failed, which is fatal at startup rather than survivable.
+	plugins *pluginRuntime
 	// publicURL is how this install is reachable from outside, used to put
 	// fetchable links to a run's files in its callback. Empty simply leaves
 	// them out.
@@ -101,6 +120,25 @@ type Server struct {
 	// An OAuth redirect can point at the loopback address only here, and a
 	// browser is told to remember a session only here.
 	localInstall bool
+	// pageSpaces is every screen this server renders as a template, by its
+	// first path segment. What makes a converted screen authenticated — see
+	// (*Server).page for why the rule about /api/ is not enough.
+	pageSpaces map[string]bool
+
+	// The application's stylesheet links, read from the embedded index once.
+	appHeadOnce sync.Once
+	appHeadHTML template.HTML
+	// catalogClient fetches the shared plugin catalog. Nil in production, which
+	// means the default client — it is a field so a test can point the fetch
+	// at a server it controls, since the catalog's URL is a compiled-in
+	// constant on purpose and must stay one.
+	catalogClient *http.Client
+	// sandbox is the backend that starts containers, kept because the plugins
+	// screen has to answer "can the image tier run here" long after New
+	// returned — and the honest answer follows the LIVE backend rather than
+	// the channel's name. The shipped compose image is itself a container and
+	// cannot start one; a native install with Docker can.
+	sandbox sandbox.Runner
 	// interactive is the sandbox backend able to host a terminal; nil means
 	// no terminal is possible, and that is a refusal rather than a fallback.
 	interactive     sandbox.Interactive
@@ -140,6 +178,33 @@ type Server struct {
 // egress bool) a caller that swaps two arguments compiles cleanly, and the
 // result is a security gate silently switched on.
 func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.Searcher, env *secrets.Resolver, gate *gearnet.Gate) *Server {
+	// The interface is composed before anything is served. A plugin that
+	// cannot render is dropped by name here rather than discovered by a
+	// visitor, and the product's own templates failing is a panic because
+	// there would be nothing to serve — a test in internal/view catches that
+	// long before a build gets this far.
+	plugins, err := loadPlugins(cfg.DataDir)
+	if err != nil {
+		panic("cogitorium: the interface could not be composed: " + err.Error())
+	}
+	// The image's own plugin tree, checked as the user this process actually
+	// runs as. It ran only inside `plugins seed` and its answer went nowhere,
+	// so a tree that is present and unreadable — the ownership case on the
+	// cluster channel — came up as an interface that quietly has nothing extra
+	// in it, with nothing anywhere to read.
+	if err := plugin.CheckRef(""); err != nil {
+		slog.Warn("this image carries plugins that cannot be read as this user, so none of them "+
+			"are installed", "err", err, "uid", os.Getuid())
+	}
+	// Compiled at boot rather than on the first request, so a module that will
+	// not load is a line in the startup log rather than a page that fails the
+	// first time somebody visits it.
+	// Before the backends, because a plugin's cog.enqueue goes on this queue
+	// and the gateway is built with it.
+	queue := work.NewStore(db)
+	pluginBackends := startBackends(context.Background(), plugins, plugins.live, cfg.DataDir,
+		sb, db, cfg.Plugins, gate, queue)
+
 	cat := catalog.NewStore(db)
 	ws := workspace.NewStore(db)
 	cs := contextstore.New(cfg.ContextdPath)
@@ -159,7 +224,6 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	}
 	lib := library.NewStore(db)
 	broker := egress.New()
-	queue := work.NewStore(db)
 	// Zero means unset, not "refuse everything". A Config built in code rather
 	// than read from a file — which is what every test and every embedding
 	// does — would otherwise turn the queue's bound into a door that is shut,
@@ -169,6 +233,9 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		queueMax = config.Defaults().QueueMaxPerWorkspace
 	}
 	s := &Server{
+		plugins:    plugins,
+		backends:   pluginBackends,
+		sandbox:    sb,
 		db:         db,
 		catalog:    cat,
 		workspaces: ws,
@@ -189,17 +256,20 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		inlets:   inlet.NewStore(db),
 		engine: engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, queue,
 			engine.Budgets{Run: cfg.BudgetRunTokens}, cfg.DataDir),
-		queue:           queue,
-		schedules:       schedule.NewStore(db),
-		queueMax:        queueMax,
-		callbackHosts:   cfg.CallbackHosts,
-		publicURL:       strings.TrimSuffix(cfg.PublicURL, "/"),
-		localInstall:    isLoopbackListen(cfg.Listen),
-		terminalEnabled: cfg.Terminal,
-		dataDir:         cfg.DataDir,
-		searcher:        searcher,
-		broker:          broker,
-		adminSeeds:      identity.Seeds{Token: cfg.AdminToken, Password: cfg.AdminPassword},
+		queue:               queue,
+		schedules:           schedule.NewStore(db),
+		settings:            settings.NewStore(db),
+		versions:            workflow.NewStore(db),
+		orchestratorSecrets: cfg.OrchestratorSecrets,
+		queueMax:            queueMax,
+		callbackHosts:       cfg.CallbackHosts,
+		publicURL:           strings.TrimSuffix(cfg.PublicURL, "/"),
+		localInstall:        isLoopbackListen(cfg.Listen),
+		terminalEnabled:     cfg.Terminal,
+		dataDir:             cfg.DataDir,
+		searcher:            searcher,
+		broker:              broker,
+		adminSeeds:          identity.Seeds{Token: cfg.AdminToken, Password: cfg.AdminPassword},
 		// The contextd version is fetched at check time, not here: an install
 		// with no contextd should not pay a subprocess on every boot to
 		// discover that, and the check runs at most once a day.
@@ -228,6 +298,9 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	if mcpStore != nil {
 		s.engine.SetMCP(mcpStore, env)
 	}
+	// The resolver for named values, whether or not MCP was configured: the
+	// orchestrator's env tools read the same one a gear's names go through.
+	s.engine.SetSecrets(env)
 	s.engine.SetMetrics(s.metrics)
 	s.engine.SetMCPOAuth(s.mcpOAuth)
 	// The sweeper that closes idle MCP connections. On the pool's lifetime,
@@ -242,7 +315,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// "ask" and asks again, and one whose operator said "no" is asked forever.
 	// Load enforces the ceiling on the way in: a stored answer can never lift
 	// a configured off.
-	s.updates.Load(poolCtx, settings.NewStore(db))
+	s.updates.Load(poolCtx, s.settings)
 
 	// The update check, on the same lifetime and deliberately not on the
 	// startup path: it returns immediately and defers its first request, so a
@@ -266,6 +339,28 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	mux := http.NewServeMux()
 	s.route(mux, "GET /health", s.handleHealth)
 
+	s.route(mux, "GET /api/v1/workspaces/{id}/metrics", s.handleWorkspaceMetrics)
+	s.route(mux, "GET /api/v1/plugins", s.handleListPlugins)
+	s.route(mux, "POST /api/v1/plugins", s.handleUploadPlugin)
+	// Its own path space rather than under /plugins/. Go's mux refused the
+	// nested form at registration — /plugins/catalog/{id} and
+	// /plugins/{id}/approve both match /plugins/catalog/approve and neither is
+	// more specific — which is exactly the crash that keeping every route in
+	// one file exists to surface at boot rather than in production.
+	s.route(mux, "GET /api/v1/plugin-catalog", s.handleBrowseCatalog)
+	s.route(mux, "POST /api/v1/plugin-catalog/{id}", s.handleInstallFromCatalog)
+	s.routeIn(mux, "PUT /api/v1/plugins/order", s.handleOrderPlugins, struct {
+		Order []string `json:"order"`
+	}{})
+	// Not under /plugins/, because restarting is not a plugin operation even
+	// though the plugin screen is what mostly asks for it.
+	s.route(mux, "POST /api/v1/restart", s.handleRestart)
+	s.route(mux, "GET /api/v1/plugins/{id}/preview", s.handlePreviewPlugin)
+	s.route(mux, "POST /api/v1/plugins/{id}/approve", s.handleApprovePlugin)
+	s.route(mux, "POST /api/v1/plugins/{id}/revoke", s.handleRevokePlugin)
+	s.route(mux, "POST /api/v1/plugins/{id}/enable", s.handleEnablePlugin)
+	s.route(mux, "POST /api/v1/plugins/{id}/disable", s.handleDisablePlugin)
+	s.route(mux, "DELETE /api/v1/plugins/{id}", s.handleRemovePlugin)
 	s.route(mux, "GET /api/v1/providers", s.handleListProviders)
 	s.route(mux, "POST /api/v1/providers", s.handleCreateProvider)
 	s.route(mux, "PATCH /api/v1/providers/{id}", s.handleUpdateProvider)
@@ -453,7 +548,120 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "GET /i/{address}/runs/{id}/file", s.handleInletRunFile)
 	s.route(mux, inletDeliveryPrefix, handleInletDeliveryPath)
 
-	mux.Handle("/", uiHandler())
+	// The hypermedia layer, from this binary.
+	//
+	// Under /cog/ and NOT /assets/, which is where it was first put — and
+	// /assets/ is where Vite writes the application's own bundle. Registering
+	// a handler there shadowed the whole interface: every screen answered 404
+	// for its own JavaScript, which presents as a blank page rather than as a
+	// routing mistake.
+	//
+	// /cog/ matches the template namespace, so it reads as the host's own, and
+	// nothing a plugin serves can land in it.
+	mux.Handle(hostAssetPrefix, http.StripPrefix(hostAssetPrefix,
+		http.FileServer(http.FS(view.Hypermedia()))))
+
+	// The first screen of the product served as a template rather than by the
+	// application. Its own paths rather than /api/v1 ones: these answer with
+	// HTML, and the described API is a JSON surface — putting a page in it
+	// would make every generated client expect a document.
+	// A panel the server renders, swapped into a page the client still owns.
+	// The seam the conversion is happening on: the workspace is the
+	// application's and the drawers inside it are becoming templates, so
+	// something inside a workspace is overridable before the workspace itself
+	// has to be.
+	s.page(mux, "GET /workspaces/{id}/drawers/{name}", s.handleWorkspaceDrawer)
+	s.page(mux, "GET /workspaces/{id}/transcript", s.handleTranscript)
+	s.page(mux, "POST /messages/{id}/forget", s.handleForgetMessageForm)
+	s.page(mux, "POST /memory/save", s.handleSaveMemoryForm)
+	s.page(mux, "POST /memory/forget", s.handleForgetMemoryForm)
+
+	// The library screen, rendered by the system it is about. If the template
+	// stack, the layer order or the approval gate were wrong, this is the
+	// screen that would fail to draw — and the one an operator would be on
+	// when they needed it most.
+	// The lists, not the page. The access map shares this screen and stays
+	// where it is — it is a drawn graph, and a template renders a thing that
+	// exists at a moment rather than a layout somebody drags. So the client
+	// keeps the page and the server fills the half made of words.
+	s.page(mux, "GET /people/lists", s.handlePeoplePage)
+	s.page(mux, "POST /people/users", s.handleCreateUserForm)
+	s.page(mux, "POST /people/users/{id}/delete", s.handleDeleteUserForm)
+	s.page(mux, "POST /people/teams", s.handleCreateTeamForm)
+	s.page(mux, "POST /people/teams/{id}/delete", s.handleDeleteTeamForm)
+	s.page(mux, "POST /people/teams/{id}/members", s.handleAddTeamMemberForm)
+
+	s.page(mux, "POST /workspaces/{id}/versions", s.handleSaveVersionForm)
+	s.page(mux, "POST /workspaces/{id}/versions/{number}/restore", s.handleRestoreVersionForm)
+	s.page(mux, "GET /account", s.handleAccountPage)
+	s.page(mux, "POST /account/password", s.handleAccountPasswordForm)
+	s.page(mux, "POST /account/signout", s.handleAccountSignOutForm)
+	s.page(mux, "GET /plugins", s.handlePluginsPage)
+	s.page(mux, "POST /plugins", s.handleUploadPluginForm)
+	s.page(mux, "POST /plugins/restart", s.handleRestartFromPluginsForm)
+	// Its own path space rather than under /plugins/, for the same reason the
+	// API's is: /plugins/catalog/{id} and /plugins/{id}/approve both match
+	// /plugins/catalog/approve and neither is more specific. Go's mux refuses
+	// that at registration — which is exactly the crash that keeping every
+	// route in one file exists to surface at boot rather than in production.
+	s.page(mux, "POST /plugin-catalog/{id}", s.handleInstallFromCatalogForm)
+	s.page(mux, "POST /plugins/{id}/approve", s.handleApprovePluginForm)
+	s.page(mux, "POST /plugins/{id}/revoke", s.handleRevokePluginForm)
+	s.page(mux, "POST /plugins/{id}/enable", s.handleEnablePluginForm)
+	s.page(mux, "POST /plugins/{id}/disable", s.handleDisablePluginForm)
+	s.page(mux, "POST /plugins/{id}/up", s.handlePluginUpForm)
+	s.page(mux, "POST /plugins/{id}/down", s.handlePluginDownForm)
+	s.page(mux, "POST /plugins/{id}/remove", s.handleRemovePluginForm)
+
+	s.page(mux, "GET /workspaces", s.handleWorkspacesPage)
+	s.page(mux, "POST /workspaces", s.handleCreateWorkspaceForm)
+	s.page(mux, "POST /workspaces/import", s.handleImportWorkspaceForm)
+	s.page(mux, "POST /workspaces/{id}/clone", s.handleCloneWorkspaceForm)
+	s.page(mux, "POST /workspaces/{id}/colour", s.handleColourWorkspaceForm)
+	s.page(mux, "POST /workspaces/{id}/delete", s.handleDeleteWorkspaceForm)
+	s.page(mux, "POST /workspaces/{id}/share", s.handleShareWorkspaceForm)
+	s.page(mux, "POST /workspaces/{id}/unshare", s.handleUnshareWorkspaceForm)
+
+	s.page(mux, "GET /gears", s.handleGearsPage)
+	s.page(mux, "POST /gears", s.handleWriteGearForm)
+	s.page(mux, "POST /gears/{id}/approve", s.handleApproveGearForm)
+	// Open to anyone: a dry run is how somebody decides whether to ask for an
+	// approval, and requiring the permission to form the opinion would leave
+	// only administrators able to have one.
+	s.page(mux, "POST /gears/{id}/run", s.handleRunGearForm)
+	s.page(mux, "POST /gears/{id}/disable", s.handleDisableGearForm)
+	s.page(mux, "POST /gears/{id}/delete", s.handleDeleteGearForm)
+
+	s.page(mux, "GET /env", s.handleVariablesPage)
+	s.page(mux, "GET /context", s.handleContextPage)
+	s.page(mux, "POST /context/save", s.handleSaveContextForm)
+	s.page(mux, "POST /context/delete", s.handleDeleteContextForm)
+
+	s.page(mux, "GET /models", s.handleModelsPage)
+	s.page(mux, "POST /models/providers", s.handleCreateProviderForm)
+	s.page(mux, "POST /models/providers/{id}/delete", s.handleDeleteProviderForm)
+	s.page(mux, "POST /models/providers/{id}/test", s.handleTestProviderForm)
+	s.page(mux, "POST /models/providers/{id}/models", s.handleCreateModelForm)
+	s.page(mux, "POST /models/{id}/delete", s.handleDeleteModelForm)
+
+	s.page(mux, "GET /instructions", s.handleInstructionsPage)
+	s.page(mux, "POST /instructions", s.handleCreateInstructionForm)
+	s.page(mux, "POST /instructions/{id}/delete", s.handleDeleteInstructionForm)
+
+	mux.Handle(pluginPagePrefix, s.pluginHandler())
+	mux.Handle("/", s.uiHandler())
+
+	// The bare mux, for a plugin's cog.api call.
+	//
+	// Below authenticate on purpose: that middleware resolves a credential
+	// into a user, and a plugin has no credential to resolve — its identity is
+	// put on the context directly, which is the one thing a network request
+	// can never do. Going through authenticate would mean either minting a
+	// token for a call that never leaves this process, or teaching the
+	// middleware a second way in.
+	if pluginBackends != nil {
+		pluginBackends.attachAPI(mux)
+	}
 
 	s.http = &http.Server{
 		Addr:              cfg.Listen,
@@ -483,6 +691,30 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	// The runtime kill switch is handed to the engine here rather than at
 	// construction, so the engine never imports the server.
 	s.engine.SetEgressKill(s.egressOff.Load)
+	// The orchestrator's clocks. Without this it can build the agent that
+	// would run nightly and then has to tell somebody to go and set the timer
+	// themselves, which is not what an orchestrator is for.
+	s.engine.SetSchedules(s.schedules)
+	// Whether the orchestrator may read and write named values. On unless an
+	// operator says otherwise: an orchestrator that cannot configure what it
+	// builds hands the job back. Read per turn, so switching it off takes
+	// effect on the next thing it does.
+	s.engine.SetSecretsAccess(func(ctx context.Context) bool {
+		// The file first and absolutely: an operator who wrote "off" on the
+		// server's own disk has decided, and a row in the database must not be
+		// able to lift it. That is the same rule update_check follows, and for
+		// the same reason — a decision made on disk is not a suggestion.
+		if strings.EqualFold(strings.TrimSpace(s.orchestratorSecrets), "off") {
+			return false
+		}
+		v, err := s.settings.Get(ctx, settings.OrchestratorSecrets)
+		if err != nil {
+			// A database that cannot answer is not permission to hand out
+			// credentials.
+			return false
+		}
+		return v != "off"
+	})
 
 	// Before anything else asks for context: an installed contextd with no
 	// space is a product where memory silently does nothing, and until now only
@@ -615,9 +847,72 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, code, map[string]string{"status": status, "version": version.Version})
 }
 
+// clientRoutes is every path the single-page application answers.
+//
+// Declared, not guessed. This server knows exactly which screens exist, so a
+// path that is not one of them is a mistake and must be answered as one — the
+// alternative is a 200 and an HTML document for anything anybody types, which
+// makes a typo look like a working page and a missing asset look like a
+// corrupt bundle.
+//
+// One segment of ":" matches any single segment. Kept in step with the Route
+// elements in web/src/App.tsx by a test that fails when the two disagree, and
+// it shrinks as pages are converted to templates.
+var clientRoutes = []string{
+	"/",
+	"/workspaces",
+	"/workspaces/:",
+	"/map",
+	"/people",
+	"/terminal",
+	"/context",
+	"/gears",
+	"/env",
+	"/instructions",
+	"/models",
+	"/plugins",
+}
+
+// servesTheApp reports whether a path is one of the application's own screens.
+func servesTheApp(path string) bool {
+	got := splitPath(path)
+	for _, pattern := range clientRoutes {
+		if matchRoute(splitPath(pattern), got) {
+			return true
+		}
+	}
+	return false
+}
+
+func splitPath(p string) []string {
+	p = strings.Trim(p, "/")
+	if p == "" {
+		return nil
+	}
+	return strings.Split(p, "/")
+}
+
+func matchRoute(pattern, got []string) bool {
+	if len(pattern) != len(got) {
+		return false
+	}
+	for i := range pattern {
+		if pattern[i] == ":" {
+			if got[i] == "" {
+				return false
+			}
+			continue
+		}
+		if pattern[i] != got[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // uiHandler serves the embedded SPA: real files as-is, everything else falls
 // back to index.html so client-side routes deep-link correctly.
-func uiHandler() http.Handler {
+func (s *Server) uiHandler() http.Handler {
 	dist, err := fs.Sub(web.Dist, "dist")
 	if err != nil {
 		// Impossible with a correct embed; fail loudly, not silently.
@@ -642,12 +937,143 @@ func uiHandler() http.Handler {
 			// Any Stat failure (ErrNotExist, ErrInvalid for e.g. trailing
 			// slashes) means "not a real file" — serve the SPA shell.
 			if _, err := fs.Stat(dist, path[1:]); err != nil {
+				if !servesTheApp(path) {
+					http.NotFound(w, r)
+					return
+				}
 				r = r.Clone(r.Context())
 				r.URL.Path = "/"
 			}
 		}
+		// The index carries what the plugins contribute, so the rail is not a
+		// destination that briefly has fewer entries than it will have a
+		// moment later. Everything else is served as-is.
+		if r.URL.Path == "/" {
+			if b, err := s.indexWithPlugins(dist); err == nil {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Header().Set("Cache-Control", "no-store")
+				_, _ = w.Write(b)
+				return
+			}
+		}
 		fileServer.ServeHTTP(w, r)
 	})
+}
+
+// appHead is the application's own stylesheet links, for a page the server
+// renders itself.
+//
+// A converted screen builds its document from the template stack rather than
+// from index.html, so nothing carries the application's CSS into it unless
+// something does it deliberately — and for a while nothing did: every
+// converted screen went out as a correct document with no styling at all,
+// which reads as a broken product rather than as a missing link tag.
+//
+// Links only, never the scripts. The application's module in a server-rendered
+// page would boot the single-page app on top of the page it is inside.
+//
+// Computed once and cached, because it is the same answer for the life of the
+// process: the file is embedded in the binary.
+func (s *Server) appHead() template.HTML {
+	s.appHeadOnce.Do(func() {
+		dist, err := fs.Sub(web.Dist, "dist")
+		if err != nil {
+			return
+		}
+		raw, err := fs.ReadFile(dist, "index.html")
+		if err != nil {
+			return
+		}
+		var b strings.Builder
+		for _, m := range stylesheetLink.FindAll(raw, -1) {
+			// Without the crossorigin attribute the build emits. It makes the
+			// stylesheet a CORS request, which is fine from this origin and
+			// fails from the preview frame: that frame is sandboxed, so its
+			// origin is opaque, it sends Origin: null, and a file server that
+			// answers no CORS header leaves the preview unstyled — which is
+			// the one thing a preview must not be.
+			b.Write(crossorigin.ReplaceAll(m, nil))
+		}
+		s.appHeadHTML = template.HTML(b.String())
+
+	})
+	return s.appHeadHTML
+}
+
+// stylesheetLink matches a link element that carries a stylesheet.
+//
+// A regexp over the built index rather than a parse, and deliberately narrow:
+// it matches the one shape Vite emits, and matching nothing is a page with no
+// CSS — visibly wrong, and caught by the test that reads the served document
+// for it.
+var stylesheetLink = regexp.MustCompile(`(?i)<link[^>]+rel="stylesheet"[^>]*>`)
+
+// crossorigin is that attribute, with the space before it.
+var crossorigin = regexp.MustCompile(`(?i)\s+crossorigin(="[^"]*")?`)
+
+// contributesNothing is the early out for a document that needs no splicing.
+//
+// Its own function so that it can be tested, and so that adding a contribution
+// kind has one place to be remembered rather than a boolean chain inside a
+// bigger function. Mounts were forgotten exactly that way: a plugin whose only
+// contribution was a workspace panel matched "nothing", and its button was
+// silently missing.
+func contributesNothing(c Contribution) bool {
+	return len(c.Nav) == 0 && len(c.Mounts) == 0 && len(c.Styles) == 0 && len(c.Scripts) == 0
+}
+
+// indexWithPlugins splices the plugin contribution into the application's own
+// document.
+//
+// Injected rather than fetched, because a rail that gains entries a moment
+// after it renders is a rail that moves under somebody's cursor. Written into
+// the head so it is set before the application's module runs, which is the
+// only ordering that lets the first render already be right.
+func (s *Server) indexWithPlugins(dist fs.FS) ([]byte, error) {
+	raw, err := fs.ReadFile(dist, "index.html")
+	if err != nil {
+		return nil, err
+	}
+	c := s.plugins.Contribution()
+	// Mounts are counted here too. They were not, and a plugin whose whole
+	// contribution is a workspace panel — no rail entry, no stylesheet, no
+	// script — took this early return and never reached the document, so its
+	// button was missing with nothing anywhere saying why.
+	if contributesNothing(c) {
+		return raw, nil
+	}
+
+	payload, err := json.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+	var b strings.Builder
+	b.WriteString("<script>window.__COG_PLUGINS__=")
+	// The payload is this server's own JSON, but it lands inside a script
+	// element, where the parser ends the script at the first </script> no
+	// matter what the JSON meant. A plugin's name is author-controlled text,
+	// so the sequence is broken up rather than trusted not to occur.
+	b.WriteString(strings.ReplaceAll(string(payload), "</", `<\/`))
+	b.WriteString("</script>")
+	for _, href := range c.Styles {
+		b.WriteString(`<link rel="stylesheet" href="` + template.HTMLEscapeString(href) + `">`)
+	}
+	for _, src := range c.Scripts {
+		b.WriteString(`<script type="module" src="` + template.HTMLEscapeString(src) + `"></script>`)
+	}
+
+	head := []byte("</head>")
+	i := bytes.Index(raw, head)
+	if i < 0 {
+		// No head to splice into. Serving the document unchanged is better
+		// than serving one this code guessed the shape of.
+		return raw, nil
+	}
+	out := make([]byte, 0, len(raw)+b.Len())
+	out = append(out, raw[:i]...)
+	out = append(out, b.String()...)
+	out = append(out, raw[i:]...)
+	return out, nil
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

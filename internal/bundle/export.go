@@ -84,6 +84,14 @@ func Export(ctx context.Context, s Stores, wsID int64, opts Options) (Bundle, er
 			return Bundle{}, err
 		}
 	}
+	// Who reads what, always. It is three fields of wiring rather than a
+	// document, it is meaningless without the agents it names, and an agent
+	// arriving without what it was told to read is a different agent.
+	b.Reads, err = exportReads(ctx, s, wsID, ws.Branch, nameOf)
+	if err != nil {
+		return Bundle{}, err
+	}
+
 	if opts.Context {
 		b.Context, err = exportContext(ctx, s, ws.Branch)
 		if err != nil {
@@ -250,5 +258,31 @@ func exportMCP(ctx context.Context, s Stores, wsID int64, nameOf map[int64]strin
 	// Sorted, so two exports of the same workspace are the same bytes: a map
 	// has no order, and a bundle people diff must not churn.
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+// exportReads carries the bindings: which document each agent was told to read.
+func exportReads(ctx context.Context, s Stores, wsID int64, branch string, nameOf map[int64]string) ([]Reading, error) {
+	bindings, err := s.Workspaces.ListContextBindings(ctx, wsID)
+	if err != nil {
+		return nil, err
+	}
+	out := []Reading{}
+	for _, b := range bindings {
+		r := Reading{Path: b.Path}
+		if prefix := branch + "/"; branch != "" && strings.HasPrefix(b.Path, prefix) {
+			r.Path, r.Own = strings.TrimPrefix(b.Path, prefix), true
+		}
+		if b.AgentID != nil {
+			// An agent that is not in this bundle cannot be named on the far
+			// side, and a binding to a name nobody has is worse than none.
+			name, ok := nameOf[*b.AgentID]
+			if !ok {
+				continue
+			}
+			r.Agent = name
+		}
+		out = append(out, r)
+	}
 	return out, nil
 }

@@ -46,6 +46,30 @@ const (
 	AuthToken = "token"
 )
 
+// pluginPagePrefix is where a plugin's own pages live, and it is reserved
+// before anything is served under it.
+//
+// The reservation matters more than it looks. openToAnyone's last term exempts
+// every non-/api/ path, because that is how the single-page app and its assets
+// are served — so a new path space added outside /api/ is anonymous BY
+// CONSTRUCTION, with no opt-in and no warning. A plugin page landing in that
+// term would be reachable by anyone who knew the URL, and nothing in the
+// plugin's manifest would have said so.
+//
+// Closed here instead, before the first page exists. A plugin that genuinely
+// wants an open page will say so in its manifest and the operator will see it
+// on the approval screen; that is a declaration, and a declaration cannot be
+// expressed by a rule derived from the shape of a path. Until the declared
+// path exists, everything under /p/ needs a token.
+const pluginPagePrefix = "/p/"
+
+// hostAssetPrefix is where this server's own vendored assets live.
+//
+// Deliberately not /assets/: that is the application's build output, and a
+// handler registered there shadows every script and stylesheet the interface
+// needs.
+const hostAssetPrefix = "/cog/"
+
 // openToAnyone reports whether a path is reachable without a credential.
 //
 // The authentication middleware and the published description both call this,
@@ -58,6 +82,12 @@ const (
 // and its assets are served. Delivery is named separately rather than left to
 // that term, so tightening the asset rule cannot silently close it.
 func openToAnyone(path string) bool {
+	// Plugin pages are carved out of the catch-all first. Order matters only
+	// for a reader: the point is that the general "everything outside /api/"
+	// term must never be what decides a plugin route.
+	if strings.HasPrefix(path, pluginPagePrefix) {
+		return false
+	}
 	return path == "/health" ||
 		path == "/api/v1/login" ||
 		path == "/api/v1/setup" ||
@@ -93,6 +123,73 @@ func (s *Server) route(mux *http.ServeMux, pattern string, h http.HandlerFunc) {
 	mux.HandleFunc(pattern, h)
 }
 
+// page registers a screen this server renders.
+//
+// Two things at once, and the second is the one that matters.
+//
+// It keeps the route out of the API inventory: the inventory describes a JSON
+// API, and putting a document in it would tell every generated client to
+// expect one.
+//
+// And it records the path as PAGE SPACE, which is what makes it
+// authenticated. Everything outside /api/ was anonymous, and that was right
+// while everything outside /api/ was the application's shell and its static
+// files — none of which hold data, because the application fetches its own
+// with a token. A server-rendered screen holds data. Without this, converting
+// a screen would quietly publish it: /instructions answered 200 with the
+// library in it to anybody who asked.
+func (s *Server) page(mux *http.ServeMux, pattern string, h http.HandlerFunc) {
+	_, path, ok := strings.Cut(pattern, " ")
+	if !ok {
+		path = pattern
+	}
+	// The space, not the path: a page has actions hanging off it —
+	// /models/providers/{id}/delete — and matching exact paths would leave
+	// every one of them open. The first segment is the screen.
+	if space := firstSegment(path); space != "" {
+		if s.pageSpaces == nil {
+			s.pageSpaces = map[string]bool{}
+		}
+		s.pageSpaces[space] = true
+	}
+	mux.HandleFunc(pattern, h)
+}
+
+// firstSegment is "/models" for "/models/providers/{id}/delete".
+func firstSegment(path string) string {
+	trimmed := strings.TrimPrefix(path, "/")
+	if trimmed == "" {
+		return ""
+	}
+	if i := strings.IndexByte(trimmed, '/'); i >= 0 {
+		trimmed = trimmed[:i]
+	}
+	return "/" + trimmed
+}
+
+// pageAdmin is requireAdmin for a screen.
+//
+// The same decision, a different refusal. requireAdmin answers JSON, which is
+// right for a script and useless to somebody looking at a browser — so a
+// member who reached an admin screen is sent where the application would have
+// sent them rather than shown an error object. The client router does exactly
+// this, and the two have to agree or converting a screen changes who can see
+// it.
+func (s *Server) pageAdmin(w http.ResponseWriter, r *http.Request) bool {
+	if callerFrom(r.Context()).IsAdmin() {
+		return true
+	}
+	http.Redirect(w, r, "/workspaces", http.StatusSeeOther)
+	return false
+}
+
+// inPageSpace reports whether a request is for a screen this server renders,
+// and therefore needs a credential like every other route that shows data.
+func (s *Server) inPageSpace(path string) bool {
+	space := firstSegment(path)
+	return space != "" && s.pageSpaces[space]
+}
+
 // routeIn is route, for an endpoint that takes a body. The body argument is a
 // zero value of the type the handler decodes into — passing the type rather
 // than describing it is what keeps the two from drifting.
@@ -115,4 +212,17 @@ func (s *Server) Routes() []Route {
 		return strings.Compare(a.Method, b.Method)
 	})
 	return out
+}
+
+// done ends a form post by sending the browser back to the screen.
+//
+// See Other, not a rendered page. A form that answers a POST with its own
+// screen leaves the POST's URL in the address bar — /models/providers/1/test —
+// and a refresh re-submits it: a second provider, a second user, a second dial
+// of somebody's endpoint. The person did nothing wrong; they pressed reload.
+//
+// Failures still render in place, because the message belongs beside the form
+// that produced it and there is nothing to repeat.
+func (s *Server) done(w http.ResponseWriter, r *http.Request, path string) {
+	http.Redirect(w, r, path, http.StatusSeeOther)
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { api, type User, type Workspace } from "./api";
+import { api, contributions, type PluginNavItem, type User, type Workspace } from "./api";
 import { COG_MARK, DOCS_URL, ORKCOM_URL, ORK_MARK } from "./styles/brand";
 import ThemeMenu from "./pages/ThemeMenu";
 import UpdateNotice from "./pages/UpdateNotice";
@@ -37,6 +37,15 @@ const I = {
       <rect x="14" y="3" width="7" height="7" rx="2" />
       <rect x="3" y="14" width="7" height="7" rx="2" />
       <rect x="14" y="14" width="7" height="7" rx="2" />
+    </svg>
+  ),
+  plugins: (
+    /* A block seated into a socket: the two tabs are what makes it read as
+       something that plugs in rather than as another panel. */
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <rect x="7" y="9.5" width="13" height="11" rx="2.5" />
+      <path d="M10.5 9.5V6a2.5 2.5 0 0 1 5 0v3.5" />
+      <path d="M7 13.5H3.5M7 16.5H3.5" />
     </svg>
   ),
   map: (
@@ -97,6 +106,31 @@ const I = {
   ),
 };
 
+/** pluginNav is what the plugins contributed, filtered to this viewer.
+ *
+ * The `when` test happens here rather than on the server for one reason: the
+ * server would have to render a different document per role, and a cached
+ * document that leaked an admin's entries to everybody else is a worse failure
+ * than a filter that runs in the browser.
+ */
+function pluginNav(user: User): PluginNavItem[] {
+  return contributions().nav.filter((n) => {
+    switch (n.when) {
+      case "admin":
+        return user.role === "admin"
+      case "workspace":
+      case "always":
+      case undefined:
+      case "":
+        return true
+      default:
+        // A `when` this build does not know is not shown. A rail entry whose
+        // condition nobody can evaluate is one nobody decided to show.
+        return false
+    }
+  })
+}
+
 export default function Rail({
   user,
   health,
@@ -112,6 +146,10 @@ export default function Rail({
   const box = useRef<HTMLElement>(null);
   const loc = useLocation();
   const nav = useNavigate();
+  // Leaving for a screen the SERVER renders. The client router would push the
+  // path and render nothing, because the app has no route for it — which is
+  // what an empty cavity after pressing a destination actually was.
+  const leave = (href: string) => window.location.assign(href);
   const shell = useShell();
   // The rail is icons, so it has to be able to say what each one is. One
   // element for all of them, moved to whichever button the pointer is over —
@@ -174,7 +212,8 @@ export default function Rail({
       ref={box}
       aria-label="Cogitorium"
     >
-      <Link className="rail-brand" to="/workspaces" title="Cogitorium">
+      {/* A plain anchor: /workspaces is the server's screen now. */}
+      <a className="rail-brand" href="/workspaces" title="Cogitorium">
         <img src={COG_MARK} alt="Cogitorium" width={26} height={26} />
         <span className="by">
           <span>by</span>
@@ -187,7 +226,7 @@ export default function Rail({
             }}
           />
         </span>
-      </Link>
+      </a>
 
       {/* CAPSULE 1 — WHERE AM I.
           The workspace you are in, and a press opens the list of the others
@@ -319,6 +358,21 @@ export default function Rail({
             answered for yet — something to ask. */}
         <UpdateNotice me={user} />
         <ThemeMenu />
+        {/* Directly above the account, because it is about this install
+            rather than about the work: the same half of the column the
+            appearance bead and the update notice already sit in. */}
+        {user.role === "admin" && (
+          <button
+            data-own
+            className={`rail-btn ${loc.pathname === "/plugins" ? "on" : ""}`}
+            onMouseEnter={hover("Plugins")}
+            onMouseLeave={unhover}
+            onClick={() => leave("/plugins")}
+          >
+            {I.plugins}
+            <span className="sr-only">Plugins</span>
+          </button>
+        )}
         <button
           data-own
           className={`rail-btn ${menu === "account" ? "on" : ""}`}
@@ -356,16 +410,26 @@ export default function Rail({
             </button>
           ))}
           <hr />
-          <button onClick={() => nav("/workspaces")}>All workspaces…</button>
+          <button onClick={() => leave("/workspaces")}>All workspaces…</button>
         </div>
       )}
 
       {menu === "more" && (
         <div className="rail-menu" style={{ top: menuTop }} role="menu">
           <span className="rail-menu-label">the install</span>
-          <Link to="/models">Models</Link>
+          {/* Anchors for the two the server renders, a Link for the one the
+              client still owns: People is a drawn access map. */}
+          <a href="/models">Models</a>
           {user.role === "admin" && <Link to="/people">People</Link>}
-          {user.role === "admin" && <Link to="/context">Context</Link>}
+          {user.role === "admin" && <a href="/context">Context</a>}
+          {pluginNav(user).map((n) => (
+            /* A plain anchor rather than a Link: a plugin's page is served by
+               the server, not by the client router, so routing to it in the
+               browser would land on a screen this app does not have. */
+            <a key={`${n.from}-${n.href}`} href={n.href}>
+              {n.label}
+            </a>
+          ))}
           <hr />
           <a href={DOCS_URL} target="_blank" rel="noreferrer">
             Documentation

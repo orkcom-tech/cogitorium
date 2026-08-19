@@ -122,6 +122,19 @@ jobs:
         # egress broker parking a turn, the sandbox draining two pipes.
         run: go test ./... -count=1 -race
 
+      # The browser suite: a real server, a real Chromium, no mocks.
+      #
+      # The Go tests above cannot see the thing this branch is actually
+      # changing. Every step of turning React pages into templates has "nothing
+      # visibly changed" as its success criterion, which is not a claim
+      # anybody checks by hand across sixteen screens — and a net that only
+      # runs when somebody remembers to run it is not a net.
+      - name: Install Chromium for the browser tests
+        run: cd web && npx playwright install --with-deps chromium
+
+      - name: The interface, in a browser
+        run: cd web && npm test
+
       # And a proof that the step above actually did something: a skip is not a
       # pass, and this package reporting ok while running nothing is precisely
       # the state this is here to prevent.

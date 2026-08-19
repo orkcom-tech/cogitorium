@@ -37,15 +37,19 @@ type ImportOptions struct {
 // workspace can do, and finding that out by watching an agent fail later is
 // how a missing piece turns into a mystery.
 type Result struct {
-	Workspace        workspace.Workspace `json:"workspace"`
-	Agents           int                 `json:"agents"`
-	Wires            int                 `json:"wires"`
-	GearsImported    []string            `json:"gears_imported"`
-	GearsSkipped     []SkippedGear       `json:"gears_skipped"`
-	MCPImported      []string            `json:"mcp_imported"`
-	MCPSkipped       []SkippedGear       `json:"mcp_skipped"`
-	ContextFiles     int                 `json:"context_files"`
-	UnresolvedModels []UnresolvedModel   `json:"unresolved_models"`
+	Workspace     workspace.Workspace `json:"workspace"`
+	Agents        int                 `json:"agents"`
+	Wires         int                 `json:"wires"`
+	GearsImported []string            `json:"gears_imported"`
+	GearsSkipped  []SkippedGear       `json:"gears_skipped"`
+	MCPImported   []string            `json:"mcp_imported"`
+	MCPSkipped    []SkippedGear       `json:"mcp_skipped"`
+	ContextFiles  int                 `json:"context_files"`
+	// Reads is how many bindings were made, and ReadsSkipped the ones that
+	// named an agent this bundle does not have.
+	Reads            int               `json:"reads"`
+	ReadsSkipped     []SkippedGear     `json:"reads_skipped,omitempty"`
+	UnresolvedModels []UnresolvedModel `json:"unresolved_models"`
 }
 
 type SkippedGear struct {
@@ -185,6 +189,48 @@ func Import(ctx context.Context, s Stores, b Bundle, opts ImportOptions) (Result
 			}
 			res.ContextFiles++
 		}
+	}
+
+	// Who reads what. Always, and after the documents: a binding is three
+	// fields of wiring, and an agent that arrived without what it was told to
+	// read is a different agent behaving differently for no stated reason.
+	//
+	// A path that does not resolve on this install is still bound. The binding
+	// says what the workflow asks for; whether this install can supply it is a
+	// separate question, answered where context is read and answered there
+	// already. Dropping it would turn a missing document into a missing
+	// instruction nobody can see was ever intended.
+	for _, rd := range b.Reads {
+		var agentID *int64
+		if rd.Agent != "" {
+			agent, ok := created[rd.Agent]
+			if !ok {
+				res.ReadsSkipped = append(res.ReadsSkipped, SkippedGear{
+					Name: rd.Path,
+					Why:  fmt.Sprintf("it was read by %q, and this bundle has no such agent", rd.Agent),
+				})
+				continue
+			}
+			agentID = &agent.ID
+		}
+		path := rd.Path
+		// A document of the exporting workspace's own arrives under THIS
+		// workspace's branch, so the binding has to follow it. A binding
+		// carrying the old branch would point at nothing here, or at somebody
+		// else's workspace.
+		if rd.Own {
+			p, err := ContextPath(ws.Branch, rd.Path)
+			if err != nil {
+				return res, fmt.Errorf("workspace %q was created (id %d) but %q could not be bound: %w",
+					ws.Name, ws.ID, rd.Path, err)
+			}
+			path = p
+		}
+		if _, err := s.Workspaces.CreateContextBinding(ctx, ws.ID, path, agentID); err != nil {
+			return res, fmt.Errorf("workspace %q was created (id %d) but %q could not be bound: %w",
+				ws.Name, ws.ID, rd.Path, err)
+		}
+		res.Reads++
 	}
 
 	slog.Info("workspace imported from a bundle", "workspace_id", ws.ID, "name", ws.Name, "owner_id", opts.OwnerID,

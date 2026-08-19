@@ -63,3 +63,17 @@ func (s *Store) Set(ctx context.Context, key, value string) error {
 	slog.Info("setting stored", "key", key, "value", value)
 	return nil
 }
+
+// OrchestratorSecrets is whether the orchestrator may read and write the
+// operator's named values.
+//
+// Absent means on, which is the one default in this file that grants rather
+// than withholds — an orchestrator that can build an agent and forge a gear
+// but cannot give either the credential they need is an orchestrator that
+// hands the job back at the last step.
+//
+// What it costs is stated rather than hidden: reading a secret puts its
+// plaintext into a model's context, and no design removes that. Setting this
+// to "off" is how an operator who would rather type credentials themselves
+// says so.
+const OrchestratorSecrets = "orchestrator_secrets"

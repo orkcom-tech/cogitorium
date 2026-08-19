@@ -982,6 +982,17 @@ export default function BlueprintEditor({
             owned.current = true
           }}
           fitView
+          // React Flow will not zoom out past 0.5 by default, and that default
+          // silently defeats fitting. With a drawer docked along the bottom the
+          // canvas is about 280 pixels tall; five nodes need nearly six hundred
+          // at half size, so "fit view" hit the floor, stopped, and left two of
+          // them outside the canvas with no scrollbar to find them by. Pressing
+          // it again did nothing, which is the worst kind of control.
+          //
+          // Far enough out that a real graph fits in a short canvas. Small type
+          // is something somebody can zoom into; a node they cannot see is a
+          // node they do not know is there.
+          minZoom={0.15}
           proOptions={{ hideAttribution: true }}
         >
           <Background />

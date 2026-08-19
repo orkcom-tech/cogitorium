@@ -1,0 +1,21 @@
+{{/*
+  The rail, and one repeated unit named on its own so the container above can
+  be rebuilt without touching an override hanging off the row.
+
+  Rendered on every page this shell serves. It is NOT rendered on the
+  application's own screens: those still draw their own rail in the client, and
+  a second one above it would be two rails. That is the seam the conversion
+  closes, one screen at a time.
+*/}}
+
+{{define "cog.shell.rail"}}<nav class="rail" aria-label="{{.Ctx.T.Navigation}}">
+{{range .Nav}}{{template "cog.row.nav" .}}{{end}}{{template "cog.slot.rail" .}}</nav>{{end}}
+
+{{/*
+  One destination. The label is read aloud rather than drawn, because the rail
+  is icons — and a plugin whose icon name this build has never heard of gets
+  its label drawn instead, which beats an empty square nobody can identify.
+*/}}
+{{define "cog.row.nav"}}<a class="rail-item{{if .Current}} is-current{{end}}" href="{{.Href}}"{{if .Current}} aria-current="page"{{end}} title="{{.Label}}">{{if .Glyph}}{{.Glyph}}<span class="sr-only">{{.Label}}</span>{{else}}<span class="rail-label">{{.Label}}</span>{{end}}</a>{{end}}
+
+{{define "cog.slot.rail"}}{{end}}
