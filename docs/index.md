@@ -1948,8 +1948,15 @@ never as whoever installed it, so a grant is not decorative.
 `enqueue` puts work on the durable queue, so a background task survives a
 restart instead of being a goroutine nothing recorded.
 
-There is a [Python SDK](https://github.com/orkcom-tech/cogitorium/tree/main/sdk/python)
-— one file, standard library only, copied in beside your code.
+There are four SDKs, all offering those same nine calls under the same names:
+[Python](https://github.com/orkcom-tech/cogitorium/tree/main/sdk/python) — one
+file, standard library only, copied in beside your code —
+[Go](https://github.com/orkcom-tech/cogitorium/tree/main/sdk/go), which builds
+the same source to WebAssembly or to a native binary and takes TinyGo as well,
+and [Rust](https://github.com/orkcom-tech/cogitorium/tree/main/sdk/rust).
+
+`needs: js` needs no SDK at all — the engine is compiled into the server and you
+ship one `plugin.js`.
 
 ### The catalog
 

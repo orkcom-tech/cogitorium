@@ -188,6 +188,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, page, fragme
 	var out bytes.Buffer
 	shell := view.Shell{
 		Ctx:     s.viewCtx(r, callerFrom(r.Context())),
+		AppHead: s.appHead(),
 		Title:   title,
 		Body:    template.HTML(body.String()),
 		Nav:     rt.navFor(r.URL.Path),

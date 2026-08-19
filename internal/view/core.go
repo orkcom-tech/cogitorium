@@ -156,6 +156,38 @@ type NavItem struct {
 	From string
 }
 
+// Glyph is the shape for this item's icon, empty when there is no shape for
+// that name.
+//
+// Resolved here rather than chosen in the template, because choosing in a
+// template means a comparison function, and the function set is a permanent
+// promise to every plugin author. An item with no glyph renders its label
+// instead, which is what a plugin naming an icon this build has never heard of
+// gets — a destination somebody can read, rather than an empty square.
+func (n NavItem) Glyph() template.HTML { return glyphs[n.Icon] }
+
+// glyphs is the rail's icon set: the same shapes the application draws, so a
+// page the server renders sits in the same rail rather than in one that
+// changed character.
+var glyphs = map[string]template.HTML{
+	"grid": `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/>` +
+		`<rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/>` +
+		`<rect x="14" y="14" width="7" height="7" rx="2"/></svg>`,
+	"map": `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6.5v13L9 17l6 3 6-2.5v-13L15 7 9 4Z"/>` +
+		`<path d="M9 4v13M15 7v13"/></svg>`,
+	"gear": `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/>` +
+		`<path d="M12 3.4v3M12 17.6v3M3.4 12h3M17.6 12h3M5.9 5.9l2.1 2.1M16 16l2.1 2.1M18.1 5.9 16 8M8 16l-2.1 2.1"/></svg>`,
+	"model": `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7.5" y="7.5" width="9" height="9" rx="2"/>` +
+		`<path d="M10 3.5v4M14 3.5v4M10 16.5v4M14 16.5v4M3.5 10h4M3.5 14h4M16.5 10h4M16.5 14h4"/></svg>`,
+	"text": `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/>` +
+		`<path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4"/></svg>`,
+	"layers": `<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6.5" rx="7.5" ry="3"/>` +
+		`<path d="M4.5 6.5v11c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-11"/>` +
+		`<path d="M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></svg>`,
+	"plug": `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="9.5" width="13" height="11" rx="2.5"/>` +
+		`<path d="M10.5 9.5V6a2.5 2.5 0 0 1 5 0v3.5"/><path d="M7 13.5H3.5M7 16.5H3.5"/></svg>`,
+}
+
 // Asset is a stylesheet or module the shell injects.
 type Asset struct {
 	Src string

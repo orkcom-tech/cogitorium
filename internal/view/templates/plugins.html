@@ -113,8 +113,8 @@
           hx-confirm="Remove {{.Name}}? Its files go; anything it wrote stays.">
       <button type="submit" class="danger">Remove</button>
     </form>
-    {{if .Docs}}<a href="{{.Docs}}" target="_blank" rel="noreferrer noopener">Documentation</a>{{end}}
-    {{if .Source}}<a href="{{.Source}}" target="_blank" rel="noreferrer noopener">Source</a>{{end}}
+    {{if .Docs}}<a class="action" href="{{.Docs}}" target="_blank" rel="noreferrer noopener">Documentation</a>{{end}}
+    {{if .Source}}<a class="action" href="{{.Source}}" target="_blank" rel="noreferrer noopener">Source</a>{{end}}
   </div>
 </section>{{end}}
 

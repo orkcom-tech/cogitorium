@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { auth, setup, Unauthorized, type SetupState, type User } from './api'
 import { session } from './session'
 import LoginPage from './pages/LoginPage'
@@ -13,6 +13,19 @@ import Rail from './Rail'
 import { ShellProvider } from './shell'
 
 type Health = { status: string; version: string }
+
+/** Go to a screen the server renders, by leaving this application.
+ *
+ * react-router's Navigate pushes a path and looks for a route. There is no
+ * route for a server template, so it renders nothing and the person is left
+ * looking at an empty frame with a working rail around it.
+ */
+function Leave({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.replace(to)
+  }, [to])
+  return null
+}
 
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null)
@@ -107,7 +120,10 @@ export default function App() {
         <div className="frame">
         <main className="cavity">
           <Routes>
-            <Route path="/" element={<Navigate to="/workspaces" replace />} />
+            {/* A real navigation, not a client-side one. /workspaces is a
+                server template: pushing the path would render an empty cavity,
+                which is exactly what signing in used to land on. */}
+            <Route path="/" element={<Leave to="/workspaces" />} />
             {/* Everything not listed above is a server template: /workspaces,
                 /gears, /models, /instructions, /context, /env and /plugins.
                 The router must not claim them — a client route would shadow
@@ -118,8 +134,8 @@ export default function App() {
                 /terminal is a socket: a template renders a thing that exists
                 at a moment, and all four exist in motion. */}
             <Route path="/map" element={<InstallMap />} />
-            <Route path="/people" element={user.role === 'admin' ? <AdminPage /> : <Navigate to="/workspaces" replace />} />
-            <Route path="/terminal" element={user.role === 'admin' ? <TerminalPage /> : <Navigate to="/workspaces" replace />} />
+            <Route path="/people" element={user.role === 'admin' ? <AdminPage /> : <Leave to="/workspaces" />} />
+            <Route path="/terminal" element={user.role === 'admin' ? <TerminalPage /> : <Leave to="/workspaces" />} />
             <Route path="/workspaces/:id" element={<WorkspacePage me={user} />} />
           </Routes>
           </main>

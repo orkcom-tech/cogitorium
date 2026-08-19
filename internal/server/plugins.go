@@ -420,10 +420,12 @@ func (s *Server) pluginHandler() http.Handler {
 		shell := view.Shell{
 			Ctx:   model.Ctx,
 			Title: page.Title,
-			// No AppHead: a plugin page is not the single-page application, and
-			// loading its bundle here would boot React over the top of what the
-			// plugin just rendered.
-			Body: template.HTML(body.String()),
+			// The application's stylesheet links and nothing else. A plugin's
+			// page sits inside the product and has to look like it does; its
+			// module script would boot the single-page app over the top of
+			// what the plugin just rendered.
+			AppHead: s.appHead(),
+			Body:    template.HTML(body.String()),
 			// The product's own destinations, then whatever plugins added, so
 			// a plugin's page sits inside the product rather than beside it.
 			// Somebody who opened it from the rail has to be able to leave the

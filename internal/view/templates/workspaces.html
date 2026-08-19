@@ -12,8 +12,8 @@
   <div class="row">
     <h2>{{.Ctx.T.Workspaces}}</h2>
     <span class="spacer"></span>
-    <a href="/workspaces?import=1" title="Build a workspace from a bundle someone exported">import</a>
-    <a href="/workspaces?new=1">+ New workspace</a>
+    <a class="action" href="/workspaces?import=1" title="Build a workspace from a bundle someone exported">import</a>
+    <a class="action is-primary" href="/workspaces?new=1">+ New workspace</a>
   </div>
 
   {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
@@ -33,7 +33,7 @@
           </select>
         </label>
         <button type="submit">create it</button>
-        <a href="/workspaces">cancel</a>
+        <a class="action" href="/workspaces">cancel</a>
       </form>
     {{else}}
       {{/* Offering an empty picker would let somebody fill in a name and then
@@ -57,7 +57,7 @@
       <label class="row"><input type="checkbox" name="gears" value="on" checked>
         bring its gears — they arrive unapproved, like anything else</label>
       <button type="submit">import it</button>
-      <a href="/workspaces">cancel</a>
+      <a class="action" href="/workspaces">cancel</a>
     </form>
   </section>
   {{end}}
@@ -138,5 +138,5 @@
     A workspace is a group of agents behind one orchestrator chat. You talk to the orchestrator; it
     creates the others, wires them together and hands them work.
   </p>
-  <a class="primary big" href="/workspaces?new=1">+ New workspace</a>
+  <a class="action is-primary" href="/workspaces?new=1">+ New workspace</a>
 </div>{{end}}

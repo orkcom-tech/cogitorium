@@ -32,9 +32,9 @@
     <span class="spacer"></span>
     {{if .Editing}}
       <button type="submit" form="edit-{{.BindingID}}{{.Source}}">save</button>
-      <a href="?">cancel</a>
+      <a class="action" href="?">cancel</a>
     {{else if .Editable}}
-      <a href="?edit={{.Source}}">edit</a>
+      <a class="action" href="?edit={{.Source}}">edit</a>
     {{end}}
     {{/* A role is neither editable away nor droppable: it is what the agent
          is, and removing it leaves an agent with no answer to what it is

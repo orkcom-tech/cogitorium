@@ -60,7 +60,7 @@
   {{if .Description}}<p class="hint">{{.Description}}</p>{{end}}
   {{if .Open}}<pre class="instruction-text">{{.Text}}</pre>{{end}}
   <div class="instruction-actions">
-    <a href="/instructions?open={{.ID}}">{{if .Open}}Hide{{else}}Read{{end}}</a>
+    <a class="action" href="/instructions?open={{.ID}}">{{if .Open}}Hide{{else}}Read{{end}}</a>
     <form method="post" action="/instructions/{{.ID}}/delete"
           hx-post="/instructions/{{.ID}}/delete" hx-target="#library-list" hx-swap="outerHTML"
           hx-confirm="Delete {{.Name}}? Its text stays in Contextverse; the entry goes.">

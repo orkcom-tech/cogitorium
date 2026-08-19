@@ -120,9 +120,23 @@ describe('a plugin', () => {
     await server?.stop()
   })
 
-  test('its nav entry reaches the rail', async () => {
-    // nav: was accepted, validated and shown on the plugins page while
-    // rendering nothing. This is the test that stops it going inert again.
+  // nav: was accepted, validated and shown on the plugins page while rendering
+  // nothing. This is the test that stops it going inert again — and it has to
+  // check both rails, because there are two: a screen the server renders draws
+  // its own, and the four screens the application still owns draw theirs from
+  // a payload spliced into the document.
+  test('its nav entry reaches the rail the server draws', async () => {
+    await ui.page.goto(server.url + '/plugins')
+    await ui.page.waitForSelector('nav.rail')
+    const entry = ui.page.locator('nav.rail a[href="/p/release-radar/guide"]')
+    assert.equal(await entry.count(), 1, "the plugin's entry is not in the rendered rail")
+    assert.equal(await entry.getAttribute('title'), 'Releases')
+  })
+
+  test('its nav entry reaches the rail the application draws', async () => {
+    // /map is one of the four the client still owns: a drawn canvas, which a
+    // template cannot be.
+    await ui.page.goto(server.url + '/map')
     const contribution = await ui.page.evaluate(() => window.__COG_PLUGINS__)
     assert.ok(contribution, 'the document should carry the contribution')
     assert.equal(contribution.nav.length, 1)
@@ -281,6 +295,27 @@ describe('a converted screen', () => {
     assert.ok(await ui.page.locator('nav.rail').count(), 'the page has no rail')
     // And React was not booted over the top of it.
     assert.equal(await ui.page.locator('#root').count(), 0, 'the application mounted over the template')
+  })
+
+  // A screen with correct markup and no stylesheet is a broken product, and it
+  // is the failure a server-rendered page invites: the document is built from
+  // the template stack rather than from index.html, so nothing carries the
+  // application's CSS into it unless something does it deliberately. For a
+  // while nothing did, and every converted screen went out unstyled.
+  test('it is styled, and not merely correct', async () => {
+    await ui.page.goto(`${server.url}/instructions`)
+    await ui.page.waitForSelector('.library-list')
+
+    const sheets = await ui.page.evaluate(() => document.styleSheets.length)
+    assert.ok(sheets > 0, 'the document carries no stylesheet at all')
+
+    // The rail is the visible half of it: its shapes come from the same file,
+    // and an unstyled rail is a column of blue underlined words.
+    const rail = await ui.page.evaluate(() => {
+      const el = document.querySelector('.rail')
+      return el ? getComputedStyle(el).position : null
+    })
+    assert.equal(rail, 'fixed', 'the rail is unstyled, so the page has no frame')
   })
 
   test('the empty state says which kind of empty it is', async () => {

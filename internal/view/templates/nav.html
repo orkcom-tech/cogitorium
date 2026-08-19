@@ -11,6 +11,11 @@
 {{define "cog.shell.rail"}}<nav class="rail" aria-label="{{.Ctx.T.Navigation}}">
 {{range .Nav}}{{template "cog.row.nav" .}}{{end}}{{template "cog.slot.rail" .}}</nav>{{end}}
 
-{{define "cog.row.nav"}}<a class="rail-item{{if .Current}} is-current{{end}}" href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}>{{if .Icon}}<span class="rail-icon" data-icon="{{.Icon}}" aria-hidden="true"></span>{{end}}<span class="rail-label">{{.Label}}</span></a>{{end}}
+{{/*
+  One destination. The label is read aloud rather than drawn, because the rail
+  is icons — and a plugin whose icon name this build has never heard of gets
+  its label drawn instead, which beats an empty square nobody can identify.
+*/}}
+{{define "cog.row.nav"}}<a class="rail-item{{if .Current}} is-current{{end}}" href="{{.Href}}"{{if .Current}} aria-current="page"{{end}} title="{{.Label}}">{{if .Glyph}}{{.Glyph}}<span class="sr-only">{{.Label}}</span>{{else}}<span class="rail-label">{{.Label}}</span>{{end}}</a>{{end}}
 
 {{define "cog.slot.rail"}}{{end}}

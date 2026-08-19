@@ -47,7 +47,17 @@
   here; the application puts its mount point here once it is served through
   this shell rather than beside it.
 */}}
-{{define "cog.shell.body"}}{{template "cog.shell.rail" .}}<div class="cavity">{{.Body}}</div>{{end}}
+{{/*
+  The frame and the hole in it, the same two elements the application builds:
+  the rail stands outside, the frame is fixed to the viewport and holds the
+  rail's width out of the way, and the cavity is the panel the content sits in.
+
+  This was one div for a while, and the stylesheet's rules are written against
+  all three — so the cavity filled the viewport, the rail printed over the top
+  of it, and every converted screen looked like a page with its navigation
+  spilled across the text.
+*/}}
+{{define "cog.shell.body"}}{{template "cog.shell.rail" .}}<div class="frame"><main class="cavity">{{.Body}}</main></div>{{end}}
 
 {{/*
   Append slots. Definitions of these CONCATENATE rather than replace, so two

@@ -23,7 +23,7 @@
 // of mistake that only has to happen once.
 
 import { chromium } from 'playwright'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 
 const base = process.argv[2] || 'http://127.0.0.1:8894'
 const out = new URL('../../docs/assets/', import.meta.url).pathname
@@ -305,19 +305,5 @@ for (const s of shots) {
 }
 
 await browser.close()
-
-// WHEN THE SET WAS SHOT, recorded so the guard has something true to compare
-// against.
-//
-// It used to compare each PNG's commit time with web/src's, which is wrong in
-// the case that matters most: a re-shoot of a screen that genuinely did not
-// change produces a byte-identical file, git commits nothing, and the guard
-// calls a picture taken minutes ago stale. It named sixteen at once, which is
-// how a guard teaches people to ignore it. What has to be newer than the
-// interface is the ACT of shooting, and only the shooter knows when that was.
-await writeFile(
-  `${out}.shot-at`,
-  `${new Date().toISOString()}\n${done}/${shots.length} shot\n`,
-)
 
 console.log(`\n${done}/${shots.length} shot into docs/assets/`)

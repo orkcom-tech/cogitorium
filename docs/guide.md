@@ -1903,6 +1903,155 @@ on it. A slow or unreachable GitHub is not a reason for a workspace to be slow.
 
 ---
 
+## Plugins
+
+A gear adds a tool. A plugin adds a **screen** — and can change the ones already
+there. It can put an entry in the rail, hang a panel inside every workspace,
+take over a row the core draws, and run code of its own on your machine. That is
+a much larger thing to say yes to than a gear, and the screen is built around
+the moment you say it.
+
+Everything about plugins is under **Plugins** in the rail. It is admin-only.
+
+### Getting one in
+
+At the top of the screen is a drop zone: drag a `.zip` onto it, or click to
+choose one. Under the drop zone are two tabs.
+
+- **Installed** — what this machine has. This is where you approve, enable,
+  reorder and remove.
+- **Library** — the shared catalog, searchable. Nothing here is on your machine;
+  "Install" fetches it and puts it in Installed, still switched off.
+
+The command line does the same thing:
+
+```bash
+cogitorium plugins install mine.zip
+```
+
+And if you are writing one, point the server at the directory instead of
+building a bundle for every edit:
+
+```bash
+cogitorium plugins dev .
+```
+
+A development directory is listed as such everywhere it appears. It has no
+version directory, no digest and no signature, because there is nothing stable
+to take one of.
+
+### It arrives switched off
+
+Three separate things have to be true before a plugin does anything, and they
+are separate on purpose.
+
+1. **Installed** — the files are on the machine. Nothing has run.
+2. **Approved** — somebody read it and said yes. Still nothing has run.
+3. **Enabled** — it is in the stack. It runs after the next restart.
+
+The screen will offer to restart when a change is waiting.
+
+**Approval is bound to the bytes, not the name.** The digest is taken from what
+is on disk, so what you approved is what you could have read. Rebuild the plugin
+and it drops back to pending by itself — not as a nuisance, but because the
+thing you approved no longer exists.
+
+### Reading the approval card
+
+The card is the whole point of the feature, so it is worth knowing what each
+part is telling you.
+
+- **What it overrides**, with a **picture of each one**. "It overrides
+  `cog.row.nav`" is not something anyone can evaluate. The card renders that
+  row, through the composed stack, against an example — so you are looking at
+  what you would get.
+- **Which hosts it wants to reach.** It reaches those and nothing else, through
+  the same gate gears use: a row is written before the socket opens, and
+  loopback and link-local are refused regardless of what was granted.
+- **Which secrets it names**, by name. It never sees a value you did not name.
+- **Which parts of your own API it asks for.** It calls them as `plugin:<id>`,
+  never as you — so a grant it does not have is a grant it does not get, even
+  though the call is in-process.
+- **How it runs.** Five ways, and one of them is different in kind:
+
+| It runs as | What that means for your machine |
+|---|---|
+| templates only | nothing executes; it is words and CSS |
+| WebAssembly | sandboxed by the runtime, no filesystem, no network except through the gate |
+| a fetched interpreter | an interpreter downloaded once and shared; a child process running as this server's user |
+| a container | isolated, on the same sandbox your gears already use; costs a container start per call |
+| **a native binary** | **your machine code, as this server's user, with no isolation at all** |
+
+The last row is shown in red on the card. It is not forbidden — an operator who
+wants it is entitled to it, and some things genuinely need it — but it is the
+one where "I read the manifest" is not enough, and the card says so rather than
+letting the choice look like the others.
+
+**`auth: none` is also shown in red.** A plugin's own pages require a signed-in
+person by default; a plugin can ask for a page that does not, and that is a page
+on your server open to anybody who can reach it.
+
+### When two plugins want the same thing
+
+They stack, in an order you set. Later layers win, and each row on the Installed
+tab has arrows to move it earlier or later.
+
+This matters more than it sounds. Two plugins that both draw the workspace
+header do not conflict and do not error — the later one is simply what you see.
+If a plugin you installed seems to have done nothing, check whether something
+below it is drawing the same thing.
+
+```bash
+cogitorium plugins order first second third
+```
+
+### Turning one off
+
+- **Disable** takes it out of the stack and leaves the approval standing. Use
+  this to find out whether a plugin is what broke something.
+- **Withdraw approval** switches it off *and* forgets that anybody said yes. It
+  has to be read and approved again.
+- **Remove** deletes it.
+
+If a plugin cannot load — its templates do not compile, it names something that
+is not there — it is **dropped and the rest are composed without it**, and the
+screen says which one and why. The install comes up. One broken plugin does not
+take the product down with it.
+
+### Where they come from
+
+The library is
+[`orkcom-tech/cogitorium-plugins`](https://github.com/orkcom-tech/cogitorium-plugins),
+an index of five fields per plugin saying where it lives. The bundles stay in
+their authors' own repositories.
+
+Each entry shows one of three things, and the third is the ordinary one:
+
+- **the team read the version you have**
+- **the team read a different version** — not an accusation, just a different
+  number
+- **nobody has looked**
+
+Verified means somebody read that version. It is not an audit and it does not
+replace the approval step on your own install — that is the one performed by
+somebody who can actually see your data.
+
+Checking for updates costs you nothing in privacy: the catalog's CI publishes an
+index with the versions in it, your install fetches the whole file, and the
+comparison happens locally. No query string, no install id, no list of what you
+have.
+
+### Writing one
+
+`cogitorium plugins names` prints every template you can override, what model it
+renders against, and what the core's own version of it is today — offline, from
+the binary you are running. There are SDKs for Python, Go, TinyGo and Rust, and
+`needs: js` needs no SDK at all: the engine is compiled into the server and you
+ship one file.
+
+The full account is in the reference, under Plugins.
+
+
 ## Watching it
 
 Nothing here is a screen — it is what an install looks like to Prometheus,

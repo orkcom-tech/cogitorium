@@ -194,7 +194,7 @@
             hx-confirm="Delete {{.Name}}? Its runs stay on the record; the gear goes.">
         <button type="submit" class="danger">delete</button>
       </form>
-      <a href="/gears">close</a>
+      <a class="action" href="/gears">close</a>
     </div>
 
     {{if .Approvals}}
@@ -211,7 +211,7 @@
     {{end}}
   {{else}}
     <div class="gear-actions">
-      <a href="/gears?open={{.ID}}">{{if .Approved}}review &amp; run{{else}}review &amp; approve{{end}}</a>
+      <a class="action" href="/gears?open={{.ID}}">{{if .Approved}}review &amp; run{{else}}review &amp; approve{{end}}</a>
     </div>
   {{end}}
 </article>{{end}}

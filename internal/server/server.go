@@ -17,8 +17,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -117,6 +119,10 @@ type Server struct {
 	// first path segment. What makes a converted screen authenticated — see
 	// (*Server).page for why the rule about /api/ is not enough.
 	pageSpaces map[string]bool
+
+	// The application's stylesheet links, read from the embedded index once.
+	appHeadOnce sync.Once
+	appHeadHTML template.HTML
 	// catalogClient fetches the shared plugin catalog. Nil in production, which
 	// means the default client — it is a field so a test can point the fetch
 	// at a server it controls, since the catalog's URL is a compiled-in
@@ -911,6 +917,57 @@ func (s *Server) uiHandler() http.Handler {
 		fileServer.ServeHTTP(w, r)
 	})
 }
+
+// appHead is the application's own stylesheet links, for a page the server
+// renders itself.
+//
+// A converted screen builds its document from the template stack rather than
+// from index.html, so nothing carries the application's CSS into it unless
+// something does it deliberately — and for a while nothing did: every
+// converted screen went out as a correct document with no styling at all,
+// which reads as a broken product rather than as a missing link tag.
+//
+// Links only, never the scripts. The application's module in a server-rendered
+// page would boot the single-page app on top of the page it is inside.
+//
+// Computed once and cached, because it is the same answer for the life of the
+// process: the file is embedded in the binary.
+func (s *Server) appHead() template.HTML {
+	s.appHeadOnce.Do(func() {
+		dist, err := fs.Sub(web.Dist, "dist")
+		if err != nil {
+			return
+		}
+		raw, err := fs.ReadFile(dist, "index.html")
+		if err != nil {
+			return
+		}
+		var b strings.Builder
+		for _, m := range stylesheetLink.FindAll(raw, -1) {
+			// Without the crossorigin attribute the build emits. It makes the
+			// stylesheet a CORS request, which is fine from this origin and
+			// fails from the preview frame: that frame is sandboxed, so its
+			// origin is opaque, it sends Origin: null, and a file server that
+			// answers no CORS header leaves the preview unstyled — which is
+			// the one thing a preview must not be.
+			b.Write(crossorigin.ReplaceAll(m, nil))
+		}
+		s.appHeadHTML = template.HTML(b.String())
+
+	})
+	return s.appHeadHTML
+}
+
+// stylesheetLink matches a link element that carries a stylesheet.
+//
+// A regexp over the built index rather than a parse, and deliberately narrow:
+// it matches the one shape Vite emits, and matching nothing is a page with no
+// CSS — visibly wrong, and caught by the test that reads the served document
+// for it.
+var stylesheetLink = regexp.MustCompile(`(?i)<link[^>]+rel="stylesheet"[^>]*>`)
+
+// crossorigin is that attribute, with the space before it.
+var crossorigin = regexp.MustCompile(`(?i)\s+crossorigin(="[^"]*")?`)
 
 // contributesNothing is the early out for a document that needs no splicing.
 //

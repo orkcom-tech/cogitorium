@@ -29,7 +29,7 @@
     <form class="row" method="get" action="/context">
       <input class="grow" name="q" value="{{.Query}}" placeholder="search inside the files…">
       <button type="submit">search</button>
-      {{if .Searched}}<a href="/context">clear</a>{{end}}
+      {{if .Searched}}<a class="action" href="/context">clear</a>{{end}}
     </form>
 
     {{if .Searched}}

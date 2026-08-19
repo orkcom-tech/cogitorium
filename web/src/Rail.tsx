@@ -146,6 +146,10 @@ export default function Rail({
   const box = useRef<HTMLElement>(null);
   const loc = useLocation();
   const nav = useNavigate();
+  // Leaving for a screen the SERVER renders. The client router would push the
+  // path and render nothing, because the app has no route for it — which is
+  // what an empty cavity after pressing a destination actually was.
+  const leave = (href: string) => window.location.assign(href);
   const shell = useShell();
   // The rail is icons, so it has to be able to say what each one is. One
   // element for all of them, moved to whichever button the pointer is over —
@@ -208,7 +212,8 @@ export default function Rail({
       ref={box}
       aria-label="Cogitorium"
     >
-      <Link className="rail-brand" to="/workspaces" title="Cogitorium">
+      {/* A plain anchor: /workspaces is the server's screen now. */}
+      <a className="rail-brand" href="/workspaces" title="Cogitorium">
         <img src={COG_MARK} alt="Cogitorium" width={26} height={26} />
         <span className="by">
           <span>by</span>
@@ -221,7 +226,7 @@ export default function Rail({
             }}
           />
         </span>
-      </Link>
+      </a>
 
       {/* CAPSULE 1 — WHERE AM I.
           The workspace you are in, and a press opens the list of the others
@@ -362,7 +367,7 @@ export default function Rail({
             className={`rail-btn ${loc.pathname === "/plugins" ? "on" : ""}`}
             onMouseEnter={hover("Plugins")}
             onMouseLeave={unhover}
-            onClick={() => nav("/plugins")}
+            onClick={() => leave("/plugins")}
           >
             {I.plugins}
             <span className="sr-only">Plugins</span>
@@ -405,16 +410,18 @@ export default function Rail({
             </button>
           ))}
           <hr />
-          <button onClick={() => nav("/workspaces")}>All workspaces…</button>
+          <button onClick={() => leave("/workspaces")}>All workspaces…</button>
         </div>
       )}
 
       {menu === "more" && (
         <div className="rail-menu" style={{ top: menuTop }} role="menu">
           <span className="rail-menu-label">the install</span>
-          <Link to="/models">Models</Link>
+          {/* Anchors for the two the server renders, a Link for the one the
+              client still owns: People is a drawn access map. */}
+          <a href="/models">Models</a>
           {user.role === "admin" && <Link to="/people">People</Link>}
-          {user.role === "admin" && <Link to="/context">Context</Link>}
+          {user.role === "admin" && <a href="/context">Context</a>}
           {pluginNav(user).map((n) => (
             /* A plain anchor rather than a Link: a plugin's page is served by
                the server, not by the client router, so routing to it in the
