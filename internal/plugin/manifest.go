@@ -19,13 +19,19 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/orkcom-tech/cogitorium/internal/abi"
 )
 
 // Contract is the integer this build speaks. It is the real compatibility
 // gate, and it moves only when the template model or the host ABI breaks —
 // never for a feature addition, because a plugin that would still work must
 // not be refused.
-const Contract = 1
+//
+// Defined by the ABI rather than restated here. A manifest's declaration and
+// the vocabulary its code speaks are the same promise, and two constants for
+// one promise is one of them eventually being wrong.
+const Contract = abi.Version
 
 // SchemaVersion is the manifest's own shape, which is a different question
 // from the contract. A manifest can gain optional fields without the host ABI
