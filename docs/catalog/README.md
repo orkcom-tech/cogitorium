@@ -58,11 +58,25 @@ So publishing is: tag a release, attach `<id>.zip` built by
 Open a pull request adding one entry. CI runs; if it passes, the entry merges
 automatically. Nobody waits on a human to be available.
 
+**Additions only.** Editing or removing an entry that is already listed does
+not merge itself, and this is the one rule worth explaining rather than just
+enforcing: an edit can point an id people have already installed at a
+**different repository**, which hands that plugin's download URL to whoever
+opened the pull request. Nothing in a public JSON file can establish who owns
+an id — the author of a pull request is whoever opened it, which is exactly the
+claim under question. Additions cannot do that, which is why additions are the
+thing that merges itself.
+
+The rule is `cogitorium plugins check-catalog plugins.json --base <the current
+one>`, which exits non-zero on an edit or a removal and says which entry
+moved.
+
 ### What CI checks
 
 | Check | Why |
 |---|---|
-| The diff adds or edits entries and nothing else | A submission that also edits the workflows is not a submission |
+| The diff touches only `plugins.json` and `verified.json` | A submission that also edits the workflows is not a submission |
+| The file has no field nobody implements | A field nobody reads is a field an author believes in |
 | `id` is 3–48 lowercase characters and not reserved | It becomes a template namespace and a URL prefix |
 | `id` is not already taken | Two plugins with one id is two plugins that cannot coexist |
 | `repo` is `owner/name` | It is what the download URL is built from |
@@ -75,6 +89,11 @@ automatically. Nobody waits on a human to be available.
 The last three are the same code the server runs, invoked as
 `cogitorium plugins check-bundle <zip>` — one implementation, so a submission
 cannot pass CI and then fail to load.
+
+None of these are implemented in the workflow itself. A validator written there
+would be a second opinion about the format, and the two would disagree
+eventually — with the disagreement landing on an author who did nothing
+wrong.
 
 ## The verified list
 
