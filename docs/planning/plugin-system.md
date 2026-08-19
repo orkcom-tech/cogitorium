@@ -2,7 +2,13 @@
 
 > **Brief:** People other than the maintainer write plugins. A plugin adds functionality *and* changes the interface, Jenkins-style — it can override a screen the core never designated as extensible. Authors submit to a repository we own and their plugin appears in a library screen inside the client. Restart after install is the accepted activation model.
 
-This is a design document. Nothing here is built yet.
+This is a design document, and it is no longer ahead of the code. The work is
+on `refactor/plugin-system`; **What is built** near the end says which parts
+landed and which are still only described here.
+
+Read the rest as the intent. Where the code and this document disagree about a
+detail, the code is what runs — and the disagreement is a bug in whichever one
+somebody has not fixed yet.
 
 ## The rule everything serves
 
@@ -177,6 +183,43 @@ Ordered by dependency, not by time.
 | 18 | Catalog and its CI | 3, 6, 9, 15 |
 | 19 | The mark, statement family, client verification | 18 |
 | 20 | Update discovery, offline behaviour, compatibility ratchets | 5, 7, 18, 19 |
+
+## What is built
+
+Written down here rather than left to be inferred from a diff, because the
+distance between "designed" and "running" is the thing everybody gets wrong
+about a document like this one.
+
+**Landed and running end to end.** The channel capability probe. `plugin.yaml`,
+the bundle format and the builder. The ordered layer stack — ledger, append
+slots, `under:`/`core:` aliases, `plugins.order`. Load-time validation with
+per-plugin blame and the drop-and-recompose policy. Tier 0 delivery: pages,
+rail entries, assets, the auth default. Approval bound to the sha256 of the
+bytes on disk, from the command line and from the browser. Workspace panels
+through `mounts:`. The tier registry and resolver. Tier A on wazero, including
+a page whose model comes from the plugin's own code. The catalog: fetch, cache,
+search, the three-state verified check, install-with-crosscheck, the browse and
+install screens, and its CI — `check-catalog` and `check-bundle`, with
+additions auto-merging and edits held for a person.
+
+**Described here and not built.** Tiers B, C and D: the code for all three
+compiles and is tested, and nothing dispatches to it — only the wasm tier is
+reached. Seven of the nine `cog.*` calls, and the eighth (`cog.http`) refuses.
+The embedded QuickJS provider, so `needs: js` currently resolves to a tier with
+no engine behind it. The Extism-shaped ABI — the wasm contract works, but it is
+ours, so existing Extism PDKs do not fit it. The restart controller. The
+hypermedia layer, and with it every server-rendered screen: the template
+surface renders plugin pages only, so **no screen of the product is overridable
+yet** and the rail vocabulary is defined but dormant. `requires:` and a
+topological layer order. The exemplar validation pass and the approval-screen
+preview. The template inspector and `registry.json`. Author SDKs for every
+tier.
+
+**Dropped rather than deferred.** The mark — cosign, a transparency log,
+statement families, `verified|unmarked|unverifiable`. It would have tripled the
+dependency graph to defend against somebody who controls the catalog
+repository, and if that has happened they are already serving whatever they
+like. The mechanism is who may merge `verified.json`, which is CODEOWNERS.
 
 The restart controller at step 7 is the part an earlier draft assumed the environment provides: on a supervised channel the process exits and kubelet/compose/systemd restarts it; on an unsupervised channel (Windows portable exe, plain local binary, macOS `.app`) the install re-execs itself.
 

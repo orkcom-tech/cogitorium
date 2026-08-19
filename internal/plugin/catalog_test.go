@@ -492,3 +492,38 @@ func TestTheDerivedIndexIsPreferredAndThePlainListIsTheFallback(t *testing.T) {
 		t.Errorf("the fallback carries no versions and claims none: %+v", plain.Entries)
 	}
 }
+
+// The catalog records a release TAG, and a tag is whatever its author typed.
+//
+// The index job used to tidy `v1.2.0` down to `1.2.0` before writing it, which
+// made the pinned download URL point at a tag that does not exist. Every
+// pinned install 404'd while `latest` kept working — so it would have surfaced
+// months later, on somebody else's machine, as "this one plugin cannot be
+// installed at a version".
+func TestAVPrefixedTagSurvivesToTheDownloadURL(t *testing.T) {
+	e := Entry{ID: "radar", Repo: "someone/radar", Version: "v1.2.0"}
+
+	url := e.BundleURL(e.Version)
+	want := "https://github.com/someone/radar/releases/download/v1.2.0/radar.zip"
+	if url != want {
+		t.Fatalf("pinned URL is %q, want %q", url, want)
+	}
+
+	// And comparison is unaffected, because the version parser ignores the v.
+	// Both halves have to hold: a fix that made the URL right by breaking
+	// update detection would trade a 404 for a plugin that never updates.
+	idx := Index{Entries: []Entry{e}}
+	ups := idx.Updates([]Installed{{ID: "radar", Version: "1.1.0",
+		Manifest: Manifest{ID: "radar"}}})
+	if len(ups) != 1 || ups[0].Available != "v1.2.0" {
+		t.Fatalf("v1.2.0 was not seen as newer than 1.1.0: %+v", ups)
+	}
+
+	// The same tag against the same version is not an update, whichever form
+	// each side happens to be written in.
+	same := idx.Updates([]Installed{{ID: "radar", Version: "1.2.0",
+		Manifest: Manifest{ID: "radar"}}})
+	if len(same) != 0 {
+		t.Fatalf("v1.2.0 was offered as an update over 1.2.0: %+v", same)
+	}
+}

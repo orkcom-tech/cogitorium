@@ -69,10 +69,15 @@ func scaffoldID(id string) string {
 
 func scaffoldManifest(id, override string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, `# %s
+	fmt.Fprintf(&b, `# yaml-language-server: $schema=`+SchemaURL+`
+# %s
 #
 # Everything here except native: is platform-free, which is why a plugin like
 # this one runs the same on a laptop, in a container and in a cluster.
+#
+# The line above is what makes an editor complete these fields and underline a
+# typo. It is a comment: nothing reads it at install, and the server checks
+# this file itself either way.
 schema: 1
 id: %s
 name: %s
