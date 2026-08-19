@@ -50,6 +50,11 @@ type Entry struct {
 	// so an author publishes by tagging rather than by asking anybody.
 	Repo string `json:"repo"`
 
+	// Version is the current release, filled in by the catalog's CI rather
+	// than by the author. Absent in a hand-written plugins.json, which is why
+	// nothing depends on it being there.
+	Version string `json:"version,omitempty"`
+
 	// bundleBase overrides where the bundle is fetched from. Unexported and
 	// never decoded from JSON, so a catalog entry cannot redirect a download
 	// somewhere the convention does not point. It exists for tests.
@@ -145,6 +150,7 @@ func (i Index) Search(q string) []Entry {
 type Catalog struct {
 	dataDir     string
 	url         string
+	derivedURL  string
 	verifiedURL string
 	client      *http.Client
 	// allow is the operator's egress consent, the same gate the update check
@@ -162,7 +168,7 @@ func NewCatalog(dataDir string, client *http.Client, allow func() bool) *Catalog
 		allow = func() bool { return false }
 	}
 	return &Catalog{
-		dataDir: dataDir, url: CatalogURL, verifiedURL: VerifiedURL,
+		dataDir: dataDir, url: CatalogURL, derivedURL: DerivedURL, verifiedURL: VerifiedURL,
 		client: client, allow: allow,
 	}
 }
@@ -184,7 +190,9 @@ func (c *Catalog) Fetch(ctx context.Context) (Index, error) {
 		return idx, nil
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
+	// The derived index first, because it carries versions; the hand-written
+	// list is the fallback when CI has not published one yet.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.derivedURL, nil)
 	if err != nil {
 		return Index{}, err
 	}
@@ -196,6 +204,14 @@ func (c *Catalog) Fetch(ctx context.Context) (Index, error) {
 		return Index{}, fmt.Errorf("the plugin catalog could not be reached: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		// No derived index published yet. The hand-written list still lists
+		// every plugin; it simply cannot say which versions exist.
+		resp.Body.Close()
+		if plain, err := c.fetchPlain(ctx); err == nil {
+			return plain, nil
+		}
+	}
 	if resp.StatusCode != http.StatusOK {
 		if idx, cerr := c.cached(); cerr == nil {
 			return idx, nil
@@ -218,6 +234,31 @@ func (c *Catalog) Fetch(ctx context.Context) (Index, error) {
 		// filesystem should still be able to look.
 		return Index{Entries: entries, VerifiedList: verified, Fetched: time.Now().UTC()}, nil
 	}
+	return Index{Entries: entries, VerifiedList: verified, Fetched: time.Now().UTC()}, nil
+}
+
+// fetchPlain reads the hand-written list, for a catalog whose CI has not
+// published a derived index.
+func (c *Catalog) fetchPlain(ctx context.Context) (Index, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
+	if err != nil {
+		return Index{}, err
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return Index{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return Index{}, fmt.Errorf("the plugin catalog answered %s", resp.Status)
+	}
+	var entries []Entry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return Index{}, err
+	}
+	entries = keepValid(entries)
+	verified := c.fetchVerified(ctx)
+	_ = c.store(entries, verified)
 	return Index{Entries: entries, VerifiedList: verified, Fetched: time.Now().UTC()}, nil
 }
 
@@ -454,5 +495,65 @@ func (c *Catalog) fetchVerified(ctx context.Context) []Verified {
 			out = append(out, v)
 		}
 	}
+	return out
+}
+
+// ── update discovery ──────────────────────────────────────────────────────
+
+// The derived index, and why there is one.
+//
+// A catalog entry carries no version: an author publishes by tagging a release
+// and never touches this repository again, which is the whole reason
+// submitting is cheap. But a client cannot know an update exists without a
+// version from somewhere.
+//
+// The alternative is asking GitHub once per installed plugin, and that is the
+// thing worth avoiding — not because GitHub is untrustworthy, but because it
+// would mean every install continuously telling a third party exactly which
+// plugins it runs. So the catalog's own CI does the polling once, for
+// everybody, and publishes the answers in one file. A client fetches the WHOLE
+// file with no query string, no install id and no list of what it has, and
+// diffs locally. What it runs stays its own business by construction rather
+// than by policy.
+
+// DerivedURL is the index the catalog's CI publishes: the same entries with
+// the current version of each filled in.
+const DerivedURL = "https://raw.githubusercontent.com/orkcom-tech/cogitorium-plugins/main/index.json"
+
+// Update is one plugin with something newer available.
+type Update struct {
+	Entry     Entry
+	Installed string
+	Available string
+}
+
+// Updates compares what is installed against what the index says exists.
+//
+// Computed here rather than asked for: nothing leaves this machine to answer
+// it, because the whole list already arrived.
+func (i Index) Updates(installed []Installed) []Update {
+	have := map[string]string{}
+	for _, in := range installed {
+		if in.Broken == nil && !in.Dev {
+			have[in.ID] = in.Version
+		}
+	}
+	var out []Update
+	for _, e := range i.Entries {
+		cur, ok := have[e.ID]
+		if !ok || e.Version == "" || e.Version == cur {
+			continue
+		}
+		// Newer only. A catalog that briefly lists an older version — a yank,
+		// a bad publish — must not offer somebody a downgrade they did not ask
+		// for, and "different" is not the same as "newer".
+		a, aok := parseVersion(cur)
+		b, bok := parseVersion(e.Version)
+		if aok && bok && b.Compare(a) <= 0 {
+			continue
+		}
+		out = append(out, Update{Entry: e, Installed: cur, Available: e.Version})
+	}
+	sort.Slice(out, func(a, b int) bool { return out[a].Entry.Name < out[b].Entry.Name })
 	return out
 }

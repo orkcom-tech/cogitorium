@@ -402,3 +402,93 @@ func TestAMissingVerifiedListLeavesEverythingUnchecked(t *testing.T) {
 		t.Errorf("without the list everything is unchecked, got %q", got.State)
 	}
 }
+
+// Nothing leaves this machine to answer "is there an update": the whole list
+// already arrived, and the comparison is local. What an install runs stays its
+// own business by construction rather than by policy.
+func TestUpdateDiscoveryIsALocalDiff(t *testing.T) {
+	idx := Index{Entries: []Entry{
+		{ID: "radar", Name: "Radar", Version: "2.0.0"},
+		{ID: "midnight", Name: "Midnight", Version: "1.0.0"},
+		{ID: "unlisted-here", Name: "X", Version: "9.9.9"},
+	}}
+	installed := []Installed{
+		{ID: "radar", Version: "1.0.0"},
+		{ID: "midnight", Version: "1.0.0"},
+	}
+	ups := idx.Updates(installed)
+	if len(ups) != 1 || ups[0].Entry.ID != "radar" {
+		t.Fatalf("updates = %+v", ups)
+	}
+	if ups[0].Installed != "1.0.0" || ups[0].Available != "2.0.0" {
+		t.Errorf("it must say both versions: %+v", ups[0])
+	}
+}
+
+// A catalog that briefly lists an older version — a yank, a bad publish — must
+// not offer somebody a downgrade they did not ask for.
+func TestAnOlderCatalogVersionIsNotAnUpdate(t *testing.T) {
+	idx := Index{Entries: []Entry{{ID: "radar", Version: "1.0.0"}}}
+	if ups := idx.Updates([]Installed{{ID: "radar", Version: "2.0.0"}}); len(ups) != 0 {
+		t.Errorf("a downgrade is not an update: %+v", ups)
+	}
+}
+
+// A development layer is somebody's working copy. Offering to replace it with
+// a release would be offering to overwrite their unsaved work.
+func TestADevelopmentLayerIsNeverOfferedAnUpdate(t *testing.T) {
+	idx := Index{Entries: []Entry{{ID: "radar", Version: "2.0.0"}}}
+	if ups := idx.Updates([]Installed{{ID: "radar", Version: "1.0.0", Dev: true}}); len(ups) != 0 {
+		t.Errorf("a working copy is not out of date: %+v", ups)
+	}
+}
+
+// A hand-written catalog carries no versions, and that must not read as "no
+// updates" — it reads as "cannot tell", which is what it is.
+func TestWithoutVersionsNothingIsClaimed(t *testing.T) {
+	idx := Index{Entries: []Entry{{ID: "radar"}}}
+	if ups := idx.Updates([]Installed{{ID: "radar", Version: "1.0.0"}}); len(ups) != 0 {
+		t.Errorf("no version means no claim: %+v", ups)
+	}
+}
+
+// The derived index is what carries versions; the hand-written list is the
+// fallback when CI has not published one.
+func TestTheDerivedIndexIsPreferredAndThePlainListIsTheFallback(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.json", func(w http.ResponseWriter, _ *http.Request) {
+		e := entry("radar")
+		e.Version = "2.0.0"
+		_ = json.NewEncoder(w).Encode([]Entry{e})
+	})
+	mux.HandleFunc("/plugins.json", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]Entry{entry("radar")})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := NewCatalog(t.TempDir(), nil, func() bool { return true })
+	c.url, c.derivedURL = srv.URL+"/plugins.json", srv.URL+"/index.json"
+	c.verifiedURL = srv.URL + "/absent.json"
+
+	idx, err := c.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(idx.Entries) != 1 || idx.Entries[0].Version != "2.0.0" {
+		t.Fatalf("the derived index should have answered: %+v", idx.Entries)
+	}
+
+	// Now with no derived index published.
+	c2 := NewCatalog(t.TempDir(), nil, func() bool { return true })
+	c2.url, c2.derivedURL = srv.URL+"/plugins.json", srv.URL+"/absent.json"
+	c2.verifiedURL = srv.URL + "/absent.json"
+
+	plain, err := c2.Fetch(context.Background())
+	if err != nil {
+		t.Fatalf("the plain list must still work: %v", err)
+	}
+	if len(plain.Entries) != 1 || plain.Entries[0].Version != "" {
+		t.Errorf("the fallback carries no versions and claims none: %+v", plain.Entries)
+	}
+}

@@ -116,6 +116,28 @@ Three states, not a badge:
 A missing or unreachable `verified.json` leaves everything `unchecked`, which
 is true rather than a guess in either direction.
 
+## Knowing an update exists
+
+A catalog entry carries no version — an author tags a release and never
+touches this repository again, which is what makes submitting cheap. But a
+client cannot know an update exists without a version from somewhere.
+
+The obvious answer is asking GitHub once per installed plugin, and it is the
+one worth avoiding: not because GitHub is untrustworthy, but because it would
+mean every install continuously telling a third party exactly which plugins it
+runs.
+
+So the catalog's own CI polls each listed repository on a schedule and
+publishes `index.json` — the same entries with the current version filled in.
+A client fetches that **whole file**, with no query string, no install id and
+no list of what it has, and diffs locally. What an install runs stays its own
+business by construction rather than by policy.
+
+`index.json` is generated. Nobody edits it, and a catalog that has not
+published one yet still works — clients fall back to `plugins.json` and simply
+cannot tell which versions exist, which is reported as "cannot tell" rather
+than as "up to date".
+
 ## What verified does not mean
 
 It means somebody on the team read that version. It is not a guarantee, not a

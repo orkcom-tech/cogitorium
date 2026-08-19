@@ -84,6 +84,10 @@ type Set struct {
 // is reported; it is not an error, because declaration is advisory by design.
 type Ledger struct {
 	Entries []Entry
+	// Notes are names a plugin used that this build has renamed or retired.
+	// Not failures: the rule made them work. Reported because a compatibility
+	// rule that nobody is told about is a rule that becomes permanent.
+	Notes []Note
 }
 
 // LedgerAction is what defining a name amounted to.
@@ -171,8 +175,22 @@ func Compose(funcs template.FuncMap, layers ...Layer) (*Set, error) {
 			return nil, err
 		}
 
+		defined := make(map[string]bool, len(trees))
+		for name := range trees {
+			defined[name] = true
+		}
+		renamed, notes := applyRatchets(layer.ID, defined)
+		s.ledger.Notes = append(s.ledger.Notes, notes...)
+
 		for _, name := range sortedKeys(trees) {
 			tree := trees[name]
+			// A retired name is resolved to its replacement before anything
+			// else looks at it, so every rule downstream — ownership,
+			// appending, the ledger — sees the current name and needs to know
+			// nothing about the rename.
+			if to, ok := renamed[name]; ok {
+				name = to
+			}
 
 			n, err := plugin.ParseName(name)
 			if err != nil {
