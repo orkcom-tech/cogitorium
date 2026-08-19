@@ -600,6 +600,101 @@
       "appends": false
     },
     {
+      "name": "cog.drawer.memory",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "AgentID",
+          "type": "int64"
+        },
+        {
+          "path": "AgentName",
+          "type": "string"
+        },
+        {
+          "path": "Items",
+          "type": "[]MemoryItem"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv class=\"dk-body memory\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  \u003cp class=\"hint\"\u003e\n    Everything below reaches the model on every turn, in this order. If an agent behaves in a way you\n    did not ask for, the reason is here — change it or drop it.\n  \u003c/p\u003e\n\n  {{range .Items}}{{template \"cog.row.memory\" .}}{{else}}\n  \u003cp class=\"hint\"\u003eThis agent carries nothing but its role.\u003c/p\u003e\n  {{end}}\n\n  \u003cp class=\"hint\"\u003e\n    The conversation is memory too: it is replayed on every turn. Anything wrong in it can be dropped\n    from the chat, entry by entry.\n  \u003c/p\u003e\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.drawer.queue",
       "model": [
         {
@@ -3248,6 +3343,57 @@
         }
       ],
       "body": "\u003carticle class=\"card mcp-server\"\u003e\n  \u003cheader class=\"row\"\u003e\n    \u003cstrong\u003e{{.Name}}\u003c/strong\u003e\n    \u003cspan class=\"badge\"\u003e{{.Kind}}\u003c/span\u003e\n    {{if .Approved}}\u003cspan class=\"badge is-ok\"\u003e{{.Status}}\u003c/span\u003e{{else}}\u003cspan class=\"badge is-warn\"\u003e{{.Status}}\u003c/span\u003e{{end}}\n    \u003cspan class=\"muted\"\u003e{{.ApprovedTools}} of {{.TotalTools}} tools approved\u003c/span\u003e\n  \u003c/header\u003e\n  {{if .Command}}\u003cp class=\"muted\"\u003e\u003ccode\u003e{{.Command}}\u003c/code\u003e\u003c/p\u003e{{end}}\n  {{if .Address}}\u003cp class=\"muted\"\u003e\u003ccode\u003e{{.Address}}\u003c/code\u003e\u003c/p\u003e{{end}}\n\n  \u003cdiv class=\"grants\"\u003e\n    \u003ch4\u003eWhat approving this grants\u003c/h4\u003e\n    {{if .Hosted}}\n      {{/* A hosted server is a genuinely different risk, and saying the same\n           four things would be false in two of them. Nothing runs here — which\n           is safer — and what leaves is the part that matters. */}}\n      \u003cp\u003e\u003cstrong\u003eNothing runs on this machine.\u003c/strong\u003e There is no process, no file access and nothing\n      to sandbox, which is the one way this is safer than a packaged server.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eYour agents’ words leave this install.\u003c/strong\u003e Every argument of every call to it goes\n      to a host somebody else operates, along with whatever the agent wrote to get there.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIt is sent a real credential\u003c/strong\u003e, on every request, belonging to a real account\n      with that account’s permissions.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eA URL can be repointed and look identical.\u003c/strong\u003e That is why the address is part of\n      what you approve here: change it and this server goes back to pending.\u003c/p\u003e\n    {{else}}\n      \u003cp\u003e\u003cstrong\u003eIt is not sandboxed.\u003c/strong\u003e It runs on this host as this server’s user, outside the\n      container gears run in — so it can read this install’s database, and the provider keys in it.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIt reaches the network by definition.\u003c/strong\u003e That is what it is for, and the gate that\n      covers agent web search does not cover it at all.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIts code is fetched when it starts\u003c/strong\u003e, every time it starts. What you approve is\n      the command line, not the bytes that command will fetch tomorrow.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIt is handed real credentials\u003c/strong\u003e — by name, resolved at spawn, belonging to a real\n      account with that account’s permissions.\u003c/p\u003e\n    {{end}}\n\n    {{if .Secrets}}\u003cp class=\"muted\"\u003eNamed values it is handed:\n      {{range .Secrets}}\u003ccode\u003e{{.}}\u003c/code\u003e {{end}}\u003c/p\u003e{{end}}\n  \u003c/div\u003e\n\n  {{/* One at a time. A server's tool list is its own to change, so approving\n       the server is not approving whatever it offers next week. */}}\n  \u003cdetails\u003e\n    \u003csummary\u003eits tools\u003c/summary\u003e\n    {{range .Tools}}\u003cdiv class=\"mcp-tool\"\u003e\n      \u003ccode\u003e{{.Name}}\u003c/code\u003e\n      {{if .Description}}\u003cspan class=\"muted\"\u003e{{.Description}}\u003c/span\u003e{{end}}\n      \u003cform method=\"post\" action=\"/mcp/tools/{{.ID}}/approve\"\u003e\n        \u003cbutton type=\"submit\"\u003e{{if .Approved}}withdraw{{else}}approve this tool{{end}}\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/div\u003e{{else}}\u003cp class=\"hint\"\u003eIt has not been probed yet, so nothing here knows what it offers.\u003c/p\u003e{{end}}\n  \u003c/details\u003e\n\n  \u003cdiv class=\"mcp-actions\"\u003e\n    \u003cform method=\"post\" action=\"/mcp/{{.ID}}/probe\"\u003e\n      \u003cbutton type=\"submit\"\u003eask it what it offers\u003c/button\u003e\n    \u003c/form\u003e\n    \u003cform method=\"post\" action=\"/mcp/{{.ID}}/delete\"\n          hx-confirm=\"Remove {{.Name}}? Every agent granted it loses those tools.\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eremove\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/div\u003e\n\u003c/article\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.row.memory",
+      "model": [
+        {
+          "path": "Label",
+          "type": "string"
+        },
+        {
+          "path": "Kind",
+          "type": "string"
+        },
+        {
+          "path": "Source",
+          "type": "string"
+        },
+        {
+          "path": "Description",
+          "type": "string"
+        },
+        {
+          "path": "Content",
+          "type": "string"
+        },
+        {
+          "path": "Editable",
+          "type": "bool"
+        },
+        {
+          "path": "Removable",
+          "type": "bool"
+        },
+        {
+          "path": "IsRole",
+          "type": "bool"
+        },
+        {
+          "path": "Editing",
+          "type": "bool"
+        },
+        {
+          "path": "BindingID",
+          "type": "int64"
+        },
+        {
+          "path": "Version",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv class=\"card memory-item\"\u003e\n  \u003cdiv class=\"card-head\"\u003e\n    \u003cspan class=\"status {{if .IsRole}}approved{{else}}pending{{end}}\"\u003e{{.Label}}\u003c/span\u003e\n    \u003ccode\u003e{{.Source}}\u003c/code\u003e\n    \u003cspan class=\"muted\"\u003e{{.Description}}\u003c/span\u003e\n    \u003cspan class=\"spacer\"\u003e\u003c/span\u003e\n    {{if .Editing}}\n      \u003cbutton type=\"submit\" form=\"edit-{{.BindingID}}{{.Source}}\"\u003esave\u003c/button\u003e\n      \u003ca href=\"?\"\u003ecancel\u003c/a\u003e\n    {{else if .Editable}}\n      \u003ca href=\"?edit={{.Source}}\"\u003eedit\u003c/a\u003e\n    {{end}}\n    {{/* A role is neither editable away nor droppable: it is what the agent\n         is, and removing it leaves an agent with no answer to what it is\n         for. */}}\n    {{if .IsRole}}{{else}}\n      \u003cform method=\"post\" action=\"/memory/forget\"\n            hx-confirm=\"{{if .Removable}}Stop this agent reading {{.Source}}? The document itself stays.{{else}}Forget {{.Source}}?\u0026#10;\u0026#10;It is removed from the space, so no agent is told it again. Contextverse keeps its history and can restore it.{{end}}\"\u003e\n        \u003cinput type=\"hidden\" name=\"source\" value=\"{{.Source}}\"\u003e\n        \u003cinput type=\"hidden\" name=\"binding_id\" value=\"{{.BindingID}}\"\u003e\n        \u003cinput type=\"hidden\" name=\"version\" value=\"{{.Version}}\"\u003e\n        \u003cbutton type=\"submit\" class=\"danger\"\u003e{{if .Removable}}unbind{{else}}forget{{end}}\u003c/button\u003e\n      \u003c/form\u003e\n    {{end}}\n  \u003c/div\u003e\n  {{if .Editing}}\n    \u003cform id=\"edit-{{.BindingID}}{{.Source}}\" method=\"post\" action=\"/memory/save\"\u003e\n      \u003cinput type=\"hidden\" name=\"source\" value=\"{{.Source}}\"\u003e\n      \u003cinput type=\"hidden\" name=\"version\" value=\"{{.Version}}\"\u003e\n      \u003ctextarea name=\"content\" rows=\"10\" spellcheck=\"false\"\u003e{{.Content}}\u003c/textarea\u003e\n    \u003c/form\u003e\n  {{else}}\n    \u003cpre class=\"prompt-preview\"\u003e{{if .Content}}{{.Content}}{{else}}(empty — nothing reaches the model from this){{end}}\u003c/pre\u003e\n  {{end}}\n\u003c/div\u003e",
       "appends": false
     },
     {

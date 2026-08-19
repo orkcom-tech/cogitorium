@@ -247,6 +247,8 @@ func CoreModels() Models {
 		// it, so it is the same list without the page frame — and its own
 		// name, because a plugin overriding the drawer should not have to take
 		// the page with it.
+		"cog.drawer.memory": Memory{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.memory":    MemoryItem{},
 		"cog.drawer.agents": Agents{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.agent":     AgentCard{},
 		"cog.drawer.mcp":    MCP{Ctx: Ctx{T: DefaultStrings()}},
@@ -363,6 +365,48 @@ type Workspaces struct {
 	Importing bool
 	Error     string
 	Notice    string
+}
+
+// MemoryItem is one thing an agent carries into every turn.
+type MemoryItem struct {
+	// Label is what this piece IS, in the words somebody reads: "role",
+	// "private to this agent", "shared with the workspace", "bound document",
+	// "from the library".
+	Label       string
+	Kind        string
+	Source      string
+	Description string
+	Content     string
+	// Editable and Removable decide which controls the row carries. A role is
+	// neither: it is what the agent is, and dropping it would leave an agent
+	// with no answer to what it is for.
+	Editable  bool
+	Removable bool
+	IsRole    bool
+	// Editing marks the row somebody opened, so the panel comes back with the
+	// draft still open.
+	Editing bool
+	// BindingID is set when forgetting means unbinding: the document itself
+	// stays, and only this agent stops reading it.
+	BindingID int64
+	// Version is what this text was read at, carried back on a save or a
+	// delete. Removing a document somebody has just rewritten is exactly as
+	// destructive as overwriting it, so both carry it.
+	Version string
+}
+
+// Memory is everything one agent remembers, in the order it reaches the model.
+//
+// The point is not tidiness. An agent that quietly carries something it picked
+// up once will keep steering by it, and the only way to stop that is to be
+// able to see it — so nothing here is behind a summary: the text is the text,
+// and next to it is the way to change or drop it.
+type Memory struct {
+	Ctx       Ctx
+	AgentID   int64
+	AgentName string
+	Items     []MemoryItem
+	Error     string
 }
 
 // AgentCard is one agent, as the roster draws it.
@@ -955,6 +999,17 @@ func Exemplars() Models {
 		"cog.row.provider":   exampleModels(ctx).Providers[0],
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
+
+		"cog.drawer.memory": Memory{Ctx: ctx, AgentID: 2, AgentName: "Reviewer",
+			Items: []MemoryItem{
+				{Label: "role", Kind: "role", IsRole: true, Source: "role",
+					Content: "Reads the diff and refuses it out loud."},
+				{Label: "private to this agent", Kind: "private", Source: "agents/reviewer/notes.md",
+					Description: "what it learned", Content: "The build tags matter on darwin.",
+					Editable: true},
+			}},
+		"cog.row.memory": MemoryItem{Label: "bound document", Kind: "bound",
+			Source: "decisions.md", Removable: true, BindingID: 4},
 
 		"cog.drawer.agents": Agents{Ctx: ctx, Items: []AgentCard{
 			{ID: 1, Name: "orchestrator", Orchestrator: true, Model: "Opus", State: "working",

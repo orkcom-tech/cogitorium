@@ -554,6 +554,8 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// something inside a workspace is overridable before the workspace itself
 	// has to be.
 	s.page(mux, "GET /workspaces/{id}/drawers/{name}", s.handleWorkspaceDrawer)
+	s.page(mux, "POST /memory/save", s.handleSaveMemoryForm)
+	s.page(mux, "POST /memory/forget", s.handleForgetMemoryForm)
 
 	s.page(mux, "GET /workspaces", s.handleWorkspacesPage)
 	s.page(mux, "POST /workspaces", s.handleCreateWorkspaceForm)

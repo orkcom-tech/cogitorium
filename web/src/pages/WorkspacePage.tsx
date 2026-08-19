@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import BlueprintEditor from './BlueprintEditor'
 import TerminalPage from './TerminalPage'
-import AgentMemory from './AgentMemory'
 import FilesPage from './FilesPage'
 import CodeEditor from './CodeEditor'
 import ApprovalDialog from './ApprovalDialog'
@@ -559,7 +558,16 @@ export default function WorkspacePage({ me }: { me: User }) {
         )}
         {overlay === 'memory' &&
           (selectedAgent ? (
-            <AgentMemory agent={selectedAgent} onChanged={() => void reloadAgents()} onError={setError} />
+            /* The agent travels in the URL rather than being held by the
+               server, which keeps the panel a pure function of its request:
+               a refresh, a reload and a link all show the same thing. */
+            <div
+              key={`memory-${selectedAgent.id}`}
+              className="dk-body"
+              hx-get={`/workspaces/${wsId}/drawers/memory?agent=${selectedAgent.id}`}
+              hx-trigger="load"
+              hx-swap="innerHTML"
+            />
           ) : (
             <p className="hint">
               Memory belongs to one agent. Pick one in Agents, and it opens here.
@@ -1202,7 +1210,15 @@ function AgentPanel({
       </div>
 
       <h3>Memory</h3>
-      <AgentMemory agent={agent} onChanged={() => setPrompt(null)} onError={onError} />
+      {/* The same panel the Memory drawer shows, from the same template. Two
+          renderings of one thing is two things that disagree eventually, and
+          the one nobody is looking at is the one that drifts. */}
+      <div
+        key={`agent-memory-${agent.id}`}
+        hx-get={`/workspaces/${agent.workspace_id}/drawers/memory?agent=${agent.id}`}
+        hx-trigger="load"
+        hx-swap="innerHTML"
+      />
 
       <h3>Add context</h3>
       {contextUnavailable ? (

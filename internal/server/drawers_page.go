@@ -40,6 +40,14 @@ func (s *Server) handleWorkspaceDrawer(w http.ResponseWriter, r *http.Request) {
 		s.renderDrawer(w, r, "cog.drawer.gears", func() any {
 			return s.gearsModel(r, "", "", nil)
 		})
+	case "memory":
+		// The agent travels in the URL rather than being remembered here,
+		// which keeps the panel a pure function of its request: a refresh, a
+		// reload and a link all show the same thing.
+		agentID, _ := strconv.ParseInt(r.URL.Query().Get("agent"), 10, 64)
+		s.renderDrawer(w, r, "cog.drawer.memory", func() any {
+			return s.memoryModel(r, agentID, r.URL.Query().Get("edit"))
+		})
 	case "agents":
 		// The row somebody has open, so the roster comes back with it still
 		// marked. Without it a poll every four seconds would clear the
