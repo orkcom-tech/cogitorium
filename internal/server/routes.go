@@ -46,6 +46,23 @@ const (
 	AuthToken = "token"
 )
 
+// pluginPagePrefix is where a plugin's own pages live, and it is reserved
+// before anything is served under it.
+//
+// The reservation matters more than it looks. openToAnyone's last term exempts
+// every non-/api/ path, because that is how the single-page app and its assets
+// are served — so a new path space added outside /api/ is anonymous BY
+// CONSTRUCTION, with no opt-in and no warning. A plugin page landing in that
+// term would be reachable by anyone who knew the URL, and nothing in the
+// plugin's manifest would have said so.
+//
+// Closed here instead, before the first page exists. A plugin that genuinely
+// wants an open page will say so in its manifest and the operator will see it
+// on the approval screen; that is a declaration, and a declaration cannot be
+// expressed by a rule derived from the shape of a path. Until the declared
+// path exists, everything under /p/ needs a token.
+const pluginPagePrefix = "/p/"
+
 // openToAnyone reports whether a path is reachable without a credential.
 //
 // The authentication middleware and the published description both call this,
@@ -58,6 +75,12 @@ const (
 // and its assets are served. Delivery is named separately rather than left to
 // that term, so tightening the asset rule cannot silently close it.
 func openToAnyone(path string) bool {
+	// Plugin pages are carved out of the catch-all first. Order matters only
+	// for a reader: the point is that the general "everything outside /api/"
+	// term must never be what decides a plugin route.
+	if strings.HasPrefix(path, pluginPagePrefix) {
+		return false
+	}
 	return path == "/health" ||
 		path == "/api/v1/login" ||
 		path == "/api/v1/setup" ||
