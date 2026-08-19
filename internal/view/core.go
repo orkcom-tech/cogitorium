@@ -195,6 +195,58 @@ func CoreModels() Models {
 	}
 }
 
+// Exemplars are the same models with something in them.
+//
+// The zero-value pass catches a template naming a field that does not exist,
+// which is the failure that disables a plugin at boot. It cannot catch the
+// other one: a body that renders emptily because every value it reaches for is
+// blank, and reads on screen as a plugin that did nothing. Ranging over an
+// empty slice succeeds, so a template whose entire content is inside a
+// {{range}} passes the zero pass while producing not one byte.
+//
+// So there are two passes. Zero says "this will not crash"; exemplar says
+// "this will put something on screen", and gives the approval screen something
+// to render as a preview — which is what turns "it overrides cog.row.nav" into
+// a picture of what that will look like.
+func Exemplars() Models {
+	ctx := Ctx{
+		Lang: "en", T: DefaultStrings(),
+		Viewer: Viewer{ID: 1, Name: "sam", SignedIn: true, IsAdmin: true},
+	}
+	shell := Shell{
+		Ctx: ctx, Title: "Example",
+		Body: "<p>Whatever the page rendered goes here.</p>",
+		Nav: []NavItem{
+			{Label: "Workspaces", Href: "/workspaces", Icon: "grid", Order: 100},
+			{Label: "Gears", Href: "/gears", Icon: "gear", Order: 200, Current: true},
+		},
+		Styles:  []string{"/p/example/example.css"},
+		Scripts: []Asset{{Src: "/p/example/example.js"}},
+	}
+	actions := []Action{
+		{ID: "approve", Label: "Approve", Method: "POST", Href: "/api/v1/example/approve"},
+		{ID: "remove", Label: "Remove", Method: "DELETE", Href: "/api/v1/example", Danger: true},
+	}
+	return Models{
+		"cog.shell.document": shell,
+		"cog.shell.head":     shell,
+		"cog.shell.tokens":   shell,
+		"cog.shell.rail":     shell,
+		"cog.shell.body":     shell,
+		"cog.slot.head":      shell,
+		"cog.slot.rail":      shell,
+		"cog.row.nav":        shell.Nav[1],
+		"cog.action.button":  actions[0],
+		"cog.list.actions":   actions,
+		"cog.empty.default":  "Nothing here yet.",
+		"cog.page.plugin": Page{
+			Ctx: ctx, Title: "Example",
+			Params: map[string]string{"id": "42"},
+			Query:  map[string]string{"q": "search"},
+		},
+	}
+}
+
 // Funcs is the function set every template may call, host and plugin alike.
 //
 // Kept small on purpose. Every name here is a permanent promise to every

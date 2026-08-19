@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"github.com/orkcom-tech/cogitorium/internal/plugin"
 	"io"
 	"reflect"
 	"regexp"
@@ -240,6 +241,67 @@ func fieldsOf(model any) []string {
 // nearest picks the closest available name, and only when it is close enough
 // to be worth saying. A suggestion that is wrong is worse than none: it sends
 // an author to change something that was already right.
+// Preview renders one name against an exemplar, for a screen that shows what
+// an override will look like before somebody agrees to it.
+//
+// Against the composed stack, so what comes back is what will actually render
+// — including any other plugin layered over the same name. A preview that
+// rendered the plugin's own file in isolation would show something nobody will
+// ever see.
+func Preview(s *Set, name string) (string, error) {
+	model, ok := Exemplars()[name]
+	if !ok {
+		return "", fmt.Errorf("%s renders against nothing this build can make an example of", name)
+	}
+	var out strings.Builder
+	if err := s.Execute(&out, name, model); err != nil {
+		return "", err
+	}
+	return out.String(), nil
+}
+
+// Silent reports names that render without producing anything.
+//
+// The zero-value pass cannot see this: ranging over an empty slice succeeds,
+// so a template whose entire content sits inside a {{range}} passes while
+// producing not one byte. On screen that is a plugin that installed, loaded,
+// reported itself live and did nothing — the failure people spend an evening
+// on.
+//
+// Reported rather than refused. An empty body is legitimate: cog.slot.head
+// exists to be empty until somebody fills it, and a plugin may deliberately
+// blank a region. What is not legitimate is nobody being told.
+func Silent(s *Set, ledger Ledger) []string {
+	var out []string
+	for name, model := range Exemplars() {
+		// Only names somebody took over. The host's own empty bodies are
+		// empty on purpose and saying so every boot would train an operator to
+		// ignore the line.
+		owned := false
+		for _, e := range ledger.Entries {
+			// A PLUGIN's body, not the host's. cog.shell.tokens is empty
+			// because it exists so somebody can put something there, and
+			// reporting the host's own deliberate blanks every boot would
+			// train an operator to skip the line that matters.
+			if e.Name == name && e.Action != Extends && e.Layer != plugin.CoreNamespace {
+				owned = true
+			}
+		}
+		if !owned {
+			continue
+		}
+		var buf strings.Builder
+		if err := s.Execute(&buf, name, model); err != nil {
+			continue // already reported by Validate, in better words
+		}
+		if strings.TrimSpace(buf.String()) == "" {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // Nearest is nearest, for a caller outside this package.
 //
 // Exported so the command line can answer a mistyped template name the same

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 // The published registry and this package must agree.
@@ -85,5 +87,64 @@ func TestABodyWithAConditionalIsNotTruncated(t *testing.T) {
 	}
 	if got["b"] != "second" {
 		t.Fatalf("the definition after it was lost: %q", got["b"])
+	}
+}
+
+// The failure the zero-value pass cannot see.
+//
+// A template that renders empty is valid: it names no missing field and
+// executing it succeeds. On screen it is a plugin that installed, loaded,
+// reported itself live and blanked a region — which looks identical to working
+// from every angle the plugins screen had.
+func TestAnOverrideThatRendersNothingIsReported(t *testing.T) {
+	set, _, err := Boot(Funcs(), Core(), []Source{{
+		ID: "skin",
+		FS: fstest.MapFS{"t.html": &fstest.MapFile{
+			Data: []byte(`{{define "cog.empty.default"}}{{end}}`),
+		}},
+	}}, CoreModels())
+	if err != nil {
+		t.Fatal(err)
+	}
+	silent := Silent(set, set.Ledger())
+	if len(silent) != 1 || silent[0] != "cog.empty.default" {
+		t.Fatalf("a blanked region was not reported: %v", silent)
+	}
+	if r := Validate(set, CoreModels()); len(r.Failures) != 0 {
+		t.Fatalf("this was supposed to be valid: %+v", r.Failures)
+	}
+}
+
+// The host's own empty bodies are empty on purpose. Reporting them every boot
+// would train an operator to ignore the line that matters.
+func TestTheHostsOwnEmptyBodiesAreNotReported(t *testing.T) {
+	set, _, err := Boot(Funcs(), Core(), nil, CoreModels())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if silent := Silent(set, set.Ledger()); len(silent) != 0 {
+		t.Fatalf("the host reported itself silent: %v", silent)
+	}
+}
+
+// A preview renders against something, so an operator sees a row rather than a
+// name — and through the composed stack, so it includes whatever is layered
+// over the same name.
+func TestAPreviewRendersTheExampleThroughTheStack(t *testing.T) {
+	set, _, err := Boot(Funcs(), Core(), []Source{{
+		ID: "skin",
+		FS: fstest.MapFS{"t.html": &fstest.MapFile{
+			Data: []byte(`{{define "cog.action.button"}}<b>{{.Label}}</b>{{end}}`),
+		}},
+	}}, CoreModels())
+	if err != nil {
+		t.Fatal(err)
+	}
+	html, err := Preview(set, "cog.action.button")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, "<b>Approve</b>") {
+		t.Fatalf("the preview did not render the example: %q", html)
 	}
 }

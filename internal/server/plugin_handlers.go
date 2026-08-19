@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/orkcom-tech/cogitorium/internal/view"
 	"io"
 	"log/slog"
 	"mime"
@@ -256,6 +257,58 @@ func (s *Server) handleRemovePlugin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, pluginActionResult{
 		Restart: wasLive,
 		Message: restartLine(fmt.Sprintf("%s removed.", id), wasLive),
+	})
+}
+
+// handlePreviewPlugin renders one name this plugin overrides, against an
+// example, so somebody can see what they are agreeing to.
+//
+// "It overrides cog.row.nav" is a fact an operator cannot evaluate. A picture
+// of the row as it will render is one they can, and it is the difference
+// between approval as a ritual and approval as a decision.
+//
+// Through the composed stack, so what comes back is what will actually render
+// — including another plugin layered over the same name. Rendering the
+// plugin's own file in isolation would show something nobody will ever see.
+func (s *Server) handlePreviewPlugin(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+	id := r.PathValue("id")
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "which name?")
+		return
+	}
+	if s.plugins == nil || s.plugins.set == nil {
+		writeError(w, http.StatusServiceUnavailable, "nothing is composed on this install")
+		return
+	}
+	// Only what this plugin actually contributes. Otherwise this is a way to
+	// render any template with any exemplar through an id in a URL.
+	owns := false
+	for _, e := range s.plugins.set.Ledger().For(id) {
+		if e.Name == name {
+			owns = true
+		}
+	}
+	if !owns {
+		writeError(w, http.StatusNotFound,
+			fmt.Sprintf("%s does not contribute %s on this install", id, name))
+		return
+	}
+
+	html, err := view.Preview(s.plugins.set, name)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"name": name,
+		"html": html,
+		// Said rather than left to be noticed. An override that renders
+		// nothing looks identical to a preview that failed to load.
+		"empty": strings.TrimSpace(html) == "",
 	})
 }
 

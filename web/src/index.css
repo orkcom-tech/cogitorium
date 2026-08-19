@@ -3706,3 +3706,36 @@ button.big {
   opacity: 0.55;
   cursor: default;
 }
+
+.plugin-preview {
+  margin-top: 0.6rem;
+}
+.preview-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.preview-names button {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8em;
+  padding: 0.1rem 0.7rem;
+  cursor: pointer;
+  opacity: 0.75;
+}
+.preview-names button.is-current {
+  opacity: 1;
+}
+/* Somebody else's markup, on its own origin with no scripts. Rendering it
+   inline would let a plugin restyle the screen you are deciding on it from. */
+.preview-frame {
+  width: 100%;
+  min-height: 120px;
+  margin-top: 0.5rem;
+  border: 1px dashed currentColor;
+  border-radius: 8px;
+  background: #fff;
+}

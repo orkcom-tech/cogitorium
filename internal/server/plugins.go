@@ -564,6 +564,13 @@ type PluginView struct {
 	// difference between what an operator approved and what is happening.
 	Undeclared []string `json:"undeclared,omitempty"`
 
+	// Silent is what this plugin overrides that renders empty against an
+	// example — a template that loaded, reported itself live, and puts nothing
+	// on screen. The zero-value pass cannot see it: ranging over an empty
+	// slice succeeds, so a body entirely inside a {{range}} passes while
+	// producing not one byte.
+	Silent []string `json:"silent,omitempty"`
+
 	Pages   []PluginPageView `json:"pages,omitempty"`
 	Hosts   []string         `json:"hosts,omitempty"`
 	Secrets []string         `json:"secrets,omitempty"`
@@ -672,7 +679,19 @@ func (s *Server) pluginView(in plugin.Installed, caps plugin.Capabilities) Plugi
 	for _, o := range m.Overrides {
 		declared[o] = true
 	}
+	// Names this plugin took over that render empty against an example. Shown
+	// beside what it overrides, because "it overrides cog.row.nav" and "it
+	// overrides cog.row.nav and that row now renders as nothing" are different
+	// sentences and only one of them is what somebody wants to know.
+	silent := map[string]bool{}
+	for _, name := range view.Silent(rt.set, rt.set.Ledger()) {
+		silent[name] = true
+	}
+
 	for _, e := range rt.set.Ledger().For(m.ID) {
+		if silent[e.Name] && e.Action != view.Extends {
+			v.Silent = append(v.Silent, e.Name)
+		}
 		switch e.Action {
 		case view.Overrides:
 			v.Overrides = append(v.Overrides, e.Name)

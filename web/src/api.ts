@@ -184,6 +184,10 @@ export type Plugin = {
   hosts?: string[]
   secrets?: string[]
   api?: string[]
+  /** Names this plugin overrides that render EMPTY against an example — it
+   *  loaded, it reported itself live, and that region is now blank. The
+   *  zero-value pass cannot see this: ranging over an empty slice succeeds. */
+  silent?: string[]
 }
 
 export class Unauthorized extends Error {}
@@ -803,6 +807,14 @@ export const api = {
      *  from what this machine holds rather than from the request, so a
      *  decision can only ever be about bytes somebody could have looked at —
      *  and a rebuilt plugin drops back to pending on its own. */
+    /** What an overridden name will actually look like, rendered through the
+     *  composed stack rather than the plugin's own file — so it includes
+     *  anything layered over it. "It overrides cog.row.nav" is not something
+     *  an operator can evaluate; a picture of the row is. */
+    preview: (id: string, name: string) =>
+      req<{ name: string; html: string; empty: boolean }>(
+        `/api/v1/plugins/${id}/preview?name=${encodeURIComponent(name)}`,
+      ),
     approve: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}/approve`, { method: 'POST' }),
     /** Withdraw the decision. This also switches the plugin off, because an
      *  approval that no longer stands cannot be left rendering. */

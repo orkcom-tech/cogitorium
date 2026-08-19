@@ -917,6 +917,19 @@ paths:
       responses:
         default:
           description: see the reference
+  "/api/v1/plugins/{id}/preview":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read plugins/{id}/preview"
+      responses:
+        default:
+          description: see the reference
   "/api/v1/plugins/{id}/revoke":
     parameters:
       - name: "id"
@@ -982,6 +995,12 @@ paths:
           format: int64
     delete:
       summary: "Delete queue/{id}"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/restart":
+    post:
+      summary: "Create restart"
       responses:
         default:
           description: see the reference

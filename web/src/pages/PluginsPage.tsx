@@ -419,6 +419,12 @@ function PluginCard({
       <Names label="Extends" names={p.extends} />
       <Names label="Overridden without declaring" names={p.undeclared} tone="warn" />
       <Names label="Inert — nothing installed owns that namespace" names={p.inert} tone="warn" />
+      {/* Loaded, live, and rendering nothing. It looks identical to working
+          from every other angle on this screen, which is why it gets a line of
+          its own rather than being left for somebody to notice. */}
+      <Names label="Renders empty — that region is now blank" names={p.silent} tone="warn" />
+
+      {(p.overrides?.length ?? 0) > 0 && <Preview plugin={p} />}
 
       {p.pages && p.pages.length > 0 && (
         <div className="plugin-rows">
@@ -720,4 +726,66 @@ function VerifiedBadge({ entry: e }: { entry: CatalogEntry }) {
   // Not an accusation, and worded so nobody reads it as one. Most plugins in
   // any healthy catalog will sit here forever.
   return <span className="badge">nobody has looked</span>
+}
+
+
+/** What an override will look like.
+ *
+ * Approval asks somebody to agree to "it overrides cog.row.nav", which is not
+ * a thing anybody can evaluate. Rendered through the composed stack, so what
+ * is shown includes whatever else is layered over the same name — a preview of
+ * the plugin's own file alone would show something nobody will ever see.
+ *
+ * In an iframe with no scripts and its own origin: this is somebody else's
+ * markup, and rendering it inline would let a plugin restyle the screen you
+ * are deciding on it from.
+ */
+function Preview({ plugin: p }: { plugin: Plugin }) {
+  const [name, setName] = useState<string | null>(null)
+  const [html, setHtml] = useState<string | null>(null)
+  const [empty, setEmpty] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const show = (n: string) => {
+    if (name === n) {
+      setName(null)
+      return
+    }
+    setName(n)
+    setHtml(null)
+    setError(null)
+    api.plugins
+      .preview(p.id, n)
+      .then((r) => {
+        setHtml(r.html)
+        setEmpty(r.empty)
+      })
+      .catch((e: Error) => setError(e.message))
+  }
+
+  return (
+    <div className="plugin-preview">
+      <div className="preview-names">
+        {p.overrides?.map((n) => (
+          <button key={n} className={name === n ? 'is-current' : ''} onClick={() => show(n)}>
+            {name === n ? 'Hide' : 'Preview'} {n}
+          </button>
+        ))}
+      </div>
+      {name && error && <p className="error">{error}</p>}
+      {name && !error && html === null && <p className="hint">Rendering…</p>}
+      {name && html !== null && (
+        empty ? (
+          <p className="error">It renders nothing. That region will be blank.</p>
+        ) : (
+          <iframe
+            className="preview-frame"
+            title={`${name} as it will render`}
+            sandbox=""
+            srcDoc={html}
+          />
+        )
+      )}
+    </div>
+  )
 }
