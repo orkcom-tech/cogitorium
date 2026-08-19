@@ -196,26 +196,46 @@ slots, `under:`/`core:` aliases, `plugins.order`. Load-time validation with
 per-plugin blame and the drop-and-recompose policy. Tier 0 delivery: pages,
 rail entries, assets, the auth default. Approval bound to the sha256 of the
 bytes on disk, from the command line and from the browser. Workspace panels
-through `mounts:`. The tier registry and resolver. Tier A on wazero, including
-a page whose model comes from the plugin's own code. The catalog: fetch, cache,
+through `mounts:`. The tier registry and resolver. All five tiers dispatching: wasm on wazero, a
+provisioned interpreter fetched and shared, an OCI image on the sandbox that
+already runs gears, a native binary, and `needs: js` on a JavaScript engine
+compiled into the binary. All nine `cog.*` calls, identical on every tier. A
+restart the product can perform on itself. The template inspector,
+`registry.json`, the published manifest schema, exemplar validation and the
+approval-screen preview. The catalog: fetch, cache,
 search, the three-state verified check, install-with-crosscheck, the browse and
 install screens, and its CI — `check-catalog` and `check-bundle`, with
 additions auto-merging and edits held for a person.
 
-**Described here and not built.** Tiers B, C and D: the code for all three
-compiles and is tested, and nothing dispatches to it — only the wasm tier is
-reached. Seven of the nine `cog.*` calls, and the eighth (`cog.http`) refuses.
-The embedded QuickJS provider, so `needs: js` currently resolves to a tier with
-no engine behind it. The Extism-shaped ABI — the wasm contract works, but it is
-ours, so existing Extism PDKs do not fit it. The restart controller. The
-hypermedia layer, and with it every server-rendered screen: the template
-surface renders plugin pages only, so **no screen of the product is overridable
-yet** and the rail vocabulary is defined but dormant. `requires:` and a
-topological layer order. The exemplar validation pass and the approval-screen
-preview. The template inspector and `registry.json`. Author SDKs for every
-tier.
+**Described here and not built.** The conversion itself: **no screen of the
+product is a server template yet**, so there is nothing for a plugin to
+override except the shell around its own pages and the rail. The hypermedia
+layer is vendored and the rail renders, which is the foundation; the twenty-odd
+screens on top of it are the work that remains, and the chat stage needs its
+SSE stream reshaped into the dialect before it can be first.
 
-**Dropped rather than deferred.** The mark — cosign, a transparency log,
+Author SDKs beyond Python: Go, Rust and TinyGo guests still write the three
+exports by hand, which is thirty lines but thirty lines nobody should have to
+find out about.
+
+**Dropped rather than deferred.** An Extism-shaped ABI. The plan wanted it so
+that "every existing Extism PDK is a Cogitorium PDK on day one", and that was
+the right instinct when the alternative was every author implementing a wire
+protocol. It is no longer the alternative: `needs: js` has an engine compiled
+into the binary and needs no SDK at all, Python has one file of standard
+library, and the guest contract is three exports any language reaches in about
+thirty lines. Reshaping the runtime and every guest to match somebody else's
+vocabulary would buy a compatibility two SDKs already cover — and would tie
+this contract to another project's release schedule forever.
+
+A second hypermedia dialect. The plan named htmx *and* Datastar, loaded
+unconditionally. Two dialects on every page is two vocabularies every plugin
+author has to learn before overriding anything, and the second earns nothing
+the first does not already do. htmx and its SSE extension are vendored; the SSE
+half is there because the chat stage streams and a conversion that could not
+carry streaming would stop at the screen that matters most.
+
+The mark — cosign, a transparency log,
 statement families, `verified|unmarked|unverifiable`. It would have tripled the
 dependency graph to defend against somebody who controls the catalog
 repository, and if that has happened they are already serving whatever they

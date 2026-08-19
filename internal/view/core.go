@@ -16,6 +16,25 @@ import (
 //go:embed templates/*.html
 var coreTemplates embed.FS
 
+// The hypermedia layer, vendored.
+//
+// Served from this binary rather than a CDN because the interface fetches
+// nothing from the network — no fonts, no scripts, no analytics — and an
+// exception for a library would read the same in a packet capture as any other
+// exception.
+//
+//go:embed assets/htmx.min.js assets/htmx-sse.js
+var hypermedia embed.FS
+
+// Hypermedia is htmx and its SSE extension, for the routes that serve them.
+func Hypermedia() fs.FS {
+	sub, err := fs.Sub(hypermedia, "assets")
+	if err != nil {
+		panic("view: the vendored hypermedia layer is unreadable: " + err.Error())
+	}
+	return sub
+}
+
 // Core is the host's template layer. It is layer zero of every composition.
 func Core() fs.FS {
 	sub, err := fs.Sub(coreTemplates, "templates")
@@ -145,9 +164,12 @@ type Shell struct {
 	// templates cannot take a template name from data, and the alternative
 	// would be a fixed name every page had to be squeezed into.
 	Body template.HTML
-	// Nav is the rail. Populated from plugin manifests, and NOT rendered by
-	// the document yet: the rail on screen is still the application's, and a
-	// second server-rendered one would sit unstyled above it.
+	// Nav is the rail: the host's own destinations first, then whatever
+	// plugins contributed, in the order the manifests asked for.
+	//
+	// Rendered by the document on pages this shell serves. It is NOT rendered
+	// on the application's own screens, which still draw their own — a second
+	// rail above the first would be two rails.
 	Nav []NavItem
 	// Styles and Scripts are plugin contributions injected into the head.
 	Styles  []string
@@ -193,6 +215,35 @@ func CoreModels() Models {
 		"cog.empty.default":  "",
 		"cog.page.plugin":    Page{Ctx: Ctx{T: DefaultStrings()}},
 	}
+}
+
+// HostNav is the product's own rail, as the server knows it.
+//
+// Here rather than only in the client so a page this shell serves looks like
+// the product rather than like a bare document dropped beside it. The client
+// keeps its own copy for its own screens; this is the same list, and the two
+// meeting in the middle is what the conversion is for.
+//
+// Order is spaced by hundreds so a plugin can land between two of them without
+// anybody renumbering.
+func HostNav(current string) []NavItem {
+	items := []NavItem{
+		{Label: "Workspaces", Href: "/workspaces", Icon: "grid", Order: 100},
+		{Label: "Map", Href: "/map", Icon: "map", Order: 200},
+		{Label: "Gears", Href: "/gears", Icon: "gear", Order: 300},
+		{Label: "Models", Href: "/models", Icon: "model", Order: 400},
+		{Label: "Instructions", Href: "/instructions", Icon: "text", Order: 500},
+		{Label: "Context", Href: "/context", Icon: "layers", Order: 600},
+		{Label: "Plugins", Href: "/plugins", Icon: "plug", Order: 700},
+	}
+	for i := range items {
+		// Prefix rather than equality: /workspaces/4 is still Workspaces, and
+		// a rail that forgets where you are the moment you open something is
+		// a rail that is wrong on most of the screens anybody uses.
+		items[i].Current = current == items[i].Href ||
+			(items[i].Href != "/" && strings.HasPrefix(current, items[i].Href+"/"))
+	}
+	return items
 }
 
 // Exemplars are the same models with something in them.

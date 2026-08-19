@@ -70,27 +70,59 @@ func TestTheDocumentCarriesTheApplicationThroughUntouched(t *testing.T) {
 	}
 }
 
-// The rail is defined but deliberately not rendered by the document yet: the
-// one on screen is still the application's, and a second server-rendered one
-// would sit unstyled above it. The names exist so the vocabulary is stable
-// before anybody writes against it.
-func TestTheRailIsAddressableButNotYetInTheDocument(t *testing.T) {
+// The rail is rendered by the document now, which is what stopped
+// cog.shell.rail, cog.row.nav and cog.slot.rail from being names an author
+// could override to no effect.
+//
+// This test asserted the opposite until the shell started calling it — a
+// deliberate placeholder, and the assertion that had to flip for the promise
+// to become true.
+func TestTheDocumentRendersTheRail(t *testing.T) {
 	set, _, err := Boot(Funcs(), Core(), nil, CoreModels())
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc := render(t, set, "cog.shell.document", Shell{Ctx: Ctx{T: DefaultStrings()}})
-	if strings.Contains(doc, "<nav") {
-		t.Errorf("the document must not render a second rail yet:\n%s", doc)
-	}
-	rail := render(t, set, "cog.shell.rail", Shell{
+	doc := render(t, set, "cog.shell.document", Shell{
 		Ctx: Ctx{T: DefaultStrings()},
 		Nav: []NavItem{{Label: "Workspaces", Href: "/workspaces", Current: true}},
 	})
 	for _, want := range []string{"<nav", "Workspaces", `aria-current="page"`} {
-		if !strings.Contains(rail, want) {
-			t.Errorf("the rail template omits %q:\n%s", want, rail)
+		if !strings.Contains(doc, want) {
+			t.Errorf("the document omits %q:\n%s", want, doc)
 		}
+	}
+
+	// And the hypermedia layer is served from this binary rather than fetched:
+	// the interface reaches nothing on the network, and a library would read
+	// the same in a packet capture as anything else.
+	for _, want := range []string{"/assets/htmx.min.js", "/assets/htmx-sse.js"} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("the document does not load %q:\n%s", want, doc)
+		}
+	}
+	if strings.Contains(doc, "//unpkg") || strings.Contains(doc, "//cdn") {
+		t.Errorf("the document fetches a script from the network:\n%s", doc)
+	}
+}
+
+// A plugin overriding the row gets its body on every entry, which is the whole
+// reason the row is named separately from the rail around it.
+func TestAPluginCanTakeOverTheRailRow(t *testing.T) {
+	set, _, err := Boot(Funcs(), Core(), []Source{{
+		ID: "skin",
+		FS: fstest.MapFS{"t.html": &fstest.MapFile{
+			Data: []byte(`{{define "cog.row.nav"}}<b class="mine">{{.Label}}</b>{{end}}`),
+		}},
+	}}, CoreModels())
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := render(t, set, "cog.shell.document", Shell{
+		Ctx: Ctx{T: DefaultStrings()},
+		Nav: []NavItem{{Label: "Workspaces", Href: "/workspaces"}, {Label: "Map", Href: "/map"}},
+	})
+	if strings.Count(doc, `class="mine"`) != 2 {
+		t.Errorf("the override did not reach every row:\n%s", doc)
 	}
 }
 

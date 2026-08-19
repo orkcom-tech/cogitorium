@@ -214,10 +214,11 @@ func SplitAlias(ref string) (alias, name string, ok bool) {
 // that reads as "my plugin is broken" rather than "this is not wired yet".
 // Every entry here is a line item to delete as its screen converts.
 func Dormant(name string) bool {
-	switch name {
-	case "cog.shell.rail", "cog.row.nav", "cog.slot.rail":
-		return true
-	}
+	// Empty, and kept rather than deleted.
+	//
+	// The rail lived here until the shell started rendering it. The next name
+	// to be defined ahead of the screen that calls it goes here, and tooling
+	// already knows to say so — which is the whole reason this survived being
+	// emptied.
 	return false
 }
-

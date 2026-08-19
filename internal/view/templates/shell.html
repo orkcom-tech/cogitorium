@@ -24,6 +24,8 @@
 {{end}}
 
 {{define "cog.shell.head"}}{{.AppHead}}
+<script src="/assets/htmx.min.js" defer></script>
+<script src="/assets/htmx-sse.js" defer></script>
 {{template "cog.shell.tokens" .}}
 {{range .Styles}}<link rel="stylesheet" href="{{.}}">
 {{end}}{{range .Scripts}}<script type="module" src="{{.Src}}"{{if .Integrity}} integrity="{{.Integrity}}"{{end}}></script>
@@ -45,7 +47,7 @@
   here; the application puts its mount point here once it is served through
   this shell rather than beside it.
 */}}
-{{define "cog.shell.body"}}{{.Body}}{{end}}
+{{define "cog.shell.body"}}{{template "cog.shell.rail" .}}<div class="cavity">{{.Body}}</div>{{end}}
 
 {{/*
   Append slots. Definitions of these CONCATENATE rather than replace, so two

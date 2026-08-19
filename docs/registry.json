@@ -182,8 +182,7 @@
         }
       ],
       "body": "\u003ca class=\"rail-item{{if .Current}} is-current{{end}}\" href=\"{{.Href}}\"{{if .Current}} aria-current=\"page\"{{end}}\u003e{{if .Icon}}\u003cspan class=\"rail-icon\" data-icon=\"{{.Icon}}\" aria-hidden=\"true\"\u003e\u003c/span\u003e{{end}}\u003cspan class=\"rail-label\"\u003e{{.Label}}\u003c/span\u003e\u003c/a\u003e",
-      "appends": false,
-      "dormant": true
+      "appends": false
     },
     {
       "name": "cog.shell.body",
@@ -261,7 +260,7 @@
           "type": "[]Asset"
         }
       ],
-      "body": "{{.Body}}",
+      "body": "{{template \"cog.shell.rail\" .}}\u003cdiv class=\"cavity\"\u003e{{.Body}}\u003c/div\u003e",
       "appends": false
     },
     {
@@ -419,7 +418,7 @@
           "type": "[]Asset"
         }
       ],
-      "body": "{{.AppHead}}\n{{template \"cog.shell.tokens\" .}}\n{{range .Styles}}\u003clink rel=\"stylesheet\" href=\"{{.}}\"\u003e\n{{end}}{{range .Scripts}}\u003cscript type=\"module\" src=\"{{.Src}}\"{{if .Integrity}} integrity=\"{{.Integrity}}\"{{end}}\u003e\u003c/script\u003e\n{{end}}{{template \"cog.slot.head\" .}}",
+      "body": "{{.AppHead}}\n\u003cscript src=\"/assets/htmx.min.js\" defer\u003e\u003c/script\u003e\n\u003cscript src=\"/assets/htmx-sse.js\" defer\u003e\u003c/script\u003e\n{{template \"cog.shell.tokens\" .}}\n{{range .Styles}}\u003clink rel=\"stylesheet\" href=\"{{.}}\"\u003e\n{{end}}{{range .Scripts}}\u003cscript type=\"module\" src=\"{{.Src}}\"{{if .Integrity}} integrity=\"{{.Integrity}}\"{{end}}\u003e\u003c/script\u003e\n{{end}}{{template \"cog.slot.head\" .}}",
       "appends": false
     },
     {
@@ -499,8 +498,7 @@
         }
       ],
       "body": "\u003cnav class=\"rail\" aria-label=\"{{.Ctx.T.Navigation}}\"\u003e\n{{range .Nav}}{{template \"cog.row.nav\" .}}{{end}}{{template \"cog.slot.rail\" .}}\u003c/nav\u003e",
-      "appends": false,
-      "dormant": true
+      "appends": false
     },
     {
       "name": "cog.shell.tokens",
@@ -737,8 +735,7 @@
         }
       ],
       "body": "",
-      "appends": true,
-      "dormant": true
+      "appends": true
     }
   ]
 }

@@ -2,11 +2,10 @@
   The rail, and one repeated unit named on its own so the container above can
   be rebuilt without touching an override hanging off the row.
 
-  NOT rendered by the document yet. The rail on screen is still the
-  application's, and server-rendering a second one would put an unstyled copy
-  above it. These names are defined now so the vocabulary is stable before
-  anybody writes against it, and the document starts calling them when the
-  rail itself is converted.
+  Rendered on every page this shell serves. It is NOT rendered on the
+  application's own screens: those still draw their own rail in the client, and
+  a second one above it would be two rails. That is the seam the conversion
+  closes, one screen at a time.
 */}}
 
 {{define "cog.shell.rail"}}<nav class="rail" aria-label="{{.Ctx.T.Navigation}}">

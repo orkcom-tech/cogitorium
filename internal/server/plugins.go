@@ -99,6 +99,27 @@ type pluginAsset struct {
 	Type     string
 }
 
+// navFor is the rail as this page should see it: the host's own entries and
+// the plugins', merged and ordered.
+//
+// Merged here rather than at load because "which entry is current" is a
+// property of the request, and a rail computed once would highlight whatever
+// page happened to be served first.
+func (rt *pluginRuntime) navFor(path string) []view.NavItem {
+	nav := view.HostNav(path)
+	for _, item := range rt.nav {
+		nav = append(nav, view.NavItem{
+			Label: item.Label, Icon: item.Icon, Href: item.Href, Order: item.Order,
+			Current: item.Href == path,
+			// Which plugin put it there, for a screen that has to answer
+			// "where did this button come from".
+			From: item.From,
+		})
+	}
+	sort.SliceStable(nav, func(i, j int) bool { return nav[i].Order < nav[j].Order })
+	return nav
+}
+
 // pluginPage is one declared page, resolved to what serving it needs.
 type pluginPage struct {
 	PluginID string
@@ -402,7 +423,12 @@ func (s *Server) pluginHandler() http.Handler {
 			// No AppHead: a plugin page is not the single-page application, and
 			// loading its bundle here would boot React over the top of what the
 			// plugin just rendered.
-			Body:    template.HTML(body.String()),
+			Body: template.HTML(body.String()),
+			// The product's own destinations, then whatever plugins added, so
+			// a plugin's page sits inside the product rather than beside it.
+			// Somebody who opened it from the rail has to be able to leave the
+			// same way.
+			Nav:     rt.navFor(r.URL.Path),
 			Styles:  rt.styles,
 			Scripts: rt.scripts,
 		}

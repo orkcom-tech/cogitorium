@@ -43,6 +43,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/settings"
 	"github.com/orkcom-tech/cogitorium/internal/update"
 	"github.com/orkcom-tech/cogitorium/internal/version"
+	"github.com/orkcom-tech/cogitorium/internal/view"
 	"github.com/orkcom-tech/cogitorium/internal/websearch"
 	"github.com/orkcom-tech/cogitorium/internal/work"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
@@ -525,6 +526,12 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "GET /i/{address}/runs/{id}", s.handleInletRunStatus)
 	s.route(mux, "GET /i/{address}/runs/{id}/file", s.handleInletRunFile)
 	s.route(mux, inletDeliveryPrefix, handleInletDeliveryPath)
+
+	// The hypermedia layer, from this binary. Its own prefix rather than under
+	// a plugin's assets: it belongs to the host, and a plugin that could serve
+	// something at this path would be a plugin that can replace htmx.
+	mux.Handle("/assets/", http.StripPrefix("/assets/",
+		http.FileServer(http.FS(view.Hypermedia()))))
 
 	mux.Handle(pluginPagePrefix, s.pluginHandler())
 	mux.Handle("/", s.uiHandler())
