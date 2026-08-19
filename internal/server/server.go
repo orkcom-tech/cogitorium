@@ -588,6 +588,9 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.page(mux, "POST /people/teams/{id}/delete", s.handleDeleteTeamForm)
 	s.page(mux, "POST /people/teams/{id}/members", s.handleAddTeamMemberForm)
 
+	s.page(mux, "GET /account", s.handleAccountPage)
+	s.page(mux, "POST /account/password", s.handleAccountPasswordForm)
+	s.page(mux, "POST /account/signout", s.handleAccountSignOutForm)
 	s.page(mux, "GET /plugins", s.handlePluginsPage)
 	s.page(mux, "POST /plugins", s.handleUploadPluginForm)
 	s.page(mux, "POST /plugins/restart", s.handleRestartFromPluginsForm)

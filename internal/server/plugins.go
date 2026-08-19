@@ -109,8 +109,8 @@ type pluginAsset struct {
 // Merged here rather than at load because "which entry is current" is a
 // property of the request, and a rail computed once would highlight whatever
 // page happened to be served first.
-func (rt *pluginRuntime) navFor(path string) []view.NavItem {
-	nav := view.HostNav(path)
+func (rt *pluginRuntime) navFor(path string, admin bool) []view.NavItem {
+	nav := view.HostNav(path, admin)
 	for _, item := range rt.nav {
 		nav = append(nav, view.NavItem{
 			Label: item.Label, Icon: item.Icon, Href: item.Href, Order: item.Order,
@@ -445,7 +445,7 @@ func (s *Server) pluginHandler() http.Handler {
 			// a plugin's page sits inside the product rather than beside it.
 			// Somebody who opened it from the rail has to be able to leave the
 			// same way.
-			Nav:     rt.navFor(r.URL.Path),
+			Nav:     rt.navFor(r.URL.Path, callerFrom(r.Context()).IsAdmin()),
 			Styles:  rt.styles,
 			Scripts: rt.scripts,
 		}

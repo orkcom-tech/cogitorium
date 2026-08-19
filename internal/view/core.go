@@ -186,6 +186,13 @@ var glyphs = map[string]template.HTML{
 		`<path d="M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></svg>`,
 	"plug": `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="9.5" width="13" height="11" rx="2.5"/>` +
 		`<path d="M10.5 9.5V6a2.5 2.5 0 0 1 5 0v3.5"/><path d="M7 13.5H3.5M7 16.5H3.5"/></svg>`,
+	"people": `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/>` +
+		`<path d="M3.5 20c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16 5.6a3.2 3.2 0 0 1 0 6.3"/>` +
+		`<path d="M17.5 14.6c1.9.6 3.2 2.3 3.2 4.4"/></svg>`,
+	"person": `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/>` +
+		`<path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg>`,
+	"terminal": `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/>` +
+		`<path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/></svg>`,
 }
 
 // Asset is a stylesheet or module the shell injects.
@@ -284,6 +291,8 @@ func CoreModels() Models {
 		// name, because a plugin overriding the drawer should not have to take
 		// the page with it.
 		"cog.page.people":     People{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.page.account":    Account{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.frag.password":   Account{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.list.users":      People{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.person":      Person{},
 		"cog.list.teams":      People{Ctx: Ctx{T: DefaultStrings()}},
@@ -417,6 +426,20 @@ type Workspaces struct {
 	Importing bool
 	Error     string
 	Notice    string
+}
+
+// Account is the signed-in person's own screen.
+//
+// It exists because the rail a server-rendered page draws had no account on it
+// at all: from the screen somebody lands on after signing in there was no way
+// to sign out or change a password. The client draws a menu for this, and a
+// menu is a thing only the client can draw.
+type Account struct {
+	Ctx     Ctx
+	Name    string
+	IsAdmin bool
+	Problem string
+	Notice  string
 }
 
 // Person is one account on this install.
@@ -1241,9 +1264,15 @@ type Instructions struct {
 // keeps its own copy for its own screens; this is the same list, and the two
 // meeting in the middle is what the conversion is for.
 //
+// admin decides whether the two admin-only destinations are drawn. They were
+// missing entirely, and with them the account: from the screen somebody lands
+// on after signing in there was no way to sign out, change a password, or
+// reach People or the Terminal at all. The rail was the product's navigation
+// and half the product was not in it.
+//
 // Order is spaced by hundreds so a plugin can land between two of them without
 // anybody renumbering.
-func HostNav(current string) []NavItem {
+func HostNav(current string, admin bool) []NavItem {
 	items := []NavItem{
 		{Label: "Workspaces", Href: "/workspaces", Icon: "grid", Order: 100},
 		{Label: "Map", Href: "/map", Icon: "map", Order: 200},
@@ -1253,6 +1282,16 @@ func HostNav(current string) []NavItem {
 		{Label: "Context", Href: "/context", Icon: "layers", Order: 600},
 		{Label: "Plugins", Href: "/plugins", Icon: "plug", Order: 700},
 	}
+	if admin {
+		items = append(items,
+			NavItem{Label: "People", Href: "/people", Icon: "people", Order: 800},
+			NavItem{Label: "Terminal", Href: "/terminal", Icon: "terminal", Order: 900},
+		)
+	}
+	// Last, always: it is where the account lives on every screen in the
+	// product, and a rail whose end moved would be a rail somebody has to look
+	// for.
+	items = append(items, NavItem{Label: "Account", Href: "/account", Icon: "person", Order: 10_000})
 	for i := range items {
 		// Prefix rather than equality: /workspaces/4 is still Workspaces, and
 		// a rail that forgets where you are the moment you open something is
@@ -1325,11 +1364,13 @@ func Exemplars() Models {
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
 
-		"cog.page.people": examplePeople(ctx),
-		"cog.list.users":  examplePeople(ctx),
-		"cog.row.person":  examplePeople(ctx).Users[0],
-		"cog.list.teams":  examplePeople(ctx),
-		"cog.row.team":    examplePeople(ctx).Teams[0],
+		"cog.page.people":   examplePeople(ctx),
+		"cog.page.account":  Account{Ctx: ctx, Name: "admin", IsAdmin: true},
+		"cog.frag.password": Account{Ctx: ctx, Name: "admin", IsAdmin: true},
+		"cog.list.users":    examplePeople(ctx),
+		"cog.row.person":    examplePeople(ctx).Users[0],
+		"cog.list.teams":    examplePeople(ctx),
+		"cog.row.team":      examplePeople(ctx).Teams[0],
 
 		"cog.page.plugins": examplePlugins(ctx),
 		"cog.list.plugins": examplePlugins(ctx),

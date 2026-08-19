@@ -1114,6 +1114,7 @@ a[role='tab'].is-current {
  */
 .library-write form,
 .author-gear form,
+.account form,
 .plugin-drop form {
   display: flex;
   flex-direction: column;
@@ -1122,7 +1123,8 @@ a[role='tab'].is-current {
 }
 
 .library-write form label,
-.author-gear form label {
+.author-gear form label,
+.account form label {
   display: flex;
   flex-direction: column;
   gap: var(--s1);
@@ -1135,14 +1137,23 @@ a[role='tab'].is-current {
 .library-write form label select,
 .author-gear form label input,
 .author-gear form label textarea,
-.author-gear form label select {
+.author-gear form label select,
+.account form label input {
   color: var(--text);
   font-size: var(--t-ui);
 }
 
 .library-write form button[type='submit'],
-.author-gear form button[type='submit'] {
+.author-gear form button[type='submit'],
+.account form button[type='submit'] {
   align-self: flex-start;
+}
+
+/* A panel on a screen the server renders: its own block, with room in it. */
+.account .panel {
+  padding: var(--s4);
+  margin-top: var(--s4);
+  max-width: 34rem;
 }
 
 /* A screen the server renders, inside the cavity.

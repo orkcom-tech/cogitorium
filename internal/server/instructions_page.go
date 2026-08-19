@@ -191,7 +191,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, page, fragme
 		AppHead: s.appHead(),
 		Title:   title,
 		Body:    template.HTML(body.String()),
-		Nav:     rt.navFor(r.URL.Path),
+		Nav:     rt.navFor(r.URL.Path, callerFrom(r.Context()).IsAdmin()),
 		Styles:  rt.styles,
 		Scripts: rt.scripts,
 	}
