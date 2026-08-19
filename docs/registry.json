@@ -718,7 +718,7 @@
           "type": "[]Asset"
         }
       ],
-      "body": "{{.AppHead}}\n\u003cscript src=\"/assets/htmx.min.js\" defer\u003e\u003c/script\u003e\n\u003cscript src=\"/assets/htmx-sse.js\" defer\u003e\u003c/script\u003e\n{{template \"cog.shell.tokens\" .}}\n{{range .Styles}}\u003clink rel=\"stylesheet\" href=\"{{.}}\"\u003e\n{{end}}{{range .Scripts}}\u003cscript type=\"module\" src=\"{{.Src}}\"{{if .Integrity}} integrity=\"{{.Integrity}}\"{{end}}\u003e\u003c/script\u003e\n{{end}}{{template \"cog.slot.head\" .}}",
+      "body": "{{.AppHead}}\n\u003cscript src=\"/cog/htmx.min.js\" defer\u003e\u003c/script\u003e\n\u003cscript src=\"/cog/htmx-sse.js\" defer\u003e\u003c/script\u003e\n{{template \"cog.shell.tokens\" .}}\n{{range .Styles}}\u003clink rel=\"stylesheet\" href=\"{{.}}\"\u003e\n{{end}}{{range .Scripts}}\u003cscript type=\"module\" src=\"{{.Src}}\"{{if .Integrity}} integrity=\"{{.Integrity}}\"{{end}}\u003e\u003c/script\u003e\n{{end}}{{template \"cog.slot.head\" .}}",
       "appends": false
     },
     {
