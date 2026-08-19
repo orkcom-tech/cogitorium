@@ -8,7 +8,6 @@ import WorkspacePage from './pages/WorkspacePage'
 import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
 import InstallMap from './pages/InstallMap'
-import PluginsPage from './pages/PluginsPage'
 import { applyTheme, loadTheme } from './styles/theme'
 import Rail from './Rail'
 import { ShellProvider } from './shell'
@@ -109,35 +108,19 @@ export default function App() {
         <main className="cavity">
           <Routes>
             <Route path="/" element={<Navigate to="/workspaces" replace />} />
-            {/* /workspaces is a server template now: the list, sharing,
-                cloning, the colour picker and importing a bundle. */}
+            {/* Everything not listed above is a server template: /workspaces,
+                /gears, /models, /instructions, /context, /env and /plugins.
+                The router must not claim them — a client route would shadow
+                the page and put React back over the top of it.
+
+                What is left here is what a template cannot be. /map and the
+                blueprint are drawn canvases, the editor is live text, and
+                /terminal is a socket: a template renders a thing that exists
+                at a moment, and all four exist in motion. */}
             <Route path="/map" element={<InstallMap />} />
             <Route path="/people" element={user.role === 'admin' ? <AdminPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/terminal" element={user.role === 'admin' ? <TerminalPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/workspaces/:id" element={<WorkspacePage me={user} />} />
-            {/* /context is a server template now, admin-only there as it was
-                here. The component stays: the workspace opens the space as a
-                drawer, which is a different surface still to be converted. */}
-            {/* /gears is a server template now: list, review, approve with
-                its grants, dry run, history, connections and the version
-                comparison. The component stays: the workspace opens the
-                catalogue as a drawer, which is a different surface still to be
-                converted. */}
-            {/* /env is a server template now, admin-only there as it was
-                here: one name set install-wide reaches every workspace. */}
-            {/* /instructions is served by the server as a template now, so
-                the router must not claim it — a client route would shadow the
-                page and put React back over the top of it. The component
-                stays: the workspace still opens the library as a drawer, and
-                that is a different surface with a different name still to be
-                converted. */}
-            {/* /models is a server template now, like /instructions. The
-                component stays: the workspace opens the catalogue as a drawer,
-                and that is a different surface still to be converted. */}
-            <Route
-              path="/plugins"
-              element={user.role === 'admin' ? <PluginsPage /> : <Navigate to="/workspaces" replace />}
-            />
           </Routes>
           </main>
         </div>

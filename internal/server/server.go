@@ -559,6 +559,27 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.page(mux, "POST /memory/save", s.handleSaveMemoryForm)
 	s.page(mux, "POST /memory/forget", s.handleForgetMemoryForm)
 
+	// The library screen, rendered by the system it is about. If the template
+	// stack, the layer order or the approval gate were wrong, this is the
+	// screen that would fail to draw — and the one an operator would be on
+	// when they needed it most.
+	s.page(mux, "GET /plugins", s.handlePluginsPage)
+	s.page(mux, "POST /plugins", s.handleUploadPluginForm)
+	s.page(mux, "POST /plugins/restart", s.handleRestartFromPluginsForm)
+	// Its own path space rather than under /plugins/, for the same reason the
+	// API's is: /plugins/catalog/{id} and /plugins/{id}/approve both match
+	// /plugins/catalog/approve and neither is more specific. Go's mux refuses
+	// that at registration — which is exactly the crash that keeping every
+	// route in one file exists to surface at boot rather than in production.
+	s.page(mux, "POST /plugin-catalog/{id}", s.handleInstallFromCatalogForm)
+	s.page(mux, "POST /plugins/{id}/approve", s.handleApprovePluginForm)
+	s.page(mux, "POST /plugins/{id}/revoke", s.handleRevokePluginForm)
+	s.page(mux, "POST /plugins/{id}/enable", s.handleEnablePluginForm)
+	s.page(mux, "POST /plugins/{id}/disable", s.handleDisablePluginForm)
+	s.page(mux, "POST /plugins/{id}/up", s.handlePluginUpForm)
+	s.page(mux, "POST /plugins/{id}/down", s.handlePluginDownForm)
+	s.page(mux, "POST /plugins/{id}/remove", s.handleRemovePluginForm)
+
 	s.page(mux, "GET /workspaces", s.handleWorkspacesPage)
 	s.page(mux, "POST /workspaces", s.handleCreateWorkspaceForm)
 	s.page(mux, "POST /workspaces/import", s.handleImportWorkspaceForm)

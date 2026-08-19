@@ -1,0 +1,188 @@
+{{/*
+  The library screen, rendered by the system it is about.
+
+  Built around one distinction the server draws and nothing else on this
+  install draws: enabled and live are different questions. A plugin can be
+  switched on and still not be rendering, because its templates could not run
+  against this version — and the gap between those two states is the reason
+  somebody opens this page. So the badge never says "enabled" on its own; it
+  says which of the two it means.
+
+  Everything under the name comes from the server having composed the
+  templates, not from the manifest. A plugin cannot look better here by
+  claiming less.
+*/}}
+
+{{define "cog.page.plugins"}}
+<main class="page">
+  <h2>{{.Ctx.T.Plugins}}</h2>
+
+  {{if .RestartOwed}}<p class="banner">
+    Restart Cogitorium to apply your changes — what is running has not changed yet.
+    {{if .CanRestart}}<form method="post" action="/plugins/restart" class="inline">
+      <button type="submit" class="banner-act">Restart now</button>
+    </form>{{end}}
+  </p>{{end}}
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  {{if .Notice}}<p class="hint">{{.Notice}}</p>{{end}}
+
+  {{/* Dropping a bundle stays above both views and visible in both. It is how
+       you install something the catalog does not list, and putting it behind a
+       tab would make that the advanced path rather than an ordinary one. */}}
+  <form class="plugin-drop" method="post" action="/plugins" enctype="multipart/form-data">
+    <input type="file" name="bundle" accept=".zip,application/zip" required>
+    <button type="submit">install it</button>
+    <span class="hint">Drop a plugin bundle here, or choose one. It arrives switched off.</span>
+  </form>
+
+  <div class="plugin-views" role="tablist">
+    <a role="tab" href="/plugins" class="{{if .Library}}{{else}}is-current{{end}}">Installed</a>
+    <a role="tab" href="/plugins?view=library" class="{{if .Library}}is-current{{end}}">Library</a>
+  </div>
+
+  {{if .Library}}{{template "cog.list.catalog" .}}{{else}}
+    <form class="plugin-filters" method="get" action="/plugins"
+          hx-get="/plugins" hx-target="#plugin-list" hx-swap="outerHTML"
+          hx-trigger="submit, input from:input[name='q'] delay:250ms">
+      <input type="search" name="q" value="{{.Query}}"
+             placeholder="Search by name, id, or a template it overrides"
+             aria-label="Search plugins">
+    </form>
+    {{template "cog.list.plugins" .}}
+  {{end}}
+</main>
+{{end}}
+
+{{define "cog.list.plugins"}}<div id="plugin-list" class="plugin-list">
+{{if .Items}}{{range .Items}}{{template "cog.row.plugin" .}}{{end}}{{else}}{{template "cog.empty.plugins" .}}{{end}}
+</div>{{end}}
+
+{{define "cog.row.plugin"}}<section class="card">
+  <header class="plugin-head">
+    <h3>{{.Name}} <span class="hint">{{.Version}}</span></h3>
+    {{if .StateTone}}<span class="badge is-{{.StateTone}}">{{.State}}</span>{{else}}<span class="badge">{{.State}}</span>{{end}}
+  </header>
+
+  {{/* When it is off, this is history rather than a current fault — and it is
+       exactly what somebody needs to read before switching it back on. */}}
+  {{if .Problem}}<p class="error">{{.Problem}}</p>{{end}}
+  {{if .Refusal}}<p class="error">{{.Refusal}}</p>{{end}}
+
+  {{if .Pending}}<p class="hint">{{.Pending}}</p>{{end}}
+  {{if .ApprovedBy}}<p class="hint">
+    Approved by {{.ApprovedBy}}{{if .ApprovedAt}} on {{.ApprovedAt}}{{end}} — for this exact build.
+    Rebuild it and it comes back here.
+  </p>{{end}}
+
+  {{if .Enabled}}<p class="hint">
+    Layer {{.Order}} — a plugin later in the order renders instead of an earlier one when both
+    define the same name.
+  </p>{{end}}
+
+  {{range .Names}}{{template "cog.list.names" .}}{{end}}
+
+  {{if .Pages}}<div class="plugin-rows">
+    <span class="muted">Pages</span>
+    {{range .Pages}}<span>
+      {{if .Live}}<a href="{{.Path}}">{{.Path}}</a>{{else}}<span>{{.Path}}</span>{{end}}
+      <span class="muted">{{.Auth}}</span>
+    </span>{{end}}
+  </div>{{end}}
+
+
+  <div class="plugin-actions">
+    {{/* An unreadable directory has no manifest anybody could trust, so the
+         only thing offered is taking it away. */}}
+    {{if .Readable}}
+      {{if .Pending}}
+        <form method="post" action="/plugins/{{.ID}}/approve"><button type="submit">Approve</button></form>
+      {{else if .Enabled}}
+        <form method="post" action="/plugins/{{.ID}}/disable"><button type="submit">Disable</button></form>
+        {{if .CanMoveUp}}<form method="post" action="/plugins/{{.ID}}/up">
+          <button type="submit" title="Earlier layer">↑</button></form>{{end}}
+        <form method="post" action="/plugins/{{.ID}}/down">
+          <button type="submit" title="Later layer">↓</button></form>
+      {{else}}
+        <form method="post" action="/plugins/{{.ID}}/enable"><button type="submit">Enable</button></form>
+      {{end}}
+      {{if .ApprovedBy}}<form method="post" action="/plugins/{{.ID}}/revoke">
+        <button type="submit" title="Withdraw the approval and switch it off">Withdraw approval</button>
+      </form>{{end}}
+    {{end}}
+    <form method="post" action="/plugins/{{.ID}}/remove"
+          hx-confirm="Remove {{.Name}}? Its files go; anything it wrote stays.">
+      <button type="submit" class="danger">Remove</button>
+    </form>
+    {{if .Docs}}<a href="{{.Docs}}" target="_blank" rel="noreferrer noopener">Documentation</a>{{end}}
+    {{if .Source}}<a href="{{.Source}}" target="_blank" rel="noreferrer noopener">Source</a>{{end}}
+  </div>
+</section>{{end}}
+
+{{define "cog.list.names"}}<div class="plugin-rows{{if .Tone}} is-{{.Tone}}{{end}}">
+  <span class="muted">{{.Label}}</span>
+  {{range .Names}}<code>{{.}}</code> {{end}}
+</div>{{end}}
+
+{{define "cog.empty.plugins"}}<p class="hint">
+{{if .Narrowed}}Nothing matches that.{{else}}Nothing installed. A plugin is a folder with a <code>plugin.yaml</code> and a <code>templates/</code> directory — drop its zip above, or run <code>cogitorium plugins install &lt;bundle.zip&gt;</code>.{{end}}
+</p>{{end}}
+
+{{define "cog.list.catalog"}}<div id="catalog-list" class="catalog-list">
+  {{if .CatalogFailed}}
+    <p class="error">{{.CatalogFailed}}</p>
+    <p class="hint">
+      The catalog is fetched over the network and this install could not reach it. Nothing is wrong
+      with what you have installed — this list is the only thing missing.
+    </p>
+  {{else}}
+    {{/* A cached list is not a current one, and presenting yesterday's as
+         today's is how somebody installs a version withdrawn yesterday. */}}
+    {{if .Cached}}<p class="banner">
+      This is a cached copy{{if .Fetched}} from {{.Fetched}}{{end}} — the catalog could not be reached just now.
+    </p>{{end}}
+
+    {{if .Updates}}<p class="hint">Newer versions are listed for
+      {{range .Updates}}{{.Name}} ({{.Installed}} → {{.Available}}) {{end}}</p>{{end}}
+    {{/* Said out loud rather than shown as "everything is current": without a
+         published index there are no versions to compare, and an empty update
+         list would otherwise resolve the flattering way. */}}
+    {{if .Versioned}}{{else}}{{if .Catalog}}<p class="hint">
+      The catalog has not published versions yet, so this install cannot tell whether anything you
+      have is out of date.
+    </p>{{end}}{{end}}
+
+    <form class="plugin-filters" method="get" action="/plugins">
+      <input type="hidden" name="view" value="library">
+      <input type="search" name="q" value="{{.CatalogQuery}}" placeholder="Search the catalog"
+             aria-label="Search the catalog">
+    </form>
+
+    {{range .Catalog}}{{template "cog.row.catalogitem" .}}{{else}}
+    <p class="hint">{{if .CatalogQuery}}Nothing in the catalog matches that.{{else}}The catalog lists nothing yet.{{end}}</p>
+    {{end}}
+  {{end}}
+</div>{{end}}
+
+{{define "cog.row.catalogitem"}}<section class="card">
+  <header class="plugin-head">
+    <h3>{{.Name}} <span class="hint">{{.Version}}</span></h3>
+    {{/* Three states, never a tick. A badge that survives a version change is
+         a badge about a name rather than about code. */}}
+    {{if .VerifiedRead}}<span class="badge is-ok">read by the team</span>{{end}}
+    {{if .VerifiedOther}}<span class="badge is-warn" title="The team read {{.VerifiedAt}}, not what you have">read at {{.VerifiedAt}}</span>{{end}}
+    {{if .Unchecked}}<span class="badge">nobody has looked</span>{{end}}
+  </header>
+  <p>{{.Description}}</p>
+  <p class="hint">by {{.Author}} · <a href="{{.Source}}" target="_blank" rel="noreferrer noopener">Read the code</a></p>
+  {{if .VerifiedNote}}<p class="hint">{{if .VerifiedBy}}{{.VerifiedBy}}: {{end}}{{.VerifiedNote}}</p>{{end}}
+  <div class="plugin-actions">
+    {{if .Installed}}
+      {{if .Update}}<form method="post" action="/plugin-catalog/{{.ID}}">
+        <button type="submit">Update to {{.Version}}</button></form>
+      {{else}}<span class="hint">Installed{{if .InstalledVersion}} — {{.InstalledVersion}}{{end}}</span>{{end}}
+    {{else}}
+      <form method="post" action="/plugin-catalog/{{.ID}}"><button type="submit">Install</button></form>
+    {{end}}
+    <span class="hint">Arrives switched off. You approve it after reading it, like anything else.</span>
+  </div>
+</section>{{end}}

@@ -113,13 +113,15 @@ type Strings struct {
 	Workspaces string
 	// Variables is the install-wide named values' title.
 	Variables string
+	// Plugins is the library screen's title.
+	Plugins string
 }
 
 // DefaultStrings is English, which is what this product ships in today. It is
 // a value rather than constants so a plugin overriding the shell can be handed
 // a different one without the host changing shape first.
 func DefaultStrings() Strings {
-	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalog", Context: "Context", Gears: "Gears", Workspaces: "Workspaces", Variables: "Variables & Secrets"}
+	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalog", Context: "Context", Gears: "Gears", Workspaces: "Workspaces", Variables: "Variables & Secrets", Plugins: "Plugins"}
 }
 
 // Action is one control that causes a request.
@@ -247,6 +249,13 @@ func CoreModels() Models {
 		// it, so it is the same list without the page frame — and its own
 		// name, because a plugin overriding the drawer should not have to take
 		// the page with it.
+		"cog.page.plugins":    Plugins{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.plugins":    Plugins{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.plugin":      PluginRow{},
+		"cog.list.names":      NameList{},
+		"cog.list.catalog":    Plugins{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.catalogitem": CatalogRow{},
+		"cog.empty.plugins":   Plugins{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.drawer.terminal": Terminal{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.stage.chat":      Transcript{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.list.messages":   Transcript{Ctx: Ctx{T: DefaultStrings()}},
@@ -369,6 +378,143 @@ type Workspaces struct {
 	Importing bool
 	Error     string
 	Notice    string
+}
+
+// PluginRow is one installed plugin, as the library screen draws it.
+//
+// Everything under the name is computed by the server from what a plugin
+// actually ships, never from what its manifest claimed — so nothing here can
+// be improved by writing a nicer manifest.
+type PluginRow struct {
+	ID      string
+	Name    string
+	Version string
+	Docs    string
+	Source  string
+
+	// Readable is false only when the directory could not be read as a plugin
+	// at all. That is a different thing from a plugin whose templates failed,
+	// and conflating them costs an operator the ability to switch a
+	// still-installed plugin back on.
+	Readable bool
+	// Pending is why it may not be enabled yet, empty when it may. Installing
+	// is not a decision; approval is, and it covers exact content.
+	Pending    string
+	ApprovedBy string
+	ApprovedAt string
+	Dev        bool
+
+	Enabled bool
+	Order   int
+	// Live is whether it is actually rendering. Enabled and live are different
+	// questions, and the gap between them is the reason this screen exists.
+	Live    bool
+	Problem string
+	State   string
+	// StateTone is "ok", "warn", "danger" or empty — which of the four the
+	// badge is, decided here rather than by a template comparing strings.
+	StateTone string
+
+	Tier      string
+	Available bool
+	Refusal   string
+
+	// Names is what this plugin does to the template stack and what it asks
+	// for, already labelled and in the order somebody reads them.
+	//
+	// A list of lists rather than six fields and six ifs in the template: the
+	// first draft wanted a helper function for that, and the function set is a
+	// permanent promise to every plugin author — so the assembling happens
+	// where assembling belongs.
+	Names []NameList
+
+	Pages   []PluginPageRow
+	Hosts   []string
+	Secrets []string
+	API     []string
+
+	CanMoveUp bool
+}
+
+// NameList is one labelled group of template names on a plugin's card.
+type NameList struct {
+	Label string
+	Names []string
+	// Tone is "warn" for the two groups that are news rather than description:
+	// a name overridden without saying so, and one that renders nothing.
+	Tone string
+}
+
+// PluginPageRow is one page a plugin serves.
+type PluginPageRow struct {
+	Path  string
+	Title string
+	Auth  string
+	// Live decides whether the path is a link: a page from a plugin that is
+	// not rendering goes nowhere.
+	Live bool
+}
+
+// CatalogRow is one entry in the shared catalog.
+type CatalogRow struct {
+	ID          string
+	Name        string
+	Author      string
+	Description string
+	Source      string
+	Version     string
+
+	Installed        bool
+	InstalledVersion string
+	Update           bool
+
+	// Verified is three states rather than a badge, because a badge that
+	// survives a version change is a badge about a name rather than about
+	// code.
+	VerifiedRead  bool
+	VerifiedOther bool
+	Unchecked     bool
+	VerifiedAt    string
+	VerifiedBy    string
+	VerifiedNote  string
+}
+
+// Plugins is what the library screen renders against.
+type Plugins struct {
+	Ctx Ctx
+	// Library is true when the catalog half is showing rather than what is
+	// installed. Two views of one question, on one screen.
+	Library bool
+
+	Items    []PluginRow
+	Query    string
+	Sort     string
+	Narrowed bool
+
+	Catalog       []CatalogRow
+	CatalogQuery  string
+	CatalogTotal  int
+	Cached        bool
+	Fetched       string
+	Versioned     bool
+	Updates       []CatalogUpdateRow
+	CatalogFailed string
+
+	// RestartOwed is sticky once true. A restart is owed until it happens, and
+	// somebody who enables three plugins should not watch the reminder vanish
+	// because the last of the three happened to change nothing.
+	RestartOwed bool
+	CanRestart  bool
+	Error       string
+	Notice      string
+}
+
+// CatalogUpdateRow is one installed plugin the catalog offers a newer version
+// of.
+type CatalogUpdateRow struct {
+	Name      string
+	Installed string
+	Available string
 }
 
 // Terminal is the gate around a shell, which is all of a terminal a template
@@ -1086,6 +1232,15 @@ func Exemplars() Models {
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
 
+		"cog.page.plugins": examplePlugins(ctx),
+		"cog.list.plugins": examplePlugins(ctx),
+		"cog.row.plugin":   examplePlugins(ctx).Items[0],
+		"cog.list.names":   NameList{Label: "Overrides", Names: []string{"cog.row.gear"}},
+		"cog.list.catalog": examplePlugins(ctx),
+		"cog.row.catalogitem": CatalogRow{ID: "release-radar", Name: "Release Radar",
+			Author: "someone", Description: "Watches releases.", Unchecked: true},
+		"cog.empty.plugins": Plugins{Ctx: ctx},
+
 		"cog.drawer.terminal": Terminal{Ctx: ctx, Available: true},
 
 		"cog.stage.chat": Transcript{Ctx: ctx, Messages: []ChatMessage{
@@ -1184,6 +1339,25 @@ func exampleWorkspaces(ctx Ctx) Workspaces {
 				Hue: 25, HasHue: true, MayShare: true, Teams: teams},
 		},
 		Models: []Model{{ID: 1, Name: "claude-opus-4", Label: "Opus", Provider: "Anthropic"}},
+	}
+}
+
+func examplePlugins(ctx Ctx) Plugins {
+	return Plugins{
+		Ctx: ctx, CanRestart: true,
+		Items: []PluginRow{
+			{ID: "pulse", Name: "Pulse", Version: "1.0.0", Readable: true, Enabled: true,
+				Order: 1, Live: true, State: "live", StateTone: "ok", Tier: "bundle",
+				Available: true, ApprovedBy: "admin", ApprovedAt: "2026-08-19",
+				Names: []NameList{{Label: "Adds", Names: []string{"pulse.page.panel"}}},
+				Pages: []PluginPageRow{{Path: "/p/pulse/panel", Auth: "token", Live: true}}},
+			{ID: "radar", Name: "Release Radar", Version: "2.4.0", Readable: true,
+				State: "needs approval", StateTone: "warn", Tier: "wasm", Available: true,
+				Pending: "nobody has approved this plugin on this install yet"},
+		},
+		Catalog: []CatalogRow{{ID: "release-radar", Name: "Release Radar", Author: "someone",
+			Description: "Watches releases and files them into a workspace.", Unchecked: true}},
+		CatalogTotal: 1,
 	}
 }
 

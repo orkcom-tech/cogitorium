@@ -112,6 +112,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]AgentCard"
         },
@@ -200,6 +204,10 @@
         },
         {
           "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
           "type": "string"
         },
         {
@@ -346,6 +354,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Gear"
         },
@@ -473,6 +485,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Instruction"
         },
@@ -576,6 +592,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Enabled",
           "type": "bool"
         },
@@ -675,6 +695,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "AgentID",
           "type": "int64"
         },
@@ -770,6 +794,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Units",
           "type": "[]Unit"
         },
@@ -862,6 +890,10 @@
         },
         {
           "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
           "type": "string"
         },
         {
@@ -964,6 +996,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Available",
           "type": "bool"
         },
@@ -1052,6 +1088,10 @@
         },
         {
           "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
           "type": "string"
         },
         {
@@ -1163,6 +1203,10 @@
         },
         {
           "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
           "type": "string"
         },
         {
@@ -1320,6 +1364,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Gear"
         },
@@ -1447,6 +1495,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Instruction"
         },
@@ -1550,6 +1602,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Providers",
           "type": "[]Provider"
         },
@@ -1563,6 +1619,157 @@
         }
       ],
       "body": "\u003cp class=\"hint\"\u003e\nNothing here yet. Add a model from a provider above — until there is one, an agent has nothing to think with.\n\u003c/p\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.empty.plugins",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Library",
+          "type": "bool"
+        },
+        {
+          "path": "Items",
+          "type": "[]PluginRow"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Sort",
+          "type": "string"
+        },
+        {
+          "path": "Narrowed",
+          "type": "bool"
+        },
+        {
+          "path": "Catalog",
+          "type": "[]CatalogRow"
+        },
+        {
+          "path": "CatalogQuery",
+          "type": "string"
+        },
+        {
+          "path": "CatalogTotal",
+          "type": "int"
+        },
+        {
+          "path": "Cached",
+          "type": "bool"
+        },
+        {
+          "path": "Fetched",
+          "type": "string"
+        },
+        {
+          "path": "Versioned",
+          "type": "bool"
+        },
+        {
+          "path": "Updates",
+          "type": "[]CatalogUpdateRow"
+        },
+        {
+          "path": "CatalogFailed",
+          "type": "string"
+        },
+        {
+          "path": "RestartOwed",
+          "type": "bool"
+        },
+        {
+          "path": "CanRestart",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cp class=\"hint\"\u003e\n{{if .Narrowed}}Nothing matches that.{{else}}Nothing installed. A plugin is a folder with a \u003ccode\u003eplugin.yaml\u003c/code\u003e and a \u003ccode\u003etemplates/\u003c/code\u003e directory — drop its zip above, or run \u003ccode\u003ecogitorium plugins install \u0026lt;bundle.zip\u0026gt;\u003c/code\u003e.{{end}}\n\u003c/p\u003e",
       "appends": false
     },
     {
@@ -1641,6 +1848,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]WorkspaceRow"
         },
@@ -1701,6 +1912,157 @@
         }
       ],
       "body": "{{range .}}{{template \"cog.action.button\" .}}{{end}}",
+      "appends": false
+    },
+    {
+      "name": "cog.list.catalog",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Library",
+          "type": "bool"
+        },
+        {
+          "path": "Items",
+          "type": "[]PluginRow"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Sort",
+          "type": "string"
+        },
+        {
+          "path": "Narrowed",
+          "type": "bool"
+        },
+        {
+          "path": "Catalog",
+          "type": "[]CatalogRow"
+        },
+        {
+          "path": "CatalogQuery",
+          "type": "string"
+        },
+        {
+          "path": "CatalogTotal",
+          "type": "int"
+        },
+        {
+          "path": "Cached",
+          "type": "bool"
+        },
+        {
+          "path": "Fetched",
+          "type": "string"
+        },
+        {
+          "path": "Versioned",
+          "type": "bool"
+        },
+        {
+          "path": "Updates",
+          "type": "[]CatalogUpdateRow"
+        },
+        {
+          "path": "CatalogFailed",
+          "type": "string"
+        },
+        {
+          "path": "RestartOwed",
+          "type": "bool"
+        },
+        {
+          "path": "CanRestart",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv id=\"catalog-list\" class=\"catalog-list\"\u003e\n  {{if .CatalogFailed}}\n    \u003cp class=\"error\"\u003e{{.CatalogFailed}}\u003c/p\u003e\n    \u003cp class=\"hint\"\u003e\n      The catalog is fetched over the network and this install could not reach it. Nothing is wrong\n      with what you have installed — this list is the only thing missing.\n    \u003c/p\u003e\n  {{else}}\n    {{/* A cached list is not a current one, and presenting yesterday's as\n         today's is how somebody installs a version withdrawn yesterday. */}}\n    {{if .Cached}}\u003cp class=\"banner\"\u003e\n      This is a cached copy{{if .Fetched}} from {{.Fetched}}{{end}} — the catalog could not be reached just now.\n    \u003c/p\u003e{{end}}\n\n    {{if .Updates}}\u003cp class=\"hint\"\u003eNewer versions are listed for\n      {{range .Updates}}{{.Name}} ({{.Installed}} → {{.Available}}) {{end}}\u003c/p\u003e{{end}}\n    {{/* Said out loud rather than shown as \"everything is current\": without a\n         published index there are no versions to compare, and an empty update\n         list would otherwise resolve the flattering way. */}}\n    {{if .Versioned}}{{else}}{{if .Catalog}}\u003cp class=\"hint\"\u003e\n      The catalog has not published versions yet, so this install cannot tell whether anything you\n      have is out of date.\n    \u003c/p\u003e{{end}}{{end}}\n\n    \u003cform class=\"plugin-filters\" method=\"get\" action=\"/plugins\"\u003e\n      \u003cinput type=\"hidden\" name=\"view\" value=\"library\"\u003e\n      \u003cinput type=\"search\" name=\"q\" value=\"{{.CatalogQuery}}\" placeholder=\"Search the catalog\"\n             aria-label=\"Search the catalog\"\u003e\n    \u003c/form\u003e\n\n    {{range .Catalog}}{{template \"cog.row.catalogitem\" .}}{{else}}\n    \u003cp class=\"hint\"\u003e{{if .CatalogQuery}}Nothing in the catalog matches that.{{else}}The catalog lists nothing yet.{{end}}\u003c/p\u003e\n    {{end}}\n  {{end}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -1776,6 +2138,10 @@
         },
         {
           "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
           "type": "string"
         },
         {
@@ -1922,6 +2288,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Gear"
         },
@@ -2049,6 +2419,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Instruction"
         },
@@ -2152,6 +2526,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Messages",
           "type": "[]ChatMessage"
         },
@@ -2243,6 +2621,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Providers",
           "type": "[]Provider"
         },
@@ -2256,6 +2638,176 @@
         }
       ],
       "body": "\u003cdiv id=\"catalogue\" class=\"model-list\"\u003e\n{{if .Models}}\u003ctable\u003e\n  \u003cthead\u003e\u003ctr\u003e\u003cth\u003eModel\u003c/th\u003e\u003cth\u003eLabel\u003c/th\u003e\u003cth\u003eProvider\u003c/th\u003e\u003cth\u003e\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e\n  \u003ctbody\u003e{{range .Models}}{{template \"cog.row.model\" .}}{{end}}\u003c/tbody\u003e\n\u003c/table\u003e{{else}}{{template \"cog.empty.models\" .}}{{end}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.list.names",
+      "model": [
+        {
+          "path": "Label",
+          "type": "string"
+        },
+        {
+          "path": "Names",
+          "type": "[]string"
+        },
+        {
+          "path": "Tone",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv class=\"plugin-rows{{if .Tone}} is-{{.Tone}}{{end}}\"\u003e\n  \u003cspan class=\"muted\"\u003e{{.Label}}\u003c/span\u003e\n  {{range .Names}}\u003ccode\u003e{{.}}\u003c/code\u003e {{end}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.list.plugins",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Library",
+          "type": "bool"
+        },
+        {
+          "path": "Items",
+          "type": "[]PluginRow"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Sort",
+          "type": "string"
+        },
+        {
+          "path": "Narrowed",
+          "type": "bool"
+        },
+        {
+          "path": "Catalog",
+          "type": "[]CatalogRow"
+        },
+        {
+          "path": "CatalogQuery",
+          "type": "string"
+        },
+        {
+          "path": "CatalogTotal",
+          "type": "int"
+        },
+        {
+          "path": "Cached",
+          "type": "bool"
+        },
+        {
+          "path": "Fetched",
+          "type": "string"
+        },
+        {
+          "path": "Versioned",
+          "type": "bool"
+        },
+        {
+          "path": "Updates",
+          "type": "[]CatalogUpdateRow"
+        },
+        {
+          "path": "CatalogFailed",
+          "type": "string"
+        },
+        {
+          "path": "RestartOwed",
+          "type": "bool"
+        },
+        {
+          "path": "CanRestart",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv id=\"plugin-list\" class=\"plugin-list\"\u003e\n{{if .Items}}{{range .Items}}{{template \"cog.row.plugin\" .}}{{end}}{{else}}{{template \"cog.empty.plugins\" .}}{{end}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -2331,6 +2883,10 @@
         },
         {
           "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
           "type": "string"
         },
         {
@@ -2422,6 +2978,10 @@
         },
         {
           "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
           "type": "string"
         },
         {
@@ -2525,6 +3085,10 @@
         },
         {
           "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
           "type": "string"
         },
         {
@@ -2671,6 +3235,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Gear"
         },
@@ -2798,6 +3366,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Instruction"
         },
@@ -2901,6 +3473,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Providers",
           "type": "[]Provider"
         },
@@ -2992,6 +3568,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -3009,6 +3589,157 @@
         }
       ],
       "body": "\u003cmain class=\"plugin-page\"\u003e{{if .Title}}\u003ch1\u003e{{.Title}}\u003c/h1\u003e{{end}}\u003c/main\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.page.plugins",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Library",
+          "type": "bool"
+        },
+        {
+          "path": "Items",
+          "type": "[]PluginRow"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Sort",
+          "type": "string"
+        },
+        {
+          "path": "Narrowed",
+          "type": "bool"
+        },
+        {
+          "path": "Catalog",
+          "type": "[]CatalogRow"
+        },
+        {
+          "path": "CatalogQuery",
+          "type": "string"
+        },
+        {
+          "path": "CatalogTotal",
+          "type": "int"
+        },
+        {
+          "path": "Cached",
+          "type": "bool"
+        },
+        {
+          "path": "Fetched",
+          "type": "string"
+        },
+        {
+          "path": "Versioned",
+          "type": "bool"
+        },
+        {
+          "path": "Updates",
+          "type": "[]CatalogUpdateRow"
+        },
+        {
+          "path": "CatalogFailed",
+          "type": "string"
+        },
+        {
+          "path": "RestartOwed",
+          "type": "bool"
+        },
+        {
+          "path": "CanRestart",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cmain class=\"page\"\u003e\n  \u003ch2\u003e{{.Ctx.T.Plugins}}\u003c/h2\u003e\n\n  {{if .RestartOwed}}\u003cp class=\"banner\"\u003e\n    Restart Cogitorium to apply your changes — what is running has not changed yet.\n    {{if .CanRestart}}\u003cform method=\"post\" action=\"/plugins/restart\" class=\"inline\"\u003e\n      \u003cbutton type=\"submit\" class=\"banner-act\"\u003eRestart now\u003c/button\u003e\n    \u003c/form\u003e{{end}}\n  \u003c/p\u003e{{end}}\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{if .Notice}}\u003cp class=\"hint\"\u003e{{.Notice}}\u003c/p\u003e{{end}}\n\n  {{/* Dropping a bundle stays above both views and visible in both. It is how\n       you install something the catalog does not list, and putting it behind a\n       tab would make that the advanced path rather than an ordinary one. */}}\n  \u003cform class=\"plugin-drop\" method=\"post\" action=\"/plugins\" enctype=\"multipart/form-data\"\u003e\n    \u003cinput type=\"file\" name=\"bundle\" accept=\".zip,application/zip\" required\u003e\n    \u003cbutton type=\"submit\"\u003einstall it\u003c/button\u003e\n    \u003cspan class=\"hint\"\u003eDrop a plugin bundle here, or choose one. It arrives switched off.\u003c/span\u003e\n  \u003c/form\u003e\n\n  \u003cdiv class=\"plugin-views\" role=\"tablist\"\u003e\n    \u003ca role=\"tab\" href=\"/plugins\" class=\"{{if .Library}}{{else}}is-current{{end}}\"\u003eInstalled\u003c/a\u003e\n    \u003ca role=\"tab\" href=\"/plugins?view=library\" class=\"{{if .Library}}is-current{{end}}\"\u003eLibrary\u003c/a\u003e\n  \u003c/div\u003e\n\n  {{if .Library}}{{template \"cog.list.catalog\" .}}{{else}}\n    \u003cform class=\"plugin-filters\" method=\"get\" action=\"/plugins\"\n          hx-get=\"/plugins\" hx-target=\"#plugin-list\" hx-swap=\"outerHTML\"\n          hx-trigger=\"submit, input from:input[name='q'] delay:250ms\"\u003e\n      \u003cinput type=\"search\" name=\"q\" value=\"{{.Query}}\"\n             placeholder=\"Search by name, id, or a template it overrides\"\n             aria-label=\"Search plugins\"\u003e\n    \u003c/form\u003e\n    {{template \"cog.list.plugins\" .}}\n  {{end}}\n\u003c/main\u003e",
       "appends": false
     },
     {
@@ -3084,6 +3815,10 @@
         },
         {
           "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
           "type": "string"
         },
         {
@@ -3198,6 +3933,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]WorkspaceRow"
         },
@@ -3274,6 +4013,73 @@
         }
       ],
       "body": "\u003cbutton class=\"agent-card{{if .Selected}} selected{{end}}\" data-agent-id=\"{{.ID}}\"\u003e\n  \u003cspan class=\"agent-card-head\"\u003e\n    \u003cspan class=\"dot {{.State}}\" title=\"{{.State}}{{if .Detail}}: {{.Detail}}{{end}}\"\u003e\u003c/span\u003e\n    \u003cspan class=\"agent-name\"\u003e{{.Name}}\u003c/span\u003e\n    {{if .Orchestrator}}\u003cspan class=\"star\" title=\"the workspace entry point\"\u003e★\u003c/span\u003e{{end}}\n  \u003c/span\u003e\n  \u003cspan class=\"agent-spend-big{{if .HasSpend}}{{else}} idle{{end}}\" title=\"{{.SpendDetail}}\"\u003e{{.Spend}}\u003c/span\u003e\n  \u003cspan class=\"agent-model muted\"\u003e{{.Model}}\u003c/span\u003e\n  {{/* No meter before there is anything to meter. An empty track across a card\n       is a hairline rule that means nothing, and every card in a fresh\n       workspace carried one. */}}\n  {{if .HasSpend}}\n    \u003cspan class=\"share-bar\" aria-hidden=\"true\"\u003e\u003cspan style=\"width: {{.Share}}%\"\u003e\u003c/span\u003e\u003c/span\u003e\n    \u003cspan class=\"muted share-label\"\u003e{{.Share}}% of this workspace\u003c/span\u003e\n  {{else}}\n    \u003cspan class=\"muted share-label\"\u003eno spend yet\u003c/span\u003e\n  {{end}}\n\u003c/button\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.row.catalogitem",
+      "model": [
+        {
+          "path": "ID",
+          "type": "string"
+        },
+        {
+          "path": "Name",
+          "type": "string"
+        },
+        {
+          "path": "Author",
+          "type": "string"
+        },
+        {
+          "path": "Description",
+          "type": "string"
+        },
+        {
+          "path": "Source",
+          "type": "string"
+        },
+        {
+          "path": "Version",
+          "type": "string"
+        },
+        {
+          "path": "Installed",
+          "type": "bool"
+        },
+        {
+          "path": "InstalledVersion",
+          "type": "string"
+        },
+        {
+          "path": "Update",
+          "type": "bool"
+        },
+        {
+          "path": "VerifiedRead",
+          "type": "bool"
+        },
+        {
+          "path": "VerifiedOther",
+          "type": "bool"
+        },
+        {
+          "path": "Unchecked",
+          "type": "bool"
+        },
+        {
+          "path": "VerifiedAt",
+          "type": "string"
+        },
+        {
+          "path": "VerifiedBy",
+          "type": "string"
+        },
+        {
+          "path": "VerifiedNote",
+          "type": "string"
+        }
+      ],
+      "body": "\u003csection class=\"card\"\u003e\n  \u003cheader class=\"plugin-head\"\u003e\n    \u003ch3\u003e{{.Name}} \u003cspan class=\"hint\"\u003e{{.Version}}\u003c/span\u003e\u003c/h3\u003e\n    {{/* Three states, never a tick. A badge that survives a version change is\n         a badge about a name rather than about code. */}}\n    {{if .VerifiedRead}}\u003cspan class=\"badge is-ok\"\u003eread by the team\u003c/span\u003e{{end}}\n    {{if .VerifiedOther}}\u003cspan class=\"badge is-warn\" title=\"The team read {{.VerifiedAt}}, not what you have\"\u003eread at {{.VerifiedAt}}\u003c/span\u003e{{end}}\n    {{if .Unchecked}}\u003cspan class=\"badge\"\u003enobody has looked\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n  \u003cp\u003e{{.Description}}\u003c/p\u003e\n  \u003cp class=\"hint\"\u003eby {{.Author}} · \u003ca href=\"{{.Source}}\" target=\"_blank\" rel=\"noreferrer noopener\"\u003eRead the code\u003c/a\u003e\u003c/p\u003e\n  {{if .VerifiedNote}}\u003cp class=\"hint\"\u003e{{if .VerifiedBy}}{{.VerifiedBy}}: {{end}}{{.VerifiedNote}}\u003c/p\u003e{{end}}\n  \u003cdiv class=\"plugin-actions\"\u003e\n    {{if .Installed}}\n      {{if .Update}}\u003cform method=\"post\" action=\"/plugin-catalog/{{.ID}}\"\u003e\n        \u003cbutton type=\"submit\"\u003eUpdate to {{.Version}}\u003c/button\u003e\u003c/form\u003e\n      {{else}}\u003cspan class=\"hint\"\u003eInstalled{{if .InstalledVersion}} — {{.InstalledVersion}}{{end}}\u003c/span\u003e{{end}}\n    {{else}}\n      \u003cform method=\"post\" action=\"/plugin-catalog/{{.ID}}\"\u003e\u003cbutton type=\"submit\"\u003eInstall\u003c/button\u003e\u003c/form\u003e\n    {{end}}\n    \u003cspan class=\"hint\"\u003eArrives switched off. You approve it after reading it, like anything else.\u003c/span\u003e\n  \u003c/div\u003e\n\u003c/section\u003e",
       "appends": false
     },
     {
@@ -3700,6 +4506,113 @@
       "appends": false
     },
     {
+      "name": "cog.row.plugin",
+      "model": [
+        {
+          "path": "ID",
+          "type": "string"
+        },
+        {
+          "path": "Name",
+          "type": "string"
+        },
+        {
+          "path": "Version",
+          "type": "string"
+        },
+        {
+          "path": "Docs",
+          "type": "string"
+        },
+        {
+          "path": "Source",
+          "type": "string"
+        },
+        {
+          "path": "Readable",
+          "type": "bool"
+        },
+        {
+          "path": "Pending",
+          "type": "string"
+        },
+        {
+          "path": "ApprovedBy",
+          "type": "string"
+        },
+        {
+          "path": "ApprovedAt",
+          "type": "string"
+        },
+        {
+          "path": "Dev",
+          "type": "bool"
+        },
+        {
+          "path": "Enabled",
+          "type": "bool"
+        },
+        {
+          "path": "Order",
+          "type": "int"
+        },
+        {
+          "path": "Live",
+          "type": "bool"
+        },
+        {
+          "path": "Problem",
+          "type": "string"
+        },
+        {
+          "path": "State",
+          "type": "string"
+        },
+        {
+          "path": "StateTone",
+          "type": "string"
+        },
+        {
+          "path": "Tier",
+          "type": "string"
+        },
+        {
+          "path": "Available",
+          "type": "bool"
+        },
+        {
+          "path": "Refusal",
+          "type": "string"
+        },
+        {
+          "path": "Names",
+          "type": "[]NameList"
+        },
+        {
+          "path": "Pages",
+          "type": "[]PluginPageRow"
+        },
+        {
+          "path": "Hosts",
+          "type": "[]string"
+        },
+        {
+          "path": "Secrets",
+          "type": "[]string"
+        },
+        {
+          "path": "API",
+          "type": "[]string"
+        },
+        {
+          "path": "CanMoveUp",
+          "type": "bool"
+        }
+      ],
+      "body": "\u003csection class=\"card\"\u003e\n  \u003cheader class=\"plugin-head\"\u003e\n    \u003ch3\u003e{{.Name}} \u003cspan class=\"hint\"\u003e{{.Version}}\u003c/span\u003e\u003c/h3\u003e\n    {{if .StateTone}}\u003cspan class=\"badge is-{{.StateTone}}\"\u003e{{.State}}\u003c/span\u003e{{else}}\u003cspan class=\"badge\"\u003e{{.State}}\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n\n  {{/* When it is off, this is history rather than a current fault — and it is\n       exactly what somebody needs to read before switching it back on. */}}\n  {{if .Problem}}\u003cp class=\"error\"\u003e{{.Problem}}\u003c/p\u003e{{end}}\n  {{if .Refusal}}\u003cp class=\"error\"\u003e{{.Refusal}}\u003c/p\u003e{{end}}\n\n  {{if .Pending}}\u003cp class=\"hint\"\u003e{{.Pending}}\u003c/p\u003e{{end}}\n  {{if .ApprovedBy}}\u003cp class=\"hint\"\u003e\n    Approved by {{.ApprovedBy}}{{if .ApprovedAt}} on {{.ApprovedAt}}{{end}} — for this exact build.\n    Rebuild it and it comes back here.\n  \u003c/p\u003e{{end}}\n\n  {{if .Enabled}}\u003cp class=\"hint\"\u003e\n    Layer {{.Order}} — a plugin later in the order renders instead of an earlier one when both\n    define the same name.\n  \u003c/p\u003e{{end}}\n\n  {{range .Names}}{{template \"cog.list.names\" .}}{{end}}\n\n  {{if .Pages}}\u003cdiv class=\"plugin-rows\"\u003e\n    \u003cspan class=\"muted\"\u003ePages\u003c/span\u003e\n    {{range .Pages}}\u003cspan\u003e\n      {{if .Live}}\u003ca href=\"{{.Path}}\"\u003e{{.Path}}\u003c/a\u003e{{else}}\u003cspan\u003e{{.Path}}\u003c/span\u003e{{end}}\n      \u003cspan class=\"muted\"\u003e{{.Auth}}\u003c/span\u003e\n    \u003c/span\u003e{{end}}\n  \u003c/div\u003e{{end}}\n\n\n  \u003cdiv class=\"plugin-actions\"\u003e\n    {{/* An unreadable directory has no manifest anybody could trust, so the\n         only thing offered is taking it away. */}}\n    {{if .Readable}}\n      {{if .Pending}}\n        \u003cform method=\"post\" action=\"/plugins/{{.ID}}/approve\"\u003e\u003cbutton type=\"submit\"\u003eApprove\u003c/button\u003e\u003c/form\u003e\n      {{else if .Enabled}}\n        \u003cform method=\"post\" action=\"/plugins/{{.ID}}/disable\"\u003e\u003cbutton type=\"submit\"\u003eDisable\u003c/button\u003e\u003c/form\u003e\n        {{if .CanMoveUp}}\u003cform method=\"post\" action=\"/plugins/{{.ID}}/up\"\u003e\n          \u003cbutton type=\"submit\" title=\"Earlier layer\"\u003e↑\u003c/button\u003e\u003c/form\u003e{{end}}\n        \u003cform method=\"post\" action=\"/plugins/{{.ID}}/down\"\u003e\n          \u003cbutton type=\"submit\" title=\"Later layer\"\u003e↓\u003c/button\u003e\u003c/form\u003e\n      {{else}}\n        \u003cform method=\"post\" action=\"/plugins/{{.ID}}/enable\"\u003e\u003cbutton type=\"submit\"\u003eEnable\u003c/button\u003e\u003c/form\u003e\n      {{end}}\n      {{if .ApprovedBy}}\u003cform method=\"post\" action=\"/plugins/{{.ID}}/revoke\"\u003e\n        \u003cbutton type=\"submit\" title=\"Withdraw the approval and switch it off\"\u003eWithdraw approval\u003c/button\u003e\n      \u003c/form\u003e{{end}}\n    {{end}}\n    \u003cform method=\"post\" action=\"/plugins/{{.ID}}/remove\"\n          hx-confirm=\"Remove {{.Name}}? Its files go; anything it wrote stays.\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eRemove\u003c/button\u003e\n    \u003c/form\u003e\n    {{if .Docs}}\u003ca href=\"{{.Docs}}\" target=\"_blank\" rel=\"noreferrer noopener\"\u003eDocumentation\u003c/a\u003e{{end}}\n    {{if .Source}}\u003ca href=\"{{.Source}}\" target=\"_blank\" rel=\"noreferrer noopener\"\u003eSource\u003c/a\u003e{{end}}\n  \u003c/div\u003e\n\u003c/section\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.row.provider",
       "model": [
         {
@@ -4002,6 +4915,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -4102,6 +5019,10 @@
         },
         {
           "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
           "type": "string"
         },
         {
@@ -4208,6 +5129,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -4308,6 +5233,10 @@
         },
         {
           "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
           "type": "string"
         },
         {
@@ -4414,6 +5343,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -4514,6 +5447,10 @@
         },
         {
           "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
           "type": "string"
         },
         {
@@ -4620,6 +5557,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -4720,6 +5661,10 @@
         },
         {
           "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
           "type": "string"
         },
         {
