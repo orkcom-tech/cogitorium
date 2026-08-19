@@ -15,6 +15,9 @@ import { api, type CatalogEntry, type CatalogListing, type Plugin, type PluginAc
  * claiming less.
  */
 
+/** Not a plugin id: ids are lowercase, so this cannot collide with one. */
+const RESTART = '\u0000restart'
+
 type Sort = 'state' | 'name' | 'order'
 type View = 'installed' | 'library'
 type CatalogSort = 'name' | 'author' | 'verified'
@@ -91,6 +94,39 @@ export default function PluginsPage() {
     [reload],
   )
 
+  /** Restarting is not a plugin, so it borrows the busy slot under a name no
+   *  plugin can have — ids are lowercase and this is not. */
+  const restart = useCallback(() => {
+    setBusy(RESTART)
+    api
+      .restart()
+      .then((res) => {
+        setNotice(res.message)
+        setError(null)
+        // The server is replacing itself, so this poll is waiting for a
+        // different process to answer on the same port. Reloading immediately
+        // would show a connection error for the second it takes.
+        const until = Date.now() + 30_000
+        const poll = () => {
+          api.plugins
+            .list()
+            .then(() => window.location.reload())
+            .catch(() => {
+              if (Date.now() < until) setTimeout(poll, 500)
+              else {
+                setBusy(null)
+                setError('It has not come back. Check the terminal it was started from.')
+              }
+            })
+        }
+        setTimeout(poll, 1000)
+      })
+      .catch((e: Error) => {
+        setError(e.message)
+        setBusy(null)
+      })
+  }, [])
+
   const shown = useMemo(() => filterAndSort(plugins, query, sort), [plugins, query, sort])
 
   return (
@@ -99,7 +135,10 @@ export default function PluginsPage() {
 
       {restartOwed && (
         <p className="banner">
-          Restart Cogitorium to apply your changes — what is running has not changed yet.
+          Restart Cogitorium to apply your changes — what is running has not changed yet.{' '}
+          <button className="banner-act" disabled={busy === RESTART} onClick={restart}>
+            {busy === RESTART ? 'Restarting…' : 'Restart now'}
+          </button>
         </p>
       )}
       {error && <p className="error">{error}</p>}

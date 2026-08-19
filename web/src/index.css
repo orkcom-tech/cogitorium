@@ -3688,3 +3688,21 @@ button.big {
   border-color: currentColor;
   opacity: 1;
 }
+
+/* Inside the banner rather than beside it: the sentence says a restart is
+   owed, and the thing that does it belongs in the same breath. */
+.banner-act {
+  margin-left: 0.5rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  padding: 0.1rem 0.7rem;
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+.banner-act:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

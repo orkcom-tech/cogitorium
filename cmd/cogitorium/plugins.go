@@ -122,9 +122,11 @@ func newPluginsCmds() *cobra.Command {
 		Short: "Work on a plugin from a directory, with no build step",
 		Long: "Registers a directory as a development layer: no version directory, no digest,\n" +
 			"no signature, and shown as such wherever plugins are listed.\n\n" +
-			"--watch re-execs the server when a file under it changes. Restart-to-activate\n" +
-			"is the model, so automating the restart is not designing around it — it IS the\n" +
-			"development loop.",
+			"--watch prints every change under the directory. It does NOT restart anything:\n" +
+			"what restarts a process is whatever supervises it, and a command that killed\n" +
+			"your server because you saved a file would be a worse surprise than the one it\n" +
+			"saves you. Pipe it into your own loop, or press Restart now on the plugins\n" +
+			"screen — the server can replace itself in place, keeping its pid.",
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -142,13 +144,14 @@ func newPluginsCmds() *cobra.Command {
 			}
 			fmt.Printf("%s %s is now a development layer at %s\n", in.Manifest.ID, in.Version, in.Dir)
 			if !watch {
-				fmt.Println("Restart Cogitorium to apply. Add --watch to reload on every change.")
+				fmt.Println("Restart Cogitorium to apply — from the plugins screen, or however " +
+					"you started it. Add --watch to be told when a file changes.")
 				return nil
 			}
 			return watchDir(cmd.Context(), in.Dir)
 		},
 	}
-	devCmd.Flags().BoolVar(&watch, "watch", false, "report every change, so a supervisor can restart")
+	devCmd.Flags().BoolVar(&watch, "watch", false, "print every change under the directory")
 	root.AddCommand(devCmd)
 
 	var refDir, fromFile string

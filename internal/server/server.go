@@ -314,6 +314,9 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.routeIn(mux, "PUT /api/v1/plugins/order", s.handleOrderPlugins, struct {
 		Order []string `json:"order"`
 	}{})
+	// Not under /plugins/, because restarting is not a plugin operation even
+	// though the plugin screen is what mostly asks for it.
+	s.route(mux, "POST /api/v1/restart", s.handleRestart)
 	s.route(mux, "POST /api/v1/plugins/{id}/approve", s.handleApprovePlugin)
 	s.route(mux, "POST /api/v1/plugins/{id}/revoke", s.handleRevokePlugin)
 	s.route(mux, "POST /api/v1/plugins/{id}/enable", s.handleEnablePlugin)

@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/orkcom-tech/cogitorium/internal/abi"
+	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/store"
 	"github.com/orkcom-tech/cogitorium/internal/work"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -462,4 +465,23 @@ func testDB(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 	return db
+}
+
+// Restart is admin-only, like every other route that changes what runs.
+//
+// It replaces the process image, so an ordinary member being able to call it
+// would be an ordinary member being able to interrupt everybody's work.
+func TestRestartIsRefusedToANonAdmin(t *testing.T) {
+	s := &Server{}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/restart", nil)
+	req = req.WithContext(withCaller(req.Context(), identity.User{
+		Name: "someone", Role: identity.RoleMember,
+	}))
+
+	s.handleRestart(rec, req)
+
+	if rec.Code == http.StatusOK {
+		t.Fatalf("a member restarted the server: %d %s", rec.Code, rec.Body)
+	}
 }

@@ -815,6 +815,10 @@ export const api = {
       req<PluginAction>('/api/v1/plugins/order', { method: 'PUT', body: JSON.stringify({ order }) }),
     remove: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}`, { method: 'DELETE' }),
   },
+  /** Restart-to-activate is the model, so the product has to be able to do
+   *  it. Every screen that changes the plugin set ends by saying "restart
+   *  Cogitorium", and until this existed there was nothing to press. */
+  restart: () => req<{ restarting: boolean; message: string }>('/api/v1/restart', { method: 'POST' }),
   catalog: {
     /** Search runs on the server, over the whole catalog, rather than
      *  filtering a list the browser already holds — the list is one file and
