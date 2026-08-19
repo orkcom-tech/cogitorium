@@ -257,6 +257,81 @@ func (s *Server) handleRemovePlugin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleApprovePlugin records the operator's decision about what is installed.
+//
+// It approves the CONTENT on disk, not the name: the digest is read from what
+// this machine holds rather than taken from the request, so a decision can
+// only ever be about bytes somebody could have looked at.
+func (s *Server) handleApprovePlugin(w http.ResponseWriter, r *http.Request) {
+	caller, ok := requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	store, ok := s.pluginStore(w)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+
+	a, err := store.Approve(id, caller.Name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Written down at the moment it happens, because this is the decision the
+	// whole product's trust story rests on and a log is where somebody looks
+	// afterwards to find out who made it.
+	slog.Warn("a plugin was approved",
+		"plugin", id, "version", a.Version, "digest", a.Digest, "by", caller.Name)
+
+	in, err := store.Get(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	in.Pending, in.Approval = store.Pending(id), a
+	v := s.pluginView(in, s.pluginCaps())
+	writeJSON(w, http.StatusOK, pluginActionResult{
+		// Approving changes nothing that is running: it makes enabling
+		// possible, and enabling is what needs the restart.
+		Restart: false,
+		Plugin:  &v,
+		Message: fmt.Sprintf("%s %s approved. Enable it to put it in the layer order.",
+			in.Manifest.Name, in.Version),
+	})
+}
+
+// handleRevokePlugin withdraws the decision and disables the plugin.
+func (s *Server) handleRevokePlugin(w http.ResponseWriter, r *http.Request) {
+	caller, ok := requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	store, ok := s.pluginStore(w)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+
+	wasLive := false
+	if s.plugins != nil {
+		for _, loaded := range s.plugins.report.Loaded {
+			if loaded == id {
+				wasLive = true
+			}
+		}
+	}
+	if err := store.Revoke(id); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	slog.Warn("a plugin's approval was withdrawn", "plugin", id, "by", caller.Name)
+	writeJSON(w, http.StatusOK, pluginActionResult{
+		Restart: wasLive,
+		Message: restartLine(fmt.Sprintf("%s is no longer approved and has been disabled.", id), wasLive),
+	})
+}
+
 func (s *Server) pluginStore(w http.ResponseWriter) (*plugin.Store, bool) {
 	store, err := plugin.Open(s.dataDir)
 	if err != nil {

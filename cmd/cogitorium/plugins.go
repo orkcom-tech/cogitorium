@@ -177,8 +177,13 @@ func newPluginsCmds() *cobra.Command {
 						continue
 					}
 					state := "installed"
-					if in.Enabled {
+					switch {
+					case in.Dev:
+						state = fmt.Sprintf("development #%d", in.Order+1)
+					case in.Enabled:
 						state = fmt.Sprintf("enabled #%d", in.Order+1)
+					case in.Pending != "":
+						state = "pending approval"
 					}
 					r := plugin.Resolve(in.Manifest, caps)
 					tier := string(r.Tier)
@@ -223,8 +228,57 @@ func newPluginsCmds() *cobra.Command {
 			// person is deciding, and deciding on a list they have to go and
 			// find is deciding on a list they will not read.
 			printDeclarations(in.Manifest)
-			fmt.Printf("\nIt is installed and OFF. Enable it with:\n  cogitorium plugins enable %s\n",
-				in.Manifest.ID)
+			fmt.Printf("\nIt is installed and NOT approved. Nothing of its runs until somebody "+
+				"decides about it:\n  cogitorium plugins approve %s\n", in.Manifest.ID)
+			return nil
+		},
+	})
+
+	root.AddCommand(&cobra.Command{
+		Use:   "approve <id>",
+		Short: "Approve exactly what is installed, so it can be enabled",
+		Long: "Approval covers exact content, not a name. A plugin whose bytes change returns\n" +
+			"to pending — a decision made about code somebody read is not a decision about\n" +
+			"code they have not.",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, _, err := load(cmd)
+			if err != nil {
+				return err
+			}
+			in, err := s.Get(args[0])
+			if err != nil {
+				return err
+			}
+			// Printed before the decision, because deciding on a list somebody
+			// has to go and find is deciding on a list they will not read.
+			printDeclarations(in.Manifest)
+			a, err := s.Approve(args[0], operatorName())
+			if err != nil {
+				return err
+			}
+			fmt.Printf("\nApproved %s %s\n  %s\n\nEnable it with:\n  cogitorium plugins enable %s\n",
+				args[0], a.Version, a.Digest, args[0])
+			return nil
+		},
+	})
+
+	root.AddCommand(&cobra.Command{
+		Use:          "revoke <id>",
+		Short:        "Withdraw approval and disable the plugin",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, _, err := load(cmd)
+			if err != nil {
+				return err
+			}
+			if err := s.Revoke(args[0]); err != nil {
+				return err
+			}
+			fmt.Printf("%s is no longer approved and has been disabled. Restart Cogitorium to apply.\n",
+				args[0])
 			return nil
 		},
 	})
@@ -372,6 +426,18 @@ func newPluginsCmds() *cobra.Command {
 	})
 
 	return root
+}
+
+// operatorName is who a decision is recorded against on the command line.
+// The shell's own idea of who is running, because a CLI has no session and
+// pretending it does would put a fixed word in an audit trail.
+func operatorName() string {
+	for _, k := range []string{"COGITORIUM_OPERATOR", "USER", "USERNAME"} {
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			return v
+		}
+	}
+	return "console"
 }
 
 // printDeclarations shows what a manifest asks for, grouped the way the

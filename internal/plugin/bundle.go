@@ -79,6 +79,23 @@ func (s *Store) Install(archive string) (Installed, string, error) {
 	if err := s.SetCurrent(m.ID, m.Version); err != nil {
 		return Installed{}, digest, err
 	}
+	// Recorded so approval has something to bind to. Without it a decision
+	// could only ever name a version, and a version is a label an author
+	// controls rather than the content an operator read.
+	if err := s.setDigest(m.ID, digest); err != nil {
+		return Installed{}, digest, err
+	}
+	// Content that is no longer what was approved must not stay enabled.
+	//
+	// Without this, replacing an approved plugin's bytes leaves it running on
+	// a decision made about different code — which is the exact hole approval
+	// exists to close, and it would close it only for plugins nobody had
+	// approved yet.
+	if why := s.Pending(m.ID); why != "" {
+		if err := s.Disable(m.ID); err != nil {
+			return Installed{}, digest, err
+		}
+	}
 
 	in, err := s.Get(m.ID)
 	return in, digest, err

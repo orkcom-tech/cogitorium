@@ -29,6 +29,15 @@ func install(t *testing.T, s *Store, id, version string, extra ...string) {
 	if err := s.SetCurrent(id, version); err != nil {
 		t.Fatal(err)
 	}
+	// A real install records a digest; these fixtures are about ordering and
+	// lifecycle, so they stand in for one and approve it. Approval itself is
+	// tested in approval_test.go.
+	if err := s.setDigest(id, "sha256:"+strings.Repeat("0", 64)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Approve(id, "test"); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func open(t *testing.T) *Store {

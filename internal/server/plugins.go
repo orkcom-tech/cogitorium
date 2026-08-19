@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/channel"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
@@ -377,6 +378,17 @@ type PluginView struct {
 	// still-installed plugin back on.
 	Readable bool `json:"readable"`
 
+	// Pending is why this plugin may not be enabled yet, empty when it may.
+	// Installing is not a decision; approval is, and it covers exact content.
+	Pending string `json:"pending,omitempty"`
+	// ApprovedBy and ApprovedAt record the decision, when there is one.
+	ApprovedBy string `json:"approved_by,omitempty"`
+	ApprovedAt string `json:"approved_at,omitempty"`
+	// Dev marks a working directory rather than an installed version. An
+	// operator should never have to wonder whether what they are looking at is
+	// somebody's working copy.
+	Dev bool `json:"dev"`
+
 	Enabled bool `json:"enabled"`
 	// Order is the position in the enable list, 1-based, or 0 when off.
 	// Position is precedence: a plugin later in the list renders instead of
@@ -470,8 +482,11 @@ func (s *Server) pluginView(in plugin.Installed, caps plugin.Capabilities) Plugi
 	v := PluginView{
 		ID: m.ID, Name: m.Name, Version: in.Version, Readable: true,
 		Docs: m.Docs, Source: m.Source,
-		Enabled: in.Enabled,
-		Hosts:   m.Hosts, Secrets: m.Secrets, API: m.API,
+		Enabled: in.Enabled, Pending: in.Pending, Dev: in.Dev,
+		Hosts: m.Hosts, Secrets: m.Secrets, API: m.API,
+	}
+	if in.Approval.Digest != "" {
+		v.ApprovedBy, v.ApprovedAt = in.Approval.By, in.Approval.At.Format(time.RFC3339)
 	}
 	if in.Enabled {
 		v.Order = in.Order + 1

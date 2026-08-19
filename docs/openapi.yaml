@@ -859,6 +859,19 @@ paths:
       responses:
         default:
           description: see the reference
+  "/api/v1/plugins/{id}/approve":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create plugins/{id}/approve"
+      responses:
+        default:
+          description: see the reference
   "/api/v1/plugins/{id}/disable":
     parameters:
       - name: "id"
@@ -882,6 +895,19 @@ paths:
           format: int64
     post:
       summary: "Create plugins/{id}/enable"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/plugins/{id}/revoke":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create plugins/{id}/revoke"
       responses:
         default:
           description: see the reference

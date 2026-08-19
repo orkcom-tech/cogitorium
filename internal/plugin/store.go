@@ -66,6 +66,12 @@ type Installed struct {
 	// ID is the directory name, which is the only thing known about a broken
 	// install and the only thing needed to remove it.
 	ID string
+	// Pending is why this plugin may not be enabled, or empty when it may.
+	// A development layer is never pending: an author approving their own
+	// edits on every save is a ceremony that teaches them to click through.
+	Pending string
+	// Approval is the recorded decision, when there is one.
+	Approval Approval
 	// Dev marks a layer that is a directory somebody is working in rather than
 	// an installed version. It has no digest, no signature and no version
 	// directory, and it is shown as such — an operator looking at a plugins
@@ -152,6 +158,8 @@ func (s *Store) List() ([]Installed, error) {
 			continue
 		}
 		in.ID = in.Manifest.ID
+		in.Pending = s.Pending(in.ID)
+		in.Approval, _ = s.Approved(in.ID)
 		if i, ok := pos[in.Manifest.ID]; ok {
 			in.Enabled, in.Order = true, i
 		} else {
@@ -379,6 +387,11 @@ func (s *Store) Enable(id string) error {
 	}
 	if _, err := s.read(id); err != nil {
 		return fmt.Errorf("plugin: cannot enable %q: %w", id, err)
+	}
+	// The gate. Installing is not a decision; this is where one is required,
+	// and it is required of the content on disk rather than of the name.
+	if why := s.Pending(id); why != "" {
+		return fmt.Errorf("plugin %q has not been approved: %s", id, why)
 	}
 	return s.SetOrder(append(order, id))
 }

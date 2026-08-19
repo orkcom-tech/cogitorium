@@ -35,6 +35,16 @@ func TestInstallDoesNotEnable(t *testing.T) {
 		t.Errorf("installing must not write an enable list: %v", err)
 	}
 
+	// Installing is not a decision, so enabling is refused until one is made.
+	cmd := newPluginsCmds()
+	cmd.SetArgs([]string{"enable", "radar", "--data", dir})
+	cmd.SetOut(devNull{})
+	cmd.SetErr(devNull{})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("enabling an unapproved plugin must be refused")
+	}
+
+	run(t, "approve", "radar", "--data", dir)
 	run(t, "enable", "radar", "--data", dir)
 	b, err := os.ReadFile(filepath.Join(dir, "plugins.order"))
 	if err != nil {
@@ -52,6 +62,7 @@ func TestEveryVerbHonoursTheDataFlag(t *testing.T) {
 	bundle := writeBundle(t, "schema: 1\nid: radar\nname: Radar\nversion: 1.0.0\nhost:\n  contract: 1\n")
 
 	run(t, "install", bundle, "--data", dir)
+	run(t, "approve", "radar", "--data", dir)
 	run(t, "enable", "radar", "--data", dir)
 	run(t, "order", "radar", "--data", dir)
 	run(t, "check", "--data", dir)
