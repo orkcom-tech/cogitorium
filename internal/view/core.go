@@ -293,6 +293,7 @@ func CoreModels() Models {
 		"cog.page.people":     People{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.page.account":    Account{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.frag.password":   Account{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.frag.library":    Instructions{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.list.users":      People{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.person":      Person{},
 		"cog.list.teams":      People{Ctx: Ctx{T: DefaultStrings()}},
@@ -1223,6 +1224,13 @@ type Instruction struct {
 	UpdatedAt string
 }
 
+// TagList is the tags as one field, for the form that edits them.
+//
+// A method rather than a second stored field, and joined here rather than in
+// the template, because joining in a template needs a function and the
+// function set is a permanent promise to every plugin author.
+func (i Instruction) TagList() string { return strings.Join(i.Tags, ", ") }
+
 // Tag is one filter option.
 type Tag struct {
 	Name     string
@@ -1367,6 +1375,7 @@ func Exemplars() Models {
 		"cog.page.people":   examplePeople(ctx),
 		"cog.page.account":  Account{Ctx: ctx, Name: "admin", IsAdmin: true},
 		"cog.frag.password": Account{Ctx: ctx, Name: "admin", IsAdmin: true},
+		"cog.frag.library":  exampleLibrary(ctx),
 		"cog.list.users":    examplePeople(ctx),
 		"cog.row.person":    examplePeople(ctx).Users[0],
 		"cog.list.teams":    examplePeople(ctx),

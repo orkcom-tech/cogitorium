@@ -17,18 +17,6 @@
 
   {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
 
-  <form class="library-filters" method="get" action="/instructions"
-        hx-get="/instructions" hx-target="#library-list" hx-swap="outerHTML"
-        hx-trigger="submit, input from:input[name='q'] delay:250ms, change from:select">
-    <input type="search" name="q" value="{{.Query}}" placeholder="Search names, descriptions and text"
-           aria-label="Search the library">
-    <select name="tag" aria-label="Filter by tag">
-      <option value="">every tag</option>
-      {{range .Tags}}<option value="{{.Name}}"{{if .Selected}} selected{{end}}>{{.Name}}</option>{{end}}
-    </select>
-    <noscript><button type="submit">Search</button></noscript>
-  </form>
-
   <details class="library-write">
     <summary>Write one</summary>
     {{/* A plain POST to this page. The answer is the page again, which is what
@@ -44,9 +32,33 @@
     </form>
   </details>
 
-  {{template "cog.list.instructions" .}}
+  {{template "cog.frag.library" .}}
 </main>
 {{end}}
+
+{{/*
+  The filter and the rows together, because the filter's options are BUILT from
+  the rows. Swapping the rows alone left the tag list offering a tag that
+  belonged to the instruction just deleted — a filter that finds nothing and
+  cannot be got out of except by reloading.
+
+  The write form stays outside it, so searching does not fold it shut mid-typing.
+*/}}
+{{define "cog.frag.library"}}<div id="library-panel">
+  <form class="library-filters" method="get" action="/instructions"
+        hx-get="/instructions" hx-target="#library-panel" hx-swap="outerHTML"
+        hx-trigger="submit, input from:input[name='q'] delay:250ms, change from:select">
+    <input type="search" name="q" value="{{.Query}}" placeholder="Search names, descriptions and text"
+           aria-label="Search the library">
+    <select name="tag" aria-label="Filter by tag">
+      <option value="">every tag</option>
+      {{range .Tags}}<option value="{{.Name}}"{{if .Selected}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+    <noscript><button type="submit">Search</button></noscript>
+  </form>
+
+  {{template "cog.list.instructions" .}}
+</div>{{end}}
 
 {{define "cog.list.instructions"}}<div id="library-list" class="library-list">
 {{if .Items}}{{range .Items}}{{template "cog.row.instruction" .}}{{end}}{{else}}{{template "cog.empty.instructions" .}}{{end}}
@@ -58,11 +70,24 @@
     {{range .Tags}}<span class="badge">{{.}}</span>{{end}}
   </header>
   {{if .Description}}<p class="hint">{{.Description}}</p>{{end}}
-  {{if .Open}}<pre class="instruction-text">{{.Text}}</pre>{{end}}
+  {{if .Open}}
+  {{/* Editable, because an instruction nobody can correct is one somebody
+       rewrites under a second name and then has two of. Posting where a new
+       one goes: saving by name updates what is there and versions the text in
+       Contextverse, so there is one way in and one history. */}}
+  <form class="instruction-edit" method="post" action="/instructions">
+    <input type="hidden" name="name" value="{{.Name}}">
+    <label>Description <input name="description" value="{{.Description}}"
+                              placeholder="What it is for, in one line"></label>
+    <label>Tags <input name="tags" value="{{.TagList}}" placeholder="comma, separated"></label>
+    <label>Text <textarea name="text" rows="12" spellcheck="false">{{.Text}}</textarea></label>
+    <button type="submit">Save changes</button>
+  </form>
+  {{end}}
   <div class="instruction-actions">
     <a class="action" href="/instructions?open={{.ID}}">{{if .Open}}Hide{{else}}Read{{end}}</a>
     <form method="post" action="/instructions/{{.ID}}/delete"
-          hx-post="/instructions/{{.ID}}/delete" hx-target="#library-list" hx-swap="outerHTML"
+          hx-post="/instructions/{{.ID}}/delete" hx-target="#library-panel" hx-swap="outerHTML"
           hx-confirm="Delete {{.Name}}? Its text stays in Contextverse; the entry goes.">
       <button type="submit" class="danger">Delete</button>
     </form>
@@ -84,7 +109,7 @@
 {{define "cog.drawer.instructions"}}<div class="dk-body library">
   {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
   <form class="library-filters" method="get" action="/instructions"
-        hx-get="/instructions" hx-target="#library-list" hx-swap="outerHTML"
+        hx-get="/instructions" hx-target="#library-panel" hx-swap="outerHTML"
         hx-trigger="submit, input from:input[name='q'] delay:250ms">
     <input type="search" name="q" value="{{.Query}}" placeholder="Search names, descriptions and text"
            aria-label="Search the library">

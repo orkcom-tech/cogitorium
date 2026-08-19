@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
 	"net/http"
 	"sort"
@@ -59,12 +60,19 @@ func (s *Server) handleCreateInstructionForm(w http.ResponseWriter, r *http.Requ
 		s.renderInstructions(w, r, err.Error())
 		return
 	}
-	if _, err := s.library.Save(r.Context(), name, r.PostFormValue("description"),
-		splitTags(r.PostFormValue("tags")), 0, 0); err != nil {
+	saved, err := s.library.Save(r.Context(), name, r.PostFormValue("description"),
+		splitTags(r.PostFormValue("tags")), 0, 0)
+	if err != nil {
 		s.renderInstructions(w, r, err.Error())
 		return
 	}
-	s.renderInstructions(w, r, "")
+	// Back to the instruction, open, rather than rendering the list in place.
+	//
+	// Two reasons and both are the person's: somebody who just edited one
+	// wants to see what they saved, not a list with it collapsed; and a
+	// rendered POST leaves the form's own URL in the address bar, so a refresh
+	// re-submits it.
+	http.Redirect(w, r, fmt.Sprintf("/instructions?open=%d", saved.ID), http.StatusSeeOther)
 }
 
 // handleDeleteInstructionForm removes one entry.
@@ -82,7 +90,7 @@ func (s *Server) handleDeleteInstructionForm(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) renderInstructions(w http.ResponseWriter, r *http.Request, problem string) {
-	s.renderPage(w, r, "cog.page.instructions", "cog.list.instructions", "Instructions",
+	s.renderPage(w, r, "cog.page.instructions", "cog.frag.library", "Instructions",
 		s.instructionsModel(r, problem))
 }
 

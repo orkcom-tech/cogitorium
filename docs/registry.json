@@ -529,7 +529,7 @@
           "type": "string"
         }
       ],
-      "body": "\u003cdiv class=\"dk-body library\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  \u003cform class=\"library-filters\" method=\"get\" action=\"/instructions\"\n        hx-get=\"/instructions\" hx-target=\"#library-list\" hx-swap=\"outerHTML\"\n        hx-trigger=\"submit, input from:input[name='q'] delay:250ms\"\u003e\n    \u003cinput type=\"search\" name=\"q\" value=\"{{.Query}}\" placeholder=\"Search names, descriptions and text\"\n           aria-label=\"Search the library\"\u003e\n  \u003c/form\u003e\n  {{template \"cog.list.instructions\" .}}\n\u003c/div\u003e",
+      "body": "\u003cdiv class=\"dk-body library\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  \u003cform class=\"library-filters\" method=\"get\" action=\"/instructions\"\n        hx-get=\"/instructions\" hx-target=\"#library-panel\" hx-swap=\"outerHTML\"\n        hx-trigger=\"submit, input from:input[name='q'] delay:250ms\"\u003e\n    \u003cinput type=\"search\" name=\"q\" value=\"{{.Query}}\" placeholder=\"Search names, descriptions and text\"\n           aria-label=\"Search the library\"\u003e\n  \u003c/form\u003e\n  {{template \"cog.list.instructions\" .}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -1941,6 +1941,117 @@
         }
       ],
       "body": "\u003cdiv class=\"card\"\u003e\n  \u003ch3\u003eNothing here yet\u003c/h3\u003e\n  \u003cp class=\"hint\"\u003e\n    A workspace is a group of agents behind one orchestrator chat. You talk to the orchestrator; it\n    creates the others, wires them together and hands them work.\n  \u003c/p\u003e\n  \u003ca class=\"action is-primary\" href=\"/workspaces?new=1\"\u003e+ New workspace\u003c/a\u003e\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.frag.library",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Items",
+          "type": "[]Instruction"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Tag",
+          "type": "string"
+        },
+        {
+          "path": "Tags",
+          "type": "[]Tag"
+        },
+        {
+          "path": "Narrowed",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv id=\"library-panel\"\u003e\n  \u003cform class=\"library-filters\" method=\"get\" action=\"/instructions\"\n        hx-get=\"/instructions\" hx-target=\"#library-panel\" hx-swap=\"outerHTML\"\n        hx-trigger=\"submit, input from:input[name='q'] delay:250ms, change from:select\"\u003e\n    \u003cinput type=\"search\" name=\"q\" value=\"{{.Query}}\" placeholder=\"Search names, descriptions and text\"\n           aria-label=\"Search the library\"\u003e\n    \u003cselect name=\"tag\" aria-label=\"Filter by tag\"\u003e\n      \u003coption value=\"\"\u003eevery tag\u003c/option\u003e\n      {{range .Tags}}\u003coption value=\"{{.Name}}\"{{if .Selected}} selected{{end}}\u003e{{.Name}}\u003c/option\u003e{{end}}\n    \u003c/select\u003e\n    \u003cnoscript\u003e\u003cbutton type=\"submit\"\u003eSearch\u003c/button\u003e\u003c/noscript\u003e\n  \u003c/form\u003e\n\n  {{template \"cog.list.instructions\" .}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -3926,7 +4037,7 @@
           "type": "string"
         }
       ],
-      "body": "\u003cmain class=\"page library\"\u003e\n  \u003ch2\u003e{{.Ctx.T.Instructions}}\u003c/h2\u003e\n\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n\n  \u003cform class=\"library-filters\" method=\"get\" action=\"/instructions\"\n        hx-get=\"/instructions\" hx-target=\"#library-list\" hx-swap=\"outerHTML\"\n        hx-trigger=\"submit, input from:input[name='q'] delay:250ms, change from:select\"\u003e\n    \u003cinput type=\"search\" name=\"q\" value=\"{{.Query}}\" placeholder=\"Search names, descriptions and text\"\n           aria-label=\"Search the library\"\u003e\n    \u003cselect name=\"tag\" aria-label=\"Filter by tag\"\u003e\n      \u003coption value=\"\"\u003eevery tag\u003c/option\u003e\n      {{range .Tags}}\u003coption value=\"{{.Name}}\"{{if .Selected}} selected{{end}}\u003e{{.Name}}\u003c/option\u003e{{end}}\n    \u003c/select\u003e\n    \u003cnoscript\u003e\u003cbutton type=\"submit\"\u003eSearch\u003c/button\u003e\u003c/noscript\u003e\n  \u003c/form\u003e\n\n  \u003cdetails class=\"library-write\"\u003e\n    \u003csummary\u003eWrite one\u003c/summary\u003e\n    {{/* A plain POST to this page. The answer is the page again, which is what\n         makes it work with nothing loaded. */}}\n    \u003cform method=\"post\" action=\"/instructions\"\u003e\n      \u003clabel\u003eName \u003cinput name=\"name\" required pattern=\"[a-z][a-z0-9-]*\"\n                         placeholder=\"lowercase-with-dashes\"\u003e\u003c/label\u003e\n      \u003clabel\u003eDescription \u003cinput name=\"description\" placeholder=\"What it is for, in one line\"\u003e\u003c/label\u003e\n      \u003clabel\u003eTags \u003cinput name=\"tags\" placeholder=\"comma, separated\"\u003e\u003c/label\u003e\n      \u003clabel\u003eText \u003ctextarea name=\"text\" rows=\"8\" required\n                            placeholder=\"The instruction itself. It is versioned in Contextverse.\"\u003e\u003c/textarea\u003e\u003c/label\u003e\n      \u003cbutton type=\"submit\"\u003eSave it\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/details\u003e\n\n  {{template \"cog.list.instructions\" .}}\n\u003c/main\u003e",
+      "body": "\u003cmain class=\"page library\"\u003e\n  \u003ch2\u003e{{.Ctx.T.Instructions}}\u003c/h2\u003e\n\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n\n  \u003cdetails class=\"library-write\"\u003e\n    \u003csummary\u003eWrite one\u003c/summary\u003e\n    {{/* A plain POST to this page. The answer is the page again, which is what\n         makes it work with nothing loaded. */}}\n    \u003cform method=\"post\" action=\"/instructions\"\u003e\n      \u003clabel\u003eName \u003cinput name=\"name\" required pattern=\"[a-z][a-z0-9-]*\"\n                         placeholder=\"lowercase-with-dashes\"\u003e\u003c/label\u003e\n      \u003clabel\u003eDescription \u003cinput name=\"description\" placeholder=\"What it is for, in one line\"\u003e\u003c/label\u003e\n      \u003clabel\u003eTags \u003cinput name=\"tags\" placeholder=\"comma, separated\"\u003e\u003c/label\u003e\n      \u003clabel\u003eText \u003ctextarea name=\"text\" rows=\"8\" required\n                            placeholder=\"The instruction itself. It is versioned in Contextverse.\"\u003e\u003c/textarea\u003e\u003c/label\u003e\n      \u003cbutton type=\"submit\"\u003eSave it\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/details\u003e\n\n  {{template \"cog.frag.library\" .}}\n\u003c/main\u003e",
       "appends": false
     },
     {
@@ -4938,7 +5049,7 @@
           "type": "string"
         }
       ],
-      "body": "\u003carticle class=\"card instruction{{if .Open}} is-open{{end}}\"\u003e\n  \u003cheader class=\"instruction-head\"\u003e\n    \u003ch3\u003e{{.Name}}\u003c/h3\u003e\n    {{range .Tags}}\u003cspan class=\"badge\"\u003e{{.}}\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n  {{if .Description}}\u003cp class=\"hint\"\u003e{{.Description}}\u003c/p\u003e{{end}}\n  {{if .Open}}\u003cpre class=\"instruction-text\"\u003e{{.Text}}\u003c/pre\u003e{{end}}\n  \u003cdiv class=\"instruction-actions\"\u003e\n    \u003ca class=\"action\" href=\"/instructions?open={{.ID}}\"\u003e{{if .Open}}Hide{{else}}Read{{end}}\u003c/a\u003e\n    \u003cform method=\"post\" action=\"/instructions/{{.ID}}/delete\"\n          hx-post=\"/instructions/{{.ID}}/delete\" hx-target=\"#library-list\" hx-swap=\"outerHTML\"\n          hx-confirm=\"Delete {{.Name}}? Its text stays in Contextverse; the entry goes.\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eDelete\u003c/button\u003e\n    \u003c/form\u003e\n    {{if .UpdatedAt}}\u003cspan class=\"hint\"\u003e{{.UpdatedAt}}\u003c/span\u003e{{end}}\n  \u003c/div\u003e\n\u003c/article\u003e",
+      "body": "\u003carticle class=\"card instruction{{if .Open}} is-open{{end}}\"\u003e\n  \u003cheader class=\"instruction-head\"\u003e\n    \u003ch3\u003e{{.Name}}\u003c/h3\u003e\n    {{range .Tags}}\u003cspan class=\"badge\"\u003e{{.}}\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n  {{if .Description}}\u003cp class=\"hint\"\u003e{{.Description}}\u003c/p\u003e{{end}}\n  {{if .Open}}\n  {{/* Editable, because an instruction nobody can correct is one somebody\n       rewrites under a second name and then has two of. Posting where a new\n       one goes: saving by name updates what is there and versions the text in\n       Contextverse, so there is one way in and one history. */}}\n  \u003cform class=\"instruction-edit\" method=\"post\" action=\"/instructions\"\u003e\n    \u003cinput type=\"hidden\" name=\"name\" value=\"{{.Name}}\"\u003e\n    \u003clabel\u003eDescription \u003cinput name=\"description\" value=\"{{.Description}}\"\n                              placeholder=\"What it is for, in one line\"\u003e\u003c/label\u003e\n    \u003clabel\u003eTags \u003cinput name=\"tags\" value=\"{{.TagList}}\" placeholder=\"comma, separated\"\u003e\u003c/label\u003e\n    \u003clabel\u003eText \u003ctextarea name=\"text\" rows=\"12\" spellcheck=\"false\"\u003e{{.Text}}\u003c/textarea\u003e\u003c/label\u003e\n    \u003cbutton type=\"submit\"\u003eSave changes\u003c/button\u003e\n  \u003c/form\u003e\n  {{end}}\n  \u003cdiv class=\"instruction-actions\"\u003e\n    \u003ca class=\"action\" href=\"/instructions?open={{.ID}}\"\u003e{{if .Open}}Hide{{else}}Read{{end}}\u003c/a\u003e\n    \u003cform method=\"post\" action=\"/instructions/{{.ID}}/delete\"\n          hx-post=\"/instructions/{{.ID}}/delete\" hx-target=\"#library-panel\" hx-swap=\"outerHTML\"\n          hx-confirm=\"Delete {{.Name}}? Its text stays in Contextverse; the entry goes.\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eDelete\u003c/button\u003e\n    \u003c/form\u003e\n    {{if .UpdatedAt}}\u003cspan class=\"hint\"\u003e{{.UpdatedAt}}\u003c/span\u003e{{end}}\n  \u003c/div\u003e\n\u003c/article\u003e",
       "appends": false
     },
     {
