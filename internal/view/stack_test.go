@@ -165,7 +165,7 @@ func TestLedgerIsComputedFromBytesNotClaims(t *testing.T) {
 		t.Errorf("overrides computed wrong: %v", over)
 	}
 
-	byAction := map[Action]int{}
+	byAction := map[LedgerAction]int{}
 	for _, e := range l.For("sneaky") {
 		byAction[e.Action]++
 	}

@@ -79,30 +79,34 @@ type Warning struct {
 	Message string
 }
 
-// Action is what defining a name amounted to.
-type Action string
+// LedgerAction is what defining a name amounted to.
+//
+// Named LedgerAction rather than Action because Action is the author-facing
+// model type for a control, and that one is part of the published contract
+// while this is internal bookkeeping. The contract keeps the short name.
+type LedgerAction string
 
 const (
 	// Adds is a layer defining a name in its own namespace.
-	Adds Action = "adds"
+	Adds LedgerAction = "adds"
 	// Overrides is a layer defining a name owned by somebody else. This is the
 	// Jenkins property and it is allowed whether or not it was declared.
-	Overrides Action = "overrides"
+	Overrides LedgerAction = "overrides"
 	// Extends is a layer contributing to a name that concatenates. No winner,
 	// no shadowing, no coordination between the contributors.
-	Extends Action = "extends"
+	Extends LedgerAction = "extends"
 	// Dangling is a layer defining a name in a namespace nothing installed
 	// owns. The definition is kept — it simply never renders — and the ledger
 	// says so, because a silently inert override is the hardest kind of
 	// plugin bug to find.
-	Dangling Action = "dangling"
+	Dangling LedgerAction = "dangling"
 )
 
 // Entry is one line of the ledger.
 type Entry struct {
 	Layer  string
 	Name   string
-	Action Action
+	Action LedgerAction
 	// Took names the layer whose body this one replaced. Empty unless the
 	// action is Overrides and something was actually there.
 	Took string

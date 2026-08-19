@@ -1,0 +1,75 @@
+{{/*
+  The shell: the document everything else is rendered inside.
+
+  Every name here is an address a plugin can take over. The bodies are
+  deliberately thin — a name exists so it can be replaced, and a big body is a
+  big thing to reproduce when you only wanted to change one part of it.
+*/}}
+
+{{define "cog.shell.document"}}<!doctype html>
+<html lang="{{.Ctx.Lang}}"{{if .Ctx.Theme}} data-theme="{{.Ctx.Theme}}"{{end}}>
+<head>
+{{template "cog.shell.head" .}}
+</head>
+<body>
+{{template "cog.shell.rail" .}}
+{{template "cog.shell.body" .}}
+</body>
+</html>
+{{end}}
+
+{{define "cog.shell.head"}}
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  {{template "cog.shell.tokens" .}}
+  {{range .Styles}}<link rel="stylesheet" href="{{.}}">
+  {{end}}
+  {{range .Scripts}}<script type="module" src="{{.Src}}"{{if .Integrity}} integrity="{{.Integrity}}"{{end}}></script>
+  {{end}}
+  {{template "cog.slot.head" .}}
+{{end}}
+
+{{/*
+  Tokens are their own name for one reason: overriding this single template
+  reskins the entire product, in both light and dark, with no code at all. It
+  is the cheapest thing a plugin can do and the most visible.
+*/}}
+{{define "cog.shell.tokens"}}
+  <link rel="stylesheet" href="/assets/tokens.css">
+{{end}}
+
+{{define "cog.shell.rail"}}
+  <nav class="rail" aria-label="{{.Ctx.T.Navigation}}">
+    {{range .Nav}}{{template "cog.row.nav" .}}{{end}}
+    {{template "cog.slot.rail" .}}
+  </nav>
+{{end}}
+
+{{/*
+  One repeated unit, named on its own, so the container above can be rebuilt
+  without touching an override hanging off the row.
+*/}}
+{{define "cog.row.nav"}}
+    <a class="rail-item{{if .Current}} is-current{{end}}" href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}>
+      {{if .Icon}}<span class="rail-icon" data-icon="{{.Icon}}" aria-hidden="true"></span>{{end}}
+      <span class="rail-label">{{.Label}}</span>
+    </a>
+{{end}}
+
+{{/*
+  Where the application lives. Today this is the mount point the existing
+  single-page app takes over; as pages are converted it becomes the page body.
+*/}}
+{{define "cog.shell.body"}}
+  <div id="app"></div>
+{{end}}
+
+{{/*
+  Append slots. Definitions of these CONCATENATE rather than replace, so two
+  plugins contributing to the same place both survive and neither had to know
+  the other existed. The host's own bodies are empty on purpose: an extension
+  point has to exist before anybody can extend it.
+*/}}
+{{define "cog.slot.head"}}{{end}}
+{{define "cog.slot.rail"}}{{end}}
