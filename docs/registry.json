@@ -116,6 +116,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]AgentCard"
         },
@@ -208,6 +212,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -358,6 +366,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Gear"
         },
@@ -489,6 +501,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Instruction"
         },
@@ -596,6 +612,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Enabled",
           "type": "bool"
         },
@@ -699,6 +719,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "AgentID",
           "type": "int64"
         },
@@ -798,6 +822,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Units",
           "type": "[]Unit"
         },
@@ -894,6 +922,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -1000,6 +1032,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Available",
           "type": "bool"
         },
@@ -1092,6 +1128,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -1207,6 +1247,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -1368,6 +1412,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Gear"
         },
@@ -1499,6 +1547,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Instruction"
         },
@@ -1606,6 +1658,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Providers",
           "type": "[]Provider"
         },
@@ -1698,6 +1754,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -1852,6 +1912,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]WorkspaceRow"
         },
@@ -1991,6 +2055,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -2145,6 +2213,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Available",
           "type": "bool"
         },
@@ -2292,6 +2364,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Gear"
         },
@@ -2423,6 +2499,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Instruction"
         },
@@ -2530,6 +2610,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Messages",
           "type": "[]ChatMessage"
         },
@@ -2622,6 +2706,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -2736,6 +2824,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -2890,6 +2982,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Providers",
           "type": "[]Provider"
         },
@@ -2903,6 +2999,220 @@
         }
       ],
       "body": "\u003cdiv id=\"providers\" class=\"provider-list\"\u003e\n{{if .Providers}}{{range .Providers}}{{template \"cog.row.provider\" .}}{{end}}{{else}}\u003cp class=\"hint\"\u003e\nNo providers yet. A provider is where models come from — Anthropic, or anything that speaks its\nOpenAI-compatible shape, which is how Ollama, LM Studio, vLLM and llama.cpp are reached.\n\u003c/p\u003e{{end}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.list.teams",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Users",
+          "type": "[]Person"
+        },
+        {
+          "path": "Teams",
+          "type": "[]Team"
+        },
+        {
+          "path": "IssuedTo",
+          "type": "string"
+        },
+        {
+          "path": "Issued",
+          "type": "string"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv id=\"teams\" class=\"team-list\"\u003e\n{{range .Teams}}{{template \"cog.row.team\" .}}{{else}}\u003cp class=\"hint\"\u003eNo teams. A workspace can be shared with one.\u003c/p\u003e{{end}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.list.users",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Users",
+          "type": "[]Person"
+        },
+        {
+          "path": "Teams",
+          "type": "[]Team"
+        },
+        {
+          "path": "IssuedTo",
+          "type": "string"
+        },
+        {
+          "path": "Issued",
+          "type": "string"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv id=\"users\" class=\"user-list\"\u003e\n{{range .Users}}{{template \"cog.row.person\" .}}{{else}}\u003cp class=\"hint\"\u003eNobody yet.\u003c/p\u003e{{end}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -2982,6 +3292,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -3089,6 +3403,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -3239,6 +3557,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Gear"
         },
@@ -3370,6 +3692,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Items",
           "type": "[]Instruction"
         },
@@ -3477,6 +3803,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Providers",
           "type": "[]Provider"
         },
@@ -3490,6 +3820,113 @@
         }
       ],
       "body": "\u003cmain class=\"page catalogue\"\u003e\n  \u003ch2\u003e{{.Ctx.T.Models}}\u003c/h2\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n\n  \u003csection\u003e\n    \u003ch3\u003eProviders\u003c/h3\u003e\n    \u003cdetails class=\"add-provider\"\u003e\n      \u003csummary\u003eAdd one\u003c/summary\u003e\n      \u003cform method=\"post\" action=\"/models/providers\"\u003e\n        \u003clabel\u003eName \u003cinput name=\"name\" required placeholder=\"What you will call it\"\u003e\u003c/label\u003e\n        \u003clabel\u003eKind\n          \u003cselect name=\"kind\"\u003e\n            \u003coption value=\"anthropic\"\u003eAnthropic\u003c/option\u003e\n            \u003coption value=\"openai-compatible\"\u003eOpenAI-compatible\u003c/option\u003e\n          \u003c/select\u003e\n        \u003c/label\u003e\n        \u003clabel\u003eAddress \u003cinput name=\"base_url\" placeholder=\"Empty for Anthropic's own; a URL for anything else\"\u003e\u003c/label\u003e\n        \u003clabel\u003eKey \u003cinput name=\"api_key\" type=\"password\" autocomplete=\"off\"\n                          placeholder=\"Stored, and never shown again\"\u003e\u003c/label\u003e\n        \u003cbutton type=\"submit\"\u003eAdd it\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/details\u003e\n    {{template \"cog.list.providers\" .}}\n  \u003c/section\u003e\n\n  \u003csection\u003e\n    \u003ch3\u003eCatalog\u003c/h3\u003e\n    {{template \"cog.list.models\" .}}\n  \u003c/section\u003e\n\u003c/main\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.page.people",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Users",
+          "type": "[]Person"
+        },
+        {
+          "path": "Teams",
+          "type": "[]Team"
+        },
+        {
+          "path": "IssuedTo",
+          "type": "string"
+        },
+        {
+          "path": "Issued",
+          "type": "string"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cmain class=\"page\"\u003e\n  \u003ch2\u003e{{.Ctx.T.People}}\u003c/h2\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n\n  {{if .Issued}}\u003cdiv class=\"card\"\u003e\n    \u003cp class=\"hint\"\u003e\n      Token for \u003cstrong\u003e{{.IssuedTo}}\u003c/strong\u003e — shown once, only its hash is stored. Copy it now.\n    \u003c/p\u003e\n    \u003cpre class=\"prompt-preview\"\u003e{{.Issued}}\u003c/pre\u003e\n  \u003c/div\u003e{{end}}\n\n  \u003ch3\u003eUsers\u003c/h3\u003e\n  \u003cform class=\"row\" method=\"post\" action=\"/people/users\"\u003e\n    \u003cinput name=\"name\" required placeholder=\"user name\" aria-label=\"Name\"\u003e\n    \u003cinput name=\"password\" type=\"password\" placeholder=\"optional\" aria-label=\"Password\"\n           autocomplete=\"new-password\"\u003e\n    \u003cselect name=\"role\" aria-label=\"Role\"\u003e\n      \u003coption value=\"member\"\u003emember\u003c/option\u003e\n      \u003coption value=\"admin\"\u003eadmin — can approve code and change what runs\u003c/option\u003e\n    \u003c/select\u003e\n    \u003cbutton type=\"submit\"\u003eadd user\u003c/button\u003e\n  \u003c/form\u003e\n  {{template \"cog.list.users\" .}}\n\n  \u003ch3\u003eTeams\u003c/h3\u003e\n  \u003cform class=\"row\" method=\"post\" action=\"/people/teams\"\u003e\n    \u003cinput name=\"name\" required placeholder=\"team name\" aria-label=\"Team name\"\u003e\n    \u003cbutton type=\"submit\"\u003eadd team\u003c/button\u003e\n  \u003c/form\u003e\n  {{template \"cog.list.teams\" .}}\n\u003c/main\u003e",
       "appends": false
     },
     {
@@ -3569,6 +4006,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -3668,6 +4109,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -3822,6 +4267,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Names",
           "type": "[]EnvName"
         },
@@ -3934,6 +4383,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -4506,6 +4959,37 @@
       "appends": false
     },
     {
+      "name": "cog.row.person",
+      "model": [
+        {
+          "path": "ID",
+          "type": "int64"
+        },
+        {
+          "path": "Name",
+          "type": "string"
+        },
+        {
+          "path": "Role",
+          "type": "string"
+        },
+        {
+          "path": "Admin",
+          "type": "bool"
+        },
+        {
+          "path": "Teams",
+          "type": "[]string"
+        },
+        {
+          "path": "Self",
+          "type": "bool"
+        }
+      ],
+      "body": "\u003cdiv class=\"card person\"\u003e\n  \u003cstrong\u003e{{.Name}}\u003c/strong\u003e\n  {{if .Admin}}\u003cspan class=\"badge is-warn\"\u003e{{.Role}}\u003c/span\u003e{{else}}\u003cspan class=\"badge\"\u003e{{.Role}}\u003c/span\u003e{{end}}\n  {{range .Teams}}\u003cspan class=\"team-chip\"\u003e{{.}}\u003c/span\u003e{{end}}\n  {{/* Nobody is offered a button to delete themselves: an install with nobody\n       who can administer it is an install nobody can fix. */}}\n  {{if .Self}}\u003cspan class=\"muted\"\u003ethat is you\u003c/span\u003e{{else}}\n    \u003cform method=\"post\" action=\"/people/users/{{.ID}}/delete\"\n          hx-confirm=\"Delete {{.Name}}? Their workspaces stay and become unowned.\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eremove\u003c/button\u003e\n    \u003c/form\u003e\n  {{end}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.row.plugin",
       "model": [
         {
@@ -4742,6 +5226,29 @@
       "appends": false
     },
     {
+      "name": "cog.row.team",
+      "model": [
+        {
+          "path": "ID",
+          "type": "int64"
+        },
+        {
+          "path": "Name",
+          "type": "string"
+        },
+        {
+          "path": "Members",
+          "type": "[]Person"
+        },
+        {
+          "path": "Candidates",
+          "type": "[]Person"
+        }
+      ],
+      "body": "\u003cdiv class=\"card team\"\u003e\n  \u003cstrong\u003e{{.Name}}\u003c/strong\u003e\n  {{range .Members}}\u003cspan class=\"team-chip\"\u003e{{.Name}}\u003c/span\u003e{{end}}\n  \u003cform class=\"row\" method=\"post\" action=\"/people/teams/{{.ID}}/members\"\u003e\n    \u003cselect name=\"user_id\" aria-label=\"Add to team\"\u003e\n      \u003coption value=\"\"\u003eadd to team…\u003c/option\u003e\n      {{range .Candidates}}\u003coption value=\"{{.ID}}\"\u003e{{.Name}}\u003c/option\u003e{{end}}\n    \u003c/select\u003e\n    \u003cbutton type=\"submit\"\u003eadd\u003c/button\u003e\n  \u003c/form\u003e\n  \u003cform method=\"post\" action=\"/people/teams/{{.ID}}/delete\"\n        hx-confirm=\"Delete {{.Name}}? Workspaces shared with it stop being shared.\"\u003e\n    \u003cbutton type=\"submit\" class=\"danger\"\u003eremove\u003c/button\u003e\n  \u003c/form\u003e\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.row.unit",
       "model": [
         {
@@ -4919,6 +5426,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -5023,6 +5534,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -5133,6 +5648,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -5237,6 +5756,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -5347,6 +5870,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -5451,6 +5978,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {
@@ -5561,6 +6092,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -5665,6 +6200,10 @@
         },
         {
           "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
           "type": "string"
         },
         {

@@ -563,6 +563,17 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// stack, the layer order or the approval gate were wrong, this is the
 	// screen that would fail to draw — and the one an operator would be on
 	// when they needed it most.
+	// The lists, not the page. The access map shares this screen and stays
+	// where it is — it is a drawn graph, and a template renders a thing that
+	// exists at a moment rather than a layout somebody drags. So the client
+	// keeps the page and the server fills the half made of words.
+	s.page(mux, "GET /people/lists", s.handlePeoplePage)
+	s.page(mux, "POST /people/users", s.handleCreateUserForm)
+	s.page(mux, "POST /people/users/{id}/delete", s.handleDeleteUserForm)
+	s.page(mux, "POST /people/teams", s.handleCreateTeamForm)
+	s.page(mux, "POST /people/teams/{id}/delete", s.handleDeleteTeamForm)
+	s.page(mux, "POST /people/teams/{id}/members", s.handleAddTeamMemberForm)
+
 	s.page(mux, "GET /plugins", s.handlePluginsPage)
 	s.page(mux, "POST /plugins", s.handleUploadPluginForm)
 	s.page(mux, "POST /plugins/restart", s.handleRestartFromPluginsForm)

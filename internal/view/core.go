@@ -115,13 +115,15 @@ type Strings struct {
 	Variables string
 	// Plugins is the library screen's title.
 	Plugins string
+	// People is the accounts screen's title.
+	People string
 }
 
 // DefaultStrings is English, which is what this product ships in today. It is
 // a value rather than constants so a plugin overriding the shell can be handed
 // a different one without the host changing shape first.
 func DefaultStrings() Strings {
-	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalog", Context: "Context", Gears: "Gears", Workspaces: "Workspaces", Variables: "Variables & Secrets", Plugins: "Plugins"}
+	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalog", Context: "Context", Gears: "Gears", Workspaces: "Workspaces", Variables: "Variables & Secrets", Plugins: "Plugins", People: "People"}
 }
 
 // Action is one control that causes a request.
@@ -249,6 +251,11 @@ func CoreModels() Models {
 		// it, so it is the same list without the page frame — and its own
 		// name, because a plugin overriding the drawer should not have to take
 		// the page with it.
+		"cog.page.people":     People{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.users":      People{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.person":      Person{},
+		"cog.list.teams":      People{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.team":        Team{},
 		"cog.page.plugins":    Plugins{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.list.plugins":    Plugins{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.plugin":      PluginRow{},
@@ -378,6 +385,42 @@ type Workspaces struct {
 	Importing bool
 	Error     string
 	Notice    string
+}
+
+// Person is one account on this install.
+type Person struct {
+	ID   int64
+	Name string
+	Role string
+	// Admin marks the role that can approve code, delete anybody's workspace
+	// and change what runs.
+	Admin bool
+	Teams []string
+	// Self marks the viewer, who is not offered a button to delete themselves:
+	// an install with nobody who can administer it is an install nobody can
+	// fix.
+	Self bool
+}
+
+// Team is a group a workspace can be shared with.
+type Team struct {
+	ID      int64
+	Name    string
+	Members []Person
+	// Candidates are the people not in it yet, for the picker.
+	Candidates []Person
+}
+
+// People is what the accounts screen renders against.
+type People struct {
+	Ctx   Ctx
+	Users []Person
+	Teams []Team
+	// Issued is a token somebody just created. Shown once, and only its hash
+	// is stored — so this is the only time it appears anywhere.
+	IssuedTo string
+	Issued   string
+	Error    string
 }
 
 // PluginRow is one installed plugin, as the library screen draws it.
@@ -1232,6 +1275,12 @@ func Exemplars() Models {
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
 
+		"cog.page.people": examplePeople(ctx),
+		"cog.list.users":  examplePeople(ctx),
+		"cog.row.person":  examplePeople(ctx).Users[0],
+		"cog.list.teams":  examplePeople(ctx),
+		"cog.row.team":    examplePeople(ctx).Teams[0],
+
 		"cog.page.plugins": examplePlugins(ctx),
 		"cog.list.plugins": examplePlugins(ctx),
 		"cog.row.plugin":   examplePlugins(ctx).Items[0],
@@ -1339,6 +1388,18 @@ func exampleWorkspaces(ctx Ctx) Workspaces {
 				Hue: 25, HasHue: true, MayShare: true, Teams: teams},
 		},
 		Models: []Model{{ID: 1, Name: "claude-opus-4", Label: "Opus", Provider: "Anthropic"}},
+	}
+}
+
+func examplePeople(ctx Ctx) People {
+	dana := Person{ID: 2, Name: "dana", Role: "member", Teams: []string{"Platform"}}
+	return People{
+		Ctx: ctx,
+		Users: []Person{
+			{ID: 1, Name: "admin", Role: "admin", Admin: true, Self: true},
+			dana,
+		},
+		Teams: []Team{{ID: 1, Name: "Platform", Members: []Person{dana}}},
 	}
 }
 
