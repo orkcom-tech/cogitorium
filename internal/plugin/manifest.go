@@ -182,9 +182,13 @@ func Parse(b []byte) (Manifest, error) {
 }
 
 var (
-	idRe   = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
-	envRe  = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
-	hostRe = regexp.MustCompile(`^[a-z0-9.-]+(:[0-9]{1,5})?$`)
+	idRe  = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+	envRe = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
+	// Exactly what the gate accepts, and nothing more: a hostname, optionally
+	// with the gate's own *. wildcard, and never a port. The gate refuses a
+	// port outright — a grant names hosts — so accepting one here would let an
+	// author write a grant that reads fine and fails when it is resolved.
+	hostRe = regexp.MustCompile(`^(\*\.)?[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`)
 )
 
 // reserved ids would collide with the host's own namespace or with a path the
@@ -358,7 +362,9 @@ func (m Manifest) validateOverrides(add func(string, string, ...any)) {
 func (m Manifest) validateGrants(add func(string, string, ...any)) {
 	for i, h := range m.Hosts {
 		if !hostRe.MatchString(h) {
-			add(fmt.Sprintf("hosts[%d]", i), "must be a host or host:port, got %q", h)
+			add(fmt.Sprintf("hosts[%d]", i),
+				"must be a hostname, optionally with a leading *. — and never a port, "+
+					"because a grant names hosts. Got %q", h)
 		}
 	}
 	for i, s := range m.Secrets {

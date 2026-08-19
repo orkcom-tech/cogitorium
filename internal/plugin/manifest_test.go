@@ -223,10 +223,10 @@ func TestSecretsAreNamesNotValues(t *testing.T) {
 
 func TestGrantShapes(t *testing.T) {
 	parseOK(t, minimal+`
-hosts: ["api.acme.com:443", "example.org"]
+hosts: ["api.acme.com", "*.example.org"]
 api: ["runs:read", "workspaces:read"]
 `)
-	ps := problems(t, minimal+"\nhosts: [\"https://api.acme.com/path\"]\napi: [\"everything\"]\n")
+	ps := problems(t, minimal+"\nhosts: [\"api.acme.com:443\"]\napi: [\"everything\"]\n")
 	if !hasField(ps, "hosts[0]") || !hasField(ps, "api[0]") {
 		t.Errorf("expected host and api problems, got %v", ps)
 	}
