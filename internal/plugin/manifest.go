@@ -75,6 +75,18 @@ type Manifest struct {
 	// and nothing more.
 	Overrides []string `yaml:"overrides"`
 
+	// Requires names plugins this one must layer AFTER.
+	//
+	// Position is precedence, so a plugin that wraps another's template has to
+	// come later or its wrapper is the thing being wrapped. Until this
+	// existed, that ordering was the operator's problem — expressed by hand in
+	// plugins.order, discoverable only by noticing the wrong body rendering.
+	//
+	// It is a soft edge: naming a plugin that is not installed is not an
+	// error, because the ordinary case is an optional companion. What it
+	// cannot do is name itself or form a cycle.
+	Requires []string `yaml:"requires"`
+
 	// ── behaviour ──
 
 	// Needs is a technology and an optional constraint — "js", "python@>=3.11".
@@ -323,6 +335,7 @@ func (m Manifest) Validate() Problems {
 	m.validateNav(add)
 	m.validateAssets(add)
 	m.validateOverrides(add)
+	m.validateRequires(add)
 	m.validateMounts(add)
 	m.validateNative(add)
 	m.validateGrants(add)
@@ -417,6 +430,26 @@ func (m Manifest) validateAssets(add func(string, string, ...any)) {
 		default:
 			add(fmt.Sprintf("scripts[%d].type", i), "must be module, got %q", s.Type)
 		}
+	}
+}
+
+func (m Manifest) validateRequires(add func(string, string, ...any)) {
+	seen := map[string]bool{}
+	for i, id := range m.Requires {
+		f := fmt.Sprintf("requires[%d]", i)
+		switch {
+		case id == "":
+			add(f, "is empty")
+		case id == m.ID:
+			// Not pedantry: a self-edge is a cycle, and a cycle refuses the
+			// whole load. Caught here it is one line in one manifest.
+			add(f, "names this plugin itself")
+		case !idRe.MatchString(id):
+			add(f, "%q is not a usable plugin id", id)
+		case seen[id]:
+			add(f, "names %q twice", id)
+		}
+		seen[id] = true
 	}
 }
 

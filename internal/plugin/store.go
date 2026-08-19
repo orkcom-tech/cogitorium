@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -182,8 +183,13 @@ func (s *Store) List() ([]Installed, error) {
 	return out, nil
 }
 
-// Enabled is List filtered to what the operator turned on, in layer order.
-// This is what the view stack is built from.
+// Enabled is List filtered to what the operator turned on, in the order it is
+// actually composed in. This is what the view stack is built from.
+//
+// The order is repaired here rather than in plugins.order: that file is
+// something a person edits, and a program that silently rewrote it would be
+// arguing with them through a text file. What the operator wrote stays
+// written; what composes is this.
 func (s *Store) Enabled() ([]Installed, error) {
 	all, err := s.List()
 	if err != nil {
@@ -195,7 +201,47 @@ func (s *Store) Enabled() ([]Installed, error) {
 			out = append(out, in)
 		}
 	}
+
+	saved, err := s.Order()
+	if err != nil {
+		return nil, err
+	}
+	ordered, moves, err := LayerOrder(out, saved)
+	if err != nil {
+		// A cycle has no correct answer, and picking one would put somebody's
+		// wrapper on the wrong side of what it wraps with nothing on screen to
+		// explain it.
+		return nil, err
+	}
+	for _, m := range moves {
+		slog.Info("a plugin was layered later than the enable list puts it",
+			"plugin", m.ID, "after", m.After, "why", m.Why)
+	}
+
+	at := map[string]int{}
+	for i, id := range ordered {
+		at[id] = i
+	}
+	sort.Slice(out, func(i, j int) bool { return at[out[i].ID] < at[out[j].ID] })
+	for i := range out {
+		out[i].Order = i
+	}
 	return out, nil
+}
+
+// LayerMoves reports what the composed order had to change about the enable
+// list, so a screen can say so rather than leaving somebody to notice.
+func (s *Store) LayerMoves() ([]Move, error) {
+	enabled, err := s.Enabled()
+	if err != nil {
+		return nil, err
+	}
+	saved, err := s.Order()
+	if err != nil {
+		return nil, err
+	}
+	_, moves, err := LayerOrder(enabled, saved)
+	return moves, err
 }
 
 // Get reads one installed plugin.

@@ -116,6 +116,9 @@ func JSONSchema() map[string]any {
 				"type": map[string]any{"enum": []string{"module"}, "default": "module"},
 			}), "Modules."),
 
+			"requires": arrayOf(map[string]any{"type": "string", "pattern": `^[a-z][a-z0-9-]{2,47}$`},
+				"Plugins this one must layer after. Position is precedence, so a plugin that wraps another's template has to come later or its wrapper is the thing being wrapped. Naming one that is not installed is fine; naming yourself, or forming a loop, is not."),
+
 			"overrides": arrayOf(map[string]any{"type": "string"},
 				"Template names you mean to take over. Advisory: the host computes what you actually override from what you ship, and declaring earns nothing. It is here so the approval screen can show intent beside effect."),
 

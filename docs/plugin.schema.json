@@ -255,6 +255,14 @@
       },
       "type": "array"
     },
+    "requires": {
+      "description": "Plugins this one must layer after. Position is precedence, so a plugin that wraps another's template has to come later or its wrapper is the thing being wrapped. Naming one that is not installed is fine; naming yourself, or forming a loop, is not.",
+      "items": {
+        "pattern": "^[a-z][a-z0-9-]{2,47}$",
+        "type": "string"
+      },
+      "type": "array"
+    },
     "schema": {
       "const": 1,
       "description": "The manifest format. One value today; a second would mean a second reader."
