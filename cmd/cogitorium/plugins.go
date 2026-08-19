@@ -283,6 +283,89 @@ func newPluginsCmds() *cobra.Command {
 		"the catalog as it stands, to report what this submission changed")
 	root.AddCommand(checkCatalog)
 
+	var asJSON bool
+	namesCmd := &cobra.Command{
+		Use:   "names [name]",
+		Short: "What you can override, what it renders against, and what is there now",
+		Long: "Without an argument, every name this build defines.\n\n" +
+			"With one, that name's model as dotted paths — what you write inside {{ }} —\n" +
+			"and the host's current body, which is what `under:` gives you when you wrap\n" +
+			"it instead of replacing it.\n\n" +
+			"Offline and from the binary you are actually running. A name that exists in\n" +
+			"the documentation and not in your build is the version mismatch this exists\n" +
+			"to make visible.",
+		Args:         cobra.MaximumNArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			reg, err := view.BuildRegistry(view.Core(), view.CoreModels())
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				b, err := view.RegistryJSON(view.Core(), view.CoreModels())
+				if err != nil {
+					return err
+				}
+				fmt.Print(string(b))
+				return nil
+			}
+
+			if len(args) == 0 {
+				fmt.Printf("Contract %d — %d names\n\n", reg.Contract, len(reg.Entries))
+				for _, e := range reg.Entries {
+					note := ""
+					switch {
+					case e.Dormant:
+						note = "  (defined, and nothing calls it yet)"
+					case e.Appends:
+						note = "  (appends — definitions concatenate)"
+					}
+					fmt.Printf("  %-22s %s\n", e.Name, note)
+				}
+				fmt.Println("\nOne of them, in full:\n  cogitorium plugins names cog.shell.tokens")
+				return nil
+			}
+
+			want := args[0]
+			for _, e := range reg.Entries {
+				if e.Name != want {
+					continue
+				}
+				fmt.Printf("%s\n", e.Name)
+				if e.Dormant {
+					fmt.Println("\n  DORMANT — this is defined and validated, and nothing calls it yet.")
+					fmt.Println("  An override of it will install, load and render nothing.")
+				}
+				if e.Appends {
+					fmt.Println("\n  APPENDS — definitions of this name concatenate rather than replace,")
+					fmt.Println("  so yours does not have to know about anybody else's.")
+				}
+				fmt.Println("\nModel:")
+				for _, f := range e.Model {
+					fmt.Printf("  {{.%s}}%s%s\n", f.Path, strings.Repeat(" ", pad(f.Path)), f.Type)
+				}
+				fmt.Println("\nWhat the host defines today:")
+				if e.Body == "" {
+					fmt.Println("  (empty — it exists so you can put something there)")
+				} else {
+					for _, line := range strings.Split(e.Body, "\n") {
+						fmt.Printf("  %s\n", line)
+					}
+				}
+				return nil
+			}
+
+			// A near miss is the common case, and listing everything at
+			// somebody who mistyped one character is not an answer.
+			if near := view.Nearest(want, names(reg)); near != "" {
+				return fmt.Errorf("no name %q in this build. Did you mean %s?", want, near)
+			}
+			return fmt.Errorf("no name %q in this build. Run it with no argument for the list", want)
+		},
+	}
+	namesCmd.Flags().BoolVar(&asJSON, "json", false, "the whole registry, for an editor or a script")
+	root.AddCommand(namesCmd)
+
 	root.AddCommand(&cobra.Command{
 		Use:   "check-bundle <bundle.zip>",
 		Short: "Validate a bundle without installing it. What the catalog's CI runs",
@@ -747,5 +830,21 @@ func diff(before, after map[string]string) []string {
 		}
 	}
 	sort.Strings(out)
+	return out
+}
+
+// pad lines the type column up without a table library.
+func pad(path string) int {
+	if n := 24 - len(path); n > 0 {
+		return n
+	}
+	return 1
+}
+
+func names(reg view.Registry) []string {
+	out := make([]string, 0, len(reg.Entries))
+	for _, e := range reg.Entries {
+		out = append(out, e.Name)
+	}
 	return out
 }

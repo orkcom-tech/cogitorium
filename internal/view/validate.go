@@ -240,6 +240,14 @@ func fieldsOf(model any) []string {
 // nearest picks the closest available name, and only when it is close enough
 // to be worth saying. A suggestion that is wrong is worse than none: it sends
 // an author to change something that was already right.
+// Nearest is nearest, for a caller outside this package.
+//
+// Exported so the command line can answer a mistyped template name the same
+// way validation answers a mistyped field: with the one thing the person
+// probably meant, rather than the whole vocabulary at somebody who got a
+// single character wrong.
+func Nearest(want string, have []string) string { return nearest(want, have) }
+
 func nearest(want string, have []string) string {
 	best, bestDist := "", 1<<30
 	for _, h := range have {

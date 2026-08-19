@@ -1,0 +1,744 @@
+{
+  "contract": 1,
+  "entries": [
+    {
+      "name": "cog.action.button",
+      "model": [
+        {
+          "path": "ID",
+          "type": "string"
+        },
+        {
+          "path": "Label",
+          "type": "string"
+        },
+        {
+          "path": "Method",
+          "type": "string"
+        },
+        {
+          "path": "Href",
+          "type": "string"
+        },
+        {
+          "path": "Confirm",
+          "type": "string"
+        },
+        {
+          "path": "Target",
+          "type": "string"
+        },
+        {
+          "path": "Danger",
+          "type": "bool"
+        }
+      ],
+      "body": "\u003ca class=\"action{{if .Danger}} is-danger{{end}}\" href=\"{{.Href}}\"\n  data-method=\"{{.Method}}\"{{if .Confirm}} data-confirm=\"{{.Confirm}}\"{{end}}{{if .Target}} data-target=\"{{.Target}}\"{{end}}\u003e{{.Label}}\u003c/a\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.empty.default",
+      "model": [
+        {
+          "path": ".",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cp class=\"empty\"\u003e{{.}}\u003c/p\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.list.actions",
+      "model": [
+        {
+          "path": "ID",
+          "type": "string"
+        },
+        {
+          "path": "Label",
+          "type": "string"
+        },
+        {
+          "path": "Method",
+          "type": "string"
+        },
+        {
+          "path": "Href",
+          "type": "string"
+        },
+        {
+          "path": "Confirm",
+          "type": "string"
+        },
+        {
+          "path": "Target",
+          "type": "string"
+        },
+        {
+          "path": "Danger",
+          "type": "bool"
+        }
+      ],
+      "body": "{{range .}}{{template \"cog.action.button\" .}}{{end}}",
+      "appends": false
+    },
+    {
+      "name": "cog.page.plugin",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Title",
+          "type": "string"
+        },
+        {
+          "path": "Params",
+          "type": "map[string]string"
+        },
+        {
+          "path": "Query",
+          "type": "map[string]string"
+        },
+        {
+          "path": "Data",
+          "type": "interface"
+        }
+      ],
+      "body": "\u003cmain class=\"plugin-page\"\u003e{{if .Title}}\u003ch1\u003e{{.Title}}\u003c/h1\u003e{{end}}\u003c/main\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.row.nav",
+      "model": [
+        {
+          "path": "Label",
+          "type": "string"
+        },
+        {
+          "path": "Icon",
+          "type": "string"
+        },
+        {
+          "path": "Href",
+          "type": "string"
+        },
+        {
+          "path": "Order",
+          "type": "int"
+        },
+        {
+          "path": "Current",
+          "type": "bool"
+        },
+        {
+          "path": "From",
+          "type": "string"
+        }
+      ],
+      "body": "\u003ca class=\"rail-item{{if .Current}} is-current{{end}}\" href=\"{{.Href}}\"{{if .Current}} aria-current=\"page\"{{end}}\u003e{{if .Icon}}\u003cspan class=\"rail-icon\" data-icon=\"{{.Icon}}\" aria-hidden=\"true\"\u003e\u003c/span\u003e{{end}}\u003cspan class=\"rail-label\"\u003e{{.Label}}\u003c/span\u003e\u003c/a\u003e",
+      "appends": false,
+      "dormant": true
+    },
+    {
+      "name": "cog.shell.body",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Title",
+          "type": "string"
+        },
+        {
+          "path": "AppHead",
+          "type": "HTML"
+        },
+        {
+          "path": "Body",
+          "type": "HTML"
+        },
+        {
+          "path": "Nav",
+          "type": "[]NavItem"
+        },
+        {
+          "path": "Styles",
+          "type": "[]string"
+        },
+        {
+          "path": "Scripts",
+          "type": "[]Asset"
+        }
+      ],
+      "body": "{{.Body}}",
+      "appends": false
+    },
+    {
+      "name": "cog.shell.document",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Title",
+          "type": "string"
+        },
+        {
+          "path": "AppHead",
+          "type": "HTML"
+        },
+        {
+          "path": "Body",
+          "type": "HTML"
+        },
+        {
+          "path": "Nav",
+          "type": "[]NavItem"
+        },
+        {
+          "path": "Styles",
+          "type": "[]string"
+        },
+        {
+          "path": "Scripts",
+          "type": "[]Asset"
+        }
+      ],
+      "body": "\u003c!doctype html\u003e\n\u003chtml lang=\"{{.Ctx.Lang}}\"{{if .Ctx.Theme}} data-theme=\"{{.Ctx.Theme}}\"{{end}}\u003e\n\u003chead\u003e\n{{template \"cog.shell.head\" .}}\n\u003c/head\u003e\n\u003cbody\u003e\n{{template \"cog.shell.body\" .}}\n\u003c/body\u003e\n\u003c/html\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.shell.head",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Title",
+          "type": "string"
+        },
+        {
+          "path": "AppHead",
+          "type": "HTML"
+        },
+        {
+          "path": "Body",
+          "type": "HTML"
+        },
+        {
+          "path": "Nav",
+          "type": "[]NavItem"
+        },
+        {
+          "path": "Styles",
+          "type": "[]string"
+        },
+        {
+          "path": "Scripts",
+          "type": "[]Asset"
+        }
+      ],
+      "body": "{{.AppHead}}\n{{template \"cog.shell.tokens\" .}}\n{{range .Styles}}\u003clink rel=\"stylesheet\" href=\"{{.}}\"\u003e\n{{end}}{{range .Scripts}}\u003cscript type=\"module\" src=\"{{.Src}}\"{{if .Integrity}} integrity=\"{{.Integrity}}\"{{end}}\u003e\u003c/script\u003e\n{{end}}{{template \"cog.slot.head\" .}}",
+      "appends": false
+    },
+    {
+      "name": "cog.shell.rail",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Title",
+          "type": "string"
+        },
+        {
+          "path": "AppHead",
+          "type": "HTML"
+        },
+        {
+          "path": "Body",
+          "type": "HTML"
+        },
+        {
+          "path": "Nav",
+          "type": "[]NavItem"
+        },
+        {
+          "path": "Styles",
+          "type": "[]string"
+        },
+        {
+          "path": "Scripts",
+          "type": "[]Asset"
+        }
+      ],
+      "body": "\u003cnav class=\"rail\" aria-label=\"{{.Ctx.T.Navigation}}\"\u003e\n{{range .Nav}}{{template \"cog.row.nav\" .}}{{end}}{{template \"cog.slot.rail\" .}}\u003c/nav\u003e",
+      "appends": false,
+      "dormant": true
+    },
+    {
+      "name": "cog.shell.tokens",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Title",
+          "type": "string"
+        },
+        {
+          "path": "AppHead",
+          "type": "HTML"
+        },
+        {
+          "path": "Body",
+          "type": "HTML"
+        },
+        {
+          "path": "Nav",
+          "type": "[]NavItem"
+        },
+        {
+          "path": "Styles",
+          "type": "[]string"
+        },
+        {
+          "path": "Scripts",
+          "type": "[]Asset"
+        }
+      ],
+      "body": "",
+      "appends": false
+    },
+    {
+      "name": "cog.slot.head",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Title",
+          "type": "string"
+        },
+        {
+          "path": "AppHead",
+          "type": "HTML"
+        },
+        {
+          "path": "Body",
+          "type": "HTML"
+        },
+        {
+          "path": "Nav",
+          "type": "[]NavItem"
+        },
+        {
+          "path": "Styles",
+          "type": "[]string"
+        },
+        {
+          "path": "Scripts",
+          "type": "[]Asset"
+        }
+      ],
+      "body": "",
+      "appends": true
+    },
+    {
+      "name": "cog.slot.rail",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Title",
+          "type": "string"
+        },
+        {
+          "path": "AppHead",
+          "type": "HTML"
+        },
+        {
+          "path": "Body",
+          "type": "HTML"
+        },
+        {
+          "path": "Nav",
+          "type": "[]NavItem"
+        },
+        {
+          "path": "Styles",
+          "type": "[]string"
+        },
+        {
+          "path": "Scripts",
+          "type": "[]Asset"
+        }
+      ],
+      "body": "",
+      "appends": true,
+      "dormant": true
+    }
+  ]
+}
