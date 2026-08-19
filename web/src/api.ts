@@ -19,6 +19,52 @@ export type TestResult = { ok: boolean; models?: string[]; error?: string }
 
 export type PluginPage = { path: string; title?: string; auth: string }
 
+/** One rail destination a plugin contributed. */
+export type PluginNavItem = {
+  label: string
+  icon?: string
+  href: string
+  order: number
+  /** always | workspace | admin — decided here, because this is where the
+   *  viewer's role is already known. */
+  when?: string
+  /** Which plugin contributed it, so a rail entry can be traced without
+   *  reading manifests. */
+  from: string
+}
+
+/** What the plugins add to this interface.
+ *
+ * Delivered in the document at boot rather than fetched, because a rail that
+ * gains entries a moment after it renders is a rail that moves under
+ * somebody's cursor.
+ */
+export type PluginContribution = {
+  nav: PluginNavItem[]
+  styles: string[]
+  scripts: string[]
+}
+
+declare global {
+  interface Window {
+    __COG_PLUGINS__?: PluginContribution
+  }
+}
+
+/** contributions reads what the server put in the document.
+ *
+ * Absent is the ordinary case — no plugins, or none that contribute anything —
+ * and it reads as empty rather than as an error.
+ */
+export function contributions(): PluginContribution {
+  const c = window.__COG_PLUGINS__
+  return {
+    nav: Array.isArray(c?.nav) ? c.nav : [],
+    styles: Array.isArray(c?.styles) ? c.styles : [],
+    scripts: Array.isArray(c?.scripts) ? c.scripts : [],
+  }
+}
+
 /** What an action changed.
  *
  * `restart_required` is computed, not assumed: installing arrives switched off

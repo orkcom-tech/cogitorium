@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -36,10 +37,39 @@ type pluginRuntime struct {
 	// serving a directory would publish all of it because one file in it was
 	// referenced.
 	assets map[string]pluginAsset
+	// nav is what plugins contributed to the rail, in enable order and then by
+	// the order they asked for. Sorted rather than left in enable order alone:
+	// an author who says 500 means to sit beside the other 500s, not behind
+	// whichever plugin the operator happened to install first.
+	nav []NavItem
 	// styles and scripts are what every plugin asked to inject into the head.
 	styles  []string
 	scripts []view.Asset
 	report  view.BootReport
+}
+
+// Contribution is what the plugins add to the application's own interface.
+//
+// Handed to the browser at boot rather than fetched, so the rail is not a
+// destination that briefly has fewer entries than it will have in a moment.
+type Contribution struct {
+	Nav     []NavItem `json:"nav"`
+	Styles  []string  `json:"styles"`
+	Scripts []string  `json:"scripts"`
+}
+
+// NavItem is one destination a plugin contributed.
+type NavItem struct {
+	Label string `json:"label"`
+	Icon  string `json:"icon,omitempty"`
+	Href  string `json:"href"`
+	Order int    `json:"order"`
+	// When is always | workspace | admin, decided in the browser because that
+	// is where the viewer's role is already known.
+	When string `json:"when,omitempty"`
+	// From names the plugin, so an operator debugging a rail entry can find
+	// out where it came from without reading manifests.
+	From string `json:"from"`
 }
 
 // pluginAsset is one declared file and how to answer for it.
@@ -136,6 +166,16 @@ func loadPlugins(dataDir string) (*pluginRuntime, error) {
 					"plugin", m.ID, "path", p.Path)
 			}
 		}
+		for _, n := range m.Nav {
+			when := n.When
+			if when == "" {
+				when = "always"
+			}
+			rt.nav = append(rt.nav, NavItem{
+				Label: n.Label, Icon: n.Icon, Href: n.Href,
+				Order: n.Order, When: when, From: m.ID,
+			})
+		}
 		for _, st := range m.Styles {
 			url := rt.declareAsset(m.ID, in.Dir, st)
 			rt.styles = append(rt.styles, url)
@@ -145,6 +185,8 @@ func loadPlugins(dataDir string) (*pluginRuntime, error) {
 			rt.scripts = append(rt.scripts, view.Asset{Src: url})
 		}
 	}
+
+	sortNav(rt)
 
 	if len(report.Loaded) > 0 {
 		slog.Info("plugins loaded", "plugins", strings.Join(report.Loaded, ", "),
@@ -217,6 +259,29 @@ func (rt *pluginRuntime) isAsset(path string) bool {
 	}
 	_, ok := rt.assets[path]
 	return ok
+}
+
+// sortNav puts contributed entries in the order their authors asked for.
+//
+// Stable, so two plugins that both say 500 keep the operator's enable order
+// between them — an author asking for a position is expressing where they sit
+// relative to others, not claiming a unique slot.
+func sortNav(rt *pluginRuntime) {
+	sort.SliceStable(rt.nav, func(i, j int) bool { return rt.nav[i].Order < rt.nav[j].Order })
+}
+
+// Contribution is what the browser is told at boot.
+func (rt *pluginRuntime) Contribution() Contribution {
+	c := Contribution{Nav: []NavItem{}, Styles: []string{}, Scripts: []string{}}
+	if rt == nil {
+		return c
+	}
+	c.Nav = append(c.Nav, rt.nav...)
+	c.Styles = append(c.Styles, rt.styles...)
+	for _, s := range rt.scripts {
+		c.Scripts = append(c.Scripts, s.Src)
+	}
+	return c
 }
 
 // pageAuth reports what a plugin path requires. The second result is false for

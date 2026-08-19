@@ -208,3 +208,59 @@ func TestABrokenInstallClaimsOnlyItsID(t *testing.T) {
 }
 
 var errFake = fmt.Errorf("no installed version recorded")
+
+// nav: was accepted, validated and shown on the plugins page while rendering
+// nothing at all. This is the wiring that stops it being an inert field.
+func TestNavContributionsReachTheBrowser(t *testing.T) {
+	rt := &pluginRuntime{
+		nav: []NavItem{
+			{Label: "Releases", Href: "/p/radar/guide", Order: 500, When: "always", From: "radar"},
+		},
+		styles:  []string{"/p/radar/assets/theme.css"},
+		scripts: []view.Asset{{Src: "/p/radar/assets/island.js"}},
+	}
+	c := rt.Contribution()
+	if len(c.Nav) != 1 || c.Nav[0].Label != "Releases" {
+		t.Fatalf("nav = %+v", c.Nav)
+	}
+	// Which plugin contributed an entry has to survive, or an operator
+	// debugging a rail entry has to go read manifests to find out where it
+	// came from.
+	if c.Nav[0].From != "radar" {
+		t.Errorf("the contributing plugin must be named: %+v", c.Nav[0])
+	}
+	if len(c.Styles) != 1 || len(c.Scripts) != 1 {
+		t.Errorf("styles and scripts must travel too: %+v", c)
+	}
+}
+
+// A nil runtime is the ordinary case on an install with no plugins, and the
+// browser must get empty lists rather than nulls it has to defend against.
+func TestAnEmptyContributionIsEmptyNotNull(t *testing.T) {
+	var none *pluginRuntime
+	c := none.Contribution()
+	if c.Nav == nil || c.Styles == nil || c.Scripts == nil {
+		t.Errorf("empty lists, never nulls: %+v", c)
+	}
+	if len(c.Nav) != 0 {
+		t.Errorf("nav = %+v", c.Nav)
+	}
+}
+
+// An author who says 500 means to sit beside the other 500s, not behind
+// whichever plugin the operator happened to install first.
+func TestNavIsOrderedByWhatAuthorsAskedFor(t *testing.T) {
+	rt := &pluginRuntime{nav: []NavItem{
+		{Label: "last", Order: 900, From: "a"},
+		{Label: "first", Order: 100, From: "b"},
+		{Label: "middle", Order: 500, From: "c"},
+	}}
+	sortNav(rt)
+	got := []string{rt.nav[0].Label, rt.nav[1].Label, rt.nav[2].Label}
+	want := []string{"first", "middle", "last"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("order = %v, want %v", got, want)
+		}
+	}
+}

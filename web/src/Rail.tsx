@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { api, type User, type Workspace } from "./api";
+import { api, contributions, type PluginNavItem, type User, type Workspace } from "./api";
 import { COG_MARK, DOCS_URL, ORKCOM_URL, ORK_MARK } from "./styles/brand";
 import ThemeMenu from "./pages/ThemeMenu";
 import UpdateNotice from "./pages/UpdateNotice";
@@ -105,6 +105,31 @@ const I = {
     </svg>
   ),
 };
+
+/** pluginNav is what the plugins contributed, filtered to this viewer.
+ *
+ * The `when` test happens here rather than on the server for one reason: the
+ * server would have to render a different document per role, and a cached
+ * document that leaked an admin's entries to everybody else is a worse failure
+ * than a filter that runs in the browser.
+ */
+function pluginNav(user: User): PluginNavItem[] {
+  return contributions().nav.filter((n) => {
+    switch (n.when) {
+      case "admin":
+        return user.role === "admin"
+      case "workspace":
+      case "always":
+      case undefined:
+      case "":
+        return true
+      default:
+        // A `when` this build does not know is not shown. A rail entry whose
+        // condition nobody can evaluate is one nobody decided to show.
+        return false
+    }
+  })
+}
 
 export default function Rail({
   user,
@@ -390,6 +415,14 @@ export default function Rail({
           <Link to="/models">Models</Link>
           {user.role === "admin" && <Link to="/people">People</Link>}
           {user.role === "admin" && <Link to="/context">Context</Link>}
+          {pluginNav(user).map((n) => (
+            /* A plain anchor rather than a Link: a plugin's page is served by
+               the server, not by the client router, so routing to it in the
+               browser would land on a screen this app does not have. */
+            <a key={`${n.from}-${n.href}`} href={n.href}>
+              {n.label}
+            </a>
+          ))}
           <hr />
           <a href={DOCS_URL} target="_blank" rel="noreferrer">
             Documentation

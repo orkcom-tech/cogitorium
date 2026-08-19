@@ -4,11 +4,13 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io/fs"
 	"log/slog"
 	"mime"
@@ -486,7 +488,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, inletDeliveryPrefix, handleInletDeliveryPath)
 
 	mux.Handle(pluginPagePrefix, s.pluginHandler())
-	mux.Handle("/", uiHandler())
+	mux.Handle("/", s.uiHandler())
 
 	s.http = &http.Server{
 		Addr:              cfg.Listen,
@@ -713,7 +715,7 @@ func matchRoute(pattern, got []string) bool {
 
 // uiHandler serves the embedded SPA: real files as-is, everything else falls
 // back to index.html so client-side routes deep-link correctly.
-func uiHandler() http.Handler {
+func (s *Server) uiHandler() http.Handler {
 	dist, err := fs.Sub(web.Dist, "dist")
 	if err != nil {
 		// Impossible with a correct embed; fail loudly, not silently.
@@ -746,8 +748,69 @@ func uiHandler() http.Handler {
 				r.URL.Path = "/"
 			}
 		}
+		// The index carries what the plugins contribute, so the rail is not a
+		// destination that briefly has fewer entries than it will have a
+		// moment later. Everything else is served as-is.
+		if r.URL.Path == "/" {
+			if b, err := s.indexWithPlugins(dist); err == nil {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.Header().Set("Cache-Control", "no-store")
+				_, _ = w.Write(b)
+				return
+			}
+		}
 		fileServer.ServeHTTP(w, r)
 	})
+}
+
+// indexWithPlugins splices the plugin contribution into the application's own
+// document.
+//
+// Injected rather than fetched, because a rail that gains entries a moment
+// after it renders is a rail that moves under somebody's cursor. Written into
+// the head so it is set before the application's module runs, which is the
+// only ordering that lets the first render already be right.
+func (s *Server) indexWithPlugins(dist fs.FS) ([]byte, error) {
+	raw, err := fs.ReadFile(dist, "index.html")
+	if err != nil {
+		return nil, err
+	}
+	c := s.plugins.Contribution()
+	if len(c.Nav) == 0 && len(c.Styles) == 0 && len(c.Scripts) == 0 {
+		return raw, nil
+	}
+
+	payload, err := json.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+	var b strings.Builder
+	b.WriteString("<script>window.__COG_PLUGINS__=")
+	// The payload is this server's own JSON, but it lands inside a script
+	// element, where the parser ends the script at the first </script> no
+	// matter what the JSON meant. A plugin's name is author-controlled text,
+	// so the sequence is broken up rather than trusted not to occur.
+	b.WriteString(strings.ReplaceAll(string(payload), "</", `<\/`))
+	b.WriteString("</script>")
+	for _, href := range c.Styles {
+		b.WriteString(`<link rel="stylesheet" href="` + template.HTMLEscapeString(href) + `">`)
+	}
+	for _, src := range c.Scripts {
+		b.WriteString(`<script type="module" src="` + template.HTMLEscapeString(src) + `"></script>`)
+	}
+
+	head := []byte("</head>")
+	i := bytes.Index(raw, head)
+	if i < 0 {
+		// No head to splice into. Serving the document unchanged is better
+		// than serving one this code guessed the shape of.
+		return raw, nil
+	}
+	out := make([]byte, 0, len(raw)+b.Len())
+	out = append(out, raw[:i]...)
+	out = append(out, b.String()...)
+	out = append(out, raw[i:]...)
+	return out, nil
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
