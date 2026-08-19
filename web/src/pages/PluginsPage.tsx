@@ -144,6 +144,20 @@ export default function PluginsPage() {
       {error && <p className="error">{error}</p>}
       {notice && !error && <p className="hint">{notice}</p>}
 
+      {/* Dropping a bundle stays above both views and visible in both. It is
+          how you install something the catalog does not list, and putting it
+          behind a tab would make that the advanced path rather than an
+          ordinary one. */}
+      <Upload
+        onDone={(res) => {
+          setNotice(res.message)
+          setError(null)
+          if (res.restart_required) setRestartOwed(true)
+          reload()
+        }}
+        onError={setError}
+      />
+
       {/* Two views rather than two routes. What is installed and what could be
           are the same question asked twice, and making somebody navigate
           between them is how the second half goes unread. */}
@@ -176,16 +190,6 @@ export default function PluginsPage() {
         />
       ) : (
       <>
-      <Upload
-        onDone={(res) => {
-          setNotice(res.message)
-          setError(null)
-          if (res.restart_required) setRestartOwed(true)
-          reload()
-        }}
-        onError={setError}
-      />
-
       {plugins.length > 1 && (
         <div className="plugin-filters">
           <input

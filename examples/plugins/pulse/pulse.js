@@ -76,7 +76,16 @@ async function draw() {
   $('net-chart').innerHTML = bars([m.network.requests, m.network.bytes / 1024], ['requests', 'KiB'], 'currentColor')
 }
 
-draw().catch((e) => {
-  $('err').textContent = String(e)
-  $('err').hidden = false
-})
+// A plugin's script is injected into EVERY screen, including ones that have
+// nothing of this plugin on them — the sign-in card, somebody else's page. So
+// it has to leave when its own markup is not there, rather than reaching for
+// an element that does not exist and throwing into a console the operator
+// reads as the product being broken.
+if (document.querySelector('.pulse')) {
+  draw().catch((e) => {
+    const err = $('err')
+    if (!err) return
+    err.textContent = String(e)
+    err.hidden = false
+  })
+}
