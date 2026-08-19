@@ -6,7 +6,6 @@ import LoginPage from './pages/LoginPage'
 import SetupPage from './pages/SetupPage'
 import WorkspacesPage from './pages/WorkspacesPage'
 import WorkspacePage from './pages/WorkspacePage'
-import GearsPage from './pages/GearsPage'
 import EnvPage from './pages/EnvPage'
 import AdminPage from './pages/AdminPage'
 import TerminalPage from './pages/TerminalPage'
@@ -120,7 +119,11 @@ export default function App() {
             {/* /context is a server template now, admin-only there as it was
                 here. The component stays: the workspace opens the space as a
                 drawer, which is a different surface still to be converted. */}
-            <Route path="/gears" element={<GearsPage me={user} />} />
+            {/* /gears is a server template now: list, review, approve with
+                its grants, dry run, history, connections and the version
+                comparison. The component stays: the workspace opens the
+                catalogue as a drawer, which is a different surface still to be
+                converted. */}
             <Route path="/env" element={user.role === 'admin' ? <EnvPage /> : <Navigate to="/workspaces" replace />} />
             {/* /instructions is served by the server as a template now, so
                 the router must not claim it — a client route would shadow the

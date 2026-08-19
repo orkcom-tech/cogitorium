@@ -107,13 +107,15 @@ type Strings struct {
 	Models string
 	// Context is the context space's title.
 	Context string
+	// Gears is the gear catalogue's title.
+	Gears string
 }
 
 // DefaultStrings is English, which is what this product ships in today. It is
 // a value rather than constants so a plugin overriding the shell can be handed
 // a different one without the host changing shape first.
 func DefaultStrings() Strings {
-	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalog", Context: "Context"}
+	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalog", Context: "Context", Gears: "Gears"}
 }
 
 // Action is one control that causes a request.
@@ -236,6 +238,14 @@ func CoreModels() Models {
 		// from, and which of them this install offers an agent.
 		// The context space: a list of files, a search across them, and one
 		// file open for editing.
+		// The gear catalogue. cog.row.gear is the name the documentation uses
+		// as its recurring override example, so it has to be small enough to
+		// be worth overriding on its own.
+		"cog.page.gears":  Gears{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.gears":  Gears{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.gear":    Gear{},
+		"cog.empty.gears": Gears{Ctx: Ctx{T: DefaultStrings()}},
+
 		"cog.page.context":    Context{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.list.context":    Context{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.contextfile": ContextFile{},
@@ -248,6 +258,140 @@ func CoreModels() Models {
 		"cog.row.model":      Model{},
 		"cog.empty.models":   ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
 	}
+}
+
+// GearFile is one file of a gear's source.
+type GearFile struct {
+	Path    string
+	Content string
+	// Binary marks a file that cannot be read before approving it. Showing
+	// megabytes of base64 helps nobody, and pretending a blob is reviewable
+	// source would be worse.
+	Binary bool
+	// KB is its size when it is binary, for the sentence that says so.
+	KB int
+	// Entrypoint marks the file the gear starts at, which is the one worth
+	// opening first.
+	Entrypoint bool
+	// Diff is what changed since the version an approval last covered, when
+	// somebody asked to see it. An approval covers exact content, so the
+	// question at review time is not "what is this code" but "what is
+	// different from the version I already read".
+	Diff []DiffLine
+	// TooBig says the pair was past the ceiling and not compared — said out
+	// loud, because an empty diff reads as "nothing changed".
+	TooBig bool
+}
+
+// GearGrant is one named value a gear is given, and where it comes from.
+type GearGrant struct {
+	Name string
+	// Found is whether anything on this install supplies it. Learning this at
+	// approval beats learning it at three in the morning from a run that was
+	// refused.
+	Found  bool
+	Kind   string
+	Source string
+}
+
+// GearApproval is one entry in the trail.
+type GearApproval struct {
+	Version int
+	By      string
+	At      string
+	Network string
+	Timeout string
+}
+
+// Gear is one tool an agent forged.
+type Gear struct {
+	ID          int64
+	Name        string
+	Description string
+	Tags        []string
+	Version     int
+	// Status is "pending", "approved" or "disabled" — the word an operator
+	// reads rather than a code they look up.
+	Status     string
+	Approved   bool
+	Runtime    string
+	Entrypoint string
+
+	// Open is whether this row is expanded. Everything below it is filled only
+	// then: a list carrying every gear's source would carry every gear's
+	// source to draw a page of names.
+	Open       bool
+	Files      []GearFile
+	ArgsSchema string
+	Grants     []GearGrant
+	// NetworkOn and Hosts are what approving WOULD grant rather than what it
+	// granted: the allowlist is set in the same act as the approval, beside
+	// the source.
+	NetworkOn bool
+	Hosts     string
+	Timeout   int
+	Approvals []GearApproval
+	// Comparing is whether the source is being shown as a comparison, and
+	// PreviousVersion is what against.
+	Comparing       bool
+	PreviousVersion int
+
+	// Runs is what this gear has actually done, and Connections is where it
+	// actually reached. Both are the record rather than the intention, which
+	// is the half of an approval decision the source cannot show.
+	Runs        []GearRun
+	Connections []GearConnection
+
+	// DryArgs, DryOutput and DryFailed carry a dry run somebody just asked
+	// for. A dry run executes the gear NOW, even while pending, so that
+	// approval is an informed decision rather than a reading of source.
+	DryArgs   string
+	DryRan    bool
+	DryOutput string
+	DryFailed bool
+}
+
+// GearRun is one recorded execution.
+type GearRun struct {
+	At       string
+	ExitCode int
+	Failed   bool
+	Output   string
+}
+
+// GearConnection is one destination a gear actually reached, or was refused.
+type GearConnection struct {
+	Host    string
+	Port    int
+	Method  string
+	State   string
+	Refused bool
+	At      string
+}
+
+// Gears is what the gear catalogue renders against.
+type Gears struct {
+	Ctx   Ctx
+	Items []Gear
+	// SandboxKnown and Sandboxed are three states, not two: unknown is not the
+	// same as no. Reporting unknown as no would understate the protection on a
+	// server that has a sandbox and overstate the danger on one that does not.
+	SandboxKnown bool
+	Sandboxed    bool
+	// Pending is how many are awaiting review, which is usually why somebody
+	// opened this screen.
+	Pending int
+	// IsAdmin gates the controls that change what runs. A member sees the
+	// source and cannot approve it.
+	IsAdmin bool
+
+	Query     string
+	Tag       string
+	Tags      []Tag
+	Narrowed  bool
+	Authoring bool
+	Error     string
+	Notice    string
 }
 
 // ContextFile is one file in the space.
@@ -499,10 +643,30 @@ func Exemplars() Models {
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
 
+		"cog.page.gears":  exampleGears(ctx),
+		"cog.list.gears":  exampleGears(ctx),
+		"cog.row.gear":    exampleGears(ctx).Items[0],
+		"cog.empty.gears": Gears{Ctx: ctx},
+
 		"cog.page.context":    exampleContext(ctx),
 		"cog.list.context":    exampleContext(ctx),
 		"cog.row.contextfile": exampleContext(ctx).Files[0],
 		"cog.empty.context":   Context{Ctx: ctx, Available: true},
+	}
+}
+
+func exampleGears(ctx Ctx) Gears {
+	return Gears{
+		Ctx: ctx, SandboxKnown: true, Sandboxed: true, Pending: 1, IsAdmin: true,
+		Items: []Gear{
+			{ID: 1, Name: "changelog", Description: "Turns a range of commits into release notes",
+				Tags: []string{"release", "git"}, Version: 3, Status: "approved", Approved: true,
+				Runtime: "python", Entrypoint: "main.py"},
+			{ID: 2, Name: "fetch_manifest", Description: "Reads the published manifest for a release",
+				Tags: []string{"release", "http"}, Version: 1, Status: "pending",
+				Runtime: "python", Entrypoint: "main.py"},
+		},
+		Tags: []Tag{{Name: "git"}, {Name: "http"}, {Name: "release"}},
 	}
 }
 

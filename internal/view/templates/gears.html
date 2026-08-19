@@ -1,0 +1,221 @@
+{{/*
+  The gear catalogue.
+
+  cog.row.gear is the name the documentation uses as its recurring override
+  example, so the row is small on its own and carries the detail only when it
+  is open. A list that always carried every gear's source would fetch every
+  gear's source to draw a page of names.
+
+  The other half of an approval lives beside the source on purpose. An operator
+  can only be responsible for what they can see, and "this code" and "what this
+  code is given" shown apart is a decision made blind.
+*/}}
+
+{{define "cog.page.gears"}}
+<main class="page gears">
+  <h2>{{.Ctx.T.Gears}}</h2>
+
+  {{/* Three states, not two. Unknown is not the same as no: reporting it as no
+       would understate the protection here and overstate the danger on a
+       server without a sandbox. */}}
+  <p class="hint">
+    Tools your agents forged, kept for reuse.
+    {{if .SandboxKnown}}{{if .Sandboxed}}Each gear runs in a throwaway container with none of this server’s files, and no network unless you grant it one when you approve it — read the source, and try it with the dry run, first.{{else}}This server has no sandbox, so a gear runs as a subprocess with the server’s own file access — read the source before approving anything.{{end}}{{else}}Read the source, and try it with the dry run, before approving it.{{end}}
+    Nothing an agent calls runs until you do.
+  </p>
+
+  {{if .Pending}}<p class="notice">{{.Pending}} awaiting your review.</p>{{end}}
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  {{if .Notice}}<p class="hint">✓ {{.Notice}}</p>{{end}}
+
+  <form class="row" method="get" action="/gears"
+        hx-get="/gears" hx-target="#gear-list" hx-swap="outerHTML"
+        hx-trigger="submit, input from:input[name='q'] delay:250ms, change from:select">
+    <input class="grow" name="q" value="{{.Query}}" placeholder="search by name or description…">
+    <select name="tag" aria-label="Filter by tag">
+      <option value="">all tags</option>
+      {{range .Tags}}<option value="{{.Name}}"{{if .Selected}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+    <noscript><button type="submit">search</button></noscript>
+  </form>
+
+  {{if .IsAdmin}}
+  <details class="author-gear"{{if .Authoring}} open{{end}}>
+    <summary>write a gear</summary>
+    <form method="post" action="/gears">
+      <label>Name <input name="name" required placeholder="csv_summarize"></label>
+      <label>Description <input name="description" placeholder="What it does, in one line"></label>
+      <label>Tags <input name="tags" placeholder="csv, reporting"></label>
+      <label>Runtime
+        <select name="runtime">
+          <option value="python">python</option>
+          <option value="node">node</option>
+          <option value="bash">bash</option>
+        </select>
+      </label>
+      <label>Entrypoint <input name="entrypoint" required placeholder="pick the entrypoint…"></label>
+      <label>Named values it needs <input name="env_names" placeholder="API_KEY, BASE_URL"></label>
+      <label>Arguments schema <textarea name="args_schema" rows="4"
+              placeholder='{"type":"object","properties":{}}'></textarea></label>
+      <label>Source <textarea name="source" rows="12" spellcheck="false"
+              placeholder="The file your entrypoint names."></textarea></label>
+      <button type="submit">save it</button>
+    </form>
+  </details>
+  {{end}}
+
+  {{template "cog.list.gears" .}}
+</main>
+{{end}}
+
+{{define "cog.list.gears"}}<div id="gear-list" class="gear-list">
+{{if .Items}}{{range .Items}}{{template "cog.row.gear" .}}{{end}}{{else}}{{template "cog.empty.gears" .}}{{end}}
+</div>{{end}}
+
+{{define "cog.row.gear"}}<article class="card gear{{if .Open}} is-open{{end}}">
+  <header class="gear-head">
+    <h3>{{.Name}} <span class="muted">v{{.Version}}</span></h3>
+    {{if .Approved}}<span class="badge is-ok">{{.Status}}</span>{{else}}<span class="badge is-warn">{{.Status}}</span>{{end}}
+    {{range .Tags}}<span class="badge">{{.}}</span>{{end}}
+  </header>
+  {{if .Description}}<p class="hint">{{.Description}}</p>{{end}}
+  <p class="muted">{{.Runtime}} · <code>{{.Entrypoint}}</code></p>
+
+  {{if .Open}}
+    {{if .PreviousVersion}}
+      <div class="row">
+        {{if .Comparing}}<a href="/gears?open={{.ID}}">showing changes from v{{.PreviousVersion}}</a>
+        {{else}}<a href="/gears?open={{.ID}}&amp;compare=1">compare with v{{.PreviousVersion}}</a>{{end}}
+        <span class="muted">an approval covers exact content, so this is what changed since the version you last saw</span>
+      </div>
+    {{end}}
+
+    {{range .Files}}
+      <details{{if .Entrypoint}} open{{end}}>
+        <summary><code>{{.Path}}</code>{{if .Entrypoint}}<span class="muted"> — entrypoint</span>{{end}}{{if .Binary}}<span class="muted"> — binary</span>{{end}}</summary>
+        {{if .TooBig}}
+          <p class="hint">This file is too large to compare line by line. Its current contents are below.</p>
+          <pre class="prompt-preview">{{.Content}}</pre>
+        {{else if .Diff}}
+          <pre class="prompt-preview diff">{{range .Diff}}<span class="d-{{.Kind}}">{{.Text}}</span>
+{{end}}</pre>
+        {{else if .Binary}}
+          {{/* Showing megabytes of base64 helps nobody, and pretending a blob
+               is reviewable source would be worse. */}}
+          <p class="hint">{{.KB}} KB of compiled code — it cannot be read here. Approve it only if you trust
+          where it came from, and use the dry run below to see what it does.</p>
+        {{else}}
+          <pre class="prompt-preview">{{.Content}}</pre>
+        {{end}}
+      </details>
+    {{end}}
+
+    <details><summary>arguments schema</summary><pre class="prompt-preview">{{.ArgsSchema}}</pre></details>
+
+    <div class="grants">
+      <h4>What approving this grants</h4>
+
+      <div class="grant">
+        <span class="grant-label">credentials</span>
+        {{if .Grants}}
+          <ul class="grant-list">
+            {{range .Grants}}<li><code>{{.Name}}</code>
+              {{if .Found}}<span class="muted">{{.Kind}} · from {{.Source}}</span>
+              {{else}}{{/* Learning this at approval beats learning it at three
+                           in the morning from a run that refused. */}}
+                <span class="error">nothing on this install supplies it, so every run of this gear will be refused</span>
+              {{end}}
+            </li>{{end}}
+          </ul>
+        {{else}}
+          <p class="muted">None. This gear is given no named values, and its environment holds nothing but its own name.</p>
+        {{end}}
+      </div>
+
+      <form class="grant" method="post" action="/gears/{{.ID}}/approve">
+        <span class="grant-label">network</span>
+        <label class="row grant-check">
+          <input type="checkbox" name="network" value="on"{{if .NetworkOn}} checked{{end}}>
+          it may reach the hosts below, and nothing else
+        </label>
+        <textarea name="hosts" rows="3" spellcheck="false"
+                  placeholder="api.example.com&#10;*.internal.example.com">{{.Hosts}}</textarea>
+
+        <label class="row">timeout
+          <input type="number" name="timeout" min="1" value="{{.Timeout}}"> seconds
+        </label>
+
+        <div class="gear-actions">
+          <button type="submit">approve this version</button>
+        </div>
+      </form>
+    </div>
+
+    {{/* A dry run executes the gear NOW, even while pending, so approval is
+         an informed decision rather than a reading of source. Anyone may run
+         one; only an administrator may approve. */}}
+    <div class="field">
+      <span class="muted">dry run — executes the gear right now, even while pending, so approval is an informed decision</span>
+      <form class="row" method="post" action="/gears/{{.ID}}/run">
+        <input class="grow" name="args" value="{{.DryArgs}}" aria-label="Arguments"
+               placeholder='{"numbers": [1, 2, 3]}'>
+        <button type="submit">run</button>
+      </form>
+    </div>
+    {{if .DryRan}}<pre class="prompt-preview{{if .DryFailed}} run-failed{{end}}">{{.DryOutput}}</pre>{{end}}
+
+    {{if .Runs}}
+      <details>
+        <summary>what it has done</summary>
+        {{range .Runs}}<div class="gear-run">
+          <span class="muted">{{.At}} · exit {{.ExitCode}}</span>
+          <pre class="prompt-preview{{if .Failed}} run-failed{{end}}">{{.Output}}</pre>
+        </div>{{end}}
+      </details>
+    {{end}}
+
+    {{if .Connections}}
+      <details>
+        <summary>where it reached</summary>
+        <table>
+          <thead><tr><th>host</th><th>port</th><th>method</th><th>outcome</th><th>when</th></tr></thead>
+          <tbody>{{range .Connections}}<tr>
+            <td><code>{{.Host}}</code></td><td>{{.Port}}</td><td>{{.Method}}</td>
+            <td>{{if .Refused}}<span class="error">{{.State}}</span>{{else}}{{.State}}{{end}}</td>
+            <td>{{.At}}</td>
+          </tr>{{end}}</tbody>
+        </table>
+      </details>
+    {{end}}
+
+    <div class="gear-actions">
+      <form method="post" action="/gears/{{.ID}}/disable"><button type="submit">disable</button></form>
+      <form method="post" action="/gears/{{.ID}}/delete"
+            hx-confirm="Delete {{.Name}}? Its runs stay on the record; the gear goes.">
+        <button type="submit" class="danger">delete</button>
+      </form>
+      <a href="/gears">close</a>
+    </div>
+
+    {{if .Approvals}}
+      <details>
+        <summary>who approved it</summary>
+        <table>
+          <thead><tr><th>version</th><th>who</th><th>when</th><th>network</th><th>timeout</th></tr></thead>
+          <tbody>{{range .Approvals}}<tr>
+            <td>v{{.Version}}</td><td>{{.By}}</td><td>{{.At}}</td>
+            <td>{{.Network}}</td><td>{{.Timeout}}</td>
+          </tr>{{end}}</tbody>
+        </table>
+      </details>
+    {{end}}
+  {{else}}
+    <div class="gear-actions">
+      <a href="/gears?open={{.ID}}">{{if .Approved}}review &amp; run{{else}}review &amp; approve{{end}}</a>
+    </div>
+  {{end}}
+</article>{{end}}
+
+{{define "cog.empty.gears"}}<p class="hint">
+{{if .Narrowed}}Nothing here matches that.{{else}}Nothing here yet. Agents forge gears when they need a capability that doesn't exist — or you can write one yourself.{{end}}
+</p>{{end}}

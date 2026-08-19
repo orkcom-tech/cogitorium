@@ -548,6 +548,15 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// application. Its own paths rather than /api/v1 ones: these answer with
 	// HTML, and the described API is a JSON surface — putting a page in it
 	// would make every generated client expect a document.
+	s.page(mux, "GET /gears", s.handleGearsPage)
+	s.page(mux, "POST /gears/{id}/approve", s.handleApproveGearForm)
+	// Open to anyone: a dry run is how somebody decides whether to ask for an
+	// approval, and requiring the permission to form the opinion would leave
+	// only administrators able to have one.
+	s.page(mux, "POST /gears/{id}/run", s.handleRunGearForm)
+	s.page(mux, "POST /gears/{id}/disable", s.handleDisableGearForm)
+	s.page(mux, "POST /gears/{id}/delete", s.handleDeleteGearForm)
+
 	s.page(mux, "GET /context", s.handleContextPage)
 	s.page(mux, "POST /context/save", s.handleSaveContextForm)
 

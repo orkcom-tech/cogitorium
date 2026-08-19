@@ -3739,3 +3739,19 @@ button.big {
   border-radius: 8px;
   background: #fff;
 }
+
+/* A comparison, coloured by what moved. The whole point of showing one at
+   review time is that an approval covers exact content, so the eye needs to
+   land on the changed lines rather than re-read the file. */
+.prompt-preview.diff .d-added {
+  display: block;
+  background: color-mix(in srgb, var(--ok, #2e7d32) 14%, transparent);
+}
+.prompt-preview.diff .d-removed {
+  display: block;
+  background: color-mix(in srgb, var(--danger, #b3261e) 14%, transparent);
+  opacity: 0.75;
+}
+.prompt-preview.diff .d-same {
+  display: block;
+}
