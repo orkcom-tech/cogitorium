@@ -45,4 +45,22 @@ if command -v contextd >/dev/null 2>&1; then
     fi
 fi
 
+# Seed the plugins a derived image baked in, on EVERY start rather than the
+# first. That is what makes the plugin set a property of the image: a
+# first-start-only seed comes up empty the moment somebody recreates the
+# container against a volume that already exists, or the pod lands on a node
+# whose volume was provisioned earlier.
+#
+# Only plugins are copied. Runtimes are read where they already are — a musl
+# CPython is well over a hundred megabytes across tens of thousands of files,
+# and copying that into the volume on every start would double the storage and
+# pay a per-start walk for nothing.
+#
+# Failure here is reported and not fatal. A server that refused to start
+# because an extra could not be copied would take the whole product away over
+# something nobody asked for yet.
+if [ -d /usr/share/cogitorium/ref/plugins ]; then
+    cogitorium plugins seed || echo "cogitorium: the baked plugins could not be seeded" >&2
+fi
+
 exec cogitorium "$@"

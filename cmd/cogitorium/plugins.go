@@ -151,6 +151,87 @@ func newPluginsCmds() *cobra.Command {
 	devCmd.Flags().BoolVar(&watch, "watch", false, "report every change, so a supervisor can restart")
 	root.AddCommand(devCmd)
 
+	var refDir, fromFile string
+	bakeCmd := &cobra.Command{
+		Use:   "bake [bundle.zip...]",
+		Short: "Materialise plugins into a derived image at build time",
+		Long: "Writes bundles into an image layer so the plugin set is a property of the IMAGE\n" +
+			"rather than of a volume. Wipe the volume, land on a fresh node, or run with no\n" +
+			"volume at all, and the same plugins come up.\n\n" +
+			"Baked plugins are approved by whoever built the image, because choosing them\n" +
+			"IS that decision — asking the operator who later runs it to approve them again\n" +
+			"would be asking them to ratify a choice they cannot change without rebuilding.",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			bundles := args
+			if fromFile != "" {
+				b, err := os.ReadFile(fromFile)
+				if err != nil {
+					return err
+				}
+				for _, line := range strings.Split(string(b), "\n") {
+					line = strings.TrimSpace(line)
+					if line != "" && !strings.HasPrefix(line, "#") {
+						bundles = append(bundles, line)
+					}
+				}
+			}
+			if len(bundles) == 0 {
+				return fmt.Errorf("name at least one bundle, or -f a file listing them")
+			}
+			baked, err := plugin.Bake(refDir, bundles)
+			if err != nil {
+				return err
+			}
+			dir := refDir
+			if dir == "" {
+				dir = plugin.RefDir
+			}
+			fmt.Printf("Baked %d plugin(s) into %s\n", len(baked), dir)
+			for _, in := range baked {
+				fmt.Printf("  %s %s\n", in.ID, in.Version)
+			}
+			return nil
+		},
+	}
+	bakeCmd.Flags().StringVar(&refDir, "ref", "", "the image tree to write into (default "+plugin.RefDir+")")
+	bakeCmd.Flags().StringVarP(&fromFile, "file", "f", "", "a file listing bundles, one per line")
+	root.AddCommand(bakeCmd)
+
+	var seedRef string
+	seedCmd := &cobra.Command{
+		Use:   "seed",
+		Short: "Copy the image's baked plugins into the data directory",
+		Long: "Run on EVERY start, not the first. That is what makes the plugin set a property\n" +
+			"of the image: a first-start-only seed comes up empty the moment somebody\n" +
+			"recreates the container against a volume that already exists.\n\n" +
+			"Only plugins are copied. Runtimes are used where they are, read-only.",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, cfg, err := load(cmd)
+			if err != nil {
+				return err
+			}
+			_ = s
+			if err := plugin.CheckRef(seedRef); err != nil {
+				// Reported rather than fatal: a server that refused to start
+				// because a baked plugin was unreadable would take the whole
+				// product away over an extra.
+				fmt.Fprintln(os.Stderr, "cogitorium: "+err.Error())
+			}
+			seeded, err := plugin.Seed(seedRef, cfg.DataDir)
+			if err != nil {
+				return err
+			}
+			if len(seeded) > 0 {
+				fmt.Printf("Seeded %s\n", strings.Join(seeded, ", "))
+			}
+			return nil
+		},
+	}
+	seedCmd.Flags().StringVar(&seedRef, "ref", "", "the image tree to read from (default "+plugin.RefDir+")")
+	root.AddCommand(seedCmd)
+
 	root.AddCommand(&cobra.Command{
 		Use:          "list",
 		Short:        "List installed plugins, in layer order",
