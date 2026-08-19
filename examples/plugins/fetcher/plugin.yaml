@@ -1,0 +1,15 @@
+schema: 1
+id: fetcher
+name: Fetcher
+version: 1.0.0
+license: Apache-2.0
+needs: python
+host:
+  contract: 1
+hosts:
+  - api.github.com
+pages:
+  - path: /p/fetcher/
+    template: fetcher.page.home
+    title: Fetcher
+    provider: home

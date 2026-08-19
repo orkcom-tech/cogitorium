@@ -167,7 +167,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// Compiled at boot rather than on the first request, so a module that will
 	// not load is a line in the startup log rather than a page that fails the
 	// first time somebody visits it.
-	pluginBackends := startBackends(context.Background(), plugins, plugins.live, cfg.DataDir, sb, db, cfg.Plugins)
+	pluginBackends := startBackends(context.Background(), plugins, plugins.live, cfg.DataDir, sb, db, cfg.Plugins, gate)
 
 	cat := catalog.NewStore(db)
 	ws := workspace.NewStore(db)

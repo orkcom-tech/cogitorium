@@ -16,9 +16,13 @@ import (
 // Connection is one attempt, whatever became of it. It carries no path, no
 // query string and no header — see the migration for why.
 type Connection struct {
-	ID          int64    `json:"id"`
-	GearID      *int64   `json:"gear_id"`
-	GearName    string   `json:"gear_name"`
+	ID       int64  `json:"id"`
+	GearID   *int64 `json:"gear_id"`
+	GearName string `json:"gear_name"`
+	// Source is "gear" or "plugin". A plugin's request goes out through the
+	// same gate under the same rules, and filing it under a gear name would
+	// answer "which gear reached this host" with something that was never one.
+	Source      string   `json:"source"`
 	Version     int      `json:"version"`
 	WorkspaceID *int64   `json:"workspace_id"`
 	AgentID     *int64   `json:"agent_id"`
@@ -41,6 +45,15 @@ func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 
 func now() string { return time.Now().UTC().Format(time.RFC3339) }
 
+// source defaults an empty value to gear, which is what every caller meant
+// before plugins could reach the network at all.
+func source(s string) string {
+	if s == "" {
+		return SourceGear
+	}
+	return s
+}
+
 // Record writes the attempt before the socket is opened. There is no path in
 // this package that connects without a row first — the same rule the search
 // log keeps, and for the same reason: a crash or a refusal must still leave
@@ -52,10 +65,11 @@ func (s *Store) Record(ctx context.Context, c Connection) (int64, error) {
 	}
 	ts := now()
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO gear_connections (gear_id, gear_name, version, workspace_id, agent_id, agent_name,
-		                              host, port, method, allowed, state, error, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		c.GearID, c.GearName, c.Version, c.WorkspaceID, c.AgentID, c.AgentName,
+		INSERT INTO gear_connections (gear_id, gear_name, source, version, workspace_id, agent_id,
+		                              agent_name, host, port, method, allowed, state, error,
+		                              created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.GearID, c.GearName, source(c.Source), c.Version, c.WorkspaceID, c.AgentID, c.AgentName,
 		c.Host, c.Port, c.Method, string(allowed), c.State, c.Error, ts, ts)
 	if err != nil {
 		return 0, fmt.Errorf("record gear connection: %w", err)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/orkcom-tech/cogitorium/internal/abi"
 	"github.com/orkcom-tech/cogitorium/internal/channel"
+	"github.com/orkcom-tech/cogitorium/internal/gearnet"
 	"github.com/orkcom-tech/cogitorium/internal/imagert"
 	"github.com/orkcom-tech/cogitorium/internal/plugin"
 	"github.com/orkcom-tech/cogitorium/internal/runtimes"
@@ -75,7 +76,7 @@ func hostOf(url string) string {
 // a line in the startup log rather than a page that fails the first time
 // somebody visits it.
 func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Installed, dataDir string,
-	sb sandbox.Runner, db *sql.DB, cfg map[string]map[string]any) *backends {
+	sb sandbox.Runner, db *sql.DB, cfg map[string]map[string]any, gate *gearnet.Gate) *backends {
 	b := &backends{tier: map[string]plugin.Tier{}, dirOf: map[string]string{}}
 
 	grants := map[string]plugin.Grants{}
@@ -122,7 +123,7 @@ func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Inst
 		}
 	}
 
-	gateway := newHostGateway(grants, db, rt, cfg)
+	gateway := newHostGateway(grants, db, rt, cfg, gate)
 	if len(workerPlugins) > 0 || len(nativePlugins) > 0 {
 		b.startWorkers(ctx, workerPlugins, nativePlugins, native, dataDir, profile, gateway)
 	}

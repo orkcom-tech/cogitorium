@@ -1,0 +1,11 @@
+-- What kind of thing opened a connection.
+--
+-- The gate was built for gears and its record names one: gear_id, gear_name.
+-- Plugins now go out through the same gate — deliberately, because a second
+-- way out would be a second set of rules — and without this column every
+-- plugin's traffic would be filed under a gear that does not exist. A log that
+-- answers "which gear reached api.github.com" with the name of a plugin is a
+-- log that answers the wrong question confidently.
+--
+-- Defaulted to 'gear' so every row already written stays true.
+ALTER TABLE gear_connections ADD COLUMN source TEXT NOT NULL DEFAULT 'gear';

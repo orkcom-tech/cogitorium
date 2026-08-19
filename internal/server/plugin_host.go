@@ -2,15 +2,23 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/big"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/abi"
+	"github.com/orkcom-tech/cogitorium/internal/gearnet"
 	"github.com/orkcom-tech/cogitorium/internal/plugin"
 )
 
@@ -37,6 +45,10 @@ type hostGateway struct {
 	// through the same machinery a page does — including other plugins'
 	// overrides of the name it asked for.
 	rt *pluginRuntime
+	// gate is the one way out of this process. Shared with gears on purpose:
+	// two ways out would be two sets of rules, and the one nobody remembered
+	// to update would be the one plugins used.
+	gate *gearnet.Gate
 	// config is what the operator set for each plugin, read-only. A plugin
 	// writing its own configuration would be a plugin granting itself
 	// something; what it wants to remember goes in kv.
@@ -47,9 +59,9 @@ type hostGateway struct {
 }
 
 func newHostGateway(grants map[string]plugin.Grants, db *sql.DB, rt *pluginRuntime,
-	cfg map[string]map[string]any) *hostGateway {
+	cfg map[string]map[string]any, gate *gearnet.Gate) *hostGateway {
 	return &hostGateway{
-		grants: grants, db: db, rt: rt, config: cfg,
+		grants: grants, db: db, rt: rt, config: cfg, gate: gate,
 		now: time.Now,
 		rand: func(max int64) int64 {
 			n, err := rand.Int(rand.Reader, big.NewInt(max))
@@ -108,20 +120,131 @@ func (g *hostGateway) Call(id string, req abi.HostRequest) abi.HostReply {
 		return g.kv(id, req.Input)
 
 	case abi.CallHTTP:
-		var in struct {
-			URL string `json:"url"`
-		}
-		_ = json.Unmarshal(req.Input, &in)
-		if err := gr.AllowHost(hostOf(in.URL)); err != nil {
-			return abi.HostReply{Err: err.Error()}
-		}
-		// The grant check is the part that is wired. Carrying the request
-		// belongs with the gate that already substitutes credentials at the
-		// edge, and doing it here would be a second way out of this process
-		// with different rules.
-		return abi.HostReply{Err: "outbound requests are not carried yet on this tier"}
+		return g.http(id, gr, req.Input)
 	}
 	return abi.HostReply{Err: fmt.Sprintf("%q is not answered yet on this tier", req.Call)}
+}
+
+// http carries one outbound request, through the gate every gear already uses.
+//
+// Through the gate rather than with a client of its own, and that is the whole
+// design: the gate writes a row before the socket opens, refuses loopback and
+// link-local regardless of grant, and settles the row with what was actually
+// sent. A second way out of this process would be a second set of rules, and
+// the one nobody remembered to update would be the one plugins used.
+//
+// The grant is checked here as well. The gate would refuse an ungranted host
+// anyway, but a refusal that names the plugin's own declaration is a better
+// sentence than one that names a proxy.
+func (g *hostGateway) http(id string, gr plugin.Grants, input json.RawMessage) abi.HostReply {
+	var in struct {
+		Method  string            `json:"method"`
+		URL     string            `json:"url"`
+		Headers map[string]string `json:"headers"`
+		Body    []byte            `json:"body"`
+	}
+	if err := json.Unmarshal(input, &in); err != nil {
+		return abi.HostReply{Err: "http needs a url"}
+	}
+	if in.URL == "" {
+		return abi.HostReply{Err: "http needs a url"}
+	}
+	if in.Method == "" {
+		in.Method = http.MethodGet
+	}
+	if err := gr.AllowHost(hostOf(in.URL)); err != nil {
+		return abi.HostReply{Err: err.Error()}
+	}
+	if g.gate == nil {
+		// Said rather than quietly bypassed. An install without the gate is
+		// an install where nothing records what a plugin reached, and going
+		// out anyway would be exactly the unrecorded path the gate exists to
+		// remove.
+		return abi.HostReply{Err: "this install has no network gate, so nothing can be carried out of it"}
+	}
+
+	// One ticket per request. A ticket is a run's permission and a plugin call
+	// is the run — holding one open across calls would leave a credential
+	// valid for a request nobody has made yet.
+	ticket, err := g.gate.Open(gearnet.Grant{
+		GearName: id,
+		Source:   gearnet.SourcePlugin,
+		Hosts:    gr.Hosts(),
+	})
+	if err != nil {
+		return abi.HostReply{Err: err.Error()}
+	}
+	defer ticket.Close()
+
+	proxy, err := url.Parse(ticket.ProxyURL(""))
+	if err != nil {
+		return abi.HostReply{Err: err.Error()}
+	}
+	// The machine's own roots FIRST, and the gate's added to them.
+	//
+	// Starting from an empty pool replaces the system roots rather than adding
+	// to them, so every real certificate on the internet becomes untrusted —
+	// which presents as "certificate signed by unknown authority" for
+	// api.github.com and reads like the remote host's fault.
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		return abi.HostReply{Err: "this machine's certificate roots could not be read, so nothing " +
+			"can be verified: " + err.Error()}
+	}
+	if pem := g.gate.CACert(); len(pem) > 0 {
+		// The gate reads inside TLS when a run carries secret references, and
+		// then its certificate is the one presented. Added for this request
+		// only — the pool is built here and thrown away with it.
+		pool.AppendCertsFromPEM(pem)
+	}
+	client := &http.Client{
+		Timeout: pluginHTTPTimeout,
+		Transport: &http.Transport{
+			Proxy:           http.ProxyURL(proxy),
+			TLSClientConfig: &tls.Config{RootCAs: pool},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), pluginHTTPTimeout)
+	defer cancel()
+	httpReq, err := http.NewRequestWithContext(ctx, in.Method, in.URL, bytes.NewReader(in.Body))
+	if err != nil {
+		return abi.HostReply{Err: err.Error()}
+	}
+	for k, v := range in.Headers {
+		// Hop-by-hop headers are the caller's business and not a plugin's, and
+		// a plugin setting Proxy-Authorization would be a plugin trying to be
+		// a different run.
+		if strings.EqualFold(k, "proxy-authorization") || strings.EqualFold(k, "connection") {
+			continue
+		}
+		httpReq.Header.Set(k, v)
+	}
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		// The gate's refusal arrives here as a transport error, and its own
+		// words are the useful half.
+		return abi.HostReply{Err: err.Error()}
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody+1))
+	if err != nil {
+		return abi.HostReply{Err: err.Error()}
+	}
+	if int64(len(body)) > maxHTTPBody {
+		return abi.HostReply{Err: fmt.Sprintf("the response is past the %d byte limit", int64(maxHTTPBody))}
+	}
+	headers := map[string]string{}
+	for k := range resp.Header {
+		headers[k] = resp.Header.Get(k)
+	}
+	return reply(map[string]any{
+		"status":  resp.StatusCode,
+		"headers": headers,
+		"body":    body,
+	})
 }
 
 // render runs a template through the layer stack.
@@ -307,6 +430,12 @@ func (g *hostGateway) kv(id string, input json.RawMessage) abi.HostReply {
 }
 
 const (
+	// Bounds on one outbound request. A plugin streaming a gigabyte through
+	// this call is a plugin the operator's memory will feel, and the host
+	// holds the whole body because the ABI passes bytes.
+	pluginHTTPTimeout = 30 * time.Second
+	maxHTTPBody       = 8 << 20
+
 	// A ceiling, not a policy. A plugin storing megabytes per key is doing
 	// something the operator's SQLite file will feel, and a limit somebody
 	// hits is better than a database nobody can back up.

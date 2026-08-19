@@ -61,7 +61,23 @@ type Grant struct {
 	// AgentName is empty for an operator's dry run from the catalog.
 	AgentName string
 	Hosts     []string
+	// Source names what kind of thing this grant belongs to: a gear an agent
+	// forged, or a plugin an operator installed. Empty means gear, because
+	// that is what every caller meant before plugins could reach the network
+	// at all.
+	//
+	// Recorded rather than inferred, because a connection log that files a
+	// plugin's request under a gear name answers "which gear reached this
+	// host" with something that was never a gear.
+	Source string
 }
+
+// Source values. A third would mean a third kind of thing with network access,
+// which is a decision rather than a string.
+const (
+	SourceGear   = "gear"
+	SourcePlugin = "plugin"
+)
 
 // The states one connection can end in. 'open' is the only live one; a row
 // still holding it after a restart is settled as interrupted at startup.

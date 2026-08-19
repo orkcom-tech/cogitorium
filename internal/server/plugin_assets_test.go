@@ -1,9 +1,12 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/orkcom-tech/cogitorium/internal/abi"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -283,4 +286,53 @@ func TestAPluginThatOnlyMountsAPanelReachesTheDocument(t *testing.T) {
 	if contributesNothing(c) {
 		t.Fatal("a plugin contributing only a mount was treated as contributing nothing")
 	}
+}
+
+// An install with no gate must not carry a plugin's request out anyway.
+//
+// The gate is what writes a row before the socket opens. Going out without one
+// would be exactly the unrecorded path it exists to remove — and it would be
+// the path used precisely on the installs where nobody is watching.
+func TestWithoutTheGateAnOutboundRequestIsRefusedRatherThanMade(t *testing.T) {
+	g := newHostGateway(
+		map[string]plugin.Grants{"p": mustGrants(t, plugin.Manifest{ID: "p", Hosts: []string{"example.com"}})},
+		nil, nil, nil, nil,
+	)
+
+	reply := g.Call("p", abi.HostRequest{
+		Call:  abi.CallHTTP,
+		Input: json.RawMessage(`{"url":"https://example.com/"}`),
+	})
+	if reply.Err == "" {
+		t.Fatal("a request went out on an install with no gate")
+	}
+	if !strings.Contains(reply.Err, "gate") {
+		t.Fatalf("the refusal does not say why: %q", reply.Err)
+	}
+}
+
+// And the grant is checked before anything else, so the refusal names the
+// plugin's own declaration rather than a proxy the author never wrote down.
+func TestAnUngrantedHostIsRefusedByName(t *testing.T) {
+	g := newHostGateway(
+		map[string]plugin.Grants{"p": mustGrants(t, plugin.Manifest{ID: "p", Hosts: []string{"api.github.com"}})},
+		nil, nil, nil, nil,
+	)
+
+	reply := g.Call("p", abi.HostRequest{
+		Call:  abi.CallHTTP,
+		Input: json.RawMessage(`{"url":"https://example.com/"}`),
+	})
+	if !strings.Contains(reply.Err, "example.com") || !strings.Contains(reply.Err, "api.github.com") {
+		t.Fatalf("the refusal names neither what was asked for nor what was granted: %q", reply.Err)
+	}
+}
+
+func mustGrants(t *testing.T, m plugin.Manifest) plugin.Grants {
+	t.Helper()
+	g, err := plugin.ResolveGrants(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g
 }
