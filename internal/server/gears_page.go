@@ -364,3 +364,67 @@ func (s *Server) fillGearDetail(r *http.Request, row *view.Gear, g gear.Gear) {
 // popular gear ever had is a card nobody can read, and the ones worth seeing
 // are the recent ones.
 const gearRunsShown = 10
+
+// handleWriteGearForm forges a gear from the form on the gears screen.
+//
+// This route did not exist. The form posted to /gears, Go's mux had no pattern
+// for it, and the request fell through to the single-page application — which
+// answered 200 with its own shell and rendered nothing, because the client has
+// no /gears screen any more. From the operator's side: fill in a gear, press
+// the button, land on a blank page, and no gear. The only way to author one
+// was to ask an agent.
+func (s *Server) handleWriteGearForm(w http.ResponseWriter, r *http.Request) {
+	if !s.pageAdmin(w, r) {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.renderGears(w, r, "that form could not be read", "")
+		return
+	}
+
+	name := strings.TrimSpace(r.PostFormValue("name"))
+	runtime := strings.TrimSpace(r.PostFormValue("runtime"))
+	source := r.PostFormValue("source")
+
+	// Named before the store is asked, because the store's own message is
+	// about a gear and this one is about a form somebody is still looking at.
+	switch {
+	case name == "":
+		s.renderGears(w, r, "a gear needs a name", "")
+		return
+	case strings.TrimSpace(source) == "":
+		s.renderGears(w, r, "a gear needs its source — that is the thing being approved", "")
+		return
+	}
+
+	entrypoint := strings.TrimSpace(r.PostFormValue("entrypoint"))
+	if entrypoint == "" {
+		entrypoint = gear.DefaultEntrypoint(runtime)
+	}
+	files := []gear.File{{Path: entrypoint, Content: source, Encoding: gear.EncodingUTF8}}
+
+	g, err := s.gears.Forge(r.Context(), name,
+		strings.TrimSpace(r.PostFormValue("description")),
+		splitList(r.PostFormValue("tags")),
+		runtime, entrypoint,
+		strings.TrimSpace(r.PostFormValue("args_schema")),
+		splitList(r.PostFormValue("env_names")),
+		files, 0, 0)
+	if err != nil {
+		s.renderGears(w, r, err.Error(), "")
+		return
+	}
+
+	// To the gear, opened, because the next thing anybody does with a gear
+	// they just wrote is read it and decide about it.
+	http.Redirect(w, r, fmt.Sprintf("/gears?open=%d", g.ID), http.StatusSeeOther)
+}
+
+// splitList reads a comma- or space-separated field into names.
+func splitList(raw string) []string {
+	var out []string
+	for _, v := range strings.Fields(strings.ReplaceAll(raw, ",", " ")) {
+		out = append(out, v)
+	}
+	return out
+}

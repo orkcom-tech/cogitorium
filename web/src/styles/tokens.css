@@ -1102,3 +1102,61 @@ a[role='tab'].is-current {
   max-height: 160px;
   margin-bottom: var(--s3);
 }
+
+/* A form on a screen the server renders.
+ *
+ * The markup is labels wrapping their inputs, which is the right shape and has
+ * no layout of its own: inline labels sprayed across the full width, and on
+ * the gear form a submit button 1400 pixels below anything visible. A person
+ * filled it in and could not find the button.
+ *
+ * One column, because these are forms somebody reads top to bottom.
+ */
+.library-write form,
+.author-gear form,
+.plugin-drop form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  margin-top: var(--s3);
+}
+
+.library-write form label,
+.author-gear form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  font-size: var(--t-ui);
+  color: var(--text-dim);
+}
+
+.library-write form label input,
+.library-write form label textarea,
+.library-write form label select,
+.author-gear form label input,
+.author-gear form label textarea,
+.author-gear form label select {
+  color: var(--text);
+  font-size: var(--t-ui);
+}
+
+.library-write form button[type='submit'],
+.author-gear form button[type='submit'] {
+  align-self: flex-start;
+}
+
+/* A screen the server renders, inside the cavity.
+ *
+ * The cavity clips — that is what makes the rounded corner a corner rather
+ * than a suggestion — so whatever it holds has to do its own scrolling. The
+ * client's screens each arrange that for themselves; a server-rendered page is
+ * one element and had nothing, so anything past the first screenful was simply
+ * cut off. The gear form's submit button sat a thousand pixels below a page
+ * that would not move.
+ */
+.cavity > main.page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s5);
+}

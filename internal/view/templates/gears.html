@@ -53,7 +53,10 @@
           <option value="bash">bash</option>
         </select>
       </label>
-      <label>Entrypoint <input name="entrypoint" required placeholder="pick the entrypoint…"></label>
+      {{/* Not required: a gear written here is one file, and which file that
+           is follows from the runtime. Asking for it made the form refuse
+           until somebody guessed "main.py". */}}
+      <label>Entrypoint <input name="entrypoint" placeholder="blank for the runtime's own — main.py, main.js, main.sh"></label>
       <label>Named values it needs <input name="env_names" placeholder="API_KEY, BASE_URL"></label>
       <label>Arguments schema <textarea name="args_schema" rows="4"
               placeholder='{"type":"object","properties":{}}'></textarea></label>

@@ -615,6 +615,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.page(mux, "POST /workspaces/{id}/unshare", s.handleUnshareWorkspaceForm)
 
 	s.page(mux, "GET /gears", s.handleGearsPage)
+	s.page(mux, "POST /gears", s.handleWriteGearForm)
 	s.page(mux, "POST /gears/{id}/approve", s.handleApproveGearForm)
 	// Open to anyone: a dry run is how somebody decides whether to ask for an
 	// approval, and requiring the permission to form the opinion would leave
