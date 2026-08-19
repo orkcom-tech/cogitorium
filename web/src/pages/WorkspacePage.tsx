@@ -49,7 +49,6 @@ export default function WorkspacePage({ me }: { me: User }) {
   // Bumped on every save so the tree can re-read the directory and stop
   // reporting a stale size.
   const [savedTick, setSavedTick] = useState(0)
-  const [usage, setUsage] = useState<Map<number, AgentUsage>>(new Map())
   // A paused turn waiting for permission to search the web. The SSE event is
   // a latency optimisation; the poll below is the mechanism, so a buffering
   // proxy that swallows the stream costs a second rather than the feature.
@@ -63,14 +62,6 @@ export default function WorkspacePage({ me }: { me: User }) {
   // would refetch on every status event of a newly created agent.
   const agentIdsRef = useRef<Set<number>>(new Set())
 
-  const reloadUsage = useCallback(
-    () =>
-      api.usage
-        .workspace(wsId)
-        .then((u) => setUsage(new Map(u.map((x) => [x.agent_id, x]))))
-        .catch((e: Error) => setError(e.message)),
-    [wsId],
-  )
 
   const reloadAgents = useCallback(
     () =>
@@ -91,16 +82,14 @@ export default function WorkspacePage({ me }: { me: User }) {
       api.models.list(),
       api.workspaces.messages(wsId),
       api.workspaces.status(wsId),
-      api.usage.workspace(wsId),
     ])
-      .then(([w, a, m, msgs, sts, u]) => {
+      .then(([w, a, m, msgs, sts]) => {
         setWorkspace(w)
         agentIdsRef.current = new Set(a.map((x) => x.id))
         setAgents(a)
         setModels(m)
         setMessages(msgs)
         setStatuses(new Map(sts.map((s) => [s.agent_id, s])))
-        setUsage(new Map(u.map((x) => [x.agent_id, x])))
       })
       .catch((e: Error) => setError(e.message))
   }, [wsId])
@@ -195,7 +184,6 @@ export default function WorkspacePage({ me }: { me: User }) {
       setBusy(false)
       setStreams(new Map())
       void reloadAgents()
-      void reloadUsage()
       void api.workspaces.status(wsId).then((sts) => setStatuses(new Map(sts.map((s) => [s.agent_id, s]))))
     }
   }
@@ -384,54 +372,6 @@ export default function WorkspacePage({ me }: { me: User }) {
   const drawerName = (o: string) =>
     o === 'env' ? 'variables' : o === 'inlets' ? 'receivers' : o
 
-  const roster = (
-    <div className="dk-body agent-cards">
-      {agents.map((a) => {
-        const st = statuses.get(a.id)
-        const state = st?.state ?? 'idle'
-        const u = usage.get(a.id)
-        // The bar is this agent's share of the workspace's spend, not a
-        // percentage of some invented budget. A number nobody can act on is
-        // decoration; a share tells you where the money went.
-        const total = [...usage.values()].reduce((n, x) => n + x.input_tokens + x.output_tokens, 0)
-        const mine = u ? u.input_tokens + u.output_tokens : 0
-        const share = total > 0 ? Math.round((mine / total) * 100) : 0
-        return (
-          <button
-            key={a.id}
-            className={`agent-card ${selectedAgent?.id === a.id ? 'selected' : ''}`}
-            onClick={() => {
-              setSelectedAgent(a)
-              setOverlay('agent')
-            }}
-          >
-            <span className="agent-card-head">
-              <span className={`dot ${state}`} title={state + (st?.detail ? `: ${st.detail}` : '')} />
-              <span className="agent-name">{a.name}</span>
-              {a.is_orchestrator && <span className="star" title="the workspace entry point">★</span>}
-            </span>
-            <span className={`agent-spend-big ${total > 0 ? '' : 'idle'}`} title={spendTitle(u)}>
-              {spendLabel(u)}
-            </span>
-            <span className="agent-model muted">{a.model_label || 'no model'}</span>
-            {/* No meter before there is anything to meter. An empty track
-                across a card is a hairline rule that means nothing, and every
-                card in a fresh workspace carried one. */}
-            {total > 0 && (
-              <>
-                <span className="share-bar" aria-hidden>
-                  <span style={{ width: `${share}%` }} />
-                </span>
-                <span className="muted share-label">{share}% of this workspace</span>
-              </>
-            )}
-            {total === 0 && <span className="muted share-label">no spend yet</span>}
-          </button>
-        )
-      })}
-    </div>
-  )
-
   // An overlay that is shut does not load and does not poll. The receivers
   // cost two queries, the queue runs a timer, and a workspace using neither
   // should pay for neither.
@@ -556,7 +496,6 @@ export default function WorkspacePage({ me }: { me: User }) {
             sandbox="allow-scripts allow-same-origin"
           />
         )}
-        {overlay === 'agents' && roster}
         {overlay === 'terminal' && (
           <ShellGate started={shell} onStart={() => setShell(true)}>
             <div className="dk-body">
@@ -573,6 +512,34 @@ export default function WorkspacePage({ me }: { me: User }) {
 
             The context drawer keeps its admin rule; the server applies it, so
             a rule that lives in one place cannot disagree with itself. */}
+        {/* The roster is the one panel whose rows drive this page: picking an
+            agent opens a different drawer, and which drawer is open is this
+            component's state. So the server renders the markup and the click
+            stays here — a delegated listener on the container, reading the id
+            the row carries. That is the seam that let the roster become a
+            template without the workspace around it having to be one. */}
+        {overlay === 'agents' && (
+          <div
+            key="agents"
+            className="dk-body"
+            hx-get={`/workspaces/${wsId}/drawers/agents${
+              selectedAgent ? `?selected=${selectedAgent.id}` : ''
+            }`}
+            hx-trigger="load"
+            hx-swap="innerHTML"
+            onClick={(e) => {
+              const card = (e.target as HTMLElement).closest('[data-agent-id]')
+              if (!card) return
+              const id = Number(card.getAttribute('data-agent-id'))
+              const picked = agents.find((a) => a.id === id)
+              if (picked) {
+                setSelectedAgent(picked)
+                setOverlay('agent')
+              }
+            }}
+          />
+        )}
+
         {(overlay === 'gears' ||
           overlay === 'instructions' ||
           overlay === 'context' ||
@@ -751,34 +718,8 @@ function Spend({ agentId }: { agentId: number }) {
 // Spend is shown compactly in the list and in full on hover. Rounding to "k"
 // is fine for a glance; the tooltip carries the exact figures because the
 // point of the display is comparing what each agent actually costs.
-function compact(n: number) {
-  if (n < 1000) return String(n)
-  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`
-  return `${(n / 1_000_000).toFixed(1)}M`
-}
 
-function spendLabel(u?: AgentUsage) {
-  // Nothing, not an em dash. Set at the size of a number, a dash reads as a
-  // broken element — five of them down a fresh roster looked like five failed
-  // fields — and the line under it already says "no spend yet".
-  if (!u || u.turns === 0) return ''
-  const total = u.input_tokens + u.output_tokens
-  // A provider that reports nothing would otherwise show a confident 0.
-  if (total === 0 && u.unreported_turns === u.turns) return 'n/a'
-  return compact(total)
-}
 
-function spendTitle(u?: AgentUsage) {
-  if (!u || u.turns === 0) return 'has not run yet'
-  const lines = [
-    `${u.input_tokens.toLocaleString()} in + ${u.output_tokens.toLocaleString()} out`,
-    `${u.turns} model ${u.turns === 1 ? 'call' : 'calls'}`,
-  ]
-  if (u.unreported_turns > 0) {
-    lines.push(`${u.unreported_turns} of them reported no usage — the real spend is higher`)
-  }
-  return lines.join('\n')
-}
 
 function Timeline({
   messages,
@@ -1533,4 +1474,16 @@ function BindForm({
       </button>
     </form>
   )
+}
+
+function spendTitle(u?: AgentUsage) {
+  if (!u || u.turns === 0) return 'has not run yet'
+  const lines = [
+    `${u.input_tokens.toLocaleString()} in + ${u.output_tokens.toLocaleString()} out`,
+    `${u.turns} model ${u.turns === 1 ? 'call' : 'calls'}`,
+  ]
+  if (u.unreported_turns > 0) {
+    lines.push(`${u.unreported_turns} of them reported no usage — the real spend is higher`)
+  }
+  return lines.join('\n')
 }

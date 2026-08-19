@@ -37,6 +37,97 @@
       "appends": false
     },
     {
+      "name": "cog.drawer.agents",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Items",
+          "type": "[]AgentCard"
+        },
+        {
+          "path": "PollURL",
+          "type": "string"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv class=\"dk-body agent-cards\"\n  hx-get=\"{{.PollURL}}\" hx-trigger=\"every 4s\" hx-swap=\"outerHTML\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{range .Items}}{{template \"cog.row.agent\" .}}{{else}}\n  \u003cp class=\"hint\"\u003eNo agents yet. Tell the orchestrator what you need and it will create them.\u003c/p\u003e\n  {{end}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.drawer.context",
       "model": [
         {
@@ -2855,6 +2946,57 @@
         }
       ],
       "body": "\u003cmain class=\"page workspaces\"\u003e\n  \u003cdiv class=\"row\"\u003e\n    \u003ch2\u003e{{.Ctx.T.Workspaces}}\u003c/h2\u003e\n    \u003cspan class=\"spacer\"\u003e\u003c/span\u003e\n    \u003ca href=\"/workspaces?import=1\" title=\"Build a workspace from a bundle someone exported\"\u003eimport\u003c/a\u003e\n    \u003ca href=\"/workspaces?new=1\"\u003e+ New workspace\u003c/a\u003e\n  \u003c/div\u003e\n\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{if .Notice}}\u003cp class=\"hint\"\u003e✓ {{.Notice}}\u003c/p\u003e{{end}}\n\n  {{if .Creating}}\n  \u003csection class=\"card\"\u003e\n    \u003ch3\u003eNew workspace\u003c/h3\u003e\n    {{if .Models}}\n      \u003cform method=\"post\" action=\"/workspaces\"\u003e\n        \u003clabel\u003eName \u003cinput name=\"name\" required placeholder=\"research\"\u003e\u003c/label\u003e\n        \u003clabel\u003eDescription \u003cinput name=\"description\"\n                placeholder=\"drafting and checking the release notes\"\u003e\u003c/label\u003e\n        \u003clabel\u003eThe orchestrator thinks with\n          \u003cselect name=\"orchestrator_model_id\" required\u003e\n            {{range .Models}}\u003coption value=\"{{.ID}}\"\u003e{{.Label}} — {{.Provider}}\u003c/option\u003e{{end}}\n          \u003c/select\u003e\n        \u003c/label\u003e\n        \u003cbutton type=\"submit\"\u003ecreate it\u003c/button\u003e\n        \u003ca href=\"/workspaces\"\u003ecancel\u003c/a\u003e\n      \u003c/form\u003e\n    {{else}}\n      {{/* Offering an empty picker would let somebody fill in a name and then\n           discover there is nothing to think with. */}}\n      \u003cp class=\"hint\"\u003eThere are no models yet. A workspace needs one to think with —\n      add a provider and offer a model in the \u003ca href=\"/models\"\u003emodel catalog\u003c/a\u003e first.\u003c/p\u003e\n    {{end}}\n  \u003c/section\u003e\n  {{end}}\n\n  {{if .Importing}}\n  \u003csection class=\"card\"\u003e\n    \u003ch3\u003eImport a workspace\u003c/h3\u003e\n    \u003cform method=\"post\" action=\"/workspaces/import\" enctype=\"multipart/form-data\"\u003e\n      \u003clabel class=\"field\"\u003e\u003cspan class=\"muted\"\u003ethe bundle file\u003c/span\u003e\n        \u003cinput type=\"file\" name=\"bundle\" accept=\"application/json,.json\" required\u003e\u003c/label\u003e\n      \u003clabel class=\"field\"\u003ename\n        \u003cinput name=\"name\" placeholder=\"research\"\u003e\n        \u003cspan class=\"hint\"\u003eNames are unique here. Change it to import a bundle next to the workspace it came from.\u003c/span\u003e\n      \u003c/label\u003e\n      \u003clabel class=\"row\"\u003e\u003cinput type=\"checkbox\" name=\"gears\" value=\"on\" checked\u003e\n        bring its gears — they arrive unapproved, like anything else\u003c/label\u003e\n      \u003cbutton type=\"submit\"\u003eimport it\u003c/button\u003e\n      \u003ca href=\"/workspaces\"\u003ecancel\u003c/a\u003e\n    \u003c/form\u003e\n  \u003c/section\u003e\n  {{end}}\n\n  {{template \"cog.list.workspaces\" .}}\n\u003c/main\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.row.agent",
+      "model": [
+        {
+          "path": "ID",
+          "type": "int64"
+        },
+        {
+          "path": "Name",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator",
+          "type": "bool"
+        },
+        {
+          "path": "Model",
+          "type": "string"
+        },
+        {
+          "path": "State",
+          "type": "string"
+        },
+        {
+          "path": "Detail",
+          "type": "string"
+        },
+        {
+          "path": "Spend",
+          "type": "string"
+        },
+        {
+          "path": "SpendDetail",
+          "type": "string"
+        },
+        {
+          "path": "Share",
+          "type": "int"
+        },
+        {
+          "path": "HasSpend",
+          "type": "bool"
+        },
+        {
+          "path": "Selected",
+          "type": "bool"
+        }
+      ],
+      "body": "\u003cbutton class=\"agent-card{{if .Selected}} selected{{end}}\" data-agent-id=\"{{.ID}}\"\u003e\n  \u003cspan class=\"agent-card-head\"\u003e\n    \u003cspan class=\"dot {{.State}}\" title=\"{{.State}}{{if .Detail}}: {{.Detail}}{{end}}\"\u003e\u003c/span\u003e\n    \u003cspan class=\"agent-name\"\u003e{{.Name}}\u003c/span\u003e\n    {{if .Orchestrator}}\u003cspan class=\"star\" title=\"the workspace entry point\"\u003e★\u003c/span\u003e{{end}}\n  \u003c/span\u003e\n  \u003cspan class=\"agent-spend-big{{if .HasSpend}}{{else}} idle{{end}}\" title=\"{{.SpendDetail}}\"\u003e{{.Spend}}\u003c/span\u003e\n  \u003cspan class=\"agent-model muted\"\u003e{{.Model}}\u003c/span\u003e\n  {{/* No meter before there is anything to meter. An empty track across a card\n       is a hairline rule that means nothing, and every card in a fresh\n       workspace carried one. */}}\n  {{if .HasSpend}}\n    \u003cspan class=\"share-bar\" aria-hidden=\"true\"\u003e\u003cspan style=\"width: {{.Share}}%\"\u003e\u003c/span\u003e\u003c/span\u003e\n    \u003cspan class=\"muted share-label\"\u003e{{.Share}}% of this workspace\u003c/span\u003e\n  {{else}}\n    \u003cspan class=\"muted share-label\"\u003eno spend yet\u003c/span\u003e\n  {{end}}\n\u003c/button\u003e",
       "appends": false
     },
     {

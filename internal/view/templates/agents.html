@@ -1,0 +1,39 @@
+{{/*
+  The roster: every agent in this workspace, what it is doing and what it cost.
+
+  The bar is this agent's share of the WORKSPACE's spend, not a percentage of
+  some invented budget. A number nobody can act on is decoration; a share tells
+  you where the money went.
+
+  The rows carry their id and nothing else. Selecting an agent opens another
+  panel, and which panel is open is the client's business — so this renders the
+  markup and the client keeps the behaviour it already owns. That seam is what
+  lets the roster be a template before the workspace around it is one.
+*/}}
+
+{{define "cog.drawer.agents"}}<div class="dk-body agent-cards"
+  hx-get="{{.PollURL}}" hx-trigger="every 4s" hx-swap="outerHTML">
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  {{range .Items}}{{template "cog.row.agent" .}}{{else}}
+  <p class="hint">No agents yet. Tell the orchestrator what you need and it will create them.</p>
+  {{end}}
+</div>{{end}}
+
+{{define "cog.row.agent"}}<button class="agent-card{{if .Selected}} selected{{end}}" data-agent-id="{{.ID}}">
+  <span class="agent-card-head">
+    <span class="dot {{.State}}" title="{{.State}}{{if .Detail}}: {{.Detail}}{{end}}"></span>
+    <span class="agent-name">{{.Name}}</span>
+    {{if .Orchestrator}}<span class="star" title="the workspace entry point">★</span>{{end}}
+  </span>
+  <span class="agent-spend-big{{if .HasSpend}}{{else}} idle{{end}}" title="{{.SpendDetail}}">{{.Spend}}</span>
+  <span class="agent-model muted">{{.Model}}</span>
+  {{/* No meter before there is anything to meter. An empty track across a card
+       is a hairline rule that means nothing, and every card in a fresh
+       workspace carried one. */}}
+  {{if .HasSpend}}
+    <span class="share-bar" aria-hidden="true"><span style="width: {{.Share}}%"></span></span>
+    <span class="muted share-label">{{.Share}}% of this workspace</span>
+  {{else}}
+    <span class="muted share-label">no spend yet</span>
+  {{end}}
+</button>{{end}}

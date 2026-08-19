@@ -247,6 +247,8 @@ func CoreModels() Models {
 		// it, so it is the same list without the page frame — and its own
 		// name, because a plugin overriding the drawer should not have to take
 		// the page with it.
+		"cog.drawer.agents": Agents{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.agent":     AgentCard{},
 		"cog.drawer.mcp":    MCP{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.mcpserver": MCPServer{},
 
@@ -361,6 +363,44 @@ type Workspaces struct {
 	Importing bool
 	Error     string
 	Notice    string
+}
+
+// AgentCard is one agent, as the roster draws it.
+type AgentCard struct {
+	ID   int64
+	Name string
+	// Orchestrator marks the workspace entry point.
+	Orchestrator bool
+	Model        string
+	// State is "idle" or "working", and Detail is what it is doing when it is.
+	State  string
+	Detail string
+	// Spend is what this agent has cost, already in the words the card shows:
+	// empty before it has run, "n/a" when the provider reported nothing, and a
+	// compact number otherwise. A confident 0 for a provider that reports
+	// nothing would be a lie the operator finds out about from a bill.
+	Spend string
+	// SpendDetail is the whole story, for a title somebody hovers.
+	SpendDetail string
+	// Share is this agent's percentage of the WORKSPACE's spend — its share,
+	// not a percentage of an invented budget. A number nobody can act on is
+	// decoration; a share tells you where the money went.
+	Share    int
+	HasSpend bool
+	Selected bool
+}
+
+// Agents is what the roster renders against.
+type Agents struct {
+	Ctx   Ctx
+	Items []AgentCard
+	// PollURL is where the panel refreshes itself from, carrying the selected
+	// row so a refresh does not clear the selection under whoever is reading
+	// it. Built by the server rather than in the template: a URL assembled
+	// from three fields inside markup is a URL somebody gets wrong once and
+	// nobody notices, because a poll that 404s just stops refreshing.
+	PollURL string
+	Error   string
 }
 
 // MCPTool is one capability a server offers, approved on its own.
@@ -915,6 +955,15 @@ func Exemplars() Models {
 		"cog.row.provider":   exampleModels(ctx).Providers[0],
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
+
+		"cog.drawer.agents": Agents{Ctx: ctx, Items: []AgentCard{
+			{ID: 1, Name: "orchestrator", Orchestrator: true, Model: "Opus", State: "working",
+				Detail: "thinking", Spend: "12.4k", SpendDetail: "9,100 in + 3,300 out",
+				Share: 62, HasSpend: true, Selected: true},
+			{ID: 2, Name: "Reviewer", Model: "Qwen Coder", State: "idle", Spend: "7.6k",
+				SpendDetail: "5,000 in + 2,600 out", Share: 38, HasSpend: true},
+		}},
+		"cog.row.agent": AgentCard{ID: 2, Name: "Reviewer", Model: "Qwen Coder", State: "idle"},
 
 		"cog.drawer.mcp": MCP{Ctx: ctx, Enabled: true, IsAdmin: true,
 			Servers: []MCPServer{{ID: 1, Name: "jira", Kind: "packaged",

@@ -40,6 +40,14 @@ func (s *Server) handleWorkspaceDrawer(w http.ResponseWriter, r *http.Request) {
 		s.renderDrawer(w, r, "cog.drawer.gears", func() any {
 			return s.gearsModel(r, "", "", nil)
 		})
+	case "agents":
+		// The row somebody has open, so the roster comes back with it still
+		// marked. Without it a poll every four seconds would clear the
+		// selection under whoever was reading it.
+		selected, _ := strconv.ParseInt(r.URL.Query().Get("selected"), 10, 64)
+		s.renderDrawer(w, r, "cog.drawer.agents", func() any {
+			return s.agentsModel(r, wsID, selected)
+		})
 	case "mcp":
 		s.renderDrawer(w, r, "cog.drawer.mcp", func() any {
 			return s.mcpModel(r, "", "")
