@@ -11,8 +11,10 @@ import (
 
 	"github.com/orkcom-tech/cogitorium/internal/abi"
 	"github.com/orkcom-tech/cogitorium/internal/channel"
+	"github.com/orkcom-tech/cogitorium/internal/imagert"
 	"github.com/orkcom-tech/cogitorium/internal/plugin"
 	"github.com/orkcom-tech/cogitorium/internal/runtimes"
+	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/wasmrt"
 	"github.com/orkcom-tech/cogitorium/internal/worker"
 )
@@ -38,6 +40,13 @@ type backends struct {
 	// of the tier model — an author declares a technology and the lane is not
 	// their problem.
 	workers *worker.Supervisor
+	// images is the container tier: one container per invocation, on whatever
+	// sandbox this server already has for gears. Nothing new to install and
+	// nothing new to configure — if gears are sandboxed here, so is this.
+	images  *imagert.Runner
+	imageOf map[string]string
+	dirOf   map[string]string
+	grants  map[string]plugin.Grants
 	// tier records which lane each plugin landed in, so a page for a plugin
 	// with no backend at all renders its template alone rather than failing.
 	tier map[string]plugin.Tier
@@ -102,13 +111,16 @@ func hostOf(url string) string {
 // At boot rather than on the first request, so a module that will not load is
 // a line in the startup log rather than a page that fails the first time
 // somebody visits it.
-func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Installed, dataDir string) *backends {
-	b := &backends{tier: map[string]plugin.Tier{}}
+func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Installed, dataDir string, sb sandbox.Runner) *backends {
+	b := &backends{tier: map[string]plugin.Tier{}, dirOf: map[string]string{}}
 
 	grants := map[string]plugin.Grants{}
-	var wasmPlugins, workerPlugins []plugin.Installed
+	var wasmPlugins, workerPlugins, nativePlugins, imagePlugins []plugin.Installed
+	native := map[string]plugin.Native{}
+	imageOf := map[string]string{}
 	profile := channel.Detect(dataDir)
-	caps := plugin.Capabilities{Profile: profile}
+	images := imagert.New(sb)
+	caps := plugin.Capabilities{Profile: profile, ContainerRunner: images.Available()}
 
 	for _, in := range enabled {
 		res := plugin.Resolve(in.Manifest, caps)
@@ -118,7 +130,11 @@ func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Inst
 			// be a second voice saying the same thing differently.
 			continue
 		}
-		if res.Tier != plugin.TierWasm && res.Tier != plugin.TierProvisioned {
+		switch res.Tier {
+		case plugin.TierWasm, plugin.TierProvisioned, plugin.TierNative, plugin.TierImage:
+		default:
+			// Tier 0. Its templates are its whole contribution and there is
+			// nothing here to start.
 			continue
 		}
 		g, err := plugin.ResolveGrants(in.Manifest)
@@ -133,11 +149,29 @@ func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Inst
 			wasmPlugins = append(wasmPlugins, in)
 		case plugin.TierProvisioned:
 			workerPlugins = append(workerPlugins, in)
+		case plugin.TierNative:
+			native[in.ID] = res.Native
+			nativePlugins = append(nativePlugins, in)
+		case plugin.TierImage:
+			imageOf[in.ID] = res.Technology
+			imagePlugins = append(imagePlugins, in)
 		}
 	}
 
-	if len(workerPlugins) > 0 {
-		b.startWorkers(ctx, workerPlugins, dataDir, profile)
+	if len(workerPlugins) > 0 || len(nativePlugins) > 0 {
+		b.startWorkers(ctx, workerPlugins, nativePlugins, native, dataDir, profile)
+	}
+	if len(imagePlugins) > 0 {
+		b.images = images
+		b.grants = grants
+		b.imageOf = map[string]string{}
+		for _, in := range imagePlugins {
+			b.imageOf[in.ID] = imageOf[in.ID]
+			b.dirOf[in.ID] = in.Dir
+			b.tier[in.ID] = plugin.TierImage
+			slog.Info("plugin backend ready", "plugin", in.ID, "tier", "image",
+				"image", imageOf[in.ID], "sandbox", images.Backend())
+		}
 	}
 	if len(wasmPlugins) == 0 {
 		return b
@@ -174,11 +208,46 @@ func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Inst
 // version, shared by every plugin that asked for it. Nothing is started here:
 // a worker's child process spawns on its first call, so a plugin that is
 // enabled and never visited costs a row in a map and no memory.
-func (b *backends) startWorkers(ctx context.Context, plugins []plugin.Installed, dataDir string, profile channel.Profile) {
+func (b *backends) startWorkers(ctx context.Context, provisioned, nativePlugins []plugin.Installed,
+	native map[string]plugin.Native, dataDir string, profile channel.Profile) {
 	store := runtimes.NewStore(dataDir, plugin.RefDir, profile, runtimes.HTTPFetcher{}, true)
 	sup := worker.NewSupervisor()
 
-	for _, in := range plugins {
+	// Native first, because it needs nothing fetched: the author already
+	// published the binary, and the only question was whether one matches this
+	// machine — which the resolver answered before we got here.
+	for _, in := range nativePlugins {
+		n := native[in.ID]
+		path := filepath.Join(in.Dir, filepath.FromSlash(n.Path))
+		info, err := os.Stat(path)
+		if err != nil {
+			slog.Error("a native plugin does not ship the binary its manifest names",
+				"plugin", in.ID, "target", n.Target(), "expected", n.Path, "err", err)
+			continue
+		}
+		if info.Mode()&0o111 == 0 {
+			// Zip does carry the mode, so this means the author built the
+			// bundle from a checkout where it was never executable. Said
+			// plainly rather than chmod'ed: quietly making somebody's file
+			// executable is not a decision this server should take.
+			slog.Error("a native plugin's binary is not executable, so it cannot be started",
+				"plugin", in.ID, "path", n.Path, "mode", info.Mode().String())
+			continue
+		}
+		sup.Register(worker.Spec{
+			Plugin: in.ID, Path: path, Dir: in.Dir,
+			Env: []string{"COGITORIUM_PLUGIN=" + in.ID},
+		})
+		b.tier[in.ID] = plugin.TierNative
+		slog.Warn("plugin backend ready", "plugin", in.ID, "tier", "native",
+			"target", n.Target(),
+			// Warn, not Info: this is the one tier with no isolation of any
+			// kind — the author's own machine code, as this server's user.
+			// An operator approved it, and the log should still say so.
+			"note", "runs as this server's user, unsandboxed")
+	}
+
+	for _, in := range provisioned {
 		entry := plugin.EntryFile(in.Manifest.Needs)
 		path := filepath.Join(in.Dir, entry)
 		if _, err := os.Stat(path); err != nil {
@@ -234,7 +303,14 @@ func (b *backends) provide(ctx context.Context, id, export string, req abi.Reque
 	var resp abi.Response
 	var err error
 	switch tier {
-	case plugin.TierProvisioned:
+	case plugin.TierImage:
+		resp, err = b.images.Call(ctx, imagert.Spec{
+			Plugin:  id,
+			Image:   b.imageOf[id],
+			Dir:     b.dirOf[id],
+			Network: len(b.grants[id].Hosts()) > 0,
+		}, req)
+	case plugin.TierProvisioned, plugin.TierNative:
 		// Not under b.mu: a worker serialises its own calls, and holding a
 		// lock across every tier would make one plugin's slow interpreter
 		// everybody's problem.

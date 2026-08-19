@@ -67,6 +67,10 @@ func (s *Store) Install(archive string) (Installed, string, error) {
 		_ = os.RemoveAll(staging)
 		return Installed{}, digest, err
 	}
+	if err := markExecutable(staging, m); err != nil {
+		_ = os.RemoveAll(staging)
+		return Installed{}, digest, err
+	}
 
 	if err := os.RemoveAll(final); err != nil {
 		_ = os.RemoveAll(staging)
@@ -99,6 +103,41 @@ func (s *Store) Install(archive string) (Installed, string, error) {
 
 	in, err := s.Get(m.ID)
 	return in, digest, err
+}
+
+// markExecutable makes the binaries a native plugin declared runnable.
+//
+// The archive's own modes are discarded on the way in — a bundle that shipped
+// a setuid bit or a world-writable file would otherwise have it honoured — so
+// something has to put the execute bit back, or a native plugin unpacks into a
+// binary nobody can start and fails at its first call with a permission error
+// that reads like a bug in this server.
+//
+// The manifest decides, not the archive. Only paths listed under native: get
+// it, which means the set of executable files in an install is exactly the set
+// somebody read on the approval screen. A zip that quietly marked one of its
+// templates executable changes nothing.
+func markExecutable(dir string, m Manifest) error {
+	for _, n := range m.Native {
+		target, err := safeJoin(dir, n.Path)
+		if err != nil {
+			return err
+		}
+		info, err := os.Stat(target)
+		if err != nil {
+			return fmt.Errorf("plugin %q declares the binary %s for %s and the bundle does not "+
+				"contain it", m.ID, n.Path, n.Target())
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("plugin %q declares %s as a binary and it is not a regular file",
+				m.ID, n.Path)
+		}
+		// Executable, and nothing else: no setuid, no group or world write.
+		if err := os.Chmod(target, 0o755); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // readManifestFromZip reads plugin.yaml without unpacking anything, so an

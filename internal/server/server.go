@@ -110,6 +110,12 @@ type Server struct {
 	// An OAuth redirect can point at the loopback address only here, and a
 	// browser is told to remember a session only here.
 	localInstall bool
+	// sandbox is the backend that starts containers, kept because the plugins
+	// screen has to answer "can the image tier run here" long after New
+	// returned — and the honest answer follows the LIVE backend rather than
+	// the channel's name. The shipped compose image is itself a container and
+	// cannot start one; a native install with Docker can.
+	sandbox sandbox.Runner
 	// interactive is the sandbox backend able to host a terminal; nil means
 	// no terminal is possible, and that is a refusal rather than a fallback.
 	interactive     sandbox.Interactive
@@ -161,7 +167,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// Compiled at boot rather than on the first request, so a module that will
 	// not load is a line in the startup log rather than a page that fails the
 	// first time somebody visits it.
-	pluginBackends := startBackends(context.Background(), plugins, plugins.live, cfg.DataDir)
+	pluginBackends := startBackends(context.Background(), plugins, plugins.live, cfg.DataDir, sb)
 
 	cat := catalog.NewStore(db)
 	ws := workspace.NewStore(db)
@@ -194,6 +200,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s := &Server{
 		plugins:    plugins,
 		backends:   pluginBackends,
+		sandbox:    sb,
 		db:         db,
 		catalog:    cat,
 		workspaces: ws,

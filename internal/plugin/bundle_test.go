@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -177,5 +178,70 @@ func TestSafeJoinAcceptsOrdinaryPaths(t *testing.T) {
 		if _, err := safeJoin(dst, name); err != nil {
 			t.Errorf("safeJoin(%q) should be fine: %v", name, err)
 		}
+	}
+}
+
+// A native plugin's binary has to arrive runnable.
+//
+// The archive's modes are discarded on the way in, deliberately — a bundle
+// that shipped a setuid bit would otherwise have it honoured. Nothing put the
+// execute bit back, so a native plugin unpacked into a binary nobody could
+// start, and the failure surfaced at its first call as a permission error that
+// reads like a bug in this server rather than a missing step in it.
+func TestANativePluginsDeclaredBinaryArrivesExecutable(t *testing.T) {
+	dir := t.TempDir()
+	writeFileAt(t, dir, "plugin.yaml", "schema: 1\nid: nat\nname: Nat\nversion: 1.0.0\n"+
+		"license: Apache-2.0\nneeds: native\nhost:\n  contract: 1\n"+
+		"native:\n  - os: "+runtime.GOOS+"\n    arch: "+runtime.GOARCH+"\n    path: bin/run\n")
+	writeFileAt(t, dir, "bin/run", "#!/bin/sh\necho hi\n")
+	writeFileAt(t, dir, "templates/p.html", `{{define "nat.page.home"}}x{{end}}`)
+
+	archive, _, err := Build(dir, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, _, err := s.Install(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(filepath.Join(in.Dir, "bin", "run"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Fatalf("the declared binary is not executable: %s", info.Mode())
+	}
+	// Executable, and nothing more. The point of taking modes from the
+	// manifest instead of the archive is that this set is exactly what
+	// somebody read before approving.
+	if info.Mode()&os.ModeSetuid != 0 || info.Mode().Perm()&0o022 != 0 {
+		t.Fatalf("the binary got more than execute: %s", info.Mode())
+	}
+
+	// And nothing the manifest did not name. A template that happened to be
+	// executable in somebody's checkout must not become an executable file
+	// inside an install.
+	tpl, err := os.Stat(filepath.Join(in.Dir, "templates", "p.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tpl.Mode()&0o111 != 0 {
+		t.Fatalf("a template came out executable: %s", tpl.Mode())
+	}
+}
+
+func writeFileAt(t *testing.T, dir, name, body string) {
+	t.Helper()
+	p := filepath.Join(dir, filepath.FromSlash(name))
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -608,7 +608,14 @@ func (s *Server) handleListPlugins(w http.ResponseWriter, r *http.Request) {
 // once per plugin: the channel probe is cached, but the intent is that a list
 // of forty plugins does not look like forty separate decisions.
 func (s *Server) pluginCaps() plugin.Capabilities {
-	return plugin.Capabilities{Profile: channel.Detect(s.dataDir)}
+	return plugin.Capabilities{
+		Profile: channel.Detect(s.dataDir),
+		// Follows the LIVE backend rather than the channel's name. The shipped
+		// compose image is itself a container and cannot start one; a native
+		// install with Docker can. Reading this off the channel would refuse
+		// the second and accept the first, which is backwards.
+		ContainerRunner: s.sandbox != nil,
+	}
 }
 
 func (s *Server) pluginView(in plugin.Installed, caps plugin.Capabilities) PluginView {
