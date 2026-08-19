@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, type Plugin, type PluginAction } from '../api'
+import { api, type CatalogEntry, type CatalogListing, type Plugin, type PluginAction } from '../api'
 
 /** The library.
  *
@@ -16,6 +16,8 @@ import { api, type Plugin, type PluginAction } from '../api'
  */
 
 type Sort = 'state' | 'name' | 'order'
+type View = 'installed' | 'library'
+type CatalogSort = 'name' | 'author' | 'verified'
 
 export default function PluginsPage() {
   const [plugins, setPlugins] = useState<Plugin[]>([])
@@ -28,7 +30,13 @@ export default function PluginsPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<Sort>('state')
+  const [view, setView] = useState<View>('installed')
+  const [catalog, setCatalog] = useState<CatalogListing | null>(null)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
+  const [catalogQuery, setCatalogQuery] = useState('')
+  const [catalogSort, setCatalogSort] = useState<CatalogSort>('name')
   const reloadSeq = useRef(0)
+  const catalogSeq = useRef(0)
 
   const reload = useCallback(() => {
     const seq = ++reloadSeq.current
@@ -45,6 +53,27 @@ export default function PluginsPage() {
   }, [])
 
   useEffect(reload, [reload])
+
+  // Fetched when the library is opened, not on page load: browsing costs a
+  // request to somebody else's server, and an operator who came here to switch
+  // a plugin off should not have made one.
+  useEffect(() => {
+    if (view !== 'library') return
+    const seq = ++catalogSeq.current
+    const t = setTimeout(() => {
+      api.catalog
+        .browse(catalogQuery)
+        .then((c) => {
+          if (catalogSeq.current !== seq) return
+          setCatalog(c)
+          setCatalogError(null)
+        })
+        .catch((e: Error) => {
+          if (catalogSeq.current === seq) setCatalogError(e.message)
+        })
+    }, catalogQuery ? 250 : 0)
+    return () => clearTimeout(t)
+  }, [view, catalogQuery, plugins])
 
   const act = useCallback(
     (id: string, run: () => Promise<PluginAction>) => {
@@ -76,6 +105,38 @@ export default function PluginsPage() {
       {error && <p className="error">{error}</p>}
       {notice && !error && <p className="hint">{notice}</p>}
 
+      {/* Two views rather than two routes. What is installed and what could be
+          are the same question asked twice, and making somebody navigate
+          between them is how the second half goes unread. */}
+      <div className="plugin-views" role="tablist">
+        <button role="tab" aria-selected={view === 'installed'}
+                className={view === 'installed' ? 'is-current' : ''}
+                onClick={() => setView('installed')}>
+          Installed{plugins.length > 0 ? ` (${plugins.length})` : ''}
+        </button>
+        <button role="tab" aria-selected={view === 'library'}
+                className={view === 'library' ? 'is-current' : ''}
+                onClick={() => setView('library')}>
+          Library
+          {catalog && catalog.updates.length > 0 && (
+            <span className="badge is-warn">{catalog.updates.length} to update</span>
+          )}
+        </button>
+      </div>
+
+      {view === 'library' ? (
+        <Library
+          listing={catalog}
+          error={catalogError}
+          query={catalogQuery}
+          onQuery={setCatalogQuery}
+          sort={catalogSort}
+          onSort={setCatalogSort}
+          busy={busy}
+          onInstall={(id) => act(id, () => api.catalog.install(id))}
+        />
+      ) : (
+      <>
       <Upload
         onDone={(res) => {
           setNotice(res.message)
@@ -134,6 +195,8 @@ export default function PluginsPage() {
           onMove={(dir) => act(p.id, () => api.plugins.order(moved(plugins, p.id, dir)))}
         />
       ))}
+      </>
+      )}
     </div>
   )
 }
@@ -448,4 +511,174 @@ function Grants({ plugin: p }: { plugin: Plugin }) {
       </ul>
     </div>
   )
+}
+
+/** The library: what the shared catalog lists, and what it says about it.
+ *
+ * The catalog is an index and nothing else — it says where a plugin lives, and
+ * never that it is safe. Installing from here does exactly what dropping a zip
+ * above does: the plugin arrives switched off and unapproved, and somebody
+ * still has to read it. There is deliberately no "install and enable": being
+ * listed is not a decision anybody on this install made.
+ */
+function Library({
+  listing,
+  error,
+  query,
+  onQuery,
+  sort,
+  onSort,
+  busy,
+  onInstall,
+}: {
+  listing: CatalogListing | null
+  error: string | null
+  query: string
+  onQuery: (q: string) => void
+  sort: CatalogSort
+  onSort: (s: CatalogSort) => void
+  busy: string | null
+  onInstall: (id: string) => void
+}) {
+  const entries = useMemo(() => {
+    if (!listing) return []
+    const rank = (v: string) => (v === 'verified' ? 0 : v === 'verified-other-version' ? 1 : 2)
+    return listing.entries.slice().sort((a, b) => {
+      if (sort === 'author') return a.author.localeCompare(b.author) || a.name.localeCompare(b.name)
+      if (sort === 'verified') return rank(a.verified) - rank(b.verified) || a.name.localeCompare(b.name)
+      return a.name.localeCompare(b.name)
+    })
+  }, [listing, sort])
+
+  if (error) {
+    return (
+      <>
+        <p className="error">{error}</p>
+        <p className="hint">
+          The catalog is fetched over the network and this install could not reach it. Nothing is
+          wrong with what you have installed — this list is the only thing missing.
+        </p>
+      </>
+    )
+  }
+  if (!listing) return <p className="hint">Reading the catalog…</p>
+
+  return (
+    <>
+      {/* A cached list is not a current one, and presenting yesterday's as
+          today's is how somebody installs a version withdrawn yesterday. */}
+      {listing.cached && (
+        <p className="banner">
+          This is a cached copy{listing.fetched ? ` from ${new Date(listing.fetched).toLocaleString()}` : ''} — the
+          catalog could not be reached just now.
+        </p>
+      )}
+
+      {listing.updates.length > 0 && (
+        <p className="hint">
+          Newer versions are listed for{' '}
+          {listing.updates.map((u) => `${u.name} (${u.installed} → ${u.available})`).join(', ')}.
+        </p>
+      )}
+      {/* Said out loud rather than shown as "everything is current": without a
+          published index there are no versions to compare, and an empty update
+          list would otherwise resolve the flattering way. */}
+      {!listing.versioned && listing.entries.length > 0 && (
+        <p className="hint">
+          The catalog has not published versions yet, so this install cannot tell whether anything
+          you have is out of date.
+        </p>
+      )}
+
+      <div className="plugin-filters">
+        <input
+          type="search"
+          placeholder="Search the catalog"
+          value={query}
+          onChange={(e) => onQuery(e.target.value)}
+          aria-label="Search the catalog"
+        />
+        <label>
+          Sort
+          <select value={sort} onChange={(e) => onSort(e.target.value as CatalogSort)}>
+            <option value="name">Name</option>
+            <option value="author">Author</option>
+            <option value="verified">Read by the team first</option>
+          </select>
+        </label>
+      </div>
+
+      {entries.length === 0 && (
+        <p className="hint">
+          {query
+            ? `Nothing in the catalog matches “${query}”.`
+            : 'The catalog lists nothing yet.'}
+        </p>
+      )}
+
+      {entries.map((e) => (
+        <section className="card" key={e.id}>
+          <header className="plugin-head">
+            <h3>
+              {e.name} <span className="hint">{e.version || ''}</span>
+            </h3>
+            <VerifiedBadge entry={e} />
+          </header>
+
+          <p>{e.description}</p>
+          <p className="hint">
+            by {e.author} ·{' '}
+            <a href={e.source} target="_blank" rel="noreferrer noopener">
+              Read the code
+            </a>
+          </p>
+
+          {e.verified !== 'unchecked' && e.verified_note && (
+            <p className="hint">
+              {e.verified_by ? `${e.verified_by}: ` : ''}
+              {e.verified_note}
+            </p>
+          )}
+
+          <div className="plugin-actions">
+            {e.installed ? (
+              e.update ? (
+                <button onClick={() => onInstall(e.id)} disabled={busy === e.id}>
+                  Update to {e.version}
+                </button>
+              ) : (
+                <span className="hint">Installed{e.installed_version ? ` — ${e.installed_version}` : ''}</span>
+              )
+            ) : (
+              <button onClick={() => onInstall(e.id)} disabled={busy === e.id}>
+                Install
+              </button>
+            )}
+            <span className="hint">
+              Arrives switched off. You approve it after reading it, like anything else.
+            </span>
+          </div>
+        </section>
+      ))}
+    </>
+  )
+}
+
+/** Three states, never a tick.
+ *
+ * A badge that survives a version change is a badge about a name rather than
+ * about code, so "we read 1.2.0" beside an installed 1.4.0 says so instead of
+ * carrying the old reassurance forward. */
+function VerifiedBadge({ entry: e }: { entry: CatalogEntry }) {
+  if (e.verified === 'verified') return <span className="badge is-ok">read by the team</span>
+  if (e.verified === 'verified-other-version') {
+    return (
+      <span className="badge is-warn" title={`The team read ${e.verified_version}, not what you have`}>
+        read at {e.verified_version}
+      </span>
+    )
+  }
+  // Not an accusation, and worded so nobody reads it as one. Most plugins in
+  // any healthy catalog will sit here forever.
+  return <span className="badge">nobody has looked</span>
 }

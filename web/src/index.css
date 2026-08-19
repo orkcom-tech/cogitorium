@@ -3664,3 +3664,27 @@ button.big {
   height: 100%;
   display: block;
 }
+
+/* Installed and Library are two views of one question, so they sit on one
+   screen with a switch rather than on two routes with navigation between. */
+.plugin-views {
+  display: flex;
+  gap: 0.35rem;
+  margin: 0.75rem 0;
+}
+.plugin-views button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.65;
+}
+.plugin-views button.is-current {
+  border-color: currentColor;
+  opacity: 1;
+}

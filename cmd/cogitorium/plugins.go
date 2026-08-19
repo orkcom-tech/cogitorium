@@ -232,6 +232,54 @@ func newPluginsCmds() *cobra.Command {
 	seedCmd.Flags().StringVar(&seedRef, "ref", "", "the image tree to read from (default "+plugin.RefDir+")")
 	root.AddCommand(seedCmd)
 
+	var catalogBase string
+	checkCatalog := &cobra.Command{
+		Use:   "check-catalog <plugins.json>",
+		Short: "Validate a catalog file and say whether a submission may merge itself",
+		Long: "Reads a catalog the way a client reads it: every entry validated, ids unique,\n" +
+			"no field nobody implements.\n\n" +
+			"With --base, it also reports what a submission did. Additions may merge on\n" +
+			"green CI — listing your own plugin takes nothing from anybody. An edit or a\n" +
+			"removal touches an entry somebody already installed, so it exits non-zero and\n" +
+			"waits for a person: the id in a public file is not proof of who owns it, and\n" +
+			"the author of a pull request is whoever opened it.",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			after, err := plugin.ReadCatalog(args[0])
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%s: %d entries, all readable\n", args[0], len(after))
+			if catalogBase == "" {
+				return nil
+			}
+
+			before, err := plugin.ReadCatalog(catalogBase)
+			if err != nil {
+				return fmt.Errorf("the catalog as it stands is unreadable, which is not this submission's fault: %w", err)
+			}
+			c := plugin.Diff(before, after)
+			for _, e := range c.Added {
+				fmt.Printf("  + %s (%s) -> %s\n", e.ID, e.Author, e.Repo)
+			}
+			for _, e := range c.Edited {
+				fmt.Printf("  ~ %s: %s\n", e.After.ID, strings.Join(e.Fields, ", "))
+			}
+			for _, e := range c.Removed {
+				fmt.Printf("  - %s\n", e.ID)
+			}
+			if ok, why := c.AutoMergeable(); !ok {
+				return fmt.Errorf("%s", why)
+			}
+			fmt.Println("\nOK — this may merge on green CI")
+			return nil
+		},
+	}
+	checkCatalog.Flags().StringVar(&catalogBase, "base", "",
+		"the catalog as it stands, to report what this submission changed")
+	root.AddCommand(checkCatalog)
+
 	root.AddCommand(&cobra.Command{
 		Use:   "check-bundle <bundle.zip>",
 		Short: "Validate a bundle without installing it. What the catalog's CI runs",

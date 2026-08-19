@@ -404,15 +404,46 @@ type CatalogEntryView struct {
 	VerifiedVersion string `json:"verified_version,omitempty"`
 	VerifiedBy      string `json:"verified_by,omitempty"`
 	VerifiedNote    string `json:"verified_note,omitempty"`
+
+	// Version is what the catalog is currently offering, filled in by the
+	// catalog's own index job rather than by the author. Empty when no index
+	// has been published, and empty is reported rather than guessed at: a
+	// screen that cannot tell should say so, not say "up to date".
+	Version string `json:"version,omitempty"`
+	// Update is set when what is offered is newer than what is installed.
+	// Computed rather than compared on the client, because "newer" is a
+	// version comparison and a string compare gets 1.10 wrong.
+	Update bool `json:"update,omitempty"`
 }
 
 type catalogView struct {
 	Entries []CatalogEntryView `json:"entries"`
+	// Updates is every installed plugin the catalog offers a newer version of,
+	// computed here from the whole index. Present on the browse response
+	// rather than behind a route of its own: the answer comes from the file
+	// that was just fetched, and a second endpoint would fetch it twice to
+	// give the same answer.
+	//
+	// Empty when no index.json has been published — which is "cannot tell"
+	// rather than "nothing to do", and the screen says which.
+	Updates []UpdateView `json:"updates"`
+	// Versioned is whether the catalog told us any versions at all. Without it
+	// an empty Updates list is ambiguous, and the ambiguity resolves the
+	// flattering way by default.
+	Versioned bool `json:"versioned"`
 	// Cached and Fetched are shown rather than hidden. A cached list is not a
 	// current one, and presenting yesterday's as today's is how somebody
 	// installs a version that was withdrawn yesterday.
 	Cached  bool   `json:"cached"`
 	Fetched string `json:"fetched,omitempty"`
+}
+
+// UpdateView is one installed plugin with a newer version on offer.
+type UpdateView struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Installed string `json:"installed"`
+	Available string `json:"available"`
 }
 
 func (s *Server) handleBrowseCatalog(w http.ResponseWriter, r *http.Request) {
@@ -429,17 +460,41 @@ func (s *Server) handleBrowseCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out := catalogView{Cached: idx.Cached, Entries: []CatalogEntryView{}}
+	out := catalogView{Cached: idx.Cached, Entries: []CatalogEntryView{}, Updates: []UpdateView{}}
 	if !idx.Fetched.IsZero() {
 		out.Fetched = idx.Fetched.Format(time.RFC3339)
+	}
+	for _, e := range idx.Entries {
+		if e.Version != "" {
+			out.Versioned = true
+			break
+		}
+	}
+
+	// Computed over everything installed rather than over the search results:
+	// somebody typing in the search box is not saying they stopped caring
+	// about the other seven plugins that have updates.
+	if installed, err := store.List(); err == nil {
+		for _, u := range idx.Updates(installed) {
+			out.Updates = append(out.Updates, UpdateView{
+				ID: u.Entry.ID, Name: u.Entry.Name,
+				Installed: u.Installed, Available: u.Available,
+			})
+		}
 	}
 	for _, e := range idx.Search(r.URL.Query().Get("q")) {
 		v := CatalogEntryView{
 			ID: e.ID, Name: e.Name, Author: e.Author,
 			Description: e.Description, Repo: e.Repo, Source: e.SourceURL(),
 		}
+		v.Version = e.Version
 		if in, err := store.Get(e.ID); err == nil {
 			v.Installed, v.InstalledVersion = true, in.Version
+			for _, u := range out.Updates {
+				if u.ID == e.ID {
+					v.Update = true
+				}
+			}
 		}
 		// Checked against the version this machine holds when it holds one, so
 		// the answer is about the code here rather than about the listing.

@@ -84,6 +84,51 @@ export function contributions(): PluginContribution {
  * and needs nothing, and enabling something already enabled changes nothing
  * either. Saying it every time would teach an operator to ignore it.
  */
+/** One entry in the shared catalog, as the library screen sees it. */
+export type CatalogEntry = {
+  id: string
+  name: string
+  author: string
+  description: string
+  repo: string
+  /** Where a person goes to read the code BEFORE approving it. */
+  source: string
+  installed: boolean
+  installed_version?: string
+  /** Three states rather than a badge, because a badge that survives a version
+   *  change is a badge about a name rather than about code:
+   *  'verified' — the team read the version you have.
+   *  'verified-other-version' — they read a different one, and it says which.
+   *  'unchecked' — nobody has looked. The ordinary state, not an accusation. */
+  verified: 'verified' | 'verified-other-version' | 'unchecked'
+  verified_version?: string
+  verified_by?: string
+  verified_note?: string
+  /** What the catalog currently offers. Absent when no index has been
+   *  published, and absence is shown as "cannot tell" rather than guessed. */
+  version?: string
+  update?: boolean
+}
+
+export type CatalogUpdate = {
+  id: string
+  name: string
+  installed: string
+  available: string
+}
+
+export type CatalogListing = {
+  entries: CatalogEntry[]
+  updates: CatalogUpdate[]
+  /** Whether the catalog told us any versions at all. Without this an empty
+   *  updates list is ambiguous, and the ambiguity resolves flatteringly. */
+  versioned: boolean
+  /** A cached list is not a current one, and presenting yesterday's as
+   *  today's is how somebody installs a version withdrawn yesterday. */
+  cached: boolean
+  fetched?: string
+}
+
 export type PluginAction = {
   restart_required: boolean
   plugin?: Plugin
@@ -769,6 +814,21 @@ export const api = {
     order: (order: string[]) =>
       req<PluginAction>('/api/v1/plugins/order', { method: 'PUT', body: JSON.stringify({ order }) }),
     remove: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}`, { method: 'DELETE' }),
+  },
+  catalog: {
+    /** Search runs on the server, over the whole catalog, rather than
+     *  filtering a list the browser already holds — the list is one file and
+     *  the server has just read it. */
+    browse: (q: string) =>
+      req<CatalogListing>(`/api/v1/plugin-catalog${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+    /** Installs switched OFF and unapproved, like every other route in. There
+     *  is no "install and enable" here on purpose: being listed in a catalog
+     *  is not a decision anybody on this install made. */
+    install: (id: string, version?: string) =>
+      req<PluginAction>(
+        `/api/v1/plugin-catalog/${id}${version ? `?version=${encodeURIComponent(version)}` : ''}`,
+        { method: 'POST' },
+      ),
   },
   providers: {
     list: () => req<Provider[]>('/api/v1/providers'),
