@@ -38,7 +38,23 @@ The machinery for this already exists — `models_list` to see what is offered,
 `agent_create` to make one on a chosen model, `delegate` to hand over. What is
 missing is not this part.
 
-## What is actually there, measured
+## What has been built since
+
+Removals, each the opposite of something that already existed: `agent_delete`
+(refusing to delete the agent taking the turn), `wire_cut`, `revoke_gear`.
+
+Clocks: `schedule_create`, `schedule_list`, `schedule_update`,
+`schedule_delete`, found by name rather than id.
+
+Named values: `env_list` always, and `env_get`, `env_set`, `env_delete` when
+the operator has not switched them off. Only the orchestrator ever sees them; a
+worker agent receives values the way a gear does — declared by name, supplied
+by the host, unseen. The switch withholds the tools rather than offering them
+and refusing, because a tool a model can see is a tool it will try.
+
+Still untouched: MCP servers, receivers, the queue.
+
+## What was there when this was written, measured
 
 Twenty tools. **Every one of them creates, reads, or binds. Not one removes
 anything.**

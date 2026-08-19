@@ -21,7 +21,7 @@ import (
 // what keeps them that way.
 func TestNoBuiltInTakesTheGearPrefix(t *testing.T) {
 	e := &Engine{}
-	for _, tool := range e.toolsFor(workspace.Agent{Kind: "orchestrator"}, nil, nil, nil, true, true) {
+	for _, tool := range e.toolsFor(workspace.Agent{IsOrchestrator: true}, nil, nil, nil, true, true, true) {
 		if strings.HasPrefix(tool.Name, gearToolPrefix) {
 			t.Errorf("built-in tool %q takes the %q prefix, which belongs to forged gears.\n"+
 				"It will be routed to the gear runner and answer a sentence about a gear that does not exist.\n"+

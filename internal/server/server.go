@@ -85,10 +85,13 @@ type Server struct {
 	// what runs it. queueMax bounds the waiting, because a queue with no bound
 	// is a way to run a server out of disk politely.
 	schedules *schedule.Store
-	queue     *work.Store
-	pool      *work.Pool
-	stopPool  context.CancelFunc
-	queueMax  int
+	settings  *settings.Store
+	// orchestratorSecrets is what the config file said: "off" is absolute.
+	orchestratorSecrets string
+	queue               *work.Store
+	pool                *work.Pool
+	stopPool            context.CancelFunc
+	queueMax            int
 	// callbackHosts is who this install may tell that a run finished. EMPTY
 	// MEANS OFF: a callback URL arrives in a task, and a task is editable by
 	// anyone who can reach the workspace, so defaulting to open would turn
@@ -251,17 +254,19 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		inlets:   inlet.NewStore(db),
 		engine: engine.New(ws, cat, cs, gears, gearExec, lib, searcher, broker, queue,
 			engine.Budgets{Run: cfg.BudgetRunTokens}, cfg.DataDir),
-		queue:           queue,
-		schedules:       schedule.NewStore(db),
-		queueMax:        queueMax,
-		callbackHosts:   cfg.CallbackHosts,
-		publicURL:       strings.TrimSuffix(cfg.PublicURL, "/"),
-		localInstall:    isLoopbackListen(cfg.Listen),
-		terminalEnabled: cfg.Terminal,
-		dataDir:         cfg.DataDir,
-		searcher:        searcher,
-		broker:          broker,
-		adminSeeds:      identity.Seeds{Token: cfg.AdminToken, Password: cfg.AdminPassword},
+		queue:               queue,
+		schedules:           schedule.NewStore(db),
+		settings:            settings.NewStore(db),
+		orchestratorSecrets: cfg.OrchestratorSecrets,
+		queueMax:            queueMax,
+		callbackHosts:       cfg.CallbackHosts,
+		publicURL:           strings.TrimSuffix(cfg.PublicURL, "/"),
+		localInstall:        isLoopbackListen(cfg.Listen),
+		terminalEnabled:     cfg.Terminal,
+		dataDir:             cfg.DataDir,
+		searcher:            searcher,
+		broker:              broker,
+		adminSeeds:          identity.Seeds{Token: cfg.AdminToken, Password: cfg.AdminPassword},
 		// The contextd version is fetched at check time, not here: an install
 		// with no contextd should not pay a subprocess on every boot to
 		// discover that, and the check runs at most once a day.
@@ -290,6 +295,9 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	if mcpStore != nil {
 		s.engine.SetMCP(mcpStore, env)
 	}
+	// The resolver for named values, whether or not MCP was configured: the
+	// orchestrator's env tools read the same one a gear's names go through.
+	s.engine.SetSecrets(env)
 	s.engine.SetMetrics(s.metrics)
 	s.engine.SetMCPOAuth(s.mcpOAuth)
 	// The sweeper that closes idle MCP connections. On the pool's lifetime,
@@ -304,7 +312,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// "ask" and asks again, and one whose operator said "no" is asked forever.
 	// Load enforces the ceiling on the way in: a stored answer can never lift
 	// a configured off.
-	s.updates.Load(poolCtx, settings.NewStore(db))
+	s.updates.Load(poolCtx, s.settings)
 
 	// The update check, on the same lifetime and deliberately not on the
 	// startup path: it returns immediately and defers its first request, so a
@@ -677,6 +685,26 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	// would run nightly and then has to tell somebody to go and set the timer
 	// themselves, which is not what an orchestrator is for.
 	s.engine.SetSchedules(s.schedules)
+	// Whether the orchestrator may read and write named values. On unless an
+	// operator says otherwise: an orchestrator that cannot configure what it
+	// builds hands the job back. Read per turn, so switching it off takes
+	// effect on the next thing it does.
+	s.engine.SetSecretsAccess(func(ctx context.Context) bool {
+		// The file first and absolutely: an operator who wrote "off" on the
+		// server's own disk has decided, and a row in the database must not be
+		// able to lift it. That is the same rule update_check follows, and for
+		// the same reason — a decision made on disk is not a suggestion.
+		if strings.EqualFold(strings.TrimSpace(s.orchestratorSecrets), "off") {
+			return false
+		}
+		v, err := s.settings.Get(ctx, settings.OrchestratorSecrets)
+		if err != nil {
+			// A database that cannot answer is not permission to hand out
+			// credentials.
+			return false
+		}
+		return v != "off"
+	})
 
 	// Before anything else asks for context: an installed contextd with no
 	// space is a product where memory silently does nothing, and until now only

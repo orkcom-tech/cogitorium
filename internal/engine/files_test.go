@@ -453,7 +453,7 @@ func TestUnattendedRunRefusesTheCatalogueReadersAtDispatch(t *testing.T) {
 
 	// And they are not advertised either — belt as well as braces, since a tool
 	// that is offered and always refused costs a paid round-trip per iteration.
-	for _, tool := range f.e.toolsFor(f.orch, nil, nil, nil, false, true) {
+	for _, tool := range f.e.toolsFor(f.orch, nil, nil, nil, false, false, true) {
 		if unattendedClosedTools[tool.Name] {
 			t.Errorf("%q is still offered on an unattended run", tool.Name)
 		}

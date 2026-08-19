@@ -108,12 +108,14 @@ type Engine struct {
 	// mcp is the external MCP servers an operator installed and granted. Nil
 	// when the capability is off, which is the default: it is the one thing
 	// this product runs that it never saw the source of.
-	// mcpSecrets resolves the names such a server was granted — the same
-	// resolver a gear's names go through, so the two cannot disagree about
-	// what a name means in a workspace.
-	mcp        *mcpstore.Store
-	mcpSecrets *secrets.Resolver
-	library    *library.Store
+	// env resolves named values — the same resolver a gear's names go
+	// through, so nothing here can disagree with what a gear is handed. Held
+	// unconditionally rather than only when MCP is configured: the
+	// orchestrator's own env tools need it whether or not an operator ever
+	// installed an MCP server.
+	mcp     *mcpstore.Store
+	env     *secrets.Resolver
+	library *library.Store
 
 	// dataDir is where the workspace directories live. The engine holds it
 	// because agents now read and write their workspace's own files, and
@@ -139,6 +141,11 @@ type Engine struct {
 	// schedules is the clocks. Nil is an engine that offers no schedule tools
 	// rather than one that offers them and fails.
 	schedules *schedule.Store
+
+	// secretsOK reports whether the orchestrator may read and write named
+	// values. Nil means it may not: an engine nobody told is an engine that
+	// does not hand out the operator's credentials.
+	secretsOK func(context.Context) bool
 
 	// runTokenBudget is the most one run may spend before it is stopped. Zero
 	// is off, and off is the default.
@@ -201,6 +208,32 @@ func (e *Engine) CloseMCP() { e.mcpPool.closeAll() }
 
 // SetEgressKill injects the server's runtime kill switch.
 func (e *Engine) SetEgressKill(f func() bool) { e.egressKilled = f }
+
+// SetSecretsAccess decides whether the orchestrator may read and write the
+// operator's named values.
+//
+// A function rather than a boolean, because it is read at the moment a turn
+// assembles its tools: an operator who switches it off wants the next turn to
+// be without it, not the next restart.
+//
+// Reading a secret puts its plaintext into a model's context. That is the whole
+// cost of this capability and it cannot be designed away — a value the model
+// can use is a value the model has seen. It is on by default because an
+// orchestrator that cannot configure what it builds is an orchestrator that
+// hands the job back; the switch is here so an operator who disagrees can say
+// so, and the tools say plainly what they do.
+func (e *Engine) SetSecretsAccess(f func(context.Context) bool) { e.secretsOK = f }
+
+// SetSecrets gives the engine the resolver for named values.
+func (e *Engine) SetSecrets(r *secrets.Resolver) { e.env = r }
+
+// secretsAvailable reports whether this turn may read and write named values.
+//
+// Asked per turn rather than cached, so switching it off takes effect on the
+// next thing the orchestrator does rather than on the next restart.
+func (e *Engine) secretsAvailable(ctx context.Context) bool {
+	return e.secretsOK != nil && e.secretsOK(ctx)
+}
 
 // SetSchedules gives the orchestrator its clocks.
 //
@@ -470,7 +503,7 @@ func (e *Engine) modelTurn(ctx context.Context, wsID int64, agent workspace.Agen
 		Model:    model.ModelName,
 		System:   system,
 		Messages: history,
-		Tools:    e.toolsFor(agent, targets, gears, mcpTools, e.egressAvailable(ctx, wsID, agent), e.turn(wsID).unattended),
+		Tools:    e.toolsFor(agent, targets, gears, mcpTools, e.egressAvailable(ctx, wsID, agent), e.secretsAvailable(ctx), e.turn(wsID).unattended),
 	}, func(text string) error {
 		emit(Event{Type: "delta", AgentID: agent.ID, Text: text})
 		return ctx.Err()
@@ -1127,7 +1160,7 @@ func (e *Engine) runAgent(ctx context.Context, wsID int64, agent workspace.Agent
 	if err != nil {
 		return "", err
 	}
-	tools := e.toolsFor(agent, targets, gears, mcpTools, e.egressAvailable(ctx, wsID, agent), e.turn(wsID).unattended)
+	tools := e.toolsFor(agent, targets, gears, mcpTools, e.egressAvailable(ctx, wsID, agent), e.secretsAvailable(ctx), e.turn(wsID).unattended)
 
 	history := []llm.Turn{{Role: "user", Text: task}}
 	for iter := 0; iter < maxToolIterations; iter++ {

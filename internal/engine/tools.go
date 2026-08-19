@@ -48,7 +48,7 @@ const gearFilesArg = "_files"
 
 // toolsFor returns the tools an agent may use: built-ins by role, delegation
 // along its outgoing wires, and every approved gear bound to it.
-func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gears []gear.Gear, mcpTools []mcpstore.Tool, egressGranted, unattended bool) []llm.Tool {
+func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gears []gear.Gear, mcpTools []mcpstore.Tool, egressGranted, secretsGranted, unattended bool) []llm.Tool {
 	var tools []llm.Tool
 
 	if agent.IsOrchestrator {
@@ -80,6 +80,13 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 					"role":  str("new system prompt (omit to keep)"),
 					"model": str("new catalog model (omit to keep)"),
 				}, "name"),
+			},
+			llm.Tool{
+				Name: "env_list",
+				Description: "List the named values this workspace can supply — variables and secrets, install-wide and " +
+					"workspace-scoped, with which source wins. A secret's value is never in this answer; use env_get " +
+					"when you actually need it.",
+				InputSchema: obj(map[string]any{}),
 			},
 			llm.Tool{
 				Name: "agent_delete",
@@ -332,6 +339,49 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 	// Offered only when the master switch is on AND this agent holds a grant.
 	// A tool that is advertised and then refused on every call burns a paid
 	// provider round-trip per iteration and teaches the model nothing.
+	// Reading and writing the operator's named values, when the operator
+	// granted it. The list of NAMES above is not gated: a name is not a
+	// secret, and an orchestrator that cannot see what exists cannot tell an
+	// agent which name to declare. A VALUE is different — reading one puts it
+	// in this conversation — so these three are behind the switch, and only
+	// the orchestrator ever sees them. A worker agent gets its values the way
+	// a gear does: declared by name and supplied by the host, unseen.
+	if agent.IsOrchestrator && secretsGranted {
+		tools = append(tools,
+			llm.Tool{
+				Name: "env_get",
+				Description: "Read a named value, including a secret's plaintext. Reading a secret puts it into this " +
+					"conversation, where it stays — ask for one only when the work needs the value itself rather than " +
+					"the name. Most work needs the name: a gear declares what it reads and the host supplies it " +
+					"without either of you seeing it.",
+				InputSchema: obj(map[string]any{
+					"name":  str("the name to read"),
+					"scope": str("'workspace' for this workspace's own value, 'install' for the install-wide one; default workspace, falling back to install"),
+				}, "name"),
+			},
+			llm.Tool{
+				Name: "env_set",
+				Description: "Set a named value. kind 'secret' encrypts it and withholds it from every screen; kind " +
+					"'variable' is stored in the open. Use a secret for anything that would be a credential.",
+				InputSchema: obj(map[string]any{
+					"name":        str("the name, e.g. 'API_KEY'"),
+					"value":       str("what it is"),
+					"kind":        map[string]any{"type": "string", "enum": []string{"secret", "variable"}, "description": "secret is encrypted and never shown again; variable is stored in the open"},
+					"scope":       str("'workspace' (default) or 'install'"),
+					"description": str("optional: what it is for, shown to whoever reads the list"),
+				}, "name", "value", "kind"),
+			},
+			llm.Tool{
+				Name:        "env_delete",
+				Description: "Remove a named value. Anything that reads it stops being supplied it.",
+				InputSchema: obj(map[string]any{
+					"name":  str("the name to remove"),
+					"scope": str("'workspace' (default) or 'install'"),
+				}, "name"),
+			},
+		)
+	}
+
 	if egressGranted {
 		tools = append(tools, llm.Tool{
 			Name: "web_search",
@@ -771,6 +821,118 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 			return "", err
 		}
 		return marshal(updated)
+
+	case "env_list":
+		if e.env == nil {
+			return "", errors.New("this install has no store for named values")
+		}
+		// Both scopes, because "why is this gear seeing staging's key" is a
+		// question about which of the two won, and an answer showing one of
+		// them cannot say.
+		ws, err := e.env.Store().List(ctx, &wsID)
+		if err != nil {
+			return "", err
+		}
+		install, err := e.env.Store().List(ctx, nil)
+		if err != nil {
+			return "", err
+		}
+		return marshal(map[string]any{"workspace": ws, "install": install})
+
+	case "env_get":
+		if e.env == nil {
+			return "", errors.New("this install has no store for named values")
+		}
+		name, err := args.reqStr("name")
+		if err != nil {
+			return "", err
+		}
+		scope, err := args.str("scope")
+		if err != nil {
+			return "", err
+		}
+		// Workspace first and install second when nothing was said, which is
+		// the order everything else resolves in — a tool that answered a
+		// different value from the one a gear would receive would be worse
+		// than not answering.
+		scopes := []*int64{&wsID, nil}
+		switch strings.ToLower(strings.TrimSpace(scope)) {
+		case "workspace":
+			scopes = []*int64{&wsID}
+		case "install":
+			scopes = []*int64{nil}
+		case "":
+		default:
+			return "", fmt.Errorf("scope is %q; it is 'workspace' or 'install'", scope)
+		}
+		for _, sc := range scopes {
+			vals, err := e.env.Resolve(ctx, sc, []string{name})
+			if err != nil {
+				return "", err
+			}
+			for _, v := range vals {
+				if v.Name != name {
+					continue
+				}
+				return marshal(map[string]any{
+					"name": v.Name, "kind": v.Kind, "value": v.Value, "source": v.Source,
+				})
+			}
+		}
+		return "", fmt.Errorf("nothing is set under %q", name)
+
+	case "env_set":
+		if e.env == nil {
+			return "", errors.New("this install has no store for named values")
+		}
+		name, err := args.reqStr("name")
+		if err != nil {
+			return "", err
+		}
+		value, err := args.reqStr("value")
+		if err != nil {
+			return "", err
+		}
+		kind, err := args.reqStr("kind")
+		if err != nil {
+			return "", err
+		}
+		if kind != "secret" && kind != "variable" {
+			return "", fmt.Errorf("kind is %q; it is 'secret' or 'variable'", kind)
+		}
+		desc, err := args.str("description")
+		if err != nil {
+			return "", err
+		}
+		scope, err := envScope(args, wsID)
+		if err != nil {
+			return "", err
+		}
+		rec, err := e.env.Store().Set(ctx, scope, name, kind, value, desc)
+		if err != nil {
+			return "", err
+		}
+		// The record's own Value is empty for a secret, and that is what goes
+		// back — an answer echoing what was just set would put it in the
+		// transcript a second time for nothing.
+		return marshal(rec)
+
+	case "env_delete":
+		if e.env == nil {
+			return "", errors.New("this install has no store for named values")
+		}
+		name, err := args.reqStr("name")
+		if err != nil {
+			return "", err
+		}
+		scope, err := envScope(args, wsID)
+		if err != nil {
+			return "", err
+		}
+		if err := e.env.Store().Delete(ctx, scope, name); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("removed %q; anything that reads it is no longer supplied it", name), nil
 
 	case "agent_delete":
 		name, err := args.reqStr("name")
@@ -1527,4 +1689,24 @@ func (e *Engine) scheduleByName(ctx context.Context, wsID int64, name string) (s
 	}
 	return schedule.Schedule{}, fmt.Errorf("there is no clock called %q; there is: %s",
 		name, strings.Join(have, ", "))
+}
+
+// envScope reads the scope argument: this workspace, or the whole install.
+//
+// Workspace by default, because a value set while doing one workspace's work
+// most often belongs to that workspace — and because the wider blast radius
+// should be the one somebody typed out.
+func envScope(args toolArgs, wsID int64) (*int64, error) {
+	scope, err := args.str("scope")
+	if err != nil {
+		return nil, err
+	}
+	switch strings.ToLower(strings.TrimSpace(scope)) {
+	case "", "workspace":
+		return &wsID, nil
+	case "install":
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("scope is %q; it is 'workspace' or 'install'", scope)
+	}
 }
