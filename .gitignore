@@ -37,3 +37,7 @@ internal/wasmrt/testdata/guest.wasm
 examples/plugins/*/plugin.wasm
 examples/plugins/*/target/
 /*.zip
+
+# Python leaves these beside the SDK when anything imports it.
+__pycache__/
+*.pyc
