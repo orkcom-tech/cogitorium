@@ -148,7 +148,7 @@ type providerTest struct {
 }
 
 func (s *Server) renderModels(w http.ResponseWriter, r *http.Request, problem string, test *providerTest) {
-	model := view.Catalogue{
+	model := view.ModelCatalog{
 		Ctx:   s.viewCtx(r, callerFrom(r.Context())),
 		Error: problem,
 	}

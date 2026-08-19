@@ -103,7 +103,7 @@ type Strings struct {
 	// the template because a plugin translating the product should not have to
 	// take over a page to change one word.
 	Instructions string
-	// Models is the catalogue's title, for the same reason.
+	// Models is the model catalog's title, for the same reason.
 	Models string
 }
 
@@ -111,7 +111,7 @@ type Strings struct {
 // a value rather than constants so a plugin overriding the shell can be handed
 // a different one without the host changing shape first.
 func DefaultStrings() Strings {
-	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalogue"}
+	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalog"}
 }
 
 // Action is one control that causes a request.
@@ -232,12 +232,12 @@ func CoreModels() Models {
 		// The model catalogue. Providers and the catalogue are separate lists
 		// on one page because they are separate decisions: where models come
 		// from, and which of them this install offers an agent.
-		"cog.page.models":    Catalogue{Ctx: Ctx{T: DefaultStrings()}},
-		"cog.list.providers": Catalogue{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.page.models":    ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.providers": ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.provider":   Provider{},
-		"cog.list.models":    Catalogue{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.models":    ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.model":      Model{},
-		"cog.empty.models":   Catalogue{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.empty.models":   ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
 	}
 }
 
@@ -273,12 +273,14 @@ type Model struct {
 	Kind     string
 }
 
-// Catalogue is the model the model-catalogue page renders against.
+// ModelCatalog is what the model catalog page renders against.
 //
-// Not called Models: that name is already the registry of template models, and
-// two things called Models in one package is two things somebody has to
-// disambiguate at every use.
-type Catalogue struct {
+// Not called Models: that name is already the registry of template models in
+// this package, and two things called Models in one package is two things
+// somebody has to disambiguate at every use. Not called Catalogue either —
+// internal/catalog is this, plugin.Catalog is the plugin index, and a third
+// bare "catalogue" would be the word that stops meaning anything.
+type ModelCatalog struct {
 	Ctx       Ctx
 	Providers []Provider
 	Models    []Model
@@ -430,18 +432,18 @@ func Exemplars() Models {
 		"cog.list.models":    exampleModels(ctx),
 		"cog.row.provider":   exampleModels(ctx).Providers[0],
 		"cog.row.model":      exampleModels(ctx).Models[0],
-		"cog.empty.models":   Catalogue{Ctx: ctx},
+		"cog.empty.models":   ModelCatalog{Ctx: ctx},
 	}
 }
 
-func exampleModels(ctx Ctx) Catalogue {
+func exampleModels(ctx Ctx) ModelCatalog {
 	catalogue := []Model{
 		{ID: 1, Name: "claude-opus-4", Label: "Opus — the one that thinks",
 			Provider: "Anthropic", Kind: "anthropic"},
 		{ID: 2, Name: "qwen2.5-coder:14b", Label: "Qwen Coder — local, free",
 			Provider: "Ollama", Kind: "openai-compatible"},
 	}
-	return Catalogue{
+	return ModelCatalog{
 		Ctx: ctx,
 		Providers: []Provider{
 			{ID: 1, Name: "Anthropic", Kind: "anthropic",
