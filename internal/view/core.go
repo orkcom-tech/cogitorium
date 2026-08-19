@@ -247,6 +247,9 @@ func CoreModels() Models {
 		// it, so it is the same list without the page frame — and its own
 		// name, because a plugin overriding the drawer should not have to take
 		// the page with it.
+		"cog.stage.chat":    Transcript{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.messages": Transcript{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.message":   ChatMessage{},
 		"cog.drawer.memory": Memory{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.memory":    MemoryItem{},
 		"cog.drawer.agents": Agents{Ctx: Ctx{T: DefaultStrings()}},
@@ -365,6 +368,68 @@ type Workspaces struct {
 	Importing bool
 	Error     string
 	Notice    string
+}
+
+// Attachment is a file that travelled with a message.
+//
+// Shown on the message rather than in a panel somewhere: what was attached is
+// part of what was said, and a conversation where the operator's file is
+// invisible is one where nobody can tell why the answer talks about a diagram.
+type Attachment struct {
+	Name  string
+	Bytes string
+	// ToGear marks a file the model cannot read, which goes to a gear as a
+	// path instead. Saying so is the difference between "it ignored my file"
+	// and "it handed it on".
+	ToGear bool
+	Title  string
+}
+
+// ToolCall is one tool an assistant turn asked for.
+type ToolCall struct{ Name string }
+
+// ChatMessage is one entry in the transcript.
+type ChatMessage struct {
+	ID   int64
+	Kind string
+	// Who is the agent's name, and Named says whether to print it. Only a
+	// delegate is named: the orchestrator is the voice of the workspace, so
+	// labelling every one of its replies is the same noise as labelling your
+	// own.
+	Who   string
+	Named bool
+
+	Content string
+	At      string
+
+	Attachments []Attachment
+	Calls       []ToolCall
+	// ToolName and ToolFailed describe a tool result, which renders folded.
+	ToolName   string
+	ToolFailed bool
+
+	// Which shape this row takes, as fields rather than a comparison in the
+	// template.
+	//
+	// The alternative was a compare function, and the test that guards the
+	// function set was right to refuse it: every name in that set is a
+	// permanent promise to every plugin author, and a general `eq` is the one
+	// that turns templates into programs. A template renders; deciding which
+	// of five shapes a message is belongs to whoever already knows its kind.
+	IsUser       bool
+	IsAssistant  bool
+	IsToolResult bool
+	IsDelegation bool
+}
+
+// Transcript is the conversation, as it is replayed to the model.
+type Transcript struct {
+	Ctx      Ctx
+	Messages []ChatMessage
+	// Empty is a whole screen rather than a line, so it gets its own state
+	// instead of an if around a paragraph.
+	Empty bool
+	Error string
 }
 
 // MemoryItem is one thing an agent carries into every turn.
@@ -999,6 +1064,19 @@ func Exemplars() Models {
 		"cog.row.provider":   exampleModels(ctx).Providers[0],
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
+
+		"cog.stage.chat": Transcript{Ctx: ctx, Messages: []ChatMessage{
+			{ID: 1, Kind: "user", IsUser: true, Content: "Cut a release from main."},
+			{ID: 2, Kind: "assistant", IsAssistant: true, Content: "Reading the commits since v2.0.0.",
+				Calls: []ToolCall{{Name: "run_gear"}}},
+			{ID: 3, Kind: "tool_result", IsToolResult: true, ToolName: "run_gear",
+				Content: `{"notes": ["fix the gate"]}`},
+		}},
+		"cog.list.messages": Transcript{Ctx: ctx, Messages: []ChatMessage{
+			{ID: 1, Kind: "user", IsUser: true, Content: "Cut a release from main."},
+		}},
+		"cog.row.message": ChatMessage{ID: 2, Kind: "assistant", IsAssistant: true, Who: "Reviewer", Named: true,
+			Content: "The diff is empty, so there is nothing to review."},
 
 		"cog.drawer.memory": Memory{Ctx: ctx, AgentID: 2, AgentName: "Reviewer",
 			Items: []MemoryItem{

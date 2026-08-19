@@ -1986,6 +1986,97 @@
       "appends": false
     },
     {
+      "name": "cog.list.messages",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Messages",
+          "type": "[]ChatMessage"
+        },
+        {
+          "path": "Empty",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv id=\"messages\"\u003e\n{{range .Messages}}\u003cdiv class=\"timeline-entry\"\u003e\n  {{template \"cog.row.message\" .}}\n  \u003cform method=\"post\" action=\"/messages/{{.ID}}/forget\"\n        hx-confirm=\"Forget this? It is replayed to the model on every turn.\"\u003e\n    \u003cbutton type=\"submit\" class=\"forget\" title=\"Forget this — it is replayed to the model on every turn\"\u003eforget\u003c/button\u003e\n  \u003c/form\u003e\n\u003c/div\u003e{{end}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.list.models",
       "model": [
         {
@@ -3397,6 +3488,69 @@
       "appends": false
     },
     {
+      "name": "cog.row.message",
+      "model": [
+        {
+          "path": "ID",
+          "type": "int64"
+        },
+        {
+          "path": "Kind",
+          "type": "string"
+        },
+        {
+          "path": "Who",
+          "type": "string"
+        },
+        {
+          "path": "Named",
+          "type": "bool"
+        },
+        {
+          "path": "Content",
+          "type": "string"
+        },
+        {
+          "path": "At",
+          "type": "string"
+        },
+        {
+          "path": "Attachments",
+          "type": "[]Attachment"
+        },
+        {
+          "path": "Calls",
+          "type": "[]ToolCall"
+        },
+        {
+          "path": "ToolName",
+          "type": "string"
+        },
+        {
+          "path": "ToolFailed",
+          "type": "bool"
+        },
+        {
+          "path": "IsUser",
+          "type": "bool"
+        },
+        {
+          "path": "IsAssistant",
+          "type": "bool"
+        },
+        {
+          "path": "IsToolResult",
+          "type": "bool"
+        },
+        {
+          "path": "IsDelegation",
+          "type": "bool"
+        }
+      ],
+      "body": "{{if .IsUser}}\n  \u003cdiv class=\"msg user\"\u003e\n    \u003cdiv class=\"msg-body\"\u003e{{.Content}}\u003c/div\u003e\n    {{if .Attachments}}\u003cdiv class=\"attachments\"\u003e\n      {{range .Attachments}}\u003cspan class=\"attachment{{if .ToGear}} to-gear{{end}}\" title=\"{{.Title}}\"\u003e\n        \u003cspan class=\"attachment-name\"\u003e{{.Name}}\u003c/span\u003e\n        \u003cspan class=\"muted\"\u003e{{.Bytes}}\u003c/span\u003e\n        {{if .ToGear}}\u003cspan class=\"muted\"\u003e→ gear\u003c/span\u003e{{end}}\n      \u003c/span\u003e{{end}}\n    \u003c/div\u003e{{end}}\n  \u003c/div\u003e\n{{else if .IsAssistant}}\n  \u003cdiv class=\"msg assistant\"\u003e\n    \u003cdiv class=\"msg-body\"\u003e\n      {{/* Only a delegate is named. The orchestrator is the voice of the\n           workspace, so labelling every one of its replies is the same noise\n           as labelling your own. */}}\n      {{if .Named}}\u003cspan class=\"who\"\u003e{{.Who}}\u003c/span\u003e{{end}}\n      {{.Content}}\n      {{if .Calls}}\u003cspan class=\"tool-chips\"\u003e\n        {{range .Calls}}\u003ccode class=\"chip\"\u003e⚙ {{.Name}}\u003c/code\u003e{{end}}\n      \u003c/span\u003e{{end}}\n    \u003c/div\u003e\n  \u003c/div\u003e\n{{else if .IsToolResult}}\n  \u003cdetails class=\"msg-tool{{if .ToolFailed}} tool-error{{end}}\"\u003e\n    \u003csummary\u003e{{if .ToolFailed}}✗{{else}}✓{{end}} {{.ToolName}}\u003c/summary\u003e\n    \u003cpre\u003e{{.Content}}\u003c/pre\u003e\n  \u003c/details\u003e\n{{else if .IsDelegation}}\n  \u003cdiv class=\"msg delegation\"\u003e\n    \u003cdiv class=\"msg-body\"\u003e\u003cspan class=\"who\"\u003e{{.Who}}\u003c/span\u003e{{.Content}}\u003c/div\u003e\n  \u003c/div\u003e\n{{else}}\n  \u003cdiv class=\"msg {{.Kind}}\"\u003e\u003cdiv class=\"msg-body\"\u003e{{.Content}}\u003c/div\u003e\u003c/div\u003e\n{{end}}",
+      "appends": false
+    },
+    {
       "name": "cog.row.model",
       "model": [
         {
@@ -4401,6 +4555,97 @@
       ],
       "body": "",
       "appends": true
+    },
+    {
+      "name": "cog.stage.chat",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Messages",
+          "type": "[]ChatMessage"
+        },
+        {
+          "path": "Empty",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv class=\"transcript\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{if .Empty}}\n    {{/* Centred, because an empty transcript is a whole screen and a line of\n         grey text jammed into its top-left corner reads as something left\n         behind rather than as an invitation. */}}\n    \u003cp class=\"hint empty-note\"\u003e\n      This is the workspace entry point: talk to the orchestrator. It can create agents, configure\n      them, and delegate work.\n    \u003c/p\u003e\n  {{end}}\n  {{template \"cog.list.messages\" .}}\n\u003c/div\u003e",
+      "appends": false
     }
   ]
 }
