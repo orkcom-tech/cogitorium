@@ -247,6 +247,9 @@ func CoreModels() Models {
 		// it, so it is the same list without the page frame — and its own
 		// name, because a plugin overriding the drawer should not have to take
 		// the page with it.
+		"cog.drawer.receivers": Inlets{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.receiver":     Inlet{},
+
 		"cog.page.variables":   Env{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.drawer.variables": Env{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.envname":      EnvName{},
@@ -355,6 +358,54 @@ type Workspaces struct {
 	Importing bool
 	Error     string
 	Notice    string
+}
+
+// InletTask is one thing a receiver can be asked to do.
+type InletTask struct {
+	Name string
+	// Agent is who does the work, by name — the pair an operator reads.
+	Agent       string
+	Accepts     string
+	Instruction string
+	// CallbackURL is where this install posts the finished run. Empty is the
+	// ordinary case: the answer goes back on the caller's own connection.
+	CallbackURL string
+}
+
+// Inlet is one door into a workspace.
+type Inlet struct {
+	ID          int64
+	Address     string
+	Description string
+	// HasKey is whether a key was issued — never the key. It is shown once, in
+	// the response that issues it, and only its hash is kept.
+	HasKey     bool
+	IssuedAt   string
+	LastUsedAt string
+	Tasks      []InletTask
+	// JustIssued carries a key somebody just asked for. This is the only time
+	// it appears anywhere.
+	JustIssued string
+}
+
+// InletRun is one delivery, recorded before the work started.
+type InletRun struct {
+	Task   string
+	State  string
+	Failed bool
+	Agent  string
+	At     string
+	Error  string
+}
+
+// Inlets is what the receivers drawer renders against.
+type Inlets struct {
+	Ctx    Ctx
+	Items  []Inlet
+	Runs   []InletRun
+	Agents []string
+	Error  string
+	Notice string
 }
 
 // EnvName is one named value a gear can be given.
@@ -815,6 +866,13 @@ func Exemplars() Models {
 		"cog.row.provider":   exampleModels(ctx).Providers[0],
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
+
+		"cog.drawer.receivers": Inlets{Ctx: ctx, Agents: []string{"orchestrator", "Triage"},
+			Items: []Inlet{{ID: 1, Address: "helpdesk", Description: "Where the helpdesk posts a ticket",
+				HasKey: true, IssuedAt: "2026-08-19",
+				Tasks: []InletTask{{Name: "classify", Agent: "orchestrator", Accepts: "json",
+					Instruction: "Answer with one of: platform, research, billing."}}}}},
+		"cog.row.receiver": Inlet{ID: 1, Address: "helpdesk", HasKey: true},
 
 		"cog.page.variables": Env{Ctx: ctx, CanStoreSecrets: true,
 			Names: []EnvName{{Name: "REGION", Kind: "variable", Value: "eu-central-1", Source: "the install"}}},

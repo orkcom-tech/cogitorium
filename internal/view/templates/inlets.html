@@ -1,0 +1,89 @@
+{{/*
+  Receivers: a door into this workspace for your own systems.
+
+  An address and a key. Data arrives by HTTP, an agent works on it, the answer
+  comes back — and the payload is checked against a schema before any model is
+  called, so a malformed request costs nothing.
+
+  The key is shown once, in the response that issues it, and only its hash is
+  kept. Said before it appears rather than after, because somebody who has
+  already closed the panel cannot be told.
+*/}}
+
+{{define "cog.drawer.receivers"}}<div class="dk-body inlets-panel">
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  {{if .Notice}}<p class="hint">✓ {{.Notice}}</p>{{end}}
+
+  <p class="hint">
+    A receiver is an address and a key. Data arrives by HTTP, an agent works on it, and the result
+    comes back on the same response. Nothing is added to the conversation, and nothing a delivery
+    carries can change this workspace.
+  </p>
+
+  <form class="row" method="post" action="/receivers">
+    <input name="address" required placeholder="tickets" aria-label="Address">
+    <input name="description" placeholder="What posts to it" aria-label="Description">
+    <button type="submit">add a receiver</button>
+  </form>
+  {{/* Where the key comes from, said before it appears rather than after: it
+       is issued by that button, in that response, and shown once. */}}
+  <p class="hint">
+    Adding one issues its key immediately and shows it here in full, once — copy it then, because
+    only its hash is kept.
+  </p>
+
+  <div id="receivers" class="receiver-list">
+    {{range .Items}}{{template "cog.row.receiver" .}}{{else}}
+    <p class="hint">No receivers on this workspace. Everything reaches it through you.</p>
+    {{end}}
+  </div>
+
+  <h3>Deliveries</h3>
+  <p class="hint">
+    Every delivery is recorded before the work starts, so a run that never came back still left a row.
+  </p>
+  <div class="delivery-list">
+    {{range .Runs}}<div class="delivery">
+      <code>{{.Task}}</code>
+      {{if .Failed}}<span class="badge is-danger">{{.State}}</span>{{else}}<span class="badge">{{.State}}</span>{{end}}
+      {{if .Agent}}<span class="muted">{{.Agent}}</span>{{end}}
+      <span class="muted">{{.At}}</span>
+      {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+    </div>{{else}}<p class="hint">Nothing has arrived yet.</p>{{end}}
+  </div>
+</div>{{end}}
+
+{{define "cog.row.receiver"}}<article class="card receiver">
+  <header class="row">
+    <code>{{.Address}}</code>
+    {{if .HasKey}}<span class="badge is-ok">key issued</span>{{else}}<span class="badge">no key</span>{{end}}
+    {{if .LastUsedAt}}<span class="muted">last used {{.LastUsedAt}}</span>{{end}}
+  </header>
+  {{if .Description}}<p class="hint">{{.Description}}</p>{{end}}
+
+  {{/* The only time it appears anywhere. */}}
+  {{if .JustIssued}}<p class="notice">
+    <code>{{.JustIssued}}</code><br>
+    That is the key. Copy it now — only its hash is kept, so it cannot be shown again.
+  </p>{{end}}
+
+  <div class="receiver-tasks">
+    {{range .Tasks}}<div class="receiver-task">
+      <strong>{{.Name}}</strong>
+      <span class="muted">→ {{.Agent}}</span>
+      <span class="muted">accepts {{.Accepts}}</span>
+      {{if .Instruction}}<p class="hint">{{.Instruction}}</p>{{end}}
+      {{if .CallbackURL}}<p class="muted">calls back to <code>{{.CallbackURL}}</code></p>{{end}}
+    </div>{{else}}<p class="hint">No tasks yet. A receiver with no task has nothing to do with what arrives.</p>{{end}}
+  </div>
+
+  <div class="receiver-actions">
+    <form method="post" action="/receivers/{{.ID}}/key">
+      <button type="submit">issue a new key</button>
+    </form>
+    <form method="post" action="/receivers/{{.ID}}/delete"
+          hx-confirm="Delete the receiver at {{.Address}}? Anything posting to it stops working.">
+      <button type="submit" class="danger">delete</button>
+    </form>
+  </div>
+</article>{{end}}

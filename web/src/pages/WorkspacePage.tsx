@@ -6,7 +6,6 @@ import AgentMemory from './AgentMemory'
 import FilesPage from './FilesPage'
 import CodeEditor from './CodeEditor'
 import ApprovalDialog from './ApprovalDialog'
-import InletsPanel from './InletsPanel'
 import { Select } from './Select'
 import { Deck, ShellGate, Workbench } from '../deck/Deck'
 import McpPage from './McpPage'
@@ -378,6 +377,14 @@ export default function WorkspacePage({ me }: { me: User }) {
   // invariant. The nodes below are rebuilt on each render and that is fine;
   // what matters is that the tree shape never changes, so the terminal's
   // socket and the blueprint's canvas are never torn down.
+  /** The rail's name for a drawer, as the server knows it.
+   *
+   *  The two differ for two of them, and they are mapped here rather than by
+   *  renaming either: the word on screen is what somebody reads, and the word
+   *  in the code is what the rest of this file already uses. */
+  const drawerName = (o: string) =>
+    o === 'env' ? 'variables' : o === 'inlets' ? 'receivers' : o
+
   const roster = (
     <div className="dk-body agent-cards">
       {agents.map((a) => {
@@ -551,7 +558,6 @@ export default function WorkspacePage({ me }: { me: User }) {
           />
         )}
         {overlay === 'agents' && roster}
-        {overlay === 'inlets' && <InletsPanel wsId={wsId} agents={agents} shown onError={setError} />}
         {overlay === 'terminal' && (
           <ShellGate started={shell} onStart={() => setShell(true)}>
             <div className="dk-body">
@@ -572,11 +578,12 @@ export default function WorkspacePage({ me }: { me: User }) {
           overlay === 'instructions' ||
           overlay === 'context' ||
           overlay === 'env' ||
+          overlay === 'inlets' ||
           overlay === 'queue') && (
           <div
             key={overlay}
             className="dk-body"
-            hx-get={`/workspaces/${wsId}/drawers/${overlay === 'env' ? 'variables' : overlay}${
+            hx-get={`/workspaces/${wsId}/drawers/${drawerName(overlay)}${
               overlay === 'gears' && reviewGear ? `?open=${reviewGear}` : ''
             }`}
             hx-trigger="load"

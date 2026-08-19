@@ -505,6 +505,105 @@
       "appends": false
     },
     {
+      "name": "cog.drawer.receivers",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Items",
+          "type": "[]Inlet"
+        },
+        {
+          "path": "Runs",
+          "type": "[]InletRun"
+        },
+        {
+          "path": "Agents",
+          "type": "[]string"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv class=\"dk-body inlets-panel\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{if .Notice}}\u003cp class=\"hint\"\u003e✓ {{.Notice}}\u003c/p\u003e{{end}}\n\n  \u003cp class=\"hint\"\u003e\n    A receiver is an address and a key. Data arrives by HTTP, an agent works on it, and the result\n    comes back on the same response. Nothing is added to the conversation, and nothing a delivery\n    carries can change this workspace.\n  \u003c/p\u003e\n\n  \u003cform class=\"row\" method=\"post\" action=\"/receivers\"\u003e\n    \u003cinput name=\"address\" required placeholder=\"tickets\" aria-label=\"Address\"\u003e\n    \u003cinput name=\"description\" placeholder=\"What posts to it\" aria-label=\"Description\"\u003e\n    \u003cbutton type=\"submit\"\u003eadd a receiver\u003c/button\u003e\n  \u003c/form\u003e\n  {{/* Where the key comes from, said before it appears rather than after: it\n       is issued by that button, in that response, and shown once. */}}\n  \u003cp class=\"hint\"\u003e\n    Adding one issues its key immediately and shows it here in full, once — copy it then, because\n    only its hash is kept.\n  \u003c/p\u003e\n\n  \u003cdiv id=\"receivers\" class=\"receiver-list\"\u003e\n    {{range .Items}}{{template \"cog.row.receiver\" .}}{{else}}\n    \u003cp class=\"hint\"\u003eNo receivers on this workspace. Everything reaches it through you.\u003c/p\u003e\n    {{end}}\n  \u003c/div\u003e\n\n  \u003ch3\u003eDeliveries\u003c/h3\u003e\n  \u003cp class=\"hint\"\u003e\n    Every delivery is recorded before the work starts, so a run that never came back still left a row.\n  \u003c/p\u003e\n  \u003cdiv class=\"delivery-list\"\u003e\n    {{range .Runs}}\u003cdiv class=\"delivery\"\u003e\n      \u003ccode\u003e{{.Task}}\u003c/code\u003e\n      {{if .Failed}}\u003cspan class=\"badge is-danger\"\u003e{{.State}}\u003c/span\u003e{{else}}\u003cspan class=\"badge\"\u003e{{.State}}\u003c/span\u003e{{end}}\n      {{if .Agent}}\u003cspan class=\"muted\"\u003e{{.Agent}}\u003c/span\u003e{{end}}\n      \u003cspan class=\"muted\"\u003e{{.At}}\u003c/span\u003e\n      {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n    \u003c/div\u003e{{else}}\u003cp class=\"hint\"\u003eNothing has arrived yet.\u003c/p\u003e{{end}}\n  \u003c/div\u003e\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.drawer.variables",
       "model": [
         {
@@ -2958,6 +3057,45 @@
         }
       ],
       "body": "\u003carticle class=\"card provider\"\u003e\n  \u003cheader class=\"provider-head\"\u003e\n    \u003ch4\u003e{{.Name}}\u003c/h4\u003e\n    \u003cspan class=\"badge\"\u003e{{.Kind}}\u003c/span\u003e\n    {{if .HasKey}}\u003cspan class=\"badge is-ok\"\u003ekey stored\u003c/span\u003e{{else}}\u003cspan class=\"badge\"\u003eno key\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n  {{if .BaseURL}}\u003cp class=\"hint\"\u003e\u003ccode\u003e{{.BaseURL}}\u003c/code\u003e\u003c/p\u003e{{end}}\n\n  {{/* The result of a check somebody just made, not a property of the row. A\n       connection that worked an hour ago is not a fact about now. */}}\n  {{if .Tested}}\n    {{if .TestOK}}\u003cp class=\"hint\"\u003eIt answered. It offers: {{range .Offers}}\u003ccode\u003e{{.}}\u003c/code\u003e {{end}}\u003c/p\u003e\n    {{else}}\u003cp class=\"error\"\u003e{{.TestError}}\u003c/p\u003e{{end}}\n  {{end}}\n\n  \u003cdiv class=\"provider-models\"\u003e\n    {{range .Models}}\u003cspan class=\"badge\"\u003e{{.Name}}\u003c/span\u003e{{end}}\n  \u003c/div\u003e\n\n  \u003cform class=\"provider-add\" method=\"post\" action=\"/models/providers/{{.ID}}/models\"\u003e\n    \u003cinput name=\"model_name\" required placeholder=\"A model this provider serves\"\u003e\n    \u003cinput name=\"label\" placeholder=\"What you will read on a screen\"\u003e\n    \u003cbutton type=\"submit\"\u003eOffer it\u003c/button\u003e\n  \u003c/form\u003e\n\n  \u003cdiv class=\"provider-actions\"\u003e\n    \u003cform method=\"post\" action=\"/models/providers/{{.ID}}/test\"\u003e\n      \u003cbutton type=\"submit\"\u003eTest the connection\u003c/button\u003e\n    \u003c/form\u003e\n    \u003cform method=\"post\" action=\"/models/providers/{{.ID}}/delete\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eRemove\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/div\u003e\n\u003c/article\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.row.receiver",
+      "model": [
+        {
+          "path": "ID",
+          "type": "int64"
+        },
+        {
+          "path": "Address",
+          "type": "string"
+        },
+        {
+          "path": "Description",
+          "type": "string"
+        },
+        {
+          "path": "HasKey",
+          "type": "bool"
+        },
+        {
+          "path": "IssuedAt",
+          "type": "string"
+        },
+        {
+          "path": "LastUsedAt",
+          "type": "string"
+        },
+        {
+          "path": "Tasks",
+          "type": "[]InletTask"
+        },
+        {
+          "path": "JustIssued",
+          "type": "string"
+        }
+      ],
+      "body": "\u003carticle class=\"card receiver\"\u003e\n  \u003cheader class=\"row\"\u003e\n    \u003ccode\u003e{{.Address}}\u003c/code\u003e\n    {{if .HasKey}}\u003cspan class=\"badge is-ok\"\u003ekey issued\u003c/span\u003e{{else}}\u003cspan class=\"badge\"\u003eno key\u003c/span\u003e{{end}}\n    {{if .LastUsedAt}}\u003cspan class=\"muted\"\u003elast used {{.LastUsedAt}}\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n  {{if .Description}}\u003cp class=\"hint\"\u003e{{.Description}}\u003c/p\u003e{{end}}\n\n  {{/* The only time it appears anywhere. */}}\n  {{if .JustIssued}}\u003cp class=\"notice\"\u003e\n    \u003ccode\u003e{{.JustIssued}}\u003c/code\u003e\u003cbr\u003e\n    That is the key. Copy it now — only its hash is kept, so it cannot be shown again.\n  \u003c/p\u003e{{end}}\n\n  \u003cdiv class=\"receiver-tasks\"\u003e\n    {{range .Tasks}}\u003cdiv class=\"receiver-task\"\u003e\n      \u003cstrong\u003e{{.Name}}\u003c/strong\u003e\n      \u003cspan class=\"muted\"\u003e→ {{.Agent}}\u003c/span\u003e\n      \u003cspan class=\"muted\"\u003eaccepts {{.Accepts}}\u003c/span\u003e\n      {{if .Instruction}}\u003cp class=\"hint\"\u003e{{.Instruction}}\u003c/p\u003e{{end}}\n      {{if .CallbackURL}}\u003cp class=\"muted\"\u003ecalls back to \u003ccode\u003e{{.CallbackURL}}\u003c/code\u003e\u003c/p\u003e{{end}}\n    \u003c/div\u003e{{else}}\u003cp class=\"hint\"\u003eNo tasks yet. A receiver with no task has nothing to do with what arrives.\u003c/p\u003e{{end}}\n  \u003c/div\u003e\n\n  \u003cdiv class=\"receiver-actions\"\u003e\n    \u003cform method=\"post\" action=\"/receivers/{{.ID}}/key\"\u003e\n      \u003cbutton type=\"submit\"\u003eissue a new key\u003c/button\u003e\n    \u003c/form\u003e\n    \u003cform method=\"post\" action=\"/receivers/{{.ID}}/delete\"\n          hx-confirm=\"Delete the receiver at {{.Address}}? Anything posting to it stops working.\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003edelete\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/div\u003e\n\u003c/article\u003e",
       "appends": false
     },
     {
