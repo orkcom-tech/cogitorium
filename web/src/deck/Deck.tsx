@@ -134,20 +134,6 @@ export function Workbench({
  * scrollback, cwd or running process. Measured, not theorised: four reloads,
  * four containers. So the terminal is behind a gate the operator opens.
  */
-export function ShellGate({ started, onStart, children }: { started: boolean; onStart: () => void; children: ReactNode }) {
-  if (started) return <>{children}</>
-  return (
-    <div className="dk-gate">
-      <p className="hint">
-        A shell is not reconnected automatically. Opening this again brings the panel back, not the session — the
-        previous one is gone, along with its scrollback and working directory.
-      </p>
-      <button className="primary" onClick={onStart}>
-        start a shell
-      </button>
-    </div>
-  )
-}
 
 /**
  * An overlay: something you consult, not something you work in.

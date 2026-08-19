@@ -40,6 +40,13 @@ func (s *Server) handleWorkspaceDrawer(w http.ResponseWriter, r *http.Request) {
 		s.renderDrawer(w, r, "cog.drawer.gears", func() any {
 			return s.gearsModel(r, "", "", nil)
 		})
+	case "terminal":
+		// The gate, never the session. What a template can render here is why
+		// there is or is not a shell and what starting one costs — the live
+		// PTY belongs to the socket.
+		s.renderDrawer(w, r, "cog.drawer.terminal", func() any {
+			return s.terminalModel(r)
+		})
 	case "memory":
 		// The agent travels in the URL rather than being remembered here,
 		// which keeps the panel a pure function of its request: a refresh, a

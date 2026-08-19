@@ -6,7 +6,7 @@ import FilesPage from './FilesPage'
 import CodeEditor from './CodeEditor'
 import ApprovalDialog from './ApprovalDialog'
 import { Select } from './Select'
-import { Deck, ShellGate, Workbench } from '../deck/Deck'
+import { Deck, Workbench } from '../deck/Deck'
 import { Drawer, type Edge } from '../deck/Drawer'
 import { useDeck } from '../deck/store'
 import type { OverlayId, ViewId } from '../deck/types'
@@ -220,7 +220,7 @@ export default function WorkspacePage({ me }: { me: User }) {
   // landed has never been approved. It opens the card; it approves nothing.
   const [reviewGear, setReviewGear] = useState<number | null>(null)
   // Whether the operator has asked for a shell IN THIS SESSION. Never
-  // persisted: see ShellGate.
+  // persisted: a shell is not reconnected, and the gate says so.
   const [shell, setShell] = useState(false)
 
   // Opening a file goes to the workbench, which is the view a file lives in.
@@ -495,13 +495,27 @@ export default function WorkspacePage({ me }: { me: User }) {
             sandbox="allow-scripts allow-same-origin"
           />
         )}
-        {overlay === 'terminal' && (
-          <ShellGate started={shell} onStart={() => setShell(true)}>
+        {overlay === 'terminal' &&
+          (shell ? (
             <div className="dk-body">
               <TerminalPage workspaceId={wsId} />
             </div>
-          </ShellGate>
-        )}
+          ) : (
+            /* The gate is the server's, the session is the socket's. What a
+               template can render here is why there is or is not a shell and
+               what starting one costs — including the case the client never
+               showed: an install with no sandbox, which says so instead of
+               offering a button that fails. */
+            <div
+              key="terminal-gate"
+              hx-get={`/workspaces/${wsId}/drawers/terminal`}
+              hx-trigger="load"
+              hx-swap="innerHTML"
+              onClick={(e) => {
+                if ((e.target as HTMLElement).closest('[data-start-shell]')) setShell(true)
+              }}
+            />
+          ))}
         {/* Three panels the SERVER renders now, swapped in by htmx.
             This is the seam the conversion is happening on: the workspace —
             its chat, its blueprint, its editor — is still the client's, and

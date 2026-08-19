@@ -247,15 +247,16 @@ func CoreModels() Models {
 		// it, so it is the same list without the page frame — and its own
 		// name, because a plugin overriding the drawer should not have to take
 		// the page with it.
-		"cog.stage.chat":    Transcript{Ctx: Ctx{T: DefaultStrings()}},
-		"cog.list.messages": Transcript{Ctx: Ctx{T: DefaultStrings()}},
-		"cog.row.message":   ChatMessage{},
-		"cog.drawer.memory": Memory{Ctx: Ctx{T: DefaultStrings()}},
-		"cog.row.memory":    MemoryItem{},
-		"cog.drawer.agents": Agents{Ctx: Ctx{T: DefaultStrings()}},
-		"cog.row.agent":     AgentCard{},
-		"cog.drawer.mcp":    MCP{Ctx: Ctx{T: DefaultStrings()}},
-		"cog.row.mcpserver": MCPServer{},
+		"cog.drawer.terminal": Terminal{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.stage.chat":      Transcript{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.messages":   Transcript{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.message":     ChatMessage{},
+		"cog.drawer.memory":   Memory{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.memory":      MemoryItem{},
+		"cog.drawer.agents":   Agents{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.agent":       AgentCard{},
+		"cog.drawer.mcp":      MCP{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.mcpserver":   MCPServer{},
 
 		"cog.drawer.receivers": Inlets{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.receiver":     Inlet{},
@@ -368,6 +369,26 @@ type Workspaces struct {
 	Importing bool
 	Error     string
 	Notice    string
+}
+
+// Terminal is the gate around a shell, which is all of a terminal a template
+// can render.
+//
+// The session itself is a live PTY over a socket: bytes in both directions,
+// redrawn by the client sixty times a second. A template renders a thing that
+// exists at a moment, and a terminal is the opposite of that. What IS
+// renderable is everything around it — why there is or is not one, what
+// starting it costs, and what closing it loses — and that is the half somebody
+// reads before deciding.
+type Terminal struct {
+	Ctx Ctx
+	// Available is whether this install offers one at all, and Reason says why
+	// not in the words the server already uses.
+	Available bool
+	Reason    string
+	// Started is whether the client has a session open, in which case the gate
+	// stands aside.
+	Started bool
 }
 
 // Attachment is a file that travelled with a message.
@@ -1064,6 +1085,8 @@ func Exemplars() Models {
 		"cog.row.provider":   exampleModels(ctx).Providers[0],
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
+
+		"cog.drawer.terminal": Terminal{Ctx: ctx, Available: true},
 
 		"cog.stage.chat": Transcript{Ctx: ctx, Messages: []ChatMessage{
 			{ID: 1, Kind: "user", IsUser: true, Content: "Cut a release from main."},
