@@ -82,7 +82,7 @@ workflow, so you can get back to it after an afternoon of changing your mind.
   workspace is how a metrics database runs out of memory.
   [→](https://orkcom-tech.github.io/cogitorium/#metrics--what-an-operator-can-alert-on)
 - 📐 **A described API** — `docs/openapi.yaml` is generated from the server's own
-  route table by a test that fails when the two disagree — **97 paths, 130
+  route table by a test that fails when the two disagree — **113 paths, 150
   operations** — so a route cannot exist without appearing in it.
   [→](https://orkcom-tech.github.io/cogitorium/#the-api-description)
 - 🔌 **Speaks MCP** — `cogitorium mcp` serves your approved gears and receiver

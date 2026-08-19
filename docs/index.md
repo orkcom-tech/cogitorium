@@ -649,7 +649,7 @@ first turn.
 
 [`docs/openapi.yaml`](https://github.com/orkcom-tech/cogitorium/blob/main/docs/openapi.yaml)
 is an OpenAPI 3.1 document listing every endpoint this server has: 97 path
-items carrying 130 operations, their path parameters, and which credential
+items carrying 150 operations, their path parameters, and which credential
 opens each — a user's token, a receiver's own key, or nothing.
 
 **It is generated from the server's own route table**, by a test that fails when
