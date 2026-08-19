@@ -317,3 +317,40 @@ func TestBuildingTwiceDoesNotNestTheFirstBundle(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildProducesTheNameTheCatalogFetches pins the two ends of publishing
+// together.
+//
+// They were written apart and did not match: the builder emitted
+// <id>-<version>.zip while Entry.BundleURL asks GitHub for <id>.zip, so the
+// documented publishing instruction — tag a release, attach what you built —
+// produced a release nobody could install from. Nothing failed at build time
+// and nothing failed at submission time; the first person to find out would
+// have been a stranger whose plugin 404ed for everybody.
+func TestBuildProducesTheNameTheCatalogFetches(t *testing.T) {
+	dir := t.TempDir()
+	manifest := "schema: 1\nid: acme\nname: Acme\nversion: 2.4.1\nlicense: Apache-2.0\nhost:\n  contract: 1\n"
+	if err := os.WriteFile(filepath.Join(dir, "plugin.yaml"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, m, err := Build(dir, t.TempDir())
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+
+	want := m.ID + ".zip"
+	if got := filepath.Base(out); got != want {
+		t.Fatalf("built %q, want %q", got, want)
+	}
+	// The version is still recoverable — from the manifest inside, which is
+	// the copy install trusts anyway.
+	if m.Version != "2.4.1" {
+		t.Fatalf("version %q", m.Version)
+	}
+
+	url := Entry{ID: m.ID, Repo: "someone/acme"}.BundleURL("")
+	if !strings.HasSuffix(url, "/"+want) {
+		t.Fatalf("catalog fetches %q, builder wrote %q", url, want)
+	}
+}

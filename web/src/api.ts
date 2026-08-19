@@ -107,6 +107,16 @@ export type Plugin = {
    *  different thing from a plugin whose templates failed, and conflating the
    *  two costs the operator the ability to switch one back on. */
   readable: boolean
+  /** Why this plugin may not be enabled yet, empty when it may. Installing is
+   *  not a decision and approval is, so a freshly uploaded plugin arrives with
+   *  this set and stays off until somebody has read what it does. */
+  pending?: string
+  /** Who decided, and when. Present only once somebody has. */
+  approved_by?: string
+  approved_at?: string
+  /** A working directory rather than an installed version. Nobody should have
+   *  to wonder whether they are looking at somebody's working copy. */
+  dev: boolean
   enabled: boolean
   /** Position in the enable list, 1-based. Position is precedence. */
   order: number
@@ -744,6 +754,14 @@ export const api = {
         if (!r.ok) throw new Error(body?.error?.message ?? `${r.status} ${r.statusText}`)
         return body as PluginAction
       }),
+    /** Approve the CONTENT on disk, not the name. The server reads the digest
+     *  from what this machine holds rather than from the request, so a
+     *  decision can only ever be about bytes somebody could have looked at —
+     *  and a rebuilt plugin drops back to pending on its own. */
+    approve: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}/approve`, { method: 'POST' }),
+    /** Withdraw the decision. This also switches the plugin off, because an
+     *  approval that no longer stands cannot be left rendering. */
+    revoke: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}/revoke`, { method: 'POST' }),
     enable: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}/enable`, { method: 'POST' }),
     disable: (id: string) => req<PluginAction>(`/api/v1/plugins/${id}/disable`, { method: 'POST' }),
     /** Position is precedence: a plugin later in this list renders instead of

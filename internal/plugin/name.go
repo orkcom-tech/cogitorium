@@ -200,3 +200,24 @@ func SplitAlias(ref string) (alias, name string, ok bool) {
 	}
 	return "", ref, false
 }
+
+// Dormant names a template that is registered and validated but that nothing
+// currently calls, so overriding it changes nothing on screen.
+//
+// The rail is the whole of it today: the vocabulary was fixed before the rail
+// itself was converted, so the names are stable for authors to write against
+// while the thing that would render them is still the application's.
+//
+// This exists so tooling can say so out loud. An author who overrides a
+// dormant name gets a plugin that installs, validates, loads and does nothing
+// — the single most expensive way to learn how this system works, and one
+// that reads as "my plugin is broken" rather than "this is not wired yet".
+// Every entry here is a line item to delete as its screen converts.
+func Dormant(name string) bool {
+	switch name {
+	case "cog.shell.rail", "cog.row.nav", "cog.slot.rail":
+		return true
+	}
+	return false
+}
+

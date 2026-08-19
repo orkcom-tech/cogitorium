@@ -126,6 +126,8 @@ export default function PluginsPage() {
           key={p.id}
           plugin={p}
           busy={busy === p.id}
+          onApprove={() => act(p.id, () => api.plugins.approve(p.id))}
+          onRevoke={() => act(p.id, () => api.plugins.revoke(p.id))}
           onEnable={() => act(p.id, () => api.plugins.enable(p.id))}
           onDisable={() => act(p.id, () => api.plugins.disable(p.id))}
           onRemove={() => act(p.id, () => api.plugins.remove(p.id))}
@@ -176,6 +178,10 @@ function attention(p: Plugin): number {
   if (p.problem) return 0
   if (!p.available) return 1
   if (p.enabled && !p.live) return 0
+  // Above an inert override and below a fault: it is the only state on this
+  // screen that cannot resolve on its own, so it should not sort under the
+  // plugins that are quietly working.
+  if (p.pending) return 2
   if ((p.inert?.length ?? 0) > 0) return 2
   if (p.enabled) return 3
   return 4
@@ -252,6 +258,8 @@ function Upload({
 function PluginCard({
   plugin: p,
   busy,
+  onApprove,
+  onRevoke,
   onEnable,
   onDisable,
   onRemove,
@@ -259,6 +267,8 @@ function PluginCard({
 }: {
   plugin: Plugin
   busy: boolean
+  onApprove: () => void
+  onRevoke: () => void
   onEnable: () => void
   onDisable: () => void
   onRemove: () => void
@@ -282,6 +292,18 @@ function PluginCard({
         </p>
       )}
       {!p.available && p.refusal && <p className="error">{p.refusal}</p>}
+
+      {/* Stated before the buttons rather than after them, because everything
+          between here and Approve — what it overrides, which hosts it wants,
+          which secrets — is the thing being agreed to. */}
+      {p.pending && <p className="hint">{p.pending}</p>}
+      {p.approved_by && (
+        <p className="hint">
+          Approved by {p.approved_by}
+          {p.approved_at ? ` on ${new Date(p.approved_at).toLocaleDateString()}` : ''} — for this
+          exact build. Rebuild it and it comes back here.
+        </p>
+      )}
 
       {p.enabled && (
         <p className="hint">
@@ -319,7 +341,12 @@ function PluginCard({
             only thing offered is taking it away. Everything else can be
             switched, including something that failed to load — refusing that
             would strand it off with no way back. */}
-        {p.readable ? (
+        {p.readable && p.pending ? (
+          <button onClick={onApprove} disabled={busy}>
+            Approve
+          </button>
+        ) : null}
+        {p.readable && !p.pending ? (
           p.enabled ? (
             <>
               <button onClick={onDisable} disabled={busy}>
@@ -338,6 +365,11 @@ function PluginCard({
             </button>
           )
         ) : null}
+        {p.readable && p.approved_by && !p.pending && (
+          <button onClick={onRevoke} disabled={busy} title="Withdraw the approval and switch it off">
+            Withdraw approval
+          </button>
+        )}
         <button className="danger" onClick={onRemove} disabled={busy}>
           Remove
         </button>
@@ -365,6 +397,10 @@ function State({ plugin: p }: { plugin: Plugin }) {
   // Unreadable and switched-off are different states and used to render the
   // same, which left a working plugin labelled broken and with no way back on.
   if (!p.readable) return <span className="badge is-danger">unreadable</span>
+  // Not approved is not the same as off. Off is a choice somebody made; this
+  // is a decision nobody has made yet, and the card offers different buttons
+  // for the two, so the badge has to tell them apart.
+  if (p.pending) return <span className="badge is-warn">needs approval</span>
   if (!p.enabled) return <span className="badge">off</span>
   if (!p.live) return <span className="badge is-danger">on, not loading</span>
   return <span className="badge is-ok">live</span>

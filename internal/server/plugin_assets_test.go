@@ -264,3 +264,23 @@ func TestNavIsOrderedByWhatAuthorsAskedFor(t *testing.T) {
 		}
 	}
 }
+
+// TestAPluginThatOnlyMountsAPanelReachesTheDocument covers the early return in
+// indexWithPlugins.
+//
+// The condition listed nav, styles and scripts and was written before mounts
+// existed. A plugin whose entire contribution is a workspace panel therefore
+// matched "contributes nothing", and the document was served untouched — so
+// the panel's button never appeared and no error was raised anywhere, which is
+// the worst shape a bug can take on a screen whose job is explaining itself.
+func TestAPluginThatOnlyMountsAPanelReachesTheDocument(t *testing.T) {
+	c := Contribution{Mounts: []Mount{{
+		Point: "workspace.drawer", Title: "Pulse", Page: "/p/pulse/panel", From: "pulse",
+	}}}
+	if len(c.Nav) != 0 || len(c.Styles) != 0 || len(c.Scripts) != 0 {
+		t.Fatal("this test is meaningless unless the mount is the only contribution")
+	}
+	if contributesNothing(c) {
+		t.Fatal("a plugin contributing only a mount was treated as contributing nothing")
+	}
+}

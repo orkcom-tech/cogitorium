@@ -127,9 +127,18 @@ func scaffoldPage(id string) string {
 }
 
 func scaffoldOverride(name string) string {
+	dormant := ""
+	if Dormant(name) {
+		dormant = fmt.Sprintf(`
+  READ THIS FIRST: %s is registered and validated, but nothing calls it
+  yet — the rail on screen is still the application's. This file will install,
+  load and render nothing until that screen is converted. It is here so the
+  vocabulary is stable to write against, not because it is live.
+`, name)
+	}
 	return fmt.Sprintf(`{{/*
   An override of one of the product's own templates.
-
+%s
   under: is the body that was there before you — the host's, or another
   plugin's if one is layered below you. Calling it means you add rather than
   replace, and it means two plugins can wrap this same name without either
@@ -141,13 +150,18 @@ func scaffoldOverride(name string) string {
 {{define "%s"}}
   {{template "under:%s" .}}
 {{end}}
-`, name, name)
+`, dormant, name, name)
 }
 
 func scaffoldTheme() string {
-	return `/* Overriding cog.shell.tokens restyles the whole product, in both light
-   and dark, with no code at all. This file is the ordinary way in: it is
-   injected after the product's own stylesheet. */
+	return `/* This stylesheet is injected into every screen of the product, after its
+   own, so what you write here reaches the whole interface. That is the
+   ordinary way to restyle it and it needs no template at all.
+
+   Overriding the cog.shell.tokens template is a different, narrower thing: it
+   reaches pages served through the plugin shell — your own, and other
+   plugins' — and not the application's screens, which are still served beside
+   that shell rather than through it. */
 :root {
   /* --ground: #05070a; */
 }
@@ -207,7 +221,14 @@ func Build(dir, outDir string) (string, Manifest, error) {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return "", Manifest{}, err
 	}
-	out := filepath.Join(outDir, fmt.Sprintf("%s-%s.zip", m.ID, m.Version))
+	// <id>.zip, with the version inside the manifest rather than in the name.
+	// Not a style choice: the catalog fetches
+	// releases/latest/download/<id>.zip, and "latest" is a URL that has to be
+	// writable before anybody knows which version it will resolve to. A name
+	// carrying the version cannot be fetched that way, so a build whose output
+	// is named differently from what the catalog asks for is a plugin nobody
+	// can install.
+	out := filepath.Join(outDir, m.ID+".zip")
 
 	// Written to a temporary file and renamed, because the default output
 	// directory IS the directory being walked — building in place would

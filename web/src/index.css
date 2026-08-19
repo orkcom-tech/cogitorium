@@ -3603,6 +3603,12 @@ button.big {
 .badge.is-danger {
   color: var(--danger, #b3261e);
 }
+/* Waiting on a person is not a fault, so it does not borrow the danger
+   colour — but it is the one state on this screen that will not resolve
+   without somebody acting, which is why it is not the plain badge either. */
+.badge.is-warn {
+  color: var(--warn, #b26a00);
+}
 
 .banner {
   border: 1px solid var(--danger, #b3261e);

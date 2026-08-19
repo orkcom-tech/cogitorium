@@ -44,8 +44,13 @@ export async function start(binary, { plugins = [] } = {}) {
   for (const bundle of plugins) {
     const id = bundle.id
     execFileSync(binary, ['plugins', 'install', bundle.path, '--data', dataDir])
-    execFileSync(binary, ['plugins', 'approve', id, '--data', dataDir])
-    execFileSync(binary, ['plugins', 'enable', id, '--data', dataDir])
+    // `approve: false` leaves it where an upload leaves it, which is the state
+    // the screen has to be able to get somebody out of. Approving here by
+    // default would mean no test ever saw a pending plugin.
+    if (bundle.approve !== false) {
+      execFileSync(binary, ['plugins', 'approve', id, '--data', dataDir])
+      execFileSync(binary, ['plugins', 'enable', id, '--data', dataDir])
+    }
   }
 
   const proc = spawn(binary, ['serve', '--data', dataDir, '--listen', `127.0.0.1:${port}`,
@@ -124,5 +129,9 @@ export function bundle(id, files) {
     writeFileSync(p, body)
   }
   execFileSync(join(ROOT, 'bin', 'cogitorium-test'), ['plugins', 'build', dir], { cwd: dir })
-  return { id, path: join(dir, `${id}-1.0.0.zip`) }
+  // <id>.zip, matching what the catalog fetches from a release. The name used
+  // to carry the version and did not match, which is the bug this line now
+  // holds in place: if the builder's name drifts again, every browser test
+  // that installs a plugin fails here rather than a stranger finding out.
+  return { id, path: join(dir, `${id}.zip`) }
 }

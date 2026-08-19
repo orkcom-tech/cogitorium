@@ -772,6 +772,17 @@ func (s *Server) uiHandler() http.Handler {
 	})
 }
 
+// contributesNothing is the early out for a document that needs no splicing.
+//
+// Its own function so that it can be tested, and so that adding a contribution
+// kind has one place to be remembered rather than a boolean chain inside a
+// bigger function. Mounts were forgotten exactly that way: a plugin whose only
+// contribution was a workspace panel matched "nothing", and its button was
+// silently missing.
+func contributesNothing(c Contribution) bool {
+	return len(c.Nav) == 0 && len(c.Mounts) == 0 && len(c.Styles) == 0 && len(c.Scripts) == 0
+}
+
 // indexWithPlugins splices the plugin contribution into the application's own
 // document.
 //
@@ -785,7 +796,11 @@ func (s *Server) indexWithPlugins(dist fs.FS) ([]byte, error) {
 		return nil, err
 	}
 	c := s.plugins.Contribution()
-	if len(c.Nav) == 0 && len(c.Styles) == 0 && len(c.Scripts) == 0 {
+	// Mounts are counted here too. They were not, and a plugin whose whole
+	// contribution is a workspace panel — no rail entry, no stylesheet, no
+	// script — took this early return and never reached the document, so its
+	// button was missing with nothing anywhere saying why.
+	if contributesNothing(c) {
 		return raw, nil
 	}
 

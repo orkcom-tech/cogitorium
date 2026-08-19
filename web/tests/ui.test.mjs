@@ -129,3 +129,78 @@ describe('a plugin', () => {
     assert.match(text, /live/)
   })
 })
+
+// Approval, driven the way an operator drives it.
+//
+// This is the gap that made the browser a dead end: the server has had
+// approve and revoke since the beginning, the client had neither, and enabling
+// is refused until a decision exists. So a plugin uploaded through the screen
+// could only ever be finished from a shell — on an install where the whole
+// point is that somebody without one can run this.
+//
+// The test starts a plugin at the exact state an upload leaves it in, and
+// walks the two steps that have to exist between there and rendering.
+describe('approving a plugin', () => {
+  let binary, server, ui
+
+  before(async () => {
+    binary = build()
+    const p = bundle('needs-a-look', {
+      'plugin.yaml': [
+        'schema: 1',
+        'id: needs-a-look',
+        'name: Needs A Look',
+        'version: 1.0.0',
+        'host:',
+        '  contract: 1',
+        'pages:',
+        '  - path: /p/needs-a-look/page',
+        '    template: needs-a-look.page.main',
+        '    title: Needs A Look',
+        '',
+      ].join('\n'),
+      'templates/page.html':
+        '{{define "needs-a-look.page.main"}}<h1>Needs A Look</h1>{{end}}',
+    })
+    p.approve = false
+    server = await start(binary, { plugins: [p] })
+    ui = await session(server)
+  })
+
+  after(async () => {
+    await ui?.close()
+    await server?.stop()
+  })
+
+  test('says it is waiting on a person, and offers only that decision', async () => {
+    await ui.page.goto(`${server.url}/plugins`)
+    await ui.page.waitForSelector('.card')
+
+    assert.equal(await ui.page.locator('.badge').first().innerText(), 'needs approval')
+
+    const buttons = await ui.page.locator('.plugin-actions button').allInnerTexts()
+    assert.ok(buttons.includes('Approve'), `no Approve button, got ${buttons.join(', ')}`)
+    // Enable before a decision would be refused by the server, and a button
+    // that only ever produces an error is worse than no button.
+    assert.ok(!buttons.includes('Enable'), 'Enable was offered before approval')
+  })
+
+  test('can be approved and then enabled, without leaving the browser', async () => {
+    await ui.page.goto(`${server.url}/plugins`)
+    await ui.page.waitForSelector('.card')
+
+    await ui.page.getByRole('button', { name: 'Approve' }).click()
+    await ui.page.waitForSelector('.plugin-actions button:text-is("Enable")')
+
+    // The decision is on the card afterwards. Who approved it is the question
+    // somebody asks months later, and the answer has to survive the click.
+    const card = await ui.page.locator('.card').first().innerText()
+    assert.ok(/Approved by/.test(card), `no approval trail on the card:\n${card}`)
+
+    await ui.page.getByRole('button', { name: 'Enable' }).click()
+    await ui.page.waitForSelector('.plugin-actions button:text-is("Disable")')
+
+    const after = await ui.page.locator('.plugin-actions button').allInnerTexts()
+    assert.ok(after.includes('Withdraw approval'), 'no way back out of the decision')
+  })
+})
