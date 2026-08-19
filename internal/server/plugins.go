@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/orkcom-tech/cogitorium/internal/identity"
@@ -24,10 +26,25 @@ import (
 type pluginRuntime struct {
 	set   *view.Set
 	pages map[string]pluginPage
+	// assets is an exact allowlist, URL path to file on disk.
+	//
+	// Only what a manifest declared in styles: or scripts: is reachable —
+	// never the bundle directory. A plugin ships whatever its author zipped,
+	// including notes, sources and whatever else was in the folder, and
+	// serving a directory would publish all of it because one file in it was
+	// referenced.
+	assets map[string]pluginAsset
 	// styles and scripts are what every plugin asked to inject into the head.
 	styles  []string
 	scripts []view.Asset
 	report  view.BootReport
+}
+
+// pluginAsset is one declared file and how to answer for it.
+type pluginAsset struct {
+	PluginID string
+	Path     string
+	Type     string
 }
 
 // pluginPage is one declared page, resolved to what serving it needs.
@@ -80,7 +97,12 @@ func loadPlugins(dataDir string) (*pluginRuntime, error) {
 		return nil, fmt.Errorf("composing the interface: %w", err)
 	}
 
-	rt := &pluginRuntime{set: set, pages: map[string]pluginPage{}, report: report}
+	rt := &pluginRuntime{
+		set:    set,
+		pages:  map[string]pluginPage{},
+		assets: map[string]pluginAsset{},
+		report: report,
+	}
 
 	live := map[string]bool{}
 	for _, id := range report.Loaded {
@@ -113,10 +135,12 @@ func loadPlugins(dataDir string) (*pluginRuntime, error) {
 			}
 		}
 		for _, st := range m.Styles {
-			rt.styles = append(rt.styles, pluginAssetPath(m.ID, st))
+			url := rt.declareAsset(m.ID, in.Dir, st)
+			rt.styles = append(rt.styles, url)
 		}
 		for _, sc := range m.Scripts {
-			rt.scripts = append(rt.scripts, view.Asset{Src: pluginAssetPath(m.ID, sc.Src)})
+			url := rt.declareAsset(m.ID, in.Dir, sc.Src)
+			rt.scripts = append(rt.scripts, view.Asset{Src: url})
 		}
 	}
 
@@ -129,6 +153,68 @@ func loadPlugins(dataDir string) (*pluginRuntime, error) {
 
 func pluginAssetPath(id, rel string) string {
 	return pluginPagePrefix + id + "/assets/" + strings.TrimPrefix(rel, "/")
+}
+
+// declareAsset adds one file to the allowlist and returns the URL for it.
+//
+// The file is resolved and confined here rather than at request time: a
+// containment check that runs per request is a containment check somebody
+// eventually forgets to run.
+func (rt *pluginRuntime) declareAsset(id, bundleDir, rel string) string {
+	url := pluginAssetPath(id, rel)
+	abs := filepath.Join(bundleDir, filepath.FromSlash(strings.TrimPrefix(rel, "/")))
+
+	if inside, err := filepath.Rel(bundleDir, abs); err != nil ||
+		inside == ".." || strings.HasPrefix(inside, ".."+string(os.PathSeparator)) {
+		slog.Error("a plugin declared an asset outside its own bundle and it will not be served",
+			"plugin", id, "asset", rel)
+		return url
+	}
+	if _, err := os.Stat(abs); err != nil {
+		// Declared but absent. Named at boot rather than discovered as a
+		// stylesheet that quietly never arrives.
+		slog.Error("a plugin declares an asset that is not in its bundle",
+			"plugin", id, "asset", rel, "err", err)
+		return url
+	}
+
+	rt.assets[url] = pluginAsset{
+		PluginID: id,
+		Path:     abs,
+		Type:     assetType(rel),
+	}
+	return url
+}
+
+// assetType names the media type from the extension. Declared rather than
+// sniffed: sniffing turns a mislabelled file into whatever its first bytes
+// resemble, and a stylesheet served as text/plain is ignored by the browser
+// with no error anybody can see.
+func assetType(rel string) string {
+	switch strings.ToLower(filepath.Ext(rel)) {
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".js", ".mjs":
+		return "text/javascript; charset=utf-8"
+	case ".svg":
+		return "image/svg+xml"
+	case ".png":
+		return "image/png"
+	case ".woff2":
+		return "font/woff2"
+	case ".json":
+		return "application/json"
+	}
+	return "application/octet-stream"
+}
+
+// isAsset reports whether a path is a declared asset.
+func (rt *pluginRuntime) isAsset(path string) bool {
+	if rt == nil {
+		return false
+	}
+	_, ok := rt.assets[path]
+	return ok
 }
 
 // pageAuth reports what a plugin path requires. The second result is false for
@@ -155,6 +241,11 @@ func (s *Server) pluginHandler() http.Handler {
 			http.NotFound(w, r)
 			return
 		}
+		if a, ok := rt.assets[r.URL.Path]; ok {
+			serveAsset(w, r, a)
+			return
+		}
+
 		page, ok := rt.pages[r.URL.Path]
 		if !ok {
 			http.NotFound(w, r)
@@ -209,6 +300,29 @@ func (s *Server) pluginHandler() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(out.Bytes())
 	})
+}
+
+// serveAsset answers for one declared file.
+func serveAsset(w http.ResponseWriter, r *http.Request, a pluginAsset) {
+	f, err := os.Open(a.Path)
+	if err != nil {
+		slog.Error("a declared plugin asset could not be read",
+			"plugin", a.PluginID, "path", a.Path, "err", err)
+		http.NotFound(w, r)
+		return
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	// The type is set before ServeContent so it never sniffs. ServeContent
+	// handles range requests and conditional gets, which a stylesheet behind a
+	// caching proxy will use.
+	w.Header().Set("Content-Type", a.Type)
+	http.ServeContent(w, r, filepath.Base(a.Path), info.ModTime(), f)
 }
 
 // viewCtx is the context every template gets, so a deeply nested override

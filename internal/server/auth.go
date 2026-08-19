@@ -63,6 +63,17 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 		// letting the derived rule answer here would either close a page an
 		// operator approved as open or open one nobody did.
 		if strings.HasPrefix(r.URL.Path, pluginPagePrefix) {
+			// A declared asset is readable without a credential, and that is a
+			// decision rather than an oversight: these files are the styles and
+			// modules of pages that may themselves be open, they are published
+			// in a public catalog anyway, and a stylesheet that answered 401
+			// would leave an open page rendering unstyled with nothing to
+			// explain it. Only what a manifest named is reachable — never the
+			// bundle directory.
+			if s.plugins.isAsset(r.URL.Path) {
+				next.ServeHTTP(w, r)
+				return
+			}
 			auth, declared := s.plugins.pageAuth(r.URL.Path)
 			if !declared {
 				// Not a page anybody declared. A 404 here rather than a walk
