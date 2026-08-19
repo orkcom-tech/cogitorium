@@ -29,3 +29,4 @@ web/tsconfig.tsbuildinfo
 # release artifacts carry. Not dist/, because goreleaser refuses to run with
 # anything in dist before it builds.
 /build/
+internal/wasmrt/testdata/guest.wasm
