@@ -22,6 +22,17 @@ func callerFrom(ctx context.Context) identity.User {
 	return u
 }
 
+// withCaller puts an identity on a context.
+//
+// Used by the one caller that does not arrive over the network: a plugin's
+// cog.api call is served in-process through the same mux, so it needs the same
+// thing the auth middleware would have put there. Unexported, because a
+// request that could name its own user would make every other check here
+// decorative.
+func withCaller(ctx context.Context, u identity.User) context.Context {
+	return context.WithValue(ctx, userKey, u)
+}
+
 // authenticate resolves every request to a user, and there are two ways to be
 // resolved — a bearer token or a session cookie. See internal/server/session.go
 // for why a browser gets a different one from a script, and why neither is

@@ -506,6 +506,18 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	mux.Handle(pluginPagePrefix, s.pluginHandler())
 	mux.Handle("/", s.uiHandler())
 
+	// The bare mux, for a plugin's cog.api call.
+	//
+	// Below authenticate on purpose: that middleware resolves a credential
+	// into a user, and a plugin has no credential to resolve — its identity is
+	// put on the context directly, which is the one thing a network request
+	// can never do. Going through authenticate would mean either minting a
+	// token for a call that never leaves this process, or teaching the
+	// middleware a second way in.
+	if pluginBackends != nil {
+		pluginBackends.attachAPI(mux)
+	}
+
 	s.http = &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           s.logRequests(mux, s.authenticate(mux)),

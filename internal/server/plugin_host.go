@@ -9,10 +9,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"io"
 	"log/slog"
 	"math/big"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"time"
@@ -45,6 +47,10 @@ type hostGateway struct {
 	// through the same machinery a page does — including other plugins'
 	// overrides of the name it asked for.
 	rt *pluginRuntime
+	// handler is this server's own mux, so a plugin's API call goes through
+	// the same handlers a network request does rather than a second
+	// implementation that drifts from them.
+	handler http.Handler
 	// gate is the one way out of this process. Shared with gears on purpose:
 	// two ways out would be two sets of rules, and the one nobody remembered
 	// to update would be the one plugins used.
@@ -121,9 +127,105 @@ func (g *hostGateway) Call(id string, req abi.HostRequest) abi.HostReply {
 
 	case abi.CallHTTP:
 		return g.http(id, gr, req.Input)
+
+	case abi.CallAPI:
+		return g.api(id, gr, req.Input)
 	}
 	return abi.HostReply{Err: fmt.Sprintf("%q is not answered yet on this tier", req.Call)}
 }
+
+// api calls this server's own API on the plugin's behalf.
+//
+// In-process, through the same mux a network request goes through, so a plugin
+// gets the same handlers, the same validation and the same refusals — not a
+// second implementation that drifts. Nothing is minted and nothing travels: a
+// token that existed would be a token that could leak, and there is no network
+// hop here to carry one across.
+//
+// What it calls with is a plugin identity, never the operator's. A plugin
+// asking for the workspaces list gets the ones a plugin may see, which is the
+// point of granting scopes at all — running as the person who happened to
+// install it would make every grant decorative.
+func (g *hostGateway) api(id string, gr plugin.Grants, input json.RawMessage) abi.HostReply {
+	var in struct {
+		Method string          `json:"method"`
+		Path   string          `json:"path"`
+		Body   json.RawMessage `json:"body"`
+	}
+	if err := json.Unmarshal(input, &in); err != nil {
+		return abi.HostReply{Err: "api needs a path"}
+	}
+	if in.Method == "" {
+		in.Method = http.MethodGet
+	}
+	if !strings.HasPrefix(in.Path, apiPrefix) {
+		// Only the described API. A plugin reaching the interface's own routes
+		// or another plugin's pages would be using this as a way to be a
+		// browser, which is not what a scope grant is about.
+		return abi.HostReply{Err: fmt.Sprintf("a plugin may call %s paths, and %q is not one",
+			apiPrefix, in.Path)}
+	}
+	if g.handler == nil {
+		return abi.HostReply{Err: "this install has no API to call"}
+	}
+
+	scope, err := apiScope(in.Method, in.Path)
+	if err != nil {
+		return abi.HostReply{Err: err.Error()}
+	}
+	if err := gr.AllowScope(scope); err != nil {
+		return abi.HostReply{Err: err.Error()}
+	}
+
+	req, err := http.NewRequest(in.Method, in.Path, bytes.NewReader(in.Body))
+	if err != nil {
+		return abi.HostReply{Err: err.Error()}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	// The identity a plugin runs as. Not an admin, and not the operator: a
+	// name that says what it is, so anything this touches is attributable to
+	// the plugin in whatever the handler records.
+	req = req.WithContext(withCaller(req.Context(), identity.User{
+		Name: "plugin:" + id,
+		Role: identity.RoleMember,
+	}))
+
+	rec := httptest.NewRecorder()
+	g.handler.ServeHTTP(rec, req)
+
+	body := rec.Body.Bytes()
+	if int64(len(body)) > maxHTTPBody {
+		return abi.HostReply{Err: fmt.Sprintf("the response is past the %d byte limit", int64(maxHTTPBody))}
+	}
+	return reply(map[string]any{
+		"status": rec.Code,
+		"body":   body,
+	})
+}
+
+// apiScope names what a call needs, from its method and its subject.
+//
+// Derived rather than tabulated: a table mapping every route to a scope would
+// be a second route list to keep in step with the first, and the one that
+// drifted would be the one deciding what a plugin may do.
+func apiScope(method, path string) (string, error) {
+	rest := strings.TrimPrefix(path, apiPrefix)
+	rest = strings.TrimPrefix(rest, "/")
+	subject, _, _ := strings.Cut(rest, "/")
+	subject, _, _ = strings.Cut(subject, "?")
+	if subject == "" {
+		return "", fmt.Errorf("%q names no subject to be granted", path)
+	}
+	switch method {
+	case http.MethodGet, http.MethodHead:
+		return subject + ":read", nil
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return subject + ":write", nil
+	}
+	return "", fmt.Errorf("a plugin may not call %s", method)
+}
+
+const apiPrefix = "/api/v1"
 
 // http carries one outbound request, through the gate every gear already uses.
 //

@@ -336,3 +336,59 @@ func mustGrants(t *testing.T, m plugin.Manifest) plugin.Grants {
 	}
 	return g
 }
+
+// The scope a call needs is derived from its method and subject, not looked up
+// in a table — a table mapping every route to a scope would be a second route
+// list to keep in step, and the one that drifted would be the one deciding
+// what a plugin may do.
+func TestTheScopeACallNeedsFollowsFromItsMethodAndSubject(t *testing.T) {
+	for _, c := range []struct{ method, path, want string }{
+		{"GET", "/api/v1/workspaces", "workspaces:read"},
+		{"GET", "/api/v1/workspaces/4/agents", "workspaces:read"},
+		{"POST", "/api/v1/workspaces", "workspaces:write"},
+		{"DELETE", "/api/v1/gears/2", "gears:write"},
+		{"PATCH", "/api/v1/models/9", "models:write"},
+	} {
+		got, err := apiScope(c.method, c.path)
+		if err != nil || got != c.want {
+			t.Errorf("%s %s -> %q, %v; want %q", c.method, c.path, got, err, c.want)
+		}
+	}
+
+	// A method nobody granted a meaning to is refused rather than mapped to
+	// the gentler of the two.
+	if _, err := apiScope("CONNECT", "/api/v1/workspaces"); err == nil {
+		t.Error("CONNECT was given a scope")
+	}
+}
+
+// A plugin may call the described API and nothing else. Reaching the
+// interface's own routes would be using a scope grant to be a browser.
+func TestAPluginMayOnlyCallTheDescribedAPI(t *testing.T) {
+	g := newHostGateway(
+		map[string]plugin.Grants{"p": mustGrants(t, plugin.Manifest{ID: "p", API: []string{"workspaces:read"}})},
+		nil, nil, nil, nil,
+	)
+	for _, path := range []string{"/", "/workspaces", "/p/other/page", "/metrics"} {
+		reply := g.Call("p", abi.HostRequest{
+			Call:  abi.CallAPI,
+			Input: json.RawMessage(`{"method":"GET","path":"` + path + `"}`),
+		})
+		if reply.Err == "" {
+			t.Errorf("a plugin reached %q", path)
+		}
+	}
+}
+
+// The read implied by a write, and nothing wider. A plugin granted
+// workspaces:write may read them back without a second line on the approval
+// screen; it may not read anything else.
+func TestAWriteGrantImpliesTheMatchingReadAndNoOther(t *testing.T) {
+	gr := mustGrants(t, plugin.Manifest{ID: "p", API: []string{"workspaces:write"}})
+	if err := gr.AllowScope("workspaces:read"); err != nil {
+		t.Errorf("a write grant did not imply its own read: %v", err)
+	}
+	if err := gr.AllowScope("gears:read"); err == nil {
+		t.Error("a workspaces grant allowed reading gears")
+	}
+}

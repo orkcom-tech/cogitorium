@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -49,6 +50,9 @@ type backends struct {
 	imageOf map[string]string
 	dirOf   map[string]string
 	grants  map[string]plugin.Grants
+	// host answers cog.* for every tier, and is kept so the mux can be handed
+	// to it once the routes exist.
+	host *hostGateway
 	// tier records which lane each plugin landed in, so a page for a plugin
 	// with no backend at all renders its template alone rather than failing.
 	tier map[string]plugin.Tier
@@ -124,6 +128,7 @@ func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Inst
 	}
 
 	gateway := newHostGateway(grants, db, rt, cfg, gate)
+	b.host = gateway
 	if len(workerPlugins) > 0 || len(nativePlugins) > 0 {
 		b.startWorkers(ctx, workerPlugins, nativePlugins, native, dataDir, profile, gateway)
 	}
@@ -250,6 +255,18 @@ func (b *backends) startWorkers(ctx context.Context, provisioned, nativePlugins 
 			"runtime", in.Manifest.Needs+" "+res.Row.Version, "from_image", res.FromSeed)
 	}
 	b.workers = sup
+}
+
+// attachAPI hands the gateway this server's routes.
+//
+// Late, because the mux is built after the backends are: a plugin's first call
+// cannot happen before the server is listening, so there is no window where
+// this is nil and something needs it.
+func (b *backends) attachAPI(h http.Handler) {
+	if b == nil || b.host == nil {
+		return
+	}
+	b.host.handler = h
 }
 
 // provide asks a plugin for the model behind one of its pages.
