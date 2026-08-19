@@ -129,7 +129,7 @@ func (s *Server) instructionsModel(r *http.Request, problem string) view.Instruc
 	open, _ := strconv.ParseInt(q.Get("open"), 10, 64)
 	for _, in := range items {
 		row := view.Instruction{
-			ID: in.ID, Name: in.Name, Description: in.Description,
+			ID: in.ID, Name: in.Name, Description: in.Description, Path: in.Path,
 			Tags: in.Tags, UpdatedAt: in.UpdatedAt,
 		}
 		if in.ID == open && open != 0 {

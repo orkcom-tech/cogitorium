@@ -64,7 +64,18 @@
 {{if .Items}}{{range .Items}}{{template "cog.row.instruction" .}}{{end}}{{else}}{{template "cog.empty.instructions" .}}{{end}}
 </div>{{end}}
 
-{{define "cog.row.instruction"}}<article class="card instruction{{if .Open}} is-open{{end}}">
+{{/*
+  The row carries what it is, so it can be picked up.
+
+  Dragging one onto the blueprint is how an instruction is given to an agent,
+  and it stopped working when this became a template: the payload used to be
+  attached by the component that drew the card, and a template draws no
+  handlers. So the card states itself in data attributes and the workspace
+  listens once on the container — the same delegation its clicks already use.
+*/}}
+{{define "cog.row.instruction"}}<article class="card instruction{{if .Open}} is-open{{end}}"
+  {{if .Draggable}}draggable="true" title="Drag onto the blueprint to give this to an agent"{{end}}
+  data-instruction-id="{{.ID}}" data-instruction-name="{{.Name}}" data-instruction-path="{{.Path}}">
   <header class="instruction-head">
     <h3>{{.Name}}</h3>
     {{range .Tags}}<span class="badge">{{.}}</span>{{end}}

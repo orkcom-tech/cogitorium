@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useHtmx } from '../htmx'
+import { dragging } from '../dnd'
 import BlueprintEditor from './BlueprintEditor'
 import TerminalPage from './TerminalPage'
 import FilesPage from './FilesPage'
@@ -582,6 +583,20 @@ export default function WorkspacePage({ me }: { me: User }) {
             }`}
             hx-trigger="load"
             hx-swap="innerHTML"
+            /* Picking a card up. The payload used to be attached by the
+               component that drew it; a template draws no handlers, so the
+               card states what it is in data attributes and this listens once
+               on the container — the same delegation the clicks above use. */
+            onDragStart={(e) => {
+              const card = (e.target as HTMLElement).closest('[data-instruction-id]')
+              if (!card) return
+              dragging({
+                kind: 'instruction',
+                id: Number(card.getAttribute('data-instruction-id')),
+                name: card.getAttribute('data-instruction-name') ?? '',
+                path: card.getAttribute('data-instruction-path') ?? '',
+              })(e)
+            }}
           />
         )}
         {overlay === 'memory' &&

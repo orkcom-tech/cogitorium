@@ -1233,7 +1233,22 @@ type Instruction struct {
 	// shapes it is drawing.
 	Open      bool
 	UpdatedAt string
+	// Path is where the text lives in the context space. It travels with the
+	// row so the card can be picked up and dropped on the blueprint, which is
+	// what binding an instruction to an agent actually is.
+	Path string
 }
+
+// Draggable reports whether this card may be picked up.
+//
+// Closed only: an open one is a wall of text somebody is reading and selecting
+// inside, and a card that starts a drag under a text cursor takes the sentence
+// away mid-word.
+//
+// A method rather than {{if not .Open}}, because `not` is not in the function
+// set — and the set is a permanent promise to every plugin author, so a
+// decision belongs on the model rather than in a name added to it.
+func (i Instruction) Draggable() bool { return !i.Open }
 
 // TagList is the tags as one field, for the form that edits them.
 //
