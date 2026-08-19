@@ -454,7 +454,14 @@ jobs:
           echo "ok: a gear ran as a Job and saw only its own payload"
           # And it was a Job, not a subprocess. The Jobs are deleted when the run
           # ends, so this asks the server what backend it chose.
-          kubectl -n cogitorium logs deploy/cogitorium | grep -q 'backend=kubernetes' \
+          #
+          # Both spellings, because the chart runs the server with JSON logs and
+          # this only ever matched the text ones. The step failed on an install
+          # that had just done exactly what was asked of it: the payload
+          # assertions above all passed, the log said backend kubernetes, and
+          # the grep was looking for backend=kubernetes.
+          kubectl -n cogitorium logs deploy/cogitorium \
+            | grep -qE 'backend=kubernetes|"backend":"kubernetes"' \
             || { echo "FAIL: gears did not run as Kubernetes Jobs"; exit 1; }
           echo "ok: the sandbox backend is kubernetes"
 
