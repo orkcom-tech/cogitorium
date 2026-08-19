@@ -233,6 +233,64 @@ func newPluginsCmds() *cobra.Command {
 	root.AddCommand(seedCmd)
 
 	root.AddCommand(&cobra.Command{
+		Use:   "check-bundle <bundle.zip>",
+		Short: "Validate a bundle without installing it. What the catalog's CI runs",
+		Long: "Unpacks a bundle somewhere temporary, validates its manifest, and composes its\n" +
+			"templates against this build — the same code the server runs at boot.\n\n" +
+			"One implementation, so a submission cannot pass CI and then fail to load on the\n" +
+			"first machine that tries it.",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			tmp, err := os.MkdirTemp("", "cogitorium-check-*")
+			if err != nil {
+				return err
+			}
+			defer os.RemoveAll(tmp)
+
+			s, err := plugin.Open(tmp)
+			if err != nil {
+				return err
+			}
+			in, digest, err := s.Install(args[0])
+			if err != nil {
+				return err
+			}
+
+			sources, err := view.Sources([]plugin.Installed{in})
+			if err != nil {
+				return err
+			}
+			set, report, err := view.Boot(view.Funcs(), view.Core(), sources, view.CoreModels())
+			if err != nil {
+				return err
+			}
+			for _, d := range report.Disabled {
+				return fmt.Errorf("%s would not load: %s", d.ID, d.Reason())
+			}
+
+			fmt.Printf("%s %s\n  %s\n", in.Manifest.ID, in.Version, digest)
+			for _, e := range set.Ledger().For(in.ID) {
+				switch e.Action {
+				case view.Overrides:
+					fmt.Printf("  overrides %s\n", e.Name)
+				case view.Extends:
+					fmt.Printf("  extends   %s\n", e.Name)
+				case view.Dangling:
+					// Not a failure: the plugin it extends may simply not be
+					// installed here. Named so a reviewer sees it.
+					fmt.Printf("  INERT     %s — nothing installed owns that namespace\n", e.Name)
+				default:
+					fmt.Printf("  adds      %s\n", e.Name)
+				}
+			}
+			printDeclarations(in.Manifest)
+			fmt.Println("\nOK")
+			return nil
+		},
+	})
+
+	root.AddCommand(&cobra.Command{
 		Use:          "list",
 		Short:        "List installed plugins, in layer order",
 		SilenceUsage: true,

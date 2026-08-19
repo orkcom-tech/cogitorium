@@ -1,0 +1,9 @@
+[
+  {
+    "id": "release-radar",
+    "name": "Release Radar",
+    "author": "someone",
+    "description": "Watches releases and files them into a workspace.",
+    "repo": "someone/cogitorium-release-radar"
+  }
+]
