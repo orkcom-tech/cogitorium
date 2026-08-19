@@ -105,13 +105,15 @@ type Strings struct {
 	Instructions string
 	// Models is the model catalog's title, for the same reason.
 	Models string
+	// Context is the context space's title.
+	Context string
 }
 
 // DefaultStrings is English, which is what this product ships in today. It is
 // a value rather than constants so a plugin overriding the shell can be handed
 // a different one without the host changing shape first.
 func DefaultStrings() Strings {
-	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalog"}
+	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalog", Context: "Context"}
 }
 
 // Action is one control that causes a request.
@@ -232,6 +234,13 @@ func CoreModels() Models {
 		// The model catalogue. Providers and the catalogue are separate lists
 		// on one page because they are separate decisions: where models come
 		// from, and which of them this install offers an agent.
+		// The context space: a list of files, a search across them, and one
+		// file open for editing.
+		"cog.page.context":    Context{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.context":    Context{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.contextfile": ContextFile{},
+		"cog.empty.context":   Context{Ctx: Ctx{T: DefaultStrings()}},
+
 		"cog.page.models":    ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.list.providers": ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.provider":   Provider{},
@@ -239,6 +248,62 @@ func CoreModels() Models {
 		"cog.row.model":      Model{},
 		"cog.empty.models":   ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
 	}
+}
+
+// ContextFile is one file in the space.
+type ContextFile struct {
+	Path    string
+	Version string
+	// Selected marks the one being viewed, so a row knows which of its two
+	// shapes it is drawing.
+	Selected bool
+}
+
+// ContextHit is one line a search matched.
+type ContextHit struct {
+	Path string
+	Line int
+	Text string
+}
+
+// Context is what the context page renders against.
+type Context struct {
+	Ctx Ctx
+	// Available is whether contextd can be reached at all. When it cannot,
+	// nothing else here is meaningful and the page says so instead of drawing
+	// an empty space that looks like an empty space.
+	Available bool
+	Unusable  string
+	SpaceRoot string
+
+	Files []ContextFile
+
+	// Open is the file being viewed, empty when none is.
+	Open string
+	// OpenedAt is the version this text was read at. It travels back with a
+	// save so a write that would clobber somebody else's is refused rather
+	// than performed — the version is the whole point of the field.
+	OpenedAt string
+	Text     string
+
+	// Matches is how many lines matched, counted here rather than in the
+	// template. The function set a template may call is small on purpose and
+	// every name in it is a permanent promise, so a count belongs to whoever
+	// already has the slice.
+	Matches int
+	// Query, Hits and the counts describe a search somebody just ran.
+	Searched     bool
+	Query        string
+	Hits         []ContextHit
+	FilesScanned int
+	FilesMatched int
+	// Truncated says the answer was cut. A cut answer that does not say so
+	// reads as "there is nothing else", which is the one wrong answer a search
+	// can give.
+	Truncated bool
+
+	Error  string
+	Notice string
 }
 
 // Provider is one place models come from.
@@ -433,6 +498,23 @@ func Exemplars() Models {
 		"cog.row.provider":   exampleModels(ctx).Providers[0],
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
+
+		"cog.page.context":    exampleContext(ctx),
+		"cog.list.context":    exampleContext(ctx),
+		"cog.row.contextfile": exampleContext(ctx).Files[0],
+		"cog.empty.context":   Context{Ctx: ctx, Available: true},
+	}
+}
+
+func exampleContext(ctx Ctx) Context {
+	return Context{
+		Ctx: ctx, Available: true, SpaceRoot: "~/.contextverse/spaces/solo",
+		Files: []ContextFile{
+			{Path: "instructions/house-voice.md", Version: "v3", Selected: true},
+			{Path: "notes/release-2.md", Version: "v1"},
+		},
+		Open: "instructions/house-voice.md", OpenedAt: "v3", Matches: 2,
+		Text: "Short sentences. No adjective you cannot defend.\n",
 	}
 }
 

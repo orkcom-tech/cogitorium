@@ -643,3 +643,27 @@ func TestTheApplicationShellStaysAnonymous(t *testing.T) {
 		t.Fatal("the application's shell now needs a credential to load")
 	}
 }
+
+// The context page is admin-only, as it was in the application.
+//
+// The client router guarded it and sent everybody else to /workspaces.
+// Converting a screen must not change who can see it — and the refusal has to
+// be a redirect rather than a JSON error, because the person who hit it is
+// looking at a browser.
+func TestTheContextPageIsAdminOnlyAndRedirectsAMember(t *testing.T) {
+	s := &Server{}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/context", nil)
+	req = req.WithContext(withCaller(req.Context(), identity.User{
+		Name: "sam", Role: identity.RoleMember,
+	}))
+
+	s.handleContextPage(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("a member got %d rather than being sent away", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/workspaces" {
+		t.Fatalf("sent to %q, want /workspaces — the same place the client router sent them", got)
+	}
+}

@@ -6,7 +6,6 @@ import LoginPage from './pages/LoginPage'
 import SetupPage from './pages/SetupPage'
 import WorkspacesPage from './pages/WorkspacesPage'
 import WorkspacePage from './pages/WorkspacePage'
-import ContextPage from './pages/ContextPage'
 import GearsPage from './pages/GearsPage'
 import EnvPage from './pages/EnvPage'
 import AdminPage from './pages/AdminPage'
@@ -118,7 +117,9 @@ export default function App() {
             <Route path="/people" element={user.role === 'admin' ? <AdminPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/terminal" element={user.role === 'admin' ? <TerminalPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/workspaces/:id" element={<WorkspacePage me={user} />} />
-            <Route path="/context" element={user.role === 'admin' ? <ContextPage /> : <Navigate to="/workspaces" replace />} />
+            {/* /context is a server template now, admin-only there as it was
+                here. The component stays: the workspace opens the space as a
+                drawer, which is a different surface still to be converted. */}
             <Route path="/gears" element={<GearsPage me={user} />} />
             <Route path="/env" element={user.role === 'admin' ? <EnvPage /> : <Navigate to="/workspaces" replace />} />
             {/* /instructions is served by the server as a template now, so

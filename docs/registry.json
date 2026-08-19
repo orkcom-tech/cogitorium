@@ -37,6 +37,137 @@
       "appends": false
     },
     {
+      "name": "cog.empty.context",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Available",
+          "type": "bool"
+        },
+        {
+          "path": "Unusable",
+          "type": "string"
+        },
+        {
+          "path": "SpaceRoot",
+          "type": "string"
+        },
+        {
+          "path": "Files",
+          "type": "[]ContextFile"
+        },
+        {
+          "path": "Open",
+          "type": "string"
+        },
+        {
+          "path": "OpenedAt",
+          "type": "string"
+        },
+        {
+          "path": "Text",
+          "type": "string"
+        },
+        {
+          "path": "Matches",
+          "type": "int"
+        },
+        {
+          "path": "Searched",
+          "type": "bool"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Hits",
+          "type": "[]ContextHit"
+        },
+        {
+          "path": "FilesScanned",
+          "type": "int"
+        },
+        {
+          "path": "FilesMatched",
+          "type": "int"
+        },
+        {
+          "path": "Truncated",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cp class=\"hint\"\u003espace is empty\u003c/p\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.empty.default",
       "model": [
         {
@@ -104,6 +235,10 @@
         },
         {
           "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
           "type": "string"
         },
         {
@@ -194,6 +329,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
           "path": "Providers",
           "type": "[]Provider"
         },
@@ -242,6 +381,137 @@
         }
       ],
       "body": "{{range .}}{{template \"cog.action.button\" .}}{{end}}",
+      "appends": false
+    },
+    {
+      "name": "cog.list.context",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Available",
+          "type": "bool"
+        },
+        {
+          "path": "Unusable",
+          "type": "string"
+        },
+        {
+          "path": "SpaceRoot",
+          "type": "string"
+        },
+        {
+          "path": "Files",
+          "type": "[]ContextFile"
+        },
+        {
+          "path": "Open",
+          "type": "string"
+        },
+        {
+          "path": "OpenedAt",
+          "type": "string"
+        },
+        {
+          "path": "Text",
+          "type": "string"
+        },
+        {
+          "path": "Matches",
+          "type": "int"
+        },
+        {
+          "path": "Searched",
+          "type": "bool"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Hits",
+          "type": "[]ContextHit"
+        },
+        {
+          "path": "FilesScanned",
+          "type": "int"
+        },
+        {
+          "path": "FilesMatched",
+          "type": "int"
+        },
+        {
+          "path": "Truncated",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv id=\"context-files\" class=\"context-files\"\u003e\n{{if .Files}}{{range .Files}}{{template \"cog.row.contextfile\" .}}{{end}}{{else}}{{template \"cog.empty.context\" .}}{{end}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -301,6 +571,10 @@
         },
         {
           "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
           "type": "string"
         },
         {
@@ -391,6 +665,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
           "path": "Providers",
           "type": "[]Provider"
         },
@@ -466,6 +744,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
           "path": "Providers",
           "type": "[]Provider"
         },
@@ -479,6 +761,137 @@
         }
       ],
       "body": "\u003cdiv id=\"providers\" class=\"provider-list\"\u003e\n{{if .Providers}}{{range .Providers}}{{template \"cog.row.provider\" .}}{{end}}{{else}}\u003cp class=\"hint\"\u003e\nNo providers yet. A provider is where models come from — Anthropic, or anything that speaks its\nOpenAI-compatible shape, which is how Ollama, LM Studio, vLLM and llama.cpp are reached.\n\u003c/p\u003e{{end}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.page.context",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Available",
+          "type": "bool"
+        },
+        {
+          "path": "Unusable",
+          "type": "string"
+        },
+        {
+          "path": "SpaceRoot",
+          "type": "string"
+        },
+        {
+          "path": "Files",
+          "type": "[]ContextFile"
+        },
+        {
+          "path": "Open",
+          "type": "string"
+        },
+        {
+          "path": "OpenedAt",
+          "type": "string"
+        },
+        {
+          "path": "Text",
+          "type": "string"
+        },
+        {
+          "path": "Matches",
+          "type": "int"
+        },
+        {
+          "path": "Searched",
+          "type": "bool"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Hits",
+          "type": "[]ContextHit"
+        },
+        {
+          "path": "FilesScanned",
+          "type": "int"
+        },
+        {
+          "path": "FilesMatched",
+          "type": "int"
+        },
+        {
+          "path": "Truncated",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cmain class=\"page context\"\u003e\n  \u003ch2\u003e{{.Ctx.T.Context}}\u003c/h2\u003e\n\n  {{if .Available}}\n    \u003cp class=\"hint\"\u003e\n      Files in your Contextverse space{{if .SpaceRoot}} ({{.SpaceRoot}}){{end}}. Editing here writes\n      through \u003ccode\u003econtextd\u003c/code\u003e, so versioning stays Contextverse's.\n    \u003c/p\u003e\n    {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n    {{if .Notice}}\u003cp class=\"hint\"\u003e✓ {{.Notice}}\u003c/p\u003e{{end}}\n\n    {{/* Finding a memory used to mean already knowing its path. */}}\n    \u003cform class=\"row\" method=\"get\" action=\"/context\"\u003e\n      \u003cinput class=\"grow\" name=\"q\" value=\"{{.Query}}\" placeholder=\"search inside the files…\"\u003e\n      \u003cbutton type=\"submit\"\u003esearch\u003c/button\u003e\n      {{if .Searched}}\u003ca href=\"/context\"\u003eclear\u003c/a\u003e{{end}}\n    \u003c/form\u003e\n\n    {{if .Searched}}\n      \u003cdiv class=\"card\"\u003e\n        \u003cp class=\"hint\"\u003e\n          {{if .Hits}}{{.Matches}} lines in {{.FilesMatched}} of {{.FilesScanned}} files.{{else}}Nothing in {{.FilesScanned}} files mentions “{{.Query}}”.{{end}}\n          {{if .Truncated}} There are more — narrow the search.{{end}}\n        \u003c/p\u003e\n        {{range .Hits}}\u003ca class=\"context-hit\" href=\"/context?open={{.Path}}\"\u003e\n          \u003ccode class=\"path\"\u003e{{.Path}}:{{.Line}}\u003c/code\u003e\n          \u003cspan class=\"hit-text\"\u003e{{.Text}}\u003c/span\u003e\n        \u003c/a\u003e{{end}}\n      \u003c/div\u003e\n    {{end}}\n\n    \u003cdiv class=\"context-layout\"\u003e\n      {{template \"cog.list.context\" .}}\n      \u003cdiv class=\"context-editor\"\u003e\n        {{if .Open}}\n          \u003cform method=\"post\" action=\"/context/save\"\u003e\n            \u003cdiv class=\"row\"\u003e\n              \u003ccode\u003e{{.Open}}\u003c/code\u003e\n              {{if .OpenedAt}}\u003cspan class=\"muted\"\u003eopened at {{.OpenedAt}}\u003c/span\u003e{{end}}\n              \u003cspan class=\"spacer\"\u003e\u003c/span\u003e\n              \u003cbutton type=\"submit\"\u003esave new version\u003c/button\u003e\n            \u003c/div\u003e\n            {{/* The path and the version travel with the text. Without the\n                 version a save is a clobber; without the path it is a save\n                 into whatever the server last thought was open. */}}\n            \u003cinput type=\"hidden\" name=\"path\" value=\"{{.Open}}\"\u003e\n            \u003cinput type=\"hidden\" name=\"version\" value=\"{{.OpenedAt}}\"\u003e\n            \u003ctextarea name=\"text\" spellcheck=\"false\"\u003e{{.Text}}\u003c/textarea\u003e\n          \u003c/form\u003e\n        {{else}}\n          \u003cp class=\"hint\"\u003ePick a file to view or edit it.\u003c/p\u003e\n        {{end}}\n      \u003c/div\u003e\n    \u003c/div\u003e\n  {{else}}\n    \u003cdiv class=\"card\"\u003e\n      \u003cp\u003e\n        Context lives in \u003cstrong\u003eContextverse\u003c/strong\u003e — Cogitorium does not store it. The\n        \u003ccode\u003econtextd\u003c/code\u003e CLI is not usable right now:\n      \u003c/p\u003e\n      \u003cp class=\"error\"\u003e{{.Unusable}}\u003c/p\u003e\n      \u003cp class=\"hint\"\u003e\n        Install Contextverse and run \u003ccode\u003econtextd init solo\u003c/code\u003e, or point Cogitorium at the\n        binary with \u003ccode\u003econtextd_path\u003c/code\u003e in config.yaml (or \u003ccode\u003eCOGITORIUM_CONTEXTD\u003c/code\u003e).\n      \u003c/p\u003e\n    \u003c/div\u003e\n  {{end}}\n\u003c/main\u003e",
       "appends": false
     },
     {
@@ -538,6 +951,10 @@
         },
         {
           "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
           "type": "string"
         },
         {
@@ -628,6 +1045,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
           "path": "Providers",
           "type": "[]Provider"
         },
@@ -703,6 +1124,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -720,6 +1145,25 @@
         }
       ],
       "body": "\u003cmain class=\"plugin-page\"\u003e{{if .Title}}\u003ch1\u003e{{.Title}}\u003c/h1\u003e{{end}}\u003c/main\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.row.contextfile",
+      "model": [
+        {
+          "path": "Path",
+          "type": "string"
+        },
+        {
+          "path": "Version",
+          "type": "string"
+        },
+        {
+          "path": "Selected",
+          "type": "bool"
+        }
+      ],
+      "body": "\u003ca class=\"context-file{{if .Selected}} selected{{end}}\" href=\"/context?open={{.Path}}\"\u003e\n  \u003cspan class=\"path\"\u003e{{.Path}}\u003c/span\u003e\n  \u003cspan class=\"muted\"\u003e{{.Version}}\u003c/span\u003e\n\u003c/a\u003e",
       "appends": false
     },
     {
@@ -922,6 +1366,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -1006,6 +1454,10 @@
         },
         {
           "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
           "type": "string"
         },
         {
@@ -1096,6 +1548,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -1180,6 +1636,10 @@
         },
         {
           "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
           "type": "string"
         },
         {
@@ -1270,6 +1730,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -1357,6 +1821,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
           "path": "Title",
           "type": "string"
         },
@@ -1441,6 +1909,10 @@
         },
         {
           "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
           "type": "string"
         },
         {

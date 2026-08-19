@@ -548,6 +548,9 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// application. Its own paths rather than /api/v1 ones: these answer with
 	// HTML, and the described API is a JSON surface — putting a page in it
 	// would make every generated client expect a document.
+	s.page(mux, "GET /context", s.handleContextPage)
+	s.page(mux, "POST /context/save", s.handleSaveContextForm)
+
 	s.page(mux, "GET /models", s.handleModelsPage)
 	s.page(mux, "POST /models/providers", s.handleCreateProviderForm)
 	s.page(mux, "POST /models/providers/{id}/delete", s.handleDeleteProviderForm)

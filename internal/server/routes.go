@@ -167,6 +167,22 @@ func firstSegment(path string) string {
 	return "/" + trimmed
 }
 
+// pageAdmin is requireAdmin for a screen.
+//
+// The same decision, a different refusal. requireAdmin answers JSON, which is
+// right for a script and useless to somebody looking at a browser — so a
+// member who reached an admin screen is sent where the application would have
+// sent them rather than shown an error object. The client router does exactly
+// this, and the two have to agree or converting a screen changes who can see
+// it.
+func (s *Server) pageAdmin(w http.ResponseWriter, r *http.Request) bool {
+	if callerFrom(r.Context()).IsAdmin() {
+		return true
+	}
+	http.Redirect(w, r, "/workspaces", http.StatusSeeOther)
+	return false
+}
+
 // inPageSpace reports whether a request is for a screen this server renders,
 // and therefore needs a credential like every other route that shows data.
 func (s *Server) inPageSpace(path string) bool {
