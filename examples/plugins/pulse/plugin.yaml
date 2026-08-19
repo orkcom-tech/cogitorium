@@ -1,0 +1,22 @@
+schema: 1
+id: pulse
+name: Pulse
+version: 1.0.0
+license: Apache-2.0
+host:
+  contract: 1
+
+pages:
+  - path: /p/pulse/panel
+    template: pulse.page.panel
+    title: Pulse
+    auth: token
+
+mounts:
+  - point: workspace.drawer
+    title: Pulse
+    page: /p/pulse/panel
+
+styles: [pulse.css]
+scripts:
+  - src: pulse.js

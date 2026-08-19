@@ -1596,6 +1596,19 @@ paths:
       responses:
         default:
           description: see the reference
+  "/api/v1/workspaces/{id}/metrics":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/metrics"
+      responses:
+        default:
+          description: see the reference
   "/api/v1/workspaces/{id}/queue":
     parameters:
       - name: "id"

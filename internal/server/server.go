@@ -291,6 +291,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	mux := http.NewServeMux()
 	s.route(mux, "GET /health", s.handleHealth)
 
+	s.route(mux, "GET /api/v1/workspaces/{id}/metrics", s.handleWorkspaceMetrics)
 	s.route(mux, "GET /api/v1/plugins", s.handleListPlugins)
 	s.route(mux, "POST /api/v1/plugins", s.handleUploadPlugin)
 	// Its own path space rather than under /plugins/. Go's mux refused the

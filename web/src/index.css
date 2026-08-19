@@ -3649,3 +3649,12 @@ button.big {
 .plugin-actions .danger {
   margin-left: auto;
 }
+
+/* A plugin's panel. It is an iframe, so it needs a box rather than styling —
+   what is inside is the plugin's own page and its styles are its own. */
+.plugin-panel {
+  border: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}

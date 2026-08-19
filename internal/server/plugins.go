@@ -43,6 +43,9 @@ type pluginRuntime struct {
 	// an author who says 500 means to sit beside the other 500s, not behind
 	// whichever plugin the operator happened to install first.
 	nav []NavItem
+	// mounts are panels inside the workspace, as opposed to destinations in
+	// the rail.
+	mounts []Mount
 	// styles and scripts are what every plugin asked to inject into the head.
 	styles  []string
 	scripts []view.Asset
@@ -58,8 +61,21 @@ type pluginRuntime struct {
 // destination that briefly has fewer entries than it will have in a moment.
 type Contribution struct {
 	Nav     []NavItem `json:"nav"`
+	Mounts  []Mount   `json:"mounts"`
 	Styles  []string  `json:"styles"`
 	Scripts []string  `json:"scripts"`
+}
+
+// Mount is one panel a plugin contributes inside the workspace.
+type Mount struct {
+	Point string `json:"point"`
+	Title string `json:"title"`
+	Icon  string `json:"icon,omitempty"`
+	// Page is the URL the panel shows. A URL rather than markup, so the panel
+	// and a full-window view of the same thing are one implementation — and so
+	// somebody can open it in a tab when the drawer is too small.
+	Page string `json:"page"`
+	From string `json:"from"`
 }
 
 // NavItem is one destination a plugin contributed.
@@ -185,6 +201,12 @@ func loadPlugins(dataDir string) (*pluginRuntime, error) {
 				Order: n.Order, When: when, From: m.ID,
 			})
 		}
+		for _, mt := range m.Mounts {
+			rt.mounts = append(rt.mounts, Mount{
+				Point: mt.Point, Title: mt.Title, Icon: mt.Icon,
+				Page: mt.Page, From: m.ID,
+			})
+		}
 		for _, st := range m.Styles {
 			url := rt.declareAsset(m.ID, in.Dir, st)
 			rt.styles = append(rt.styles, url)
@@ -281,11 +303,12 @@ func sortNav(rt *pluginRuntime) {
 
 // Contribution is what the browser is told at boot.
 func (rt *pluginRuntime) Contribution() Contribution {
-	c := Contribution{Nav: []NavItem{}, Styles: []string{}, Scripts: []string{}}
+	c := Contribution{Nav: []NavItem{}, Mounts: []Mount{}, Styles: []string{}, Scripts: []string{}}
 	if rt == nil {
 		return c
 	}
 	c.Nav = append(c.Nav, rt.nav...)
+	c.Mounts = append(c.Mounts, rt.mounts...)
 	c.Styles = append(c.Styles, rt.styles...)
 	for _, s := range rt.scripts {
 		c.Scripts = append(c.Scripts, s.Src)

@@ -63,6 +63,11 @@ type Manifest struct {
 	Styles  []string `yaml:"styles"`
 	Scripts []Script `yaml:"scripts"`
 
+	// Mounts are places inside the application a plugin's own surface appears.
+	// Distinct from pages: a page is a destination somebody navigates to, and
+	// a mount is a panel that opens over the work without leaving it.
+	Mounts []Mount `yaml:"mounts"`
+
 	// Overrides is ADVISORY and the system does not rely on it. What a plugin
 	// actually overrides is computed from the templates it ships, because a
 	// manifest can lie and parsed bytes cannot. Declaring accurately unlocks
@@ -165,6 +170,26 @@ func (n Native) Target() string {
 		libc = "any"
 	}
 	return n.OS + "/" + n.Arch + "/" + libc
+}
+
+// Mount is one panel a plugin contributes inside the application.
+//
+// The only point today is the workspace drawer, and the vocabulary is closed
+// for the same reason the template areas are: an open set of mount points
+// drifts into a second, undocumented layout system, and every point is a
+// promise the host has to keep rendering somewhere.
+type Mount struct {
+	// Point is where it appears. Only "workspace.drawer" for now.
+	Point string `yaml:"point"`
+	// Title is the label on the button that opens it.
+	Title string `yaml:"title"`
+	// Icon names one of the host's own glyphs, empty for a plain label.
+	Icon string `yaml:"icon"`
+	// Page is the plugin page rendered inside the panel. A page rather than a
+	// separate template, so a panel and a full-window view of the same thing
+	// are one implementation and one URL — and so a person can open it in a
+	// tab when the drawer is too small for what they are reading.
+	Page string `yaml:"page"`
 }
 
 // Script is a head-injected module. Integrity is computed from the bundle at
@@ -298,6 +323,7 @@ func (m Manifest) Validate() Problems {
 	m.validateNav(add)
 	m.validateAssets(add)
 	m.validateOverrides(add)
+	m.validateMounts(add)
 	m.validateNative(add)
 	m.validateGrants(add)
 
@@ -417,6 +443,34 @@ func (m Manifest) validateOverrides(add func(string, string, ...any)) {
 // time on somebody else's machine is too late.
 var knownOS = map[string]bool{"linux": true, "darwin": true, "windows": true}
 var knownArch = map[string]bool{"amd64": true, "arm64": true}
+
+// mountPoints is the closed set. Named here so an unknown one is refused with
+// the list rather than accepted and never rendered.
+var mountPoints = map[string]bool{"workspace.drawer": true}
+
+func (m Manifest) validateMounts(add func(string, string, ...any)) {
+	paths := map[string]bool{}
+	for _, p := range m.Pages {
+		paths[p.Path] = true
+	}
+	for i, mt := range m.Mounts {
+		f := fmt.Sprintf("mounts[%d]", i)
+		if !mountPoints[mt.Point] {
+			add(f+".point", "must be workspace.drawer, got %q", mt.Point)
+		}
+		if mt.Title == "" {
+			add(f+".title", "is required — it is the label on the button that opens it")
+		}
+		switch {
+		case mt.Page == "":
+			add(f+".page", "is required")
+		case !paths[mt.Page]:
+			// Caught here rather than at render, where it would be a panel
+			// that opens on nothing.
+			add(f+".page", "names %q, which is not one of this plugin's pages", mt.Page)
+		}
+	}
+}
 
 func (m Manifest) validateNative(add func(string, string, ...any)) {
 	seen := map[string]bool{}

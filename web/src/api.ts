@@ -39,8 +39,20 @@ export type PluginNavItem = {
  * gains entries a moment after it renders is a rail that moves under
  * somebody's cursor.
  */
+/** One panel a plugin contributes inside the workspace. */
+export type PluginMount = {
+  point: string
+  title: string
+  icon?: string
+  /** The URL the panel shows. A URL rather than markup, so the panel and a
+   *  full-window view of the same thing are one implementation. */
+  page: string
+  from: string
+}
+
 export type PluginContribution = {
   nav: PluginNavItem[]
+  mounts: PluginMount[]
   styles: string[]
   scripts: string[]
 }
@@ -60,6 +72,7 @@ export function contributions(): PluginContribution {
   const c = window.__COG_PLUGINS__
   return {
     nav: Array.isArray(c?.nav) ? c.nav : [],
+    mounts: Array.isArray(c?.mounts) ? c.mounts : [],
     styles: Array.isArray(c?.styles) ? c.styles : [],
     scripts: Array.isArray(c?.scripts) ? c.scripts : [],
   }

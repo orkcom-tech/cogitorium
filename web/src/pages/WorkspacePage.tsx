@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import BlueprintEditor from './BlueprintEditor'
 import TerminalPage from './TerminalPage'
@@ -36,6 +36,7 @@ import {
   type User,
   type WSMessage,
   type Workspace,
+  contributions,
 } from '../api'
 
 export default function WorkspacePage({ me }: { me: User }) {
@@ -221,7 +222,19 @@ export default function WorkspacePage({ me }: { me: User }) {
   // overlay is something you consulted a minute ago, not part of how the
   // workspace is arranged, and restoring one on load would put a panel over
   // the operator's work for a question they already had answered.
-  const [overlay, setOverlay] = useState<OverlayId | null>(null)
+  // A plugin's panel is identified by "plugin:<id>", which cannot collide with
+  // an OverlayId because none of those contains a colon. Widening the state's
+  // type rather than the union keeps the host's own overlays exhaustively
+  // checked by the compiler, which is what stops a new one being forgotten in
+  // the switch below.
+  const [overlay, setOverlay] = useState<OverlayId | `plugin:${string}` | null>(null)
+  const mounts = useMemo(
+    () => contributions().mounts.filter((m) => m.point === 'workspace.drawer'),
+    [],
+  )
+  const openMount = typeof overlay === 'string' && overlay.startsWith('plugin:')
+    ? mounts.find((m) => `plugin:${m.from}` === overlay)
+    : undefined
   // A gear the operator asked to see the source of, from somewhere that is not
   // the gear list — today, the note a blueprint drop leaves when the gear that
   // landed has never been approved. It opens the card; it approves nothing.
@@ -326,9 +339,19 @@ export default function WorkspacePage({ me }: { me: User }) {
               go: (id: string) => deck.go(id as ViewId),
             },
             drawers: {
-              items: OVERLAY_ITEMS.map((o) => ({ id: o.id, title: o.title, icon: DRAWER_ICON[o.id] })),
+              items: [
+                ...OVERLAY_ITEMS.map((o) => ({ id: o.id, title: o.title, icon: DRAWER_ICON[o.id] })),
+                // After the host's own, because a plugin adding a panel is
+                // adding to this workspace rather than rearranging it.
+                ...mounts.map((m) => ({
+                  id: `plugin:${m.from}`,
+                  title: m.title,
+                  icon: DRAWER_ICON.gears,
+                })),
+              ],
               open: overlay,
-              toggle: (id: string | null) => setOverlay(id as OverlayId | null),
+              toggle: (id: string | null) =>
+                setOverlay(id as OverlayId | `plugin:${string}` | null),
             },
             action: {
               label: 'export',
@@ -337,7 +360,7 @@ export default function WorkspacePage({ me }: { me: User }) {
             },
           }
         : null,
-    [workspace?.name, workspace?.description, busy, deck.deck.view, overlay],
+    [workspace?.name, workspace?.description, busy, deck.deck.view, overlay, mounts],
   )
 
   if (!workspace) {
@@ -519,6 +542,19 @@ export default function WorkspacePage({ me }: { me: User }) {
           setReviewGear(null)
         }}
       >
+        {openMount && (
+          /* An iframe rather than injected markup, and deliberately so: the
+             panel is the plugin's own page, served by the server at its own
+             URL, so what renders here is exactly what renders when somebody
+             opens that URL in a tab. One implementation, one thing to test,
+             and the plugin's styles cannot leak into the workspace around it. */
+          <iframe
+            className="dk-body plugin-panel"
+            src={openMount.page}
+            title={openMount.title}
+            sandbox="allow-scripts allow-same-origin"
+          />
+        )}
         {overlay === 'agents' && roster}
         {overlay === 'inlets' && <InletsPanel wsId={wsId} agents={agents} shown onError={setError} />}
         {overlay === 'queue' && <QueuePanel wsId={wsId} shown onError={setError} />}
