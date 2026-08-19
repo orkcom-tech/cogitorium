@@ -1,10 +1,13 @@
 package server
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 
+	"github.com/orkcom-tech/cogitorium/internal/plugin"
 	"github.com/orkcom-tech/cogitorium/internal/view"
 )
 
@@ -108,4 +111,100 @@ func TestANilRuntimeIsSafeToAsk(t *testing.T) {
 	}
 }
 
-var _ = view.Asset{}
+// The library screen is built from what the plugins actually did, not from
+// what their manifests claimed — so this view cannot be made to say something
+// flattering by writing a nicer manifest.
+func TestThePluginViewReportsUndeclaredOverrides(t *testing.T) {
+	s := &Server{}
+	in := plugin.Installed{
+		ID:      "midnight",
+		Version: "1.0.0",
+		Enabled: true,
+		Order:   0,
+		Manifest: plugin.Manifest{
+			ID: "midnight", Name: "Midnight", Version: "1.0.0",
+			// Declares one override and quietly performs another.
+			Overrides: []string{"cog.shell.tokens"},
+		},
+	}
+
+	core := fstest.MapFS{"c.html": &fstest.MapFile{Data: []byte(
+		`{{define "cog.shell.tokens"}}{{end}}{{define "cog.row.nav"}}{{end}}`)}}
+	mine := fstest.MapFS{"m.html": &fstest.MapFile{Data: []byte(
+		`{{define "cog.shell.tokens"}}a{{end}}` +
+			`{{define "cog.row.nav"}}b{{end}}` +
+			`{{define "midnight.page.own"}}c{{end}}` +
+			`{{define "cog.slot.head"}}d{{end}}`)}}
+
+	set, report, err := view.Boot(view.Funcs(), core,
+		[]view.Source{{ID: "midnight", FS: mine}},
+		view.Models{"cog.shell.tokens": view.Shell{}, "cog.row.nav": view.NavItem{},
+			"cog.slot.head": view.Shell{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.plugins = &pluginRuntime{set: set, report: report}
+
+	v := s.pluginView(in, plugin.Capabilities{})
+	if !v.Live {
+		t.Fatalf("the plugin should be live: %+v", v)
+	}
+	if len(v.Undeclared) != 1 || v.Undeclared[0] != "cog.row.nav" {
+		t.Errorf("the undeclared override must be reported, got %v", v.Undeclared)
+	}
+	if len(v.Adds) != 1 || v.Adds[0] != "midnight.page.own" {
+		t.Errorf("adds = %v", v.Adds)
+	}
+	if len(v.Extends) != 1 || v.Extends[0] != "cog.slot.head" {
+		t.Errorf("extends = %v", v.Extends)
+	}
+	if v.Order != 1 {
+		t.Errorf("order should be 1-based for a screen, got %d", v.Order)
+	}
+}
+
+// Enabled and live are different questions, and the difference is the whole
+// reason somebody is looking at this screen.
+func TestAnEnabledButBrokenPluginIsNotLive(t *testing.T) {
+	s := &Server{}
+	in := plugin.Installed{
+		ID: "bad", Version: "1.0.0", Enabled: true,
+		Manifest: plugin.Manifest{ID: "bad", Name: "Bad", Version: "1.0.0"},
+	}
+	core := fstest.MapFS{"c.html": &fstest.MapFile{Data: []byte(
+		`{{define "cog.row.nav"}}{{.Label}}{{end}}`)}}
+	bad := fstest.MapFS{"b.html": &fstest.MapFile{Data: []byte(
+		`{{define "cog.row.nav"}}{{.Gone}}{{end}}`)}}
+
+	set, report, err := view.Boot(view.Funcs(), core,
+		[]view.Source{{ID: "bad", FS: bad}}, view.Models{"cog.row.nav": view.NavItem{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.plugins = &pluginRuntime{set: set, report: report}
+
+	v := s.pluginView(in, plugin.Capabilities{})
+	if v.Live {
+		t.Error("a plugin whose templates cannot render is not live")
+	}
+	if !v.Enabled {
+		t.Error("it is still enabled — that is what makes the difference worth showing")
+	}
+	if v.Problem == "" {
+		t.Error("the screen has to be able to say why")
+	}
+}
+
+// Nothing is claimed about an install that could not be read.
+func TestABrokenInstallClaimsOnlyItsID(t *testing.T) {
+	s := &Server{}
+	v := s.pluginView(plugin.Installed{ID: "wrecked", Broken: errFake}, plugin.Capabilities{})
+	if v.ID != "wrecked" || v.Problem == "" {
+		t.Fatalf("expected an id and a reason, got %+v", v)
+	}
+	if v.Name != "" || v.Version != "" || v.Live {
+		t.Errorf("nothing else is reliable for a broken install: %+v", v)
+	}
+}
+
+var errFake = fmt.Errorf("no installed version recorded")

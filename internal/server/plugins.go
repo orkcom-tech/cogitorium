@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/orkcom-tech/cogitorium/internal/channel"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/plugin"
 	"github.com/orkcom-tech/cogitorium/internal/view"
@@ -351,4 +352,163 @@ func flattenQuery(v url.Values) map[string]string {
 		}
 	}
 	return out
+}
+
+// ── the HTTP surface ──────────────────────────────────────────────────────
+
+// PluginView is one plugin as the library screen sees it.
+//
+// It answers the three questions somebody has in front of that screen: what is
+// installed, what is each one actually doing to my interface, and why is that
+// one not working. The second is computed from the templates each plugin
+// ships, never from what its manifest claimed — so this endpoint cannot be
+// made to say something flattering by writing a nicer manifest.
+type PluginView struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Author  string `json:"author,omitempty"`
+	Docs    string `json:"docs,omitempty"`
+	Source  string `json:"source,omitempty"`
+
+	Enabled bool `json:"enabled"`
+	// Order is the position in the enable list, 1-based, or 0 when off.
+	// Position is precedence: a plugin later in the list renders instead of
+	// one earlier when they define the same name.
+	Order int `json:"order"`
+	// Live reports whether it is actually rendering. An enabled plugin that
+	// failed to load is enabled and not live, and the difference is the whole
+	// reason somebody is looking at this screen.
+	Live bool `json:"live"`
+	// Problem is why it is not live, in the words the operator needs: which
+	// plugin, which template, which field.
+	Problem string `json:"problem,omitempty"`
+
+	Tier      string `json:"tier"`
+	Available bool   `json:"available"`
+	// Refusal explains an unavailable tier, naming the runtime and the reason
+	// this install cannot provide it.
+	Refusal string `json:"refusal,omitempty"`
+
+	// Overrides, Adds and Extends are read off the composed set. A name in
+	// Overrides is a screen this plugin took over from somebody.
+	Overrides []string `json:"overrides,omitempty"`
+	Adds      []string `json:"adds,omitempty"`
+	Extends   []string `json:"extends,omitempty"`
+	// Inert is a name it defines that nothing installed owns, so it never
+	// renders. Reported because a silently inert override is the hardest kind
+	// of plugin bug to find.
+	Inert []string `json:"inert,omitempty"`
+	// Undeclared is what it overrides without having said so in its manifest.
+	// Not an error — declaration is advisory by design — but it is the
+	// difference between what an operator approved and what is happening.
+	Undeclared []string `json:"undeclared,omitempty"`
+
+	Pages   []PluginPageView `json:"pages,omitempty"`
+	Hosts   []string         `json:"hosts,omitempty"`
+	Secrets []string         `json:"secrets,omitempty"`
+	API     []string         `json:"api,omitempty"`
+}
+
+// PluginPageView is one page a plugin serves.
+type PluginPageView struct {
+	Path  string `json:"path"`
+	Title string `json:"title,omitempty"`
+	Auth  string `json:"auth"`
+}
+
+// handleListPlugins answers with everything the library screen needs.
+//
+// Admin only. What is installed on this machine and what it is allowed to
+// reach is an operator's business, not a workspace member's.
+func (s *Server) handleListPlugins(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+	store, err := plugin.Open(s.dataDir)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "the plugin directory could not be read")
+		return
+	}
+	all, err := store.List()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "the plugin directory could not be read")
+		return
+	}
+
+	caps := plugin.Capabilities{Profile: channel.Detect(s.dataDir)}
+	out := make([]PluginView, 0, len(all))
+	for _, in := range all {
+		out = append(out, s.pluginView(in, caps))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) pluginView(in plugin.Installed, caps plugin.Capabilities) PluginView {
+	if in.Broken != nil {
+		// Everything except the id is unreliable for a broken install, so
+		// nothing else is claimed about it.
+		return PluginView{ID: in.ID, Problem: in.Broken.Error()}
+	}
+
+	m := in.Manifest
+	v := PluginView{
+		ID: m.ID, Name: m.Name, Version: in.Version,
+		Docs: m.Docs, Source: m.Source,
+		Enabled: in.Enabled,
+		Hosts:   m.Hosts, Secrets: m.Secrets, API: m.API,
+	}
+	if in.Enabled {
+		v.Order = in.Order + 1
+	}
+	for _, p := range m.Pages {
+		auth := p.Auth
+		if auth == "" {
+			auth = plugin.AuthDefault
+		}
+		v.Pages = append(v.Pages, PluginPageView{Path: p.Path, Title: p.Title, Auth: auth})
+	}
+
+	res := plugin.Resolve(m, caps)
+	v.Tier, v.Available, v.Refusal = string(res.Tier), res.Available, res.Refusal
+
+	rt := s.plugins
+	if rt == nil {
+		return v
+	}
+	for _, d := range rt.report.Disabled {
+		if d.ID == m.ID {
+			v.Problem = d.Reason()
+			return v
+		}
+	}
+	for _, id := range rt.report.Loaded {
+		if id == m.ID {
+			v.Live = true
+		}
+	}
+	if !v.Live {
+		return v
+	}
+
+	declared := map[string]bool{}
+	for _, o := range m.Overrides {
+		declared[o] = true
+	}
+	for _, e := range rt.set.Ledger().For(m.ID) {
+		switch e.Action {
+		case view.Overrides:
+			v.Overrides = append(v.Overrides, e.Name)
+			if !declared[e.Name] {
+				v.Undeclared = append(v.Undeclared, e.Name)
+			}
+		case view.Adds:
+			v.Adds = append(v.Adds, e.Name)
+		case view.Extends:
+			v.Extends = append(v.Extends, e.Name)
+		case view.Dangling:
+			v.Inert = append(v.Inert, e.Name)
+		}
+	}
+	return v
 }

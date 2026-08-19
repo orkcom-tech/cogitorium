@@ -281,6 +281,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	mux := http.NewServeMux()
 	s.route(mux, "GET /health", s.handleHealth)
 
+	s.route(mux, "GET /api/v1/plugins", s.handleListPlugins)
 	s.route(mux, "GET /api/v1/providers", s.handleListProviders)
 	s.route(mux, "POST /api/v1/providers", s.handleCreateProvider)
 	s.route(mux, "PATCH /api/v1/providers/{id}", s.handleUpdateProvider)

@@ -818,6 +818,12 @@ paths:
       responses:
         default:
           description: see the reference
+  "/api/v1/plugins":
+    get:
+      summary: "Read plugins"
+      responses:
+        default:
+          description: see the reference
   "/api/v1/providers":
     get:
       summary: "Read providers"
