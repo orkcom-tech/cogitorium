@@ -109,6 +109,24 @@ func (s *Server) sampleQueue(ctx context.Context) {
 // visible; the other order loses the schedule itself into a loop of firing the
 // same instant forever.
 func (s *Server) fire(ctx context.Context, sc schedule.Schedule) {
+	// A schedule whose target was deleted cannot fire, and it will not start
+	// being able to on its own. Left enabled it fires and fails on every tick
+	// forever — a clock set to a minute filled the record with a failure a
+	// minute, none of which told anybody anything the first one had not.
+	//
+	// So it is switched off, not removed. The row is what lets somebody point
+	// it at another agent and switch it back on; cascading it away with its
+	// target is how a nightly job disappears and nobody learns why until the
+	// thing it was doing is noticed missing.
+	if sc.Broken() {
+		slog.Warn("a schedule's target was deleted; switching it off until it is repointed",
+			"schedule", sc.ID, "name", sc.Name, "target", sc.TargetKind)
+		if _, err := s.schedules.SetEnabled(context.WithoutCancel(ctx), sc.ID, false); err != nil {
+			slog.Error("could not switch off a broken schedule", "schedule", sc.ID, "err", err)
+		}
+		return
+	}
+
 	spec, err := schedule.Parse(sc.Spec)
 	if err != nil {
 		// Stored specs are validated when written, so this means the row was

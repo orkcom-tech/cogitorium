@@ -106,7 +106,10 @@ func (s *Server) queueModel(r *http.Request, wsID int64, problem, notice string)
 			// A clock whose target was deleted shows as broken rather than
 			// vanishing, and this is where somebody finds out.
 			if sc.Broken() {
-				row.LastError = "its target is gone, so it fires into nothing"
+				// It is switched off by the first tick that finds it this way,
+				// so the sentence says what to do rather than describing a
+				// loop that is no longer running.
+				row.LastError = "its target is gone; point it at another one and switch it back on"
 			} else if sc.LastOutcome != "" && sc.LastOutcome != "ok" {
 				row.LastError = sc.LastOutcome
 			}
