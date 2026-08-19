@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, type GraphData } from '../api'
 import GraphCanvas from './GraphCanvas'
+import { useHtmx } from '../htmx'
 
 // Users and teams. A single-operator install never needs this page — the
 // seeded admin is the only account — so it exists for the moment an install
 // stops being single-operator.
 export default function AdminPage() {
   const [error, setError] = useState<string | null>(null)
+  // The half of this screen the server renders. See the hook: htmx does not
+  // see what React mounts unless it is told.
+  const lists = useHtmx<HTMLDivElement>('people-lists')
   const [map, setMap] = useState<GraphData | null>(null)
   const [mapLayers, setMapLayers] = useState<Record<string, boolean>>({})
 
@@ -49,7 +53,7 @@ export default function AdminPage() {
           words are what a template is for. The access map above stays here —
           it is a drawn graph, and a template renders a thing that exists at a
           moment rather than a layout somebody drags. */}
-      <div hx-get="/people/lists" hx-trigger="load" hx-swap="innerHTML" />
+      <div ref={lists} hx-get="/people/lists" hx-trigger="load" hx-swap="innerHTML" />
 
     </div>
   )

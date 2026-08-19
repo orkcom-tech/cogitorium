@@ -40,6 +40,13 @@ export function build() {
   if (built) {
     return built
   }
+  // The bundle first, because the binary embeds it.
+  //
+  // Without this the suite tests whatever was in web/dist from the last manual
+  // build, which is a suite that passes over a broken interface — and did: a
+  // change to the client that left every drawer empty was covered by a test
+  // that went green because it was running the previous bundle.
+  execFileSync('npm', ['run', 'build'], { cwd: join(ROOT, 'web'), stdio: 'inherit' })
   execFileSync('go', ['build', '-o', join(ROOT, 'bin', 'cogitorium-test'), './cmd/cogitorium'], {
     cwd: ROOT,
     stdio: 'inherit',

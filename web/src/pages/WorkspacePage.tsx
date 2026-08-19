@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
+import { useHtmx } from '../htmx'
 import BlueprintEditor from './BlueprintEditor'
 import TerminalPage from './TerminalPage'
 import FilesPage from './FilesPage'
@@ -219,6 +220,16 @@ export default function WorkspacePage({ me }: { me: User }) {
   // the gear list — today, the note a blueprint drop leaves when the gear that
   // landed has never been approved. It opens the card; it approves nothing.
   const [reviewGear, setReviewGear] = useState<number | null>(null)
+
+  // Every panel below whose body the server renders. React mounts the
+  // container and htmx scans the document only once, at load — so without
+  // these, each one opened empty while the server sat there answering 200.
+  // Keyed on what the container asks for, because the same element is reused
+  // for a different agent or a different drawer.
+  const terminalGate = useHtmx<HTMLDivElement>(`terminal-${wsId}`)
+  const agentsPanel = useHtmx<HTMLDivElement>(`agents-${wsId}-${selectedAgent?.id ?? 0}`)
+  const overlayPanel = useHtmx<HTMLDivElement>(`overlay-${wsId}-${overlay}-${reviewGear ?? 0}`)
+  const memoryPanel = useHtmx<HTMLDivElement>(`memory-${wsId}-${selectedAgent?.id ?? 0}`)
   // Whether the operator has asked for a shell IN THIS SESSION. Never
   // persisted: a shell is not reconnected, and the gate says so.
   const [shell, setShell] = useState(false)
@@ -508,6 +519,7 @@ export default function WorkspacePage({ me }: { me: User }) {
                offering a button that fails. */
             <div
               key="terminal-gate"
+              ref={terminalGate}
               hx-get={`/workspaces/${wsId}/drawers/terminal`}
               hx-trigger="load"
               hx-swap="innerHTML"
@@ -535,6 +547,7 @@ export default function WorkspacePage({ me }: { me: User }) {
           <div
             key="agents"
             className="dk-body"
+            ref={agentsPanel}
             hx-get={`/workspaces/${wsId}/drawers/agents${
               selectedAgent ? `?selected=${selectedAgent.id}` : ''
             }`}
@@ -563,6 +576,7 @@ export default function WorkspacePage({ me }: { me: User }) {
           <div
             key={overlay}
             className="dk-body"
+            ref={overlayPanel}
             hx-get={`/workspaces/${wsId}/drawers/${drawerName(overlay)}${
               overlay === 'gears' && reviewGear ? `?open=${reviewGear}` : ''
             }`}
@@ -578,6 +592,7 @@ export default function WorkspacePage({ me }: { me: User }) {
             <div
               key={`memory-${selectedAgent.id}`}
               className="dk-body"
+              ref={memoryPanel}
               hx-get={`/workspaces/${wsId}/drawers/memory?agent=${selectedAgent.id}`}
               hx-trigger="load"
               hx-swap="innerHTML"
@@ -1073,6 +1088,7 @@ function AgentPanel({
   onChanged: (a: Agent) => void
   onError: (msg: string) => void
 }) {
+  const agentMemory = useHtmx<HTMLDivElement>(`agent-memory-${agent.id}`)
   const [role, setRole] = useState(agent.role)
   const [avoid, setAvoid] = useState(agent.avoid)
   const [modelId, setModelId] = useState<number | ''>(agent.model_id ?? '')
@@ -1229,6 +1245,7 @@ function AgentPanel({
           the one nobody is looking at is the one that drifts. */}
       <div
         key={`agent-memory-${agent.id}`}
+        ref={agentMemory}
         hx-get={`/workspaces/${agent.workspace_id}/drawers/memory?agent=${agent.id}`}
         hx-trigger="load"
         hx-swap="innerHTML"

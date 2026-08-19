@@ -377,6 +377,83 @@ describe('a screen the server renders', () => {
   })
 })
 
+// Every drawer in the workspace, opened the way a person opens it.
+//
+// This is the test that would have caught the worst fault in the product: the
+// server rendered all of them correctly, answered 200, and the browser never
+// asked. React mounts the container and htmx scans the document only once, at
+// load — so every drawer opened empty while every server-side test passed.
+//
+// It is a browser test on purpose. Nothing short of a real page can tell the
+// difference between "the server can render this" and "the person sees it".
+describe('the drawers a person opens', () => {
+  let binary, server, ui
+
+  before(async () => {
+    binary = build()
+    server = await start(binary)
+    ui = await session(server)
+  })
+
+  after(async () => {
+    await ui?.close()
+    await server?.stop()
+  })
+
+  test('every one of them arrives with something in it', async () => {
+    // A workspace needs an orchestrator, an orchestrator needs a model, and a
+    // model needs a provider — so all three, through the page's own session.
+    // The address is never reached: nothing here asks the provider anything.
+    const created = await ui.page.evaluate(async (url) => {
+      const post = async (path, body) => {
+        const res = await fetch(url + path, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`)
+        return res.json()
+      }
+      const provider = await post('/api/v1/providers', {
+        name: 'nowhere',
+        type: 'openai-compatible',
+        base_url: 'http://127.0.0.1:9',
+        api_key: 'unused',
+      })
+      const model = await post('/api/v1/models', {
+        provider_id: provider.id,
+        model_name: 'nothing',
+        label: 'Nothing',
+      })
+      const ws = await post('/api/v1/workspaces', {
+        name: 'drawers',
+        description: 'for the drawers test',
+        orchestrator_model_id: model.id,
+      })
+      return ws.id
+    }, server.url)
+    assert.ok(created, 'the workspace could not be created')
+
+    await ui.page.goto(`${server.url}/workspaces/${created}`)
+    await ui.page.waitForSelector('nav.rail')
+
+    // Not every drawer: the ones whose body the server renders. A drawer the
+    // client still draws is not what this is about.
+    for (const name of ['Agents', 'Gears', 'MCP servers', 'Receivers', 'Queue', 'Variables']) {
+      await ui.page.locator(`nav.rail button:has-text("${name}")`).first().click()
+      const body = ui.page.locator('.drawer-body')
+      await body.waitFor({ state: 'visible', timeout: 10_000 })
+      await ui.page.waitForFunction(
+        () => (document.querySelector('.drawer-body')?.innerText ?? '').trim().length > 0,
+        { timeout: 10_000 },
+      ).catch(() => {})
+      const text = (await body.innerText()).trim()
+      assert.ok(text.length > 0, `the ${name} drawer opened empty`)
+    }
+  })
+})
+
 // A panel the server renders, inside a page the client still owns.
 //
 // This is the seam the conversion is happening on. The workspace — its chat,
