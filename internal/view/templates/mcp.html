@@ -1,0 +1,107 @@
+{{/*
+  Somebody else's tools, granted to an agent.
+
+  Off unless asked for, and the default is the point: everything else this
+  product runs is either its own code or a gear whose complete source is here,
+  versioned, approved line by line and run in a container. An MCP server is a
+  command — the source is never seen, and the child runs on this host as this
+  server's user.
+
+  Tools are approved ONE AT A TIME, because a server's tool list is its own to
+  change. Approving a server is not approving whatever it offers next week.
+*/}}
+
+{{define "cog.drawer.mcp"}}<div class="dk-body mcp-page">
+  {{if .Enabled}}
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+    {{if .Notice}}<p class="hint">✓ {{.Notice}}</p>{{end}}
+
+    {{if .IsAdmin}}
+    <form class="row" method="post" action="/mcp">
+      <input name="name" required placeholder="jira" aria-label="Name">
+      <input name="description" placeholder="our tickets" aria-label="Description">
+      <input name="command" placeholder="npx" aria-label="Command">
+      <input name="address" placeholder="https://mcp.example.com/mcp" aria-label="Address">
+      <input name="secrets" placeholder="JIRA_TOKEN" aria-label="Named values it is handed">
+      <button type="submit">add it</button>
+    </form>
+    {{end}}
+
+    <div id="mcp-servers" class="mcp-servers">
+      {{range .Servers}}{{template "cog.row.mcpserver" .}}{{else}}
+      <p class="hint">No servers here. An agent reaches only what you have granted it.</p>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="hint">
+      External MCP servers are switched off for this install. They are off unless asked for, and the
+      default is the point: everything else this product runs is either its own code or a gear whose
+      complete source is here, versioned, approved line by line and run in a container. An MCP server
+      is a command — the source is never seen, and the child runs on this host as this server’s user.
+    </p>
+    <p class="hint">Set <code>mcp_clients: true</code> in the configuration and restart.</p>
+  {{end}}
+</div>{{end}}
+
+{{define "cog.row.mcpserver"}}<article class="card mcp-server">
+  <header class="row">
+    <strong>{{.Name}}</strong>
+    <span class="badge">{{.Kind}}</span>
+    {{if .Approved}}<span class="badge is-ok">{{.Status}}</span>{{else}}<span class="badge is-warn">{{.Status}}</span>{{end}}
+    <span class="muted">{{.ApprovedTools}} of {{.TotalTools}} tools approved</span>
+  </header>
+  {{if .Command}}<p class="muted"><code>{{.Command}}</code></p>{{end}}
+  {{if .Address}}<p class="muted"><code>{{.Address}}</code></p>{{end}}
+
+  <div class="grants">
+    <h4>What approving this grants</h4>
+    {{if .Hosted}}
+      {{/* A hosted server is a genuinely different risk, and saying the same
+           four things would be false in two of them. Nothing runs here — which
+           is safer — and what leaves is the part that matters. */}}
+      <p><strong>Nothing runs on this machine.</strong> There is no process, no file access and nothing
+      to sandbox, which is the one way this is safer than a packaged server.</p>
+      <p><strong>Your agents’ words leave this install.</strong> Every argument of every call to it goes
+      to a host somebody else operates, along with whatever the agent wrote to get there.</p>
+      <p><strong>It is sent a real credential</strong>, on every request, belonging to a real account
+      with that account’s permissions.</p>
+      <p><strong>A URL can be repointed and look identical.</strong> That is why the address is part of
+      what you approve here: change it and this server goes back to pending.</p>
+    {{else}}
+      <p><strong>It is not sandboxed.</strong> It runs on this host as this server’s user, outside the
+      container gears run in — so it can read this install’s database, and the provider keys in it.</p>
+      <p><strong>It reaches the network by definition.</strong> That is what it is for, and the gate that
+      covers agent web search does not cover it at all.</p>
+      <p><strong>Its code is fetched when it starts</strong>, every time it starts. What you approve is
+      the command line, not the bytes that command will fetch tomorrow.</p>
+      <p><strong>It is handed real credentials</strong> — by name, resolved at spawn, belonging to a real
+      account with that account’s permissions.</p>
+    {{end}}
+
+    {{if .Secrets}}<p class="muted">Named values it is handed:
+      {{range .Secrets}}<code>{{.}}</code> {{end}}</p>{{end}}
+  </div>
+
+  {{/* One at a time. A server's tool list is its own to change, so approving
+       the server is not approving whatever it offers next week. */}}
+  <details>
+    <summary>its tools</summary>
+    {{range .Tools}}<div class="mcp-tool">
+      <code>{{.Name}}</code>
+      {{if .Description}}<span class="muted">{{.Description}}</span>{{end}}
+      <form method="post" action="/mcp/tools/{{.ID}}/approve">
+        <button type="submit">{{if .Approved}}withdraw{{else}}approve this tool{{end}}</button>
+      </form>
+    </div>{{else}}<p class="hint">It has not been probed yet, so nothing here knows what it offers.</p>{{end}}
+  </details>
+
+  <div class="mcp-actions">
+    <form method="post" action="/mcp/{{.ID}}/probe">
+      <button type="submit">ask it what it offers</button>
+    </form>
+    <form method="post" action="/mcp/{{.ID}}/delete"
+          hx-confirm="Remove {{.Name}}? Every agent granted it loses those tools.">
+      <button type="submit" class="danger">remove</button>
+    </form>
+  </div>
+</article>{{end}}

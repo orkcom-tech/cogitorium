@@ -8,7 +8,6 @@ import CodeEditor from './CodeEditor'
 import ApprovalDialog from './ApprovalDialog'
 import { Select } from './Select'
 import { Deck, ShellGate, Workbench } from '../deck/Deck'
-import McpPage from './McpPage'
 import { Drawer, type Edge } from '../deck/Drawer'
 import { useDeck } from '../deck/store'
 import type { OverlayId, ViewId } from '../deck/types'
@@ -579,6 +578,7 @@ export default function WorkspacePage({ me }: { me: User }) {
           overlay === 'context' ||
           overlay === 'env' ||
           overlay === 'inlets' ||
+          overlay === 'mcp' ||
           overlay === 'queue') && (
           <div
             key={overlay}
@@ -590,7 +590,6 @@ export default function WorkspacePage({ me }: { me: User }) {
             hx-swap="innerHTML"
           />
         )}
-        {overlay === 'mcp' && <McpPage me={me} />}
         {overlay === 'memory' &&
           (selectedAgent ? (
             <AgentMemory agent={selectedAgent} onChanged={() => void reloadAgents()} onError={setError} />

@@ -410,6 +410,105 @@
       "appends": false
     },
     {
+      "name": "cog.drawer.mcp",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Enabled",
+          "type": "bool"
+        },
+        {
+          "path": "IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Servers",
+          "type": "[]MCPServer"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv class=\"dk-body mcp-page\"\u003e\n  {{if .Enabled}}\n    {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n    {{if .Notice}}\u003cp class=\"hint\"\u003e✓ {{.Notice}}\u003c/p\u003e{{end}}\n\n    {{if .IsAdmin}}\n    \u003cform class=\"row\" method=\"post\" action=\"/mcp\"\u003e\n      \u003cinput name=\"name\" required placeholder=\"jira\" aria-label=\"Name\"\u003e\n      \u003cinput name=\"description\" placeholder=\"our tickets\" aria-label=\"Description\"\u003e\n      \u003cinput name=\"command\" placeholder=\"npx\" aria-label=\"Command\"\u003e\n      \u003cinput name=\"address\" placeholder=\"https://mcp.example.com/mcp\" aria-label=\"Address\"\u003e\n      \u003cinput name=\"secrets\" placeholder=\"JIRA_TOKEN\" aria-label=\"Named values it is handed\"\u003e\n      \u003cbutton type=\"submit\"\u003eadd it\u003c/button\u003e\n    \u003c/form\u003e\n    {{end}}\n\n    \u003cdiv id=\"mcp-servers\" class=\"mcp-servers\"\u003e\n      {{range .Servers}}{{template \"cog.row.mcpserver\" .}}{{else}}\n      \u003cp class=\"hint\"\u003eNo servers here. An agent reaches only what you have granted it.\u003c/p\u003e\n      {{end}}\n    \u003c/div\u003e\n  {{else}}\n    \u003cp class=\"hint\"\u003e\n      External MCP servers are switched off for this install. They are off unless asked for, and the\n      default is the point: everything else this product runs is either its own code or a gear whose\n      complete source is here, versioned, approved line by line and run in a container. An MCP server\n      is a command — the source is never seen, and the child runs on this host as this server’s user.\n    \u003c/p\u003e\n    \u003cp class=\"hint\"\u003eSet \u003ccode\u003emcp_clients: true\u003c/code\u003e in the configuration and restart.\u003c/p\u003e\n  {{end}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.drawer.queue",
       "model": [
         {
@@ -2952,6 +3051,61 @@
         }
       ],
       "body": "\u003carticle class=\"card instruction{{if .Open}} is-open{{end}}\"\u003e\n  \u003cheader class=\"instruction-head\"\u003e\n    \u003ch3\u003e{{.Name}}\u003c/h3\u003e\n    {{range .Tags}}\u003cspan class=\"badge\"\u003e{{.}}\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n  {{if .Description}}\u003cp class=\"hint\"\u003e{{.Description}}\u003c/p\u003e{{end}}\n  {{if .Open}}\u003cpre class=\"instruction-text\"\u003e{{.Text}}\u003c/pre\u003e{{end}}\n  \u003cdiv class=\"instruction-actions\"\u003e\n    \u003ca href=\"/instructions?open={{.ID}}\"\u003e{{if .Open}}Hide{{else}}Read{{end}}\u003c/a\u003e\n    \u003cform method=\"post\" action=\"/instructions/{{.ID}}/delete\"\n          hx-post=\"/instructions/{{.ID}}/delete\" hx-target=\"#library-list\" hx-swap=\"outerHTML\"\n          hx-confirm=\"Delete {{.Name}}? Its text stays in Contextverse; the entry goes.\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eDelete\u003c/button\u003e\n    \u003c/form\u003e\n    {{if .UpdatedAt}}\u003cspan class=\"hint\"\u003e{{.UpdatedAt}}\u003c/span\u003e{{end}}\n  \u003c/div\u003e\n\u003c/article\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.row.mcpserver",
+      "model": [
+        {
+          "path": "ID",
+          "type": "int64"
+        },
+        {
+          "path": "Name",
+          "type": "string"
+        },
+        {
+          "path": "Kind",
+          "type": "string"
+        },
+        {
+          "path": "Hosted",
+          "type": "bool"
+        },
+        {
+          "path": "Command",
+          "type": "string"
+        },
+        {
+          "path": "Address",
+          "type": "string"
+        },
+        {
+          "path": "Status",
+          "type": "string"
+        },
+        {
+          "path": "Approved",
+          "type": "bool"
+        },
+        {
+          "path": "Secrets",
+          "type": "[]string"
+        },
+        {
+          "path": "Tools",
+          "type": "[]MCPTool"
+        },
+        {
+          "path": "ApprovedTools",
+          "type": "int"
+        },
+        {
+          "path": "TotalTools",
+          "type": "int"
+        }
+      ],
+      "body": "\u003carticle class=\"card mcp-server\"\u003e\n  \u003cheader class=\"row\"\u003e\n    \u003cstrong\u003e{{.Name}}\u003c/strong\u003e\n    \u003cspan class=\"badge\"\u003e{{.Kind}}\u003c/span\u003e\n    {{if .Approved}}\u003cspan class=\"badge is-ok\"\u003e{{.Status}}\u003c/span\u003e{{else}}\u003cspan class=\"badge is-warn\"\u003e{{.Status}}\u003c/span\u003e{{end}}\n    \u003cspan class=\"muted\"\u003e{{.ApprovedTools}} of {{.TotalTools}} tools approved\u003c/span\u003e\n  \u003c/header\u003e\n  {{if .Command}}\u003cp class=\"muted\"\u003e\u003ccode\u003e{{.Command}}\u003c/code\u003e\u003c/p\u003e{{end}}\n  {{if .Address}}\u003cp class=\"muted\"\u003e\u003ccode\u003e{{.Address}}\u003c/code\u003e\u003c/p\u003e{{end}}\n\n  \u003cdiv class=\"grants\"\u003e\n    \u003ch4\u003eWhat approving this grants\u003c/h4\u003e\n    {{if .Hosted}}\n      {{/* A hosted server is a genuinely different risk, and saying the same\n           four things would be false in two of them. Nothing runs here — which\n           is safer — and what leaves is the part that matters. */}}\n      \u003cp\u003e\u003cstrong\u003eNothing runs on this machine.\u003c/strong\u003e There is no process, no file access and nothing\n      to sandbox, which is the one way this is safer than a packaged server.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eYour agents’ words leave this install.\u003c/strong\u003e Every argument of every call to it goes\n      to a host somebody else operates, along with whatever the agent wrote to get there.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIt is sent a real credential\u003c/strong\u003e, on every request, belonging to a real account\n      with that account’s permissions.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eA URL can be repointed and look identical.\u003c/strong\u003e That is why the address is part of\n      what you approve here: change it and this server goes back to pending.\u003c/p\u003e\n    {{else}}\n      \u003cp\u003e\u003cstrong\u003eIt is not sandboxed.\u003c/strong\u003e It runs on this host as this server’s user, outside the\n      container gears run in — so it can read this install’s database, and the provider keys in it.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIt reaches the network by definition.\u003c/strong\u003e That is what it is for, and the gate that\n      covers agent web search does not cover it at all.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIts code is fetched when it starts\u003c/strong\u003e, every time it starts. What you approve is\n      the command line, not the bytes that command will fetch tomorrow.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIt is handed real credentials\u003c/strong\u003e — by name, resolved at spawn, belonging to a real\n      account with that account’s permissions.\u003c/p\u003e\n    {{end}}\n\n    {{if .Secrets}}\u003cp class=\"muted\"\u003eNamed values it is handed:\n      {{range .Secrets}}\u003ccode\u003e{{.}}\u003c/code\u003e {{end}}\u003c/p\u003e{{end}}\n  \u003c/div\u003e\n\n  {{/* One at a time. A server's tool list is its own to change, so approving\n       the server is not approving whatever it offers next week. */}}\n  \u003cdetails\u003e\n    \u003csummary\u003eits tools\u003c/summary\u003e\n    {{range .Tools}}\u003cdiv class=\"mcp-tool\"\u003e\n      \u003ccode\u003e{{.Name}}\u003c/code\u003e\n      {{if .Description}}\u003cspan class=\"muted\"\u003e{{.Description}}\u003c/span\u003e{{end}}\n      \u003cform method=\"post\" action=\"/mcp/tools/{{.ID}}/approve\"\u003e\n        \u003cbutton type=\"submit\"\u003e{{if .Approved}}withdraw{{else}}approve this tool{{end}}\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/div\u003e{{else}}\u003cp class=\"hint\"\u003eIt has not been probed yet, so nothing here knows what it offers.\u003c/p\u003e{{end}}\n  \u003c/details\u003e\n\n  \u003cdiv class=\"mcp-actions\"\u003e\n    \u003cform method=\"post\" action=\"/mcp/{{.ID}}/probe\"\u003e\n      \u003cbutton type=\"submit\"\u003eask it what it offers\u003c/button\u003e\n    \u003c/form\u003e\n    \u003cform method=\"post\" action=\"/mcp/{{.ID}}/delete\"\n          hx-confirm=\"Remove {{.Name}}? Every agent granted it loses those tools.\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eremove\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/div\u003e\n\u003c/article\u003e",
       "appends": false
     },
     {

@@ -247,6 +247,9 @@ func CoreModels() Models {
 		// it, so it is the same list without the page frame — and its own
 		// name, because a plugin overriding the drawer should not have to take
 		// the page with it.
+		"cog.drawer.mcp":    MCP{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.mcpserver": MCPServer{},
+
 		"cog.drawer.receivers": Inlets{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.receiver":     Inlet{},
 
@@ -358,6 +361,52 @@ type Workspaces struct {
 	Importing bool
 	Error     string
 	Notice    string
+}
+
+// MCPTool is one capability a server offers, approved on its own.
+//
+// One at a time, because a server's tool list is its own to change: approving
+// a server is not approving whatever it decides to offer next week.
+type MCPTool struct {
+	ID          int64
+	Name        string
+	Description string
+	Approved    bool
+}
+
+// MCPServer is somebody else's tools, granted to an agent.
+type MCPServer struct {
+	ID   int64
+	Name string
+	// Kind is "packaged" or "hosted", and the two are genuinely different
+	// risks — saying the same four things about both would be false in two of
+	// them.
+	Kind     string
+	Hosted   bool
+	Command  string
+	Address  string
+	Status   string
+	Approved bool
+	// Secrets are the names it is handed, resolved at spawn and belonging to a
+	// real account with that account's permissions.
+	Secrets []string
+	Tools   []MCPTool
+	// ApprovedTools and TotalTools are the count somebody reads before opening
+	// the list.
+	ApprovedTools int
+	TotalTools    int
+}
+
+// MCP is what the MCP drawer renders against.
+type MCP struct {
+	Ctx Ctx
+	// Enabled is false when this install was not asked for external servers.
+	// Off is the default and the default is the point.
+	Enabled bool
+	IsAdmin bool
+	Servers []MCPServer
+	Error   string
+	Notice  string
 }
 
 // InletTask is one thing a receiver can be asked to do.
@@ -866,6 +915,14 @@ func Exemplars() Models {
 		"cog.row.provider":   exampleModels(ctx).Providers[0],
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
+
+		"cog.drawer.mcp": MCP{Ctx: ctx, Enabled: true, IsAdmin: true,
+			Servers: []MCPServer{{ID: 1, Name: "jira", Kind: "packaged",
+				Command: "npx -y @atlassian/mcp", Status: "approved", Approved: true,
+				Secrets: []string{"JIRA_TOKEN"}, ApprovedTools: 2, TotalTools: 7,
+				Tools: []MCPTool{{ID: 1, Name: "search_issues", Approved: true},
+					{ID: 2, Name: "create_issue"}}}}},
+		"cog.row.mcpserver": MCPServer{ID: 1, Name: "jira", Kind: "packaged", Status: "approved"},
 
 		"cog.drawer.receivers": Inlets{Ctx: ctx, Agents: []string{"orchestrator", "Triage"},
 			Items: []Inlet{{ID: 1, Address: "helpdesk", Description: "Where the helpdesk posts a ticket",

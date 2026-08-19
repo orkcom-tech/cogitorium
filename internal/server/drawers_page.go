@@ -40,6 +40,10 @@ func (s *Server) handleWorkspaceDrawer(w http.ResponseWriter, r *http.Request) {
 		s.renderDrawer(w, r, "cog.drawer.gears", func() any {
 			return s.gearsModel(r, "", "", nil)
 		})
+	case "mcp":
+		s.renderDrawer(w, r, "cog.drawer.mcp", func() any {
+			return s.mcpModel(r, "", "")
+		})
 	case "receivers":
 		s.renderDrawer(w, r, "cog.drawer.receivers", func() any {
 			return s.inletsModel(r, wsID, "", "", nil)
