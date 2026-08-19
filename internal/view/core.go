@@ -1042,6 +1042,17 @@ type Gear struct {
 	Comparing       bool
 	PreviousVersion int
 
+	// Editable and Source are the correction form. Offered only for a gear of
+	// ONE text file: a box labelled "source" that submitted over a gear made
+	// of four files would drop three of them without saying so, and the
+	// operator would find out when it next ran.
+	//
+	// Saving forges a new version, which returns the gear to pending and drops
+	// its network grant. That is not a side effect to work around — an
+	// approval covers exact content, and this is different content.
+	Editable bool
+	Source   string
+
 	// Runs is what this gear has actually done, and Connections is where it
 	// actually reached. Both are the record rather than the intention, which
 	// is the half of an approval decision the source cannot show.
@@ -1226,10 +1237,15 @@ type Instruction struct {
 
 // TagList is the tags as one field, for the form that edits them.
 //
+// On Gear as well as Instruction, for the same form and the same reason.
+//
 // A method rather than a second stored field, and joined here rather than in
 // the template, because joining in a template needs a function and the
 // function set is a permanent promise to every plugin author.
 func (i Instruction) TagList() string { return strings.Join(i.Tags, ", ") }
+
+// TagList is the gear's tags as one field.
+func (g Gear) TagList() string { return strings.Join(g.Tags, ", ") }
 
 // Tag is one filter option.
 type Tag struct {

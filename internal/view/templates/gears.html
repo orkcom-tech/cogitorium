@@ -113,6 +113,27 @@
       </details>
     {{end}}
 
+    {{if .Editable}}
+    {{/* Saving forges the next version, which returns this gear to pending and
+         drops its network grant. Said here rather than discovered: an approval
+         covers exact content, and a correction is different content. */}}
+    <details class="edit-gear">
+      <summary>correct this gear</summary>
+      <form class="author-gear-edit" method="post" action="/gears">
+        <input type="hidden" name="name" value="{{.Name}}">
+        <input type="hidden" name="runtime" value="{{.Runtime}}">
+        <input type="hidden" name="entrypoint" value="{{.Entrypoint}}">
+        <label>Description <input name="description" value="{{.Description}}"></label>
+        <label>Tags <input name="tags" value="{{.TagList}}" placeholder="comma, separated"></label>
+        <label>Source <textarea name="source" rows="14" spellcheck="false">{{.Source}}</textarea></label>
+        <p class="hint">Saving makes this v{{.Version}} into the next version. It goes back to pending and
+        its network grant is dropped, because an approval covers exact content and this is different
+        content.</p>
+        <button type="submit">Save as a new version</button>
+      </form>
+    </details>
+    {{end}}
+
     <details><summary>arguments schema</summary><pre class="prompt-preview">{{.ArgsSchema}}</pre></details>
 
     <div class="grants">

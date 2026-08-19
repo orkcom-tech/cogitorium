@@ -308,6 +308,14 @@ func (s *Server) fillGearDetail(r *http.Request, row *view.Gear, g gear.Gear) {
 		row.Files = append(row.Files, file)
 	}
 
+	// One text file, so a correction form cannot silently drop what it does
+	// not show. A gear of several files, or one carrying a binary, is edited
+	// by forging it again — through the SDK, the CLI or an agent — and the
+	// screen says so rather than offering a box that would lose the rest.
+	if len(files) == 1 && files[0].Encoding != "base64" {
+		row.Editable, row.Source = true, files[0].Content
+	}
+
 	// What each named value would resolve to, at the moment of the decision.
 	if len(g.EnvNames) > 0 && s.env != nil {
 		statuses, err := s.env.Describe(r.Context(), nil, g.EnvNames)
