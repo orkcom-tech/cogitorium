@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -48,6 +49,11 @@ type Entry struct {
 	// Repo is "owner/name" on GitHub. The bundle is fetched from its releases,
 	// so an author publishes by tagging rather than by asking anybody.
 	Repo string `json:"repo"`
+
+	// bundleBase overrides where the bundle is fetched from. Unexported and
+	// never decoded from JSON, so a catalog entry cannot redirect a download
+	// somewhere the convention does not point. It exists for tests.
+	bundleBase string
 }
 
 var repoRe = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$`)
@@ -82,6 +88,9 @@ func (e Entry) Validate() error {
 // the catalog depend on a service being up to answer a question the URL
 // already answers.
 func (e Entry) BundleURL(version string) string {
+	if e.bundleBase != "" {
+		return e.bundleBase
+	}
 	if version == "" || version == "latest" {
 		return fmt.Sprintf("https://github.com/%s/releases/latest/download/%s.zip", e.Repo, e.ID)
 	}
@@ -245,4 +254,92 @@ func (c *Catalog) cached() (Index, error) {
 		return Index{}, err
 	}
 	return Index{Entries: keepValid(ci.Entries), Fetched: ci.Fetched, Cached: true}, nil
+}
+
+// ── installing from the catalog ───────────────────────────────────────────
+
+// maxCatalogBundle bounds what will be downloaded. A plugin is templates and
+// maybe a module; anything approaching this is a mistake or an attempt to fill
+// somebody's disk, and a length nobody checked is how that succeeds.
+const maxCatalogBundle = 64 << 20
+
+// Download fetches an entry's bundle to a temporary file.
+//
+// The URL comes from the entry rather than from anything a response said: a
+// redirect chain is followed by the HTTP client, but the thing being asked for
+// is always what the catalog pointed at, never what a page suggested.
+func (c *Catalog) Download(ctx context.Context, e Entry, version string) (path string, err error) {
+	if !c.allow() {
+		return "", fmt.Errorf("this install is not permitted to reach the network, so %s cannot "+
+			"be downloaded. It would have come from %s", e.ID, e.BundleURL(version))
+	}
+	url := e.BundleURL(version)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("downloading %s: %w", e.ID, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		// The commonest real failure by far: the catalog lists a plugin whose
+		// author has not attached a bundle to their release, or named it
+		// something else. Said in those words, because "404" sends somebody to
+		// look at their own network.
+		return "", fmt.Errorf("%s answered %s. The catalog expects a release asset named %s.zip "+
+			"on %s — the author may not have attached one",
+			url, resp.Status, e.ID, e.SourceURL())
+	}
+
+	tmp, err := os.CreateTemp("", "cogitorium-plugin-*.zip")
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		tmp.Close()
+		if err != nil {
+			os.Remove(tmp.Name())
+		}
+	}()
+
+	n, err := io.Copy(tmp, io.LimitReader(resp.Body, maxCatalogBundle+1))
+	if err != nil {
+		return "", fmt.Errorf("downloading %s: %w", e.ID, err)
+	}
+	if n > maxCatalogBundle {
+		return "", fmt.Errorf("%s is larger than the %d MB download limit", e.ID, maxCatalogBundle>>20)
+	}
+	return tmp.Name(), nil
+}
+
+// InstallFromCatalog downloads an entry and installs it.
+//
+// It arrives switched off and unapproved, exactly like every other way a
+// plugin gets onto this machine. Coming from a catalog is not a decision
+// somebody made about it — it is a decision somebody made about listing it,
+// which is a different thing and belongs to a different person.
+func (c *Catalog) InstallFromCatalog(ctx context.Context, s *Store, e Entry, version string) (Installed, string, error) {
+	path, err := c.Download(ctx, e, version)
+	if err != nil {
+		return Installed{}, "", err
+	}
+	defer os.Remove(path)
+
+	in, digest, err := s.Install(path)
+	if err != nil {
+		return Installed{}, digest, err
+	}
+	// The catalog and the bundle have to agree about what this is. They are
+	// written by the same author but at different times, and a mismatch means
+	// one of them is stale — installing it under the catalog's name would put
+	// a plugin on disk under an id its own manifest does not claim.
+	if in.Manifest.ID != e.ID {
+		_ = s.Remove(in.Manifest.ID)
+		return Installed{}, digest, fmt.Errorf("the catalog lists this as %q and the bundle says "+
+			"it is %q — one of them is out of date, and nothing was installed", e.ID, in.Manifest.ID)
+	}
+	return in, digest, nil
 }

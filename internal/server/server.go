@@ -283,6 +283,13 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 
 	s.route(mux, "GET /api/v1/plugins", s.handleListPlugins)
 	s.route(mux, "POST /api/v1/plugins", s.handleUploadPlugin)
+	// Its own path space rather than under /plugins/. Go's mux refused the
+	// nested form at registration — /plugins/catalog/{id} and
+	// /plugins/{id}/approve both match /plugins/catalog/approve and neither is
+	// more specific — which is exactly the crash that keeping every route in
+	// one file exists to surface at boot rather than in production.
+	s.route(mux, "GET /api/v1/plugin-catalog", s.handleBrowseCatalog)
+	s.route(mux, "POST /api/v1/plugin-catalog/{id}", s.handleInstallFromCatalog)
 	s.routeIn(mux, "PUT /api/v1/plugins/order", s.handleOrderPlugins, struct {
 		Order []string `json:"order"`
 	}{})

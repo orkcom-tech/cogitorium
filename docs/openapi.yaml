@@ -818,6 +818,25 @@ paths:
       responses:
         default:
           description: see the reference
+  "/api/v1/plugin-catalog":
+    get:
+      summary: "Read plugin-catalog"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/plugin-catalog/{id}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    post:
+      summary: "Create plugin-catalog/{id}"
+      responses:
+        default:
+          description: see the reference
   "/api/v1/plugins":
     get:
       summary: "Read plugins"

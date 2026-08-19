@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -200,4 +201,102 @@ func TestSearchMatchesWhatSomebodyTypes(t *testing.T) {
 	if len(idx.Search("nothing matches this")) != 0 {
 		t.Error("a query that matches nothing returns nothing")
 	}
+}
+
+// The link the catalog exists for: a listing becomes a plugin on disk.
+func TestInstallFromCatalogDownloadsAndInstalls(t *testing.T) {
+	zipBytes, err := os.ReadFile(bundle(t, "radar", "1.0.0", "hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(zipBytes)
+	}))
+	defer srv.Close()
+
+	c := NewCatalog(t.TempDir(), nil, func() bool { return true })
+	e := stubEntry("radar", srv.URL)
+	s := open(t)
+
+	in, digest, err := c.InstallFromCatalog(context.Background(), s, e, "")
+	if err != nil {
+		t.Fatalf("installing: %v", err)
+	}
+	if in.Manifest.ID != "radar" || !strings.HasPrefix(digest, "sha256:") {
+		t.Fatalf("installed wrong: %+v %s", in, digest)
+	}
+	// Being in a catalog is not a decision anybody made about RUNNING it.
+	if in.Enabled {
+		t.Error("it must arrive switched off")
+	}
+	if why := s.Pending("radar"); why == "" {
+		t.Error("and unapproved — listing it is somebody else's decision than running it")
+	}
+}
+
+// The catalog and the bundle are written by the same author at different
+// times, and a mismatch means one of them is stale.
+func TestAMismatchedIDInstallsNothing(t *testing.T) {
+	zipBytes, err := os.ReadFile(bundle(t, "actually-midnight", "1.0.0", "x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(zipBytes)
+	}))
+	defer srv.Close()
+
+	c := NewCatalog(t.TempDir(), nil, func() bool { return true })
+	s := open(t)
+
+	_, _, err = c.InstallFromCatalog(context.Background(), s, stubEntry("radar", srv.URL), "")
+	if err == nil {
+		t.Fatal("a bundle claiming another id must be refused")
+	}
+	if !strings.Contains(err.Error(), "nothing was installed") {
+		t.Errorf("the refusal should say what did not happen: %v", err)
+	}
+	all, _ := s.List()
+	if len(all) != 0 {
+		t.Errorf("something was left behind: %+v", all)
+	}
+}
+
+// "404" sends somebody to look at their own network. The commonest real
+// failure is an author who did not attach the asset.
+func TestAMissingReleaseAssetSaysWhatIsWrong(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	c := NewCatalog(t.TempDir(), nil, func() bool { return true })
+	_, err := c.Download(context.Background(), stubEntry("radar", srv.URL), "")
+	if err == nil {
+		t.Fatal("a missing asset must be an error")
+	}
+	for _, want := range []string{"radar.zip", "may not have attached"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the message omits %q: %v", want, err)
+		}
+	}
+}
+
+func TestDownloadWithoutConsentIsRefused(t *testing.T) {
+	c := NewCatalog(t.TempDir(), nil, func() bool { return false })
+	_, err := c.Download(context.Background(), entry("radar"), "")
+	if err == nil {
+		t.Fatal("without consent nothing may be downloaded")
+	}
+	if !strings.Contains(err.Error(), "releases") {
+		t.Errorf("the refusal should name where it would have come from: %v", err)
+	}
+}
+
+// stubEntry points an entry at a test server by overriding the repo host,
+// which is the only part of the conventional URL a test needs to move.
+func stubEntry(id, base string) Entry {
+	e := entry(id)
+	e.bundleBase = base
+	return e
 }

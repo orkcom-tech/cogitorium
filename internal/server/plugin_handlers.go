@@ -11,8 +11,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/orkcom-tech/cogitorium/internal/plugin"
+	"github.com/orkcom-tech/cogitorium/internal/update"
 )
 
 // Changing the plugin set from the browser.
@@ -367,4 +369,117 @@ func sameOrder(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// ── the catalog ───────────────────────────────────────────────────────────
+
+// pluginCatalog builds a client gated on the same consent the MCP registry and the
+// update check already answer to. One switch, not three: an operator who said
+// this install may not reach out said it once.
+func (s *Server) pluginCatalog() *plugin.Catalog {
+	return plugin.NewCatalog(s.dataDir, nil, func() bool {
+		return s.updates.Mode() != update.ModeOff
+	})
+}
+
+// CatalogEntryView is one listing, plus what this install already knows about
+// it. The second half is what stops the browse screen being a list somebody
+// has to cross-reference against the installed one by eye.
+type CatalogEntryView struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Author      string `json:"author"`
+	Description string `json:"description"`
+	Repo        string `json:"repo"`
+	Source      string `json:"source"`
+	// Installed and InstalledVersion say whether this machine already has it.
+	Installed        bool   `json:"installed"`
+	InstalledVersion string `json:"installed_version,omitempty"`
+}
+
+type catalogView struct {
+	Entries []CatalogEntryView `json:"entries"`
+	// Cached and Fetched are shown rather than hidden. A cached list is not a
+	// current one, and presenting yesterday's as today's is how somebody
+	// installs a version that was withdrawn yesterday.
+	Cached  bool   `json:"cached"`
+	Fetched string `json:"fetched,omitempty"`
+}
+
+func (s *Server) handleBrowseCatalog(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+	idx, err := s.pluginCatalog().Fetch(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	store, ok := s.pluginStore(w)
+	if !ok {
+		return
+	}
+
+	out := catalogView{Cached: idx.Cached, Entries: []CatalogEntryView{}}
+	if !idx.Fetched.IsZero() {
+		out.Fetched = idx.Fetched.Format(time.RFC3339)
+	}
+	for _, e := range idx.Search(r.URL.Query().Get("q")) {
+		v := CatalogEntryView{
+			ID: e.ID, Name: e.Name, Author: e.Author,
+			Description: e.Description, Repo: e.Repo, Source: e.SourceURL(),
+		}
+		if in, err := store.Get(e.ID); err == nil {
+			v.Installed, v.InstalledVersion = true, in.Version
+		}
+		out.Entries = append(out.Entries, v)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleInstallFromCatalog downloads a listed plugin and installs it.
+//
+// It arrives switched off and unapproved, exactly like every other way a
+// plugin gets onto this machine. Being in a catalog is not a decision anybody
+// made about running it — it is a decision about listing it, which is a
+// different thing and belongs to a different person.
+func (s *Server) handleInstallFromCatalog(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+	id := r.PathValue("id")
+
+	c := s.pluginCatalog()
+	idx, err := c.Fetch(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	e, found := idx.Find(id)
+	if !found {
+		writeError(w, http.StatusNotFound,
+			fmt.Sprintf("the catalog does not list %q", id))
+		return
+	}
+	store, ok := s.pluginStore(w)
+	if !ok {
+		return
+	}
+
+	in, digest, err := c.InstallFromCatalog(r.Context(), store, e, r.URL.Query().Get("version"))
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	slog.Info("plugin installed from the catalog",
+		"plugin", in.ID, "version", in.Version, "from", e.SourceURL(), "digest", digest)
+
+	in.Pending = store.Pending(in.ID)
+	v := s.pluginView(in, s.pluginCaps())
+	writeJSON(w, http.StatusOK, pluginActionResult{
+		Restart: false,
+		Plugin:  &v,
+		Message: fmt.Sprintf("%s %s installed and switched off. Read the source, then approve it.",
+			in.Manifest.Name, in.Version),
+	})
 }
