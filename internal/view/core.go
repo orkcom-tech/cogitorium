@@ -109,13 +109,15 @@ type Strings struct {
 	Context string
 	// Gears is the gear catalogue's title.
 	Gears string
+	// Workspaces is the landing screen's title.
+	Workspaces string
 }
 
 // DefaultStrings is English, which is what this product ships in today. It is
 // a value rather than constants so a plugin overriding the shell can be handed
 // a different one without the host changing shape first.
 func DefaultStrings() Strings {
-	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalog", Context: "Context", Gears: "Gears"}
+	return Strings{Navigation: "Navigation", Instructions: "Instructions", Models: "Model catalog", Context: "Context", Gears: "Gears", Workspaces: "Workspaces"}
 }
 
 // Action is one control that causes a request.
@@ -238,6 +240,12 @@ func CoreModels() Models {
 		// from, and which of them this install offers an agent.
 		// The context space: a list of files, a search across them, and one
 		// file open for editing.
+		// The landing screen.
+		"cog.page.workspaces":  Workspaces{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.workspaces":  Workspaces{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.workspace":    WorkspaceRow{},
+		"cog.empty.workspaces": Workspaces{Ctx: Ctx{T: DefaultStrings()}},
+
 		// The gear catalogue. cog.row.gear is the name the documentation uses
 		// as its recurring override example, so it has to be small enough to
 		// be worth overriding on its own.
@@ -258,6 +266,78 @@ func CoreModels() Models {
 		"cog.row.model":      Model{},
 		"cog.empty.models":   ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
 	}
+}
+
+// Palette is the colours a workspace can be given.
+//
+// The same ten the application offers, here so a server-rendered screen and a
+// client-rendered one cannot drift into two palettes. Ten rather than a
+// spectrum: a colour is for telling two workspaces apart at a glance, and a
+// picker with every hue in it makes that harder rather than easier.
+var Palette = []int{264, 166, 212, 328, 44, 18, 140, 292, 190, 350}
+
+// WorkspaceTeam is one team a workspace is shared with.
+type WorkspaceTeam struct {
+	ID   int64
+	Name string
+}
+
+// WorkspaceRow is one group of agents behind an orchestrator, as a row.
+//
+// Not called Workspace: that name is the one in scope on Ctx, which is a
+// different thing with two fields and a different lifetime. Two Workspaces in
+// one package is two things somebody disambiguates at every use.
+type WorkspaceRow struct {
+	ID          int64
+	Name        string
+	Description string
+	// Hue is the colour, in degrees. The palette mixes every neutral towards
+	// it, so what is stored is the angle rather than one chosen swatch.
+	Hue    int
+	HasHue bool
+	// Mine says the viewer owns it, and SharedWithMe is its negation as a
+	// field rather than a {{if not}} — the template function set is small on
+	// purpose and `not` is not in it, because a template renders rather than
+	// reasons.
+	Mine         bool
+	SharedWithMe bool
+	// MayDelete is the owner or an administrator. A workspace somebody else
+	// owns is not yours to remove.
+	MayDelete bool
+	MayShare  bool
+	// Shared is every team it has gone to. A list rather than a picker: a
+	// workspace can go to any number of teams, and each is withdrawn on its
+	// own rather than by replacing whoever currently has it.
+	Shared []WorkspaceTeam
+	// Teams are the ones it could still go to, for the picker.
+	Teams []WorkspaceTeam
+	// Palette is the colours on offer, each already knowing whether it is the
+	// one in effect. Clearing is not choosing grey: it hands the workspace
+	// back the colour derived from its id and records that nobody picked.
+	Palette []Hue
+}
+
+// Hue is one colour on offer.
+type Hue struct {
+	Degrees int
+	Chosen  bool
+}
+
+// Workspaces is what the landing screen renders against.
+type Workspaces struct {
+	Ctx   Ctx
+	Items []WorkspaceRow
+	// Models are what an orchestrator can be given. Without one there is
+	// nothing to think with, and the form says so rather than offering an
+	// empty list.
+	Models   []Model
+	Creating bool
+	// Importing is the bundle form, open. Its own state rather than a second
+	// page: importing is how a workspace arrives from somewhere else, and it
+	// belongs beside the list it will appear in.
+	Importing bool
+	Error     string
+	Notice    string
 }
 
 // GearFile is one file of a gear's source.
@@ -643,6 +723,11 @@ func Exemplars() Models {
 		"cog.row.model":      exampleModels(ctx).Models[0],
 		"cog.empty.models":   ModelCatalog{Ctx: ctx},
 
+		"cog.page.workspaces":  exampleWorkspaces(ctx),
+		"cog.list.workspaces":  exampleWorkspaces(ctx),
+		"cog.row.workspace":    exampleWorkspaces(ctx).Items[0],
+		"cog.empty.workspaces": Workspaces{Ctx: ctx},
+
 		"cog.page.gears":  exampleGears(ctx),
 		"cog.list.gears":  exampleGears(ctx),
 		"cog.row.gear":    exampleGears(ctx).Items[0],
@@ -652,6 +737,21 @@ func Exemplars() Models {
 		"cog.list.context":    exampleContext(ctx),
 		"cog.row.contextfile": exampleContext(ctx).Files[0],
 		"cog.empty.context":   Context{Ctx: ctx, Available: true},
+	}
+}
+
+func exampleWorkspaces(ctx Ctx) Workspaces {
+	teams := []WorkspaceTeam{{ID: 1, Name: "Platform"}, {ID: 2, Name: "Research"}}
+	return Workspaces{
+		Ctx: ctx,
+		Items: []WorkspaceRow{
+			{ID: 1, Name: "Release engineering", Description: "Cuts releases and checks them",
+				Hue: 225, HasHue: true, Mine: true, MayDelete: true, MayShare: true,
+				Shared: teams, Teams: teams},
+			{ID: 2, Name: "Support triage", Description: "Reads what arrives and files it",
+				Hue: 25, HasHue: true, MayShare: true, Teams: teams},
+		},
+		Models: []Model{{ID: 1, Name: "claude-opus-4", Label: "Opus", Provider: "Anthropic"}},
 	}
 }
 

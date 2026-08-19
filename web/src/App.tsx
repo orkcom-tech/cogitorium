@@ -4,7 +4,6 @@ import { auth, setup, Unauthorized, type SetupState, type User } from './api'
 import { session } from './session'
 import LoginPage from './pages/LoginPage'
 import SetupPage from './pages/SetupPage'
-import WorkspacesPage from './pages/WorkspacesPage'
 import WorkspacePage from './pages/WorkspacePage'
 import EnvPage from './pages/EnvPage'
 import AdminPage from './pages/AdminPage'
@@ -111,7 +110,8 @@ export default function App() {
         <main className="cavity">
           <Routes>
             <Route path="/" element={<Navigate to="/workspaces" replace />} />
-            <Route path="/workspaces" element={<WorkspacesPage me={user} />} />
+            {/* /workspaces is a server template now: the list, sharing,
+                cloning, the colour picker and importing a bundle. */}
             <Route path="/map" element={<InstallMap />} />
             <Route path="/people" element={user.role === 'admin' ? <AdminPage /> : <Navigate to="/workspaces" replace />} />
             <Route path="/terminal" element={user.role === 'admin' ? <TerminalPage /> : <Navigate to="/workspaces" replace />} />

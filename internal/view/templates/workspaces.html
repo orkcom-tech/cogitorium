@@ -1,0 +1,142 @@
+{{/*
+  The landing screen.
+
+  Sharing is a list, not a picker. A workspace can go to any number of teams,
+  and each one is withdrawn on its own rather than by replacing whoever
+  currently has it — a picker would make "also share with Research" read as
+  "stop sharing with Platform".
+*/}}
+
+{{define "cog.page.workspaces"}}
+<main class="page workspaces">
+  <div class="row">
+    <h2>{{.Ctx.T.Workspaces}}</h2>
+    <span class="spacer"></span>
+    <a href="/workspaces?import=1" title="Build a workspace from a bundle someone exported">import</a>
+    <a href="/workspaces?new=1">+ New workspace</a>
+  </div>
+
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  {{if .Notice}}<p class="hint">✓ {{.Notice}}</p>{{end}}
+
+  {{if .Creating}}
+  <section class="card">
+    <h3>New workspace</h3>
+    {{if .Models}}
+      <form method="post" action="/workspaces">
+        <label>Name <input name="name" required placeholder="research"></label>
+        <label>Description <input name="description"
+                placeholder="drafting and checking the release notes"></label>
+        <label>The orchestrator thinks with
+          <select name="orchestrator_model_id" required>
+            {{range .Models}}<option value="{{.ID}}">{{.Label}} — {{.Provider}}</option>{{end}}
+          </select>
+        </label>
+        <button type="submit">create it</button>
+        <a href="/workspaces">cancel</a>
+      </form>
+    {{else}}
+      {{/* Offering an empty picker would let somebody fill in a name and then
+           discover there is nothing to think with. */}}
+      <p class="hint">There are no models yet. A workspace needs one to think with —
+      add a provider and offer a model in the <a href="/models">model catalog</a> first.</p>
+    {{end}}
+  </section>
+  {{end}}
+
+  {{if .Importing}}
+  <section class="card">
+    <h3>Import a workspace</h3>
+    <form method="post" action="/workspaces/import" enctype="multipart/form-data">
+      <label class="field"><span class="muted">the bundle file</span>
+        <input type="file" name="bundle" accept="application/json,.json" required></label>
+      <label class="field">name
+        <input name="name" placeholder="research">
+        <span class="hint">Names are unique here. Change it to import a bundle next to the workspace it came from.</span>
+      </label>
+      <label class="row"><input type="checkbox" name="gears" value="on" checked>
+        bring its gears — they arrive unapproved, like anything else</label>
+      <button type="submit">import it</button>
+      <a href="/workspaces">cancel</a>
+    </form>
+  </section>
+  {{end}}
+
+  {{template "cog.list.workspaces" .}}
+</main>
+{{end}}
+
+{{define "cog.list.workspaces"}}<div id="workspace-list" class="workspace-list">
+{{if .Items}}{{range .Items}}{{template "cog.row.workspace" .}}{{end}}{{else}}{{template "cog.empty.workspaces" .}}{{end}}
+</div>{{end}}
+
+{{define "cog.row.workspace"}}<article class="card workspace{{if .HasHue}} has-hue{{end}}"
+  {{if .HasHue}}style="--ws-hue: {{.Hue}}"{{end}}>
+  {{/* The colour is shown by the edge it colours, and choosing one is a
+       click on that edge — which is also where you would point if asked to
+       change it. */}}
+  <details class="ws-hue">
+    <summary class="ws-spine" data-own title="give this workspace a colour"><span class="sr-only">Colour</span></summary>
+    <div class="hue-pop">
+      {{range .Palette}}<form method="post" action="/workspaces/{{$.ID}}/colour">
+        <input type="hidden" name="hue" value="{{.Degrees}}">
+        <button class="hue-dot{{if .Chosen}} on{{end}}" style="background: hsl({{.Degrees}} 68% 52%)"
+                title="give it this colour"></button>
+      </form>{{end}}
+      {{/* Clearing is not choosing grey: it hands the workspace back the
+           colour derived from its id and records that nobody picked. */}}
+      <form method="post" action="/workspaces/{{.ID}}/colour">
+        <input type="hidden" name="hue" value="">
+        <button class="hue-clear" type="submit">clear</button>
+      </form>
+    </div>
+  </details>
+
+  <div class="card-head">
+    <a class="ws-title" href="/workspaces/{{.ID}}"><strong>{{.Name}}</strong></a>
+    <span class="muted">{{.Description}}</span>
+    {{if .SharedWithMe}}<span class="badge">shared with you</span>{{end}}
+    <span class="spacer"></span>
+    <form method="post" action="/workspaces/{{.ID}}/clone">
+      <input type="hidden" name="name" value="{{.Name}} copy">
+      <button type="submit" title="Copy the agents and wiring into a workspace of your own — the history stays here">clone</button>
+    </form>
+    {{if .MayDelete}}
+      <form method="post" action="/workspaces/{{.ID}}/delete"
+            hx-confirm="Delete workspace &quot;{{.Name}}&quot; with its agents and history?">
+        <button type="submit" class="danger">delete</button>
+      </form>
+    {{end}}
+  </div>
+
+  {{/* A list, not a picker: each team is withdrawn on its own. */}}
+  <div class="row share-row">
+    <span class="muted">shared with</span>
+    {{if .Shared}}
+      {{range .Shared}}<span class="team-chip">{{.Name}}
+        <form method="post" action="/workspaces/{{$.ID}}/unshare">
+          <input type="hidden" name="team_id" value="{{.ID}}">
+          <button type="submit" title="Stop sharing with {{.Name}}">×</button>
+        </form>
+      </span>{{end}}
+    {{else}}<span class="muted">nobody — only you and admins</span>{{end}}
+    {{if .MayShare}}
+      <form class="row" method="post" action="/workspaces/{{.ID}}/share">
+        <select name="team_id" aria-label="Share with a team">
+          <option value="">add a team…</option>
+          {{range .Teams}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+        </select>
+        <button type="submit">share</button>
+      </form>
+    {{end}}
+  </div>
+</article>{{end}}
+
+{{define "cog.empty.workspaces"}}<div class="card">
+  <h3>Nothing here yet</h3>
+  <p class="hint">
+    A workspace is a group of agents behind one orchestrator chat. You talk to the orchestrator; it
+    creates the others, wires them together and hands them work.
+  </p>
+  <a class="primary big" href="/workspaces?new=1">+ New workspace</a>
+</div>{{end}}
