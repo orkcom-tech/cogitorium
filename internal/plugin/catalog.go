@@ -104,6 +104,10 @@ func (e Entry) SourceURL() string { return "https://github.com/" + e.Repo }
 // Index is the published list.
 type Index struct {
 	Entries []Entry
+	// VerifiedList is what the team has read. Kept beside the entries rather
+	// than folded into them, because it is a different statement made by
+	// different people through a different path into the same repository.
+	VerifiedList []Verified
 	// Fetched is when this copy was taken. Shown wherever the catalog is,
 	// because a cached list is not a current one and pretending otherwise is
 	// how somebody installs a version that was yanked yesterday.
@@ -139,9 +143,10 @@ func (i Index) Search(q string) []Entry {
 
 // Catalog fetches and caches the index.
 type Catalog struct {
-	dataDir string
-	url     string
-	client  *http.Client
+	dataDir     string
+	url         string
+	verifiedURL string
+	client      *http.Client
 	// allow is the operator's egress consent, the same gate the update check
 	// and the MCP registry already answer to. A browse is a network call and
 	// it asks nobody's permission twice.
@@ -156,7 +161,10 @@ func NewCatalog(dataDir string, client *http.Client, allow func() bool) *Catalog
 	if allow == nil {
 		allow = func() bool { return false }
 	}
-	return &Catalog{dataDir: dataDir, url: CatalogURL, client: client, allow: allow}
+	return &Catalog{
+		dataDir: dataDir, url: CatalogURL, verifiedURL: VerifiedURL,
+		client: client, allow: allow,
+	}
 }
 
 func (c *Catalog) cachePath() string { return filepath.Join(c.dataDir, "plugins-catalog.json") }
@@ -204,12 +212,13 @@ func (c *Catalog) Fetch(ctx context.Context) (Index, error) {
 	}
 
 	entries = keepValid(entries)
-	if err := c.store(entries); err != nil {
+	verified := c.fetchVerified(ctx)
+	if err := c.store(entries, verified); err != nil {
 		// Failing to cache is not failing to browse. An install on a read-only
 		// filesystem should still be able to look.
-		return Index{Entries: entries, Fetched: time.Now().UTC()}, nil
+		return Index{Entries: entries, VerifiedList: verified, Fetched: time.Now().UTC()}, nil
 	}
-	return Index{Entries: entries, Fetched: time.Now().UTC()}, nil
+	return Index{Entries: entries, VerifiedList: verified, Fetched: time.Now().UTC()}, nil
 }
 
 // keepValid drops entries this build cannot use rather than refusing the whole
@@ -232,12 +241,13 @@ func keepValid(entries []Entry) []Entry {
 }
 
 type cachedIndex struct {
-	Entries []Entry   `json:"entries"`
-	Fetched time.Time `json:"fetched"`
+	Entries  []Entry    `json:"entries"`
+	Verified []Verified `json:"verified,omitempty"`
+	Fetched  time.Time  `json:"fetched"`
 }
 
-func (c *Catalog) store(entries []Entry) error {
-	b, err := json.Marshal(cachedIndex{Entries: entries, Fetched: time.Now().UTC()})
+func (c *Catalog) store(entries []Entry, verified []Verified) error {
+	b, err := json.Marshal(cachedIndex{Entries: entries, Verified: verified, Fetched: time.Now().UTC()})
 	if err != nil {
 		return err
 	}
@@ -253,7 +263,10 @@ func (c *Catalog) cached() (Index, error) {
 	if err := json.Unmarshal(b, &ci); err != nil {
 		return Index{}, err
 	}
-	return Index{Entries: keepValid(ci.Entries), Fetched: ci.Fetched, Cached: true}, nil
+	return Index{
+		Entries: keepValid(ci.Entries), VerifiedList: ci.Verified,
+		Fetched: ci.Fetched, Cached: true,
+	}, nil
 }
 
 // ── installing from the catalog ───────────────────────────────────────────
@@ -342,4 +355,104 @@ func (c *Catalog) InstallFromCatalog(ctx context.Context, s *Store, e Entry, ver
 			"it is %q — one of them is out of date, and nothing was installed", e.ID, in.Manifest.ID)
 	}
 	return in, digest, nil
+}
+
+// ── the verified list ─────────────────────────────────────────────────────
+
+// VerifiedURL is the list of plugins somebody on the team has read.
+//
+// A second file in the same repository, and the whole mechanism is who may
+// merge it: entries land through CODEOWNERS review rather than through the
+// auto-merge that ordinary submissions use. An author can add themselves to
+// plugins.json without waiting for anybody; nobody can add themselves here.
+//
+// No signatures, no keys, no transparency log. Those defend against somebody
+// who controls the repository, and if that has happened the client is fetching
+// whatever they want anyway — including a different list of pinned keys in the
+// next release. GitHub's own access control is the mechanism, and pretending
+// otherwise would be cryptography as decoration.
+const VerifiedURL = "https://raw.githubusercontent.com/orkcom-tech/cogitorium-plugins/main/verified.json"
+
+// Verified is one plugin the team has looked at.
+type Verified struct {
+	ID string `json:"id"`
+	// Version is what was actually read. Optional, and worth recording: a
+	// plugin is not a fixed thing, and "we checked 1.2.0" beside an installed
+	// 1.4.0 is a more useful sentence than a badge that says nothing about
+	// which code anybody saw.
+	Version string `json:"version,omitempty"`
+	// By is who looked, and Note is anything they want to say about it.
+	By   string `json:"by,omitempty"`
+	Note string `json:"note,omitempty"`
+}
+
+// Check is what a client concludes about one plugin.
+//
+// Three states rather than a boolean, because "we read this exact version",
+// "we read an older one" and "nobody has looked" are three different things to
+// tell somebody deciding whether to approve it.
+type Check struct {
+	// State is "verified", "verified-other-version", or "unchecked".
+	State string `json:"state"`
+	// Version is what the team read, when they said.
+	Version string `json:"version,omitempty"`
+	By      string `json:"by,omitempty"`
+	Note    string `json:"note,omitempty"`
+}
+
+const (
+	// CheckVerified means the team read the version in question.
+	CheckVerified = "verified"
+	// CheckOtherVersion means they read a different one. Deliberately not
+	// "verified": a badge that survives a version change is a badge about a
+	// name rather than about code.
+	CheckOtherVersion = "verified-other-version"
+	// CheckUnchecked means nobody on the team has looked. It is the ordinary
+	// state and it is not an accusation — most plugins will be here.
+	CheckUnchecked = "unchecked"
+)
+
+// Verify reports what the team said about a plugin at a version.
+func (i Index) Verify(id, version string) Check {
+	for _, v := range i.VerifiedList {
+		if v.ID != id {
+			continue
+		}
+		switch {
+		case v.Version == "" || version == "" || v.Version == version:
+			return Check{State: CheckVerified, Version: v.Version, By: v.By, Note: v.Note}
+		default:
+			return Check{State: CheckOtherVersion, Version: v.Version, By: v.By, Note: v.Note}
+		}
+	}
+	return Check{State: CheckUnchecked}
+}
+
+// fetchVerified reads the list. A failure here is not a failure to browse: the
+// catalog is still usable without it, and every plugin simply reads as
+// unchecked — which is true, rather than a guess in either direction.
+func (c *Catalog) fetchVerified(ctx context.Context) []Verified {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.verifiedURL, nil)
+	if err != nil {
+		return nil
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	var list []Verified
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		return nil
+	}
+	out := make([]Verified, 0, len(list))
+	for _, v := range list {
+		if v.ID != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }

@@ -395,6 +395,15 @@ type CatalogEntryView struct {
 	// Installed and InstalledVersion say whether this machine already has it.
 	Installed        bool   `json:"installed"`
 	InstalledVersion string `json:"installed_version,omitempty"`
+
+	// Verified is what the team said about it: read this version, read a
+	// different one, or nobody has looked. Three states rather than a badge,
+	// because a badge that survives a version change is a badge about a name
+	// rather than about code.
+	Verified        string `json:"verified"`
+	VerifiedVersion string `json:"verified_version,omitempty"`
+	VerifiedBy      string `json:"verified_by,omitempty"`
+	VerifiedNote    string `json:"verified_note,omitempty"`
 }
 
 type catalogView struct {
@@ -432,6 +441,11 @@ func (s *Server) handleBrowseCatalog(w http.ResponseWriter, r *http.Request) {
 		if in, err := store.Get(e.ID); err == nil {
 			v.Installed, v.InstalledVersion = true, in.Version
 		}
+		// Checked against the version this machine holds when it holds one, so
+		// the answer is about the code here rather than about the listing.
+		c := idx.Verify(e.ID, v.InstalledVersion)
+		v.Verified, v.VerifiedVersion = c.State, c.Version
+		v.VerifiedBy, v.VerifiedNote = c.By, c.Note
 		out.Entries = append(out.Entries, v)
 	}
 	writeJSON(w, http.StatusOK, out)

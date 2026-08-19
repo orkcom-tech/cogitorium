@@ -76,28 +76,49 @@ The last three are the same code the server runs, invoked as
 `cogitorium plugins check-bundle <zip>` — one implementation, so a submission
 cannot pass CI and then fail to load.
 
-## The official mark
+## The verified list
 
-Auto-merge means an untrusted pull request can land without a human. So the
-mark that says *the maintainer read this* cannot live in this repository at
-all: it lives in `orkcom-tech/cogitorium-marks`, which has no pull request
-path, no bot, and no auto-merge.
+A second file, `verified.json`, listing plugins somebody on the team has
+actually read:
 
-Clients pin both identities **and which kinds of statement each may sign**. A
-mark signed by the identity that publishes this index is rejected before its
-signature is even interesting, because that identity has no authority over
-marks. That single rule is what lets auto-merge and the mark coexist: the
-signing capability an attacker can reach through the submission path is scoped
-to a kind that grants no trust.
+```json
+[
+  { "id": "release-radar", "version": "1.2.0", "by": "eduard",
+    "note": "reads a feed, writes nothing" }
+]
+```
 
-A client never reads a boolean. It recomputes the digest of the bytes on disk
-and returns a record — verified, unmarked, or unverifiable — and
-**unverifiable is displayed more loudly than unmarked**, because "I could not
-check" and "nobody vouched" are different facts.
+`id` is the only required field. `version` is worth filling in: a plugin is not
+a fixed thing, and *we checked 1.2.0* beside an installed 1.4.0 is a more
+useful sentence than a badge that says nothing about which code anybody saw.
 
-## What the mark does not mean
+**The mechanism is who may merge this file.** Ordinary submissions to
+`plugins.json` auto-merge on green CI; this one goes through CODEOWNERS
+review. An author can add themselves to the catalog without waiting for
+anybody. Nobody can add themselves here.
 
-It means the maintainer looked at that exact version. It is not a guarantee,
-not a security audit, and not a substitute for the approval step on your own
-install — which is where somebody who can actually see your data decides
-whether this plugin should touch it.
+There are no signatures and no keys. Those defend against somebody who
+controls this repository — and if that has happened, they are serving whatever
+they like to every client anyway, including the next release's pinned keys.
+GitHub's access control is the mechanism; cryptography on top of it would be
+decoration.
+
+### What a client shows
+
+Three states, not a badge:
+
+| State | Means |
+|---|---|
+| `verified` | the team read the version you have |
+| `verified-other-version` | they read a different one, and it says which |
+| `unchecked` | nobody has looked — the ordinary state, and not an accusation |
+
+A missing or unreachable `verified.json` leaves everything `unchecked`, which
+is true rather than a guess in either direction.
+
+## What verified does not mean
+
+It means somebody on the team read that version. It is not a guarantee, not a
+security audit, and not a substitute for the approval step on your own install
+— which is where somebody who can actually see your data decides whether this
+plugin should touch it.

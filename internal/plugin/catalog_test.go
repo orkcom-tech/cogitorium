@@ -300,3 +300,105 @@ func stubEntry(id, base string) Entry {
 	e.bundleBase = base
 	return e
 }
+
+// The mechanism is who may merge the file, not a signature. Three states,
+// because "we read this version", "we read another one" and "nobody looked"
+// are three different things to tell somebody deciding whether to approve it.
+func TestVerifyHasThreeStates(t *testing.T) {
+	idx := Index{VerifiedList: []Verified{
+		{ID: "radar", Version: "1.2.0", By: "someone", Note: "reads a feed, writes nothing"},
+		{ID: "loose", By: "someone"},
+	}}
+
+	got := idx.Verify("radar", "1.2.0")
+	if got.State != CheckVerified {
+		t.Errorf("the exact version read = %q", got.State)
+	}
+	if got.By != "someone" || got.Note == "" {
+		t.Errorf("who looked and what they said must survive: %+v", got)
+	}
+
+	// A badge that survives a version change is a badge about a name rather
+	// than about code.
+	if got := idx.Verify("radar", "1.4.0"); got.State != CheckOtherVersion {
+		t.Errorf("a different version = %q, want %q", got.State, CheckOtherVersion)
+	}
+	if got.Version != "1.2.0" {
+		t.Errorf("and it must say which one was read, got %q", got.Version)
+	}
+
+	// The ordinary state, and not an accusation.
+	if got := idx.Verify("nobody-looked", "1.0.0"); got.State != CheckUnchecked {
+		t.Errorf("unlisted = %q", got.State)
+	}
+
+	// An entry with no version is a statement about the plugin rather than
+	// about a release, and it applies whatever is installed.
+	if got := idx.Verify("loose", "9.9.9"); got.State != CheckVerified {
+		t.Errorf("an unversioned entry should apply: %q", got.State)
+	}
+}
+
+func TestTheVerifiedListTravelsWithTheCatalog(t *testing.T) {
+	entries := []Entry{entry("radar")}
+	verified := []Verified{{ID: "radar", Version: "1.0.0", By: "team"}}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/plugins.json", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(entries)
+	})
+	mux.HandleFunc("/verified.json", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(verified)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := NewCatalog(t.TempDir(), nil, func() bool { return true })
+	c.url, c.verifiedURL = srv.URL+"/plugins.json", srv.URL+"/verified.json"
+
+	idx, err := c.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := idx.Verify("radar", "1.0.0"); got.State != CheckVerified {
+		t.Errorf("the list did not arrive: %+v", got)
+	}
+
+	// And it survives into the cache, so an offline install still knows.
+	c.allow = func() bool { return false }
+	cached, err := c.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cached.Verify("radar", "1.0.0"); got.State != CheckVerified {
+		t.Errorf("the cached copy lost it: %+v", got)
+	}
+}
+
+// A missing verified list is not a failure to browse: every plugin reads as
+// unchecked, which is true rather than a guess in either direction.
+func TestAMissingVerifiedListLeavesEverythingUnchecked(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/plugins.json", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]Entry{entry("radar")})
+	})
+	mux.HandleFunc("/verified.json", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := NewCatalog(t.TempDir(), nil, func() bool { return true })
+	c.url, c.verifiedURL = srv.URL+"/plugins.json", srv.URL+"/verified.json"
+
+	idx, err := c.Fetch(context.Background())
+	if err != nil {
+		t.Fatalf("a missing verified list must not stop a browse: %v", err)
+	}
+	if len(idx.Entries) != 1 {
+		t.Fatalf("entries = %d", len(idx.Entries))
+	}
+	if got := idx.Verify("radar", "1.0.0"); got.State != CheckUnchecked {
+		t.Errorf("without the list everything is unchecked, got %q", got.State)
+	}
+}
