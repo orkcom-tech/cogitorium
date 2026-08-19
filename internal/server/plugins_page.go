@@ -118,6 +118,13 @@ func (s *Server) pluginRow(in plugin.Installed, caps plugin.Capabilities) view.P
 			row.Names = append(row.Names, view.NameList{Label: g.label, Names: g.names, Tone: g.tone})
 		}
 	}
+	// What the author ships to show what this does. From the runtime rather
+	// than the manifest, because the runtime is what actually declared the
+	// files and therefore what will actually serve them.
+	if rt := s.plugins; rt != nil {
+		row.Media = rt.media[v.ID]
+	}
+
 	for _, p := range v.Pages {
 		row.Pages = append(row.Pages, view.PluginPageRow{
 			Path: p.Path, Title: p.Title, Auth: p.Auth, Live: v.Live,
@@ -200,7 +207,7 @@ func (s *Server) fillCatalog(r *http.Request, model *view.Plugins) {
 	for _, e := range matched {
 		row := view.CatalogRow{
 			ID: e.ID, Name: e.Name, Author: e.Author, Description: e.Description,
-			Source: e.SourceURL(), Version: e.Version,
+			Source: e.SourceURL(), Version: e.Version, Cover: e.Cover,
 		}
 		if in, err := store.Get(e.ID); err == nil {
 			row.Installed, row.InstalledVersion = true, in.Version

@@ -1064,3 +1064,41 @@ a[role='tab'].is-current {
   gap: var(--s2);
   align-items: center;
 }
+
+/* What a plugin's author ships to show what it does. Theirs, not the
+   product's: it is shown, not rendered, and it is bounded so a card stays a
+   card whatever they shipped. */
+.plugin-media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  margin: var(--s3) 0;
+}
+
+.plugin-media figure {
+  margin: 0;
+  max-width: 320px;
+}
+
+.plugin-media img,
+.plugin-media video,
+.catalog-cover {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: var(--r2);
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  background: var(--bg);
+}
+
+.plugin-media figcaption {
+  margin-top: var(--s1);
+  font-size: var(--t-micro);
+  color: var(--text-dim);
+}
+
+.catalog-cover {
+  max-height: 160px;
+  margin-bottom: var(--s3);
+}

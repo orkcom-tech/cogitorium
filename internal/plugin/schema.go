@@ -110,6 +110,12 @@ func JSONSchema() map[string]any {
 					"page":  str("One of this plugin's own pages. A mount opening somebody else's page is refused."),
 				}), "Where this plugin hangs a panel."),
 
+			"media": arrayOf(object("A picture or a clip showing what this does.",
+				[]string{"file"}, map[string]any{
+					"file":    str("Inside the bundle. png, jpg, webp, gif, avif, mp4 or webm."),
+					"caption": str("What somebody is looking at."),
+				}), "What the author wants somebody to see before deciding. Shipped in the bundle rather than linked, so it is covered by the digest the operator approves, works offline, and cannot change after they looked."),
+
 			"styles":  arrayOf(map[string]any{"type": "string"}, "Stylesheets, injected into every screen after the product's own."),
 			"scripts": arrayOf(object("A module injected into every screen.", []string{"src"}, map[string]any{
 				"src":  str(""),

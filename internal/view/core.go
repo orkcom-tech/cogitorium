@@ -508,6 +508,11 @@ type PluginRow struct {
 	Secrets []string
 	API     []string
 
+	// Media is what the author ships to show what this does. Theirs, not the
+	// product's: it shows what they chose to show, from the bundle on this
+	// machine, and the operator decides what to make of it.
+	Media []PluginMedium
+
 	CanMoveUp bool
 }
 
@@ -518,6 +523,15 @@ type NameList struct {
 	// Tone is "warn" for the two groups that are news rather than description:
 	// a name overridden without saying so, and one that renders nothing.
 	Tone string
+}
+
+// PluginMedium is one picture or clip an author ships.
+type PluginMedium struct {
+	Src     string
+	Caption string
+	// Video decides which element draws it. Both play without script; a clip
+	// needs controls and a still does not.
+	Video bool
 }
 
 // PluginPageRow is one page a plugin serves.
@@ -538,6 +552,10 @@ type CatalogRow struct {
 	Description string
 	Source      string
 	Version     string
+	// Cover is the author's own picture for the library, or empty. Pinned by
+	// the catalog to a file in the author's repository, so showing it asks
+	// nothing of any host the catalog did not already ask.
+	Cover string
 
 	Installed        bool
 	InstalledVersion string

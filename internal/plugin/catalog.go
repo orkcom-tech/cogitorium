@@ -55,6 +55,20 @@ type Entry struct {
 	// nothing depends on it being there.
 	Version string `json:"version,omitempty"`
 
+	// Cover is one picture for the library, and it is NOT a free URL.
+	//
+	// An arbitrary address here would make browsing the library a request to
+	// whatever host an author named — which tells them who is looking, from
+	// where, and when, before anybody has installed anything. So it is pinned
+	// to the author's own repository on the same raw host the catalog itself
+	// is read from: no new party learns anything that reading the catalog did
+	// not already tell them.
+	//
+	// Filled in by the catalog's CI, like Version, and refused here if it
+	// points anywhere else. A hand-written entry that names a tracker does not
+	// load; it fails validation.
+	Cover string `json:"cover,omitempty"`
+
 	// bundleBase overrides where the bundle is fetched from. Unexported and
 	// never decoded from JSON, so a catalog entry cannot redirect a download
 	// somewhere the convention does not point. It exists for tests.
@@ -82,8 +96,19 @@ func (e Entry) Validate() error {
 		return fmt.Errorf("%s: an entry needs a description", e.ID)
 	case !repoRe.MatchString(e.Repo):
 		return fmt.Errorf("%s: repo must be owner/name, got %q", e.ID, e.Repo)
+	case e.Cover != "" && !strings.HasPrefix(e.Cover, e.coverPrefix()):
+		return fmt.Errorf("%s: cover must be a file in %s, got %q — a picture on somebody "+
+			"else's host would tell them who is browsing the library", e.ID, e.Repo, e.Cover)
+	case e.Cover != "" && MediaKind(e.Cover) != "image":
+		return fmt.Errorf("%s: cover is %q, which is not a picture", e.ID, e.Cover)
 	}
 	return nil
+}
+
+// coverPrefix is where a cover for this entry may live: the author's own
+// repository, on the host the catalog is already read from.
+func (e Entry) coverPrefix() string {
+	return "https://raw.githubusercontent.com/" + e.Repo + "/"
 }
 
 // BundleURL is where this entry's bundle is fetched from.

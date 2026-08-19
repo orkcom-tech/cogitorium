@@ -65,6 +65,28 @@
       "description": "SPDX identifier.",
       "type": "string"
     },
+    "media": {
+      "description": "What the author wants somebody to see before deciding. Shipped in the bundle rather than linked, so it is covered by the digest the operator approves, works offline, and cannot change after they looked.",
+      "items": {
+        "additionalProperties": false,
+        "description": "A picture or a clip showing what this does.",
+        "properties": {
+          "caption": {
+            "description": "What somebody is looking at.",
+            "type": "string"
+          },
+          "file": {
+            "description": "Inside the bundle. png, jpg, webp, gif, avif, mp4 or webm.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
     "mounts": {
       "description": "Where this plugin hangs a panel.",
       "items": {

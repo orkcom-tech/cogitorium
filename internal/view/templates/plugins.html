@@ -81,6 +81,17 @@
 
   {{range .Names}}{{template "cog.list.names" .}}{{end}}
 
+  {{/* The author's own pictures. Theirs to choose and yours to judge — the
+       product does not draw a preview of somebody else's work, it shows what
+       they shipped and lets you decide. */}}
+  {{if .Media}}<div class="plugin-media">
+    {{range .Media}}<figure>
+      {{if .Video}}<video src="{{.Src}}" controls preload="metadata"></video>
+      {{else}}<img src="{{.Src}}" alt="{{.Caption}}" loading="lazy">{{end}}
+      {{if .Caption}}<figcaption>{{.Caption}}</figcaption>{{end}}
+    </figure>{{end}}
+  </div>{{end}}
+
   {{if .Pages}}<div class="plugin-rows">
     <span class="muted">Pages</span>
     {{range .Pages}}<span>
@@ -172,6 +183,11 @@
     {{if .VerifiedOther}}<span class="badge is-warn" title="The team read {{.VerifiedAt}}, not what you have">read at {{.VerifiedAt}}</span>{{end}}
     {{if .Unchecked}}<span class="badge">nobody has looked</span>{{end}}
   </header>
+  {{/* The author's own picture, from their own repository. Lazy, so opening
+       the library does not fetch one per listing; no referrer, so the request
+       says nothing about which screen it came from. */}}
+  {{if .Cover}}<img class="catalog-cover" src="{{.Cover}}" alt=""
+       loading="lazy" referrerpolicy="no-referrer">{{end}}
   <p>{{.Description}}</p>
   <p class="hint">by {{.Author}} · <a href="{{.Source}}" target="_blank" rel="noreferrer noopener">Read the code</a></p>
   {{if .VerifiedNote}}<p class="hint">{{if .VerifiedBy}}{{.VerifiedBy}}: {{end}}{{.VerifiedNote}}</p>{{end}}

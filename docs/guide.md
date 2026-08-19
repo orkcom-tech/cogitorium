@@ -1972,6 +1972,13 @@ part is telling you.
 - **Which parts of your own API it asks for.** It calls them as `plugin:<id>`,
   never as you — so a grant it does not have is a grant it does not get, even
   though the call is in-process.
+- **Whatever the author shipped to show you.** Screenshots, a gif, a short
+  clip — if they chose to include any. This is the author's own material, not
+  something the product generated: it shows what they want you to see. It
+  travels inside the bundle rather than as a link, so it is covered by the same
+  digest you are approving, it works with no network, and it cannot be swapped
+  for something else the day after you looked at it. A plugin that ships none
+  is not worse off; most will ship none.
 - **How it runs.** Five ways, and one of them is different in kind:
 
 | It runs as | What that means for your machine |
@@ -2024,6 +2031,11 @@ The library is
 [`orkcom-tech/cogitorium-plugins`](https://github.com/orkcom-tech/cogitorium-plugins),
 an index of five fields per plugin saying where it lives. The bundles stay in
 their authors' own repositories.
+
+An entry may carry one picture, and the catalog pins it to a file in the
+author's own repository — the same host the catalog itself is read from. An
+address anywhere else is refused, because browsing a library should not tell a
+stranger who is looking.
 
 Each entry shows one of three things, and the third is the ordinary one:
 

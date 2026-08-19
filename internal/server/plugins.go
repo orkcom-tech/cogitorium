@@ -49,7 +49,11 @@ type pluginRuntime struct {
 	// styles and scripts are what every plugin asked to inject into the head.
 	styles  []string
 	scripts []view.Asset
-	report  view.BootReport
+	// media is what each author ships to show what their plugin does, by
+	// plugin id. Injected nowhere — only the plugins screen asks for it, which
+	// is the one place somebody is deciding.
+	media  map[string][]view.PluginMedium
+	report view.BootReport
 	// live is the enabled plugins whose templates actually loaded, kept so the
 	// backends can be started for exactly those and no others.
 	live []plugin.Installed
@@ -177,6 +181,7 @@ func loadPlugins(dataDir string) (*pluginRuntime, error) {
 		set:    set,
 		pages:  map[string]pluginPage{},
 		assets: map[string]pluginAsset{},
+		media:  map[string][]view.PluginMedium{},
 		report: report,
 	}
 
@@ -235,6 +240,16 @@ func loadPlugins(dataDir string) (*pluginRuntime, error) {
 		for _, sc := range m.Scripts {
 			url := rt.declareAsset(m.ID, in.Dir, sc.Src)
 			rt.scripts = append(rt.scripts, view.Asset{Src: url})
+		}
+		// Through the same allowlist as a stylesheet, so a file an author
+		// shows is a file they declared — and one they did not is still a 404
+		// under /p/. Media is not injected anywhere; it is only served, and
+		// only the plugins screen asks for it.
+		for _, md := range m.Media {
+			url := rt.declareAsset(m.ID, in.Dir, md.File)
+			rt.media[m.ID] = append(rt.media[m.ID], view.PluginMedium{
+				Src: url, Caption: md.Caption, Video: plugin.MediaKind(md.File) == "video",
+			})
 		}
 	}
 

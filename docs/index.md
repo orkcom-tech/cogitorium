@@ -1911,7 +1911,19 @@ pages:
   - path: /p/myplugin/
     template: myplugin.page.home
     provider: home
+
+media:                 # optional, and most plugins will have none
+  - file: docs/screen.png
+    caption: The list, with two feeds watched
 ```
+
+`media:` is yours to fill or leave out. It is shown on the approval card as
+what YOU wanted somebody to see — the product renders no preview of your work
+on your behalf. The files ship inside the bundle rather than as links, so they
+are covered by the digest the operator approves, they work offline, and they
+cannot change after somebody has looked at them. png, jpg, webp, gif, avif, mp4
+and webm; eight at most, because that card is something a person reads to make
+a decision.
 
 **You declare a technology. The host decides the lane.** Which of the five
 tiers it picked is never your problem — that is the whole point of declaring
@@ -1964,6 +1976,11 @@ ship one `plugin.js`.
 is an index and nothing else: five fields saying where a plugin lives. The
 bundle stays in the author's own repository, in their releases, so listing
 costs one small file no matter how many plugins there are.
+
+An entry may also carry one picture for the library, and the catalog pins it to
+a file in your own repository rather than accepting an address: a picture on
+somebody else's host would tell them who is browsing, before anybody installed
+anything.
 
 **Adding your own entry merges on green CI.** You are not waiting for anybody.
 Editing or removing an entry that is already listed does not, and that is the

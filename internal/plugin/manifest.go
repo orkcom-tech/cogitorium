@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -62,6 +63,15 @@ type Manifest struct {
 	Nav     []Nav    `yaml:"nav"`
 	Styles  []string `yaml:"styles"`
 	Scripts []Script `yaml:"scripts"`
+
+	// Media is what the author wants somebody to see before deciding.
+	//
+	// Files in the bundle rather than links to their site, and that is the
+	// whole point of the field: what ships here is covered by the sha256 an
+	// operator approves, works with no network, and cannot be swapped for
+	// something else the day after somebody looked at it. A URL can be all
+	// three of those things and is none of them.
+	Media []Medium `yaml:"media"`
 
 	// Mounts are places inside the application a plugin's own surface appears.
 	// Distinct from pages: a page is a destination somebody navigates to, and
@@ -212,6 +222,45 @@ type Script struct {
 	Src  string `yaml:"src"`
 	Type string `yaml:"type"`
 }
+
+// Medium is one picture or clip an author ships to show what their plugin does.
+type Medium struct {
+	File    string `yaml:"file"`
+	Caption string `yaml:"caption"`
+}
+
+// mediaKinds is what a medium may be, and what it is played as.
+//
+// A closed list rather than "whatever the browser takes", because this file is
+// how a bundle gets a browser to open a file the operator has not looked at.
+// Everything here is a still or a clip that plays without script.
+var mediaKinds = map[string]string{
+	".png": "image", ".jpg": "image", ".jpeg": "image",
+	".webp": "image", ".gif": "image", ".avif": "image",
+	".mp4": "video", ".webm": "video",
+}
+
+// MediaKind reports how a file is shown, or "" when it is not something this
+// build will put in front of somebody.
+func MediaKind(file string) string {
+	return mediaKinds[strings.ToLower(path.Ext(file))]
+}
+
+// mediaKindList is the vocabulary, for a refusal that says what would work.
+func mediaKindList() []string {
+	out := make([]string, 0, len(mediaKinds))
+	for ext := range mediaKinds {
+		out = append(out, ext)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// maxMedia bounds the set.
+//
+// Not a technical limit: it is a card on a screen somebody is reading to make
+// a decision, and forty screenshots is not a case for a bigger card.
+const maxMedia = 8
 
 // Problem is one thing wrong with a manifest.
 //
@@ -422,6 +471,18 @@ func (m Manifest) validateAssets(add func(string, string, ...any)) {
 	}
 	for i, s := range m.Styles {
 		check(fmt.Sprintf("styles[%d]", i), s)
+	}
+	if len(m.Media) > maxMedia {
+		add("media", "holds %d items and at most %d are shown; this is a card somebody reads to decide, not a gallery",
+			len(m.Media), maxMedia)
+	}
+	for i, md := range m.Media {
+		f := fmt.Sprintf("media[%d].file", i)
+		check(f, md.File)
+		if md.File != "" && MediaKind(md.File) == "" {
+			add(f, "is %q, which this build will not show; it must be one of: %s",
+				md.File, strings.Join(mediaKindList(), " "))
+		}
 	}
 	for i, s := range m.Scripts {
 		check(fmt.Sprintf("scripts[%d].src", i), s.Src)
