@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"io"
@@ -22,6 +23,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/abi"
 	"github.com/orkcom-tech/cogitorium/internal/gearnet"
 	"github.com/orkcom-tech/cogitorium/internal/plugin"
+	"github.com/orkcom-tech/cogitorium/internal/work"
 )
 
 // The cog.* gateway.
@@ -51,6 +53,9 @@ type hostGateway struct {
 	// the same handlers a network request does rather than a second
 	// implementation that drifts from them.
 	handler http.Handler
+	// work is the durable queue, so a plugin's background task survives a
+	// restart instead of being a goroutine nothing recorded.
+	work *work.Store
 	// gate is the one way out of this process. Shared with gears on purpose:
 	// two ways out would be two sets of rules, and the one nobody remembered
 	// to update would be the one plugins used.
@@ -65,9 +70,9 @@ type hostGateway struct {
 }
 
 func newHostGateway(grants map[string]plugin.Grants, db *sql.DB, rt *pluginRuntime,
-	cfg map[string]map[string]any, gate *gearnet.Gate) *hostGateway {
+	cfg map[string]map[string]any, gate *gearnet.Gate, q *work.Store) *hostGateway {
 	return &hostGateway{
-		grants: grants, db: db, rt: rt, config: cfg, gate: gate,
+		grants: grants, db: db, rt: rt, config: cfg, gate: gate, work: q,
 		now: time.Now,
 		rand: func(max int64) int64 {
 			n, err := rand.Int(rand.Reader, big.NewInt(max))
@@ -130,8 +135,84 @@ func (g *hostGateway) Call(id string, req abi.HostRequest) abi.HostReply {
 
 	case abi.CallAPI:
 		return g.api(id, gr, req.Input)
+
+	case abi.CallEnqueue:
+		return g.enqueue(id, req.Input)
 	}
 	return abi.HostReply{Err: fmt.Sprintf("%q is not answered yet on this tier", req.Call)}
+}
+
+// enqueue schedules one of the plugin's own exports to run later.
+//
+// On the same durable queue everything else uses, rather than a goroutine. A
+// goroutine is lost on restart with nothing anywhere saying it existed, and
+// "did the nightly reconcile run" would be unanswerable — which is the whole
+// argument the queue was built on.
+//
+// The lane is the plugin, so one task per plugin runs at a time. That is the
+// database's guarantee rather than this function's: the unique index on a
+// claimed lane is what makes it true, and a plugin cannot flood the queue into
+// starving everything else by enqueuing a thousand units.
+func (g *hostGateway) enqueue(id string, input json.RawMessage) abi.HostReply {
+	var in struct {
+		Export string          `json:"export"`
+		Args   json.RawMessage `json:"args"`
+		// After is a delay in seconds. Relative rather than absolute, because
+		// a guest's clock is not this machine's and an absolute instant from
+		// one would be wrong by however far they differ.
+		After int64 `json:"after"`
+		// Key makes an enqueue idempotent. Two calls with one key are one
+		// unit, which is what lets a plugin re-enqueue on every start without
+		// accumulating a task per restart.
+		Key string `json:"key"`
+	}
+	if err := json.Unmarshal(input, &in); err != nil {
+		return abi.HostReply{Err: "enqueue needs an export"}
+	}
+	if in.Export == "" {
+		return abi.HostReply{Err: "enqueue needs an export to call"}
+	}
+	if g.work == nil {
+		return abi.HostReply{Err: "this install has no queue"}
+	}
+	if in.After < 0 {
+		return abi.HostReply{Err: "enqueue cannot schedule something in the past"}
+	}
+
+	args, err := json.Marshal(map[string]any{
+		"plugin": id, "export": in.Export, "args": in.Args,
+	})
+	if err != nil {
+		return abi.HostReply{Err: err.Error()}
+	}
+
+	unit := work.Unit{
+		Kind:     work.KindPlugin,
+		Lane:     "plugin:" + id,
+		Args:     string(args),
+		RunAfter: g.now().UTC().Add(time.Duration(in.After) * time.Second),
+	}
+	if in.Key != "" {
+		// Scoped to the plugin, so two plugins choosing the same key are two
+		// units rather than one of them silently winning.
+		unit.IdemKey = id + ":" + in.Key
+	}
+
+	out, err := g.work.Enqueue(context.Background(), unit)
+	switch {
+	case errors.Is(err, work.ErrDuplicate):
+		// Not a failure. A key exists so that enqueuing twice is one unit —
+		// which is the whole reason a plugin can re-enqueue on every start
+		// without accumulating a task per restart. The queue hands back the
+		// unit that already exists, and the plugin is told which case it got
+		// rather than left to compare ids it never saw.
+		return reply(map[string]any{"id": out.ID, "deduplicated": true,
+			"run_after": out.RunAfter.UTC().Format(time.RFC3339)})
+	case err != nil:
+		return abi.HostReply{Err: err.Error()}
+	}
+	return reply(map[string]any{"id": out.ID, "deduplicated": false,
+		"run_after": out.RunAfter.UTC().Format(time.RFC3339)})
 }
 
 // api calls this server's own API on the plugin's behalf.

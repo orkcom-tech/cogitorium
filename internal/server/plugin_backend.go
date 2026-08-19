@@ -19,6 +19,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/runtimes"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/wasmrt"
+	"github.com/orkcom-tech/cogitorium/internal/work"
 	"github.com/orkcom-tech/cogitorium/internal/worker"
 )
 
@@ -80,7 +81,8 @@ func hostOf(url string) string {
 // a line in the startup log rather than a page that fails the first time
 // somebody visits it.
 func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Installed, dataDir string,
-	sb sandbox.Runner, db *sql.DB, cfg map[string]map[string]any, gate *gearnet.Gate) *backends {
+	sb sandbox.Runner, db *sql.DB, cfg map[string]map[string]any, gate *gearnet.Gate,
+	queue *work.Store) *backends {
 	b := &backends{tier: map[string]plugin.Tier{}, dirOf: map[string]string{}}
 
 	grants := map[string]plugin.Grants{}
@@ -127,7 +129,7 @@ func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Inst
 		}
 	}
 
-	gateway := newHostGateway(grants, db, rt, cfg, gate)
+	gateway := newHostGateway(grants, db, rt, cfg, gate, queue)
 	b.host = gateway
 	if len(workerPlugins) > 0 || len(nativePlugins) > 0 {
 		b.startWorkers(ctx, workerPlugins, nativePlugins, native, dataDir, profile, gateway)
@@ -255,6 +257,49 @@ func (b *backends) startWorkers(ctx context.Context, provisioned, nativePlugins 
 			"runtime", in.Manifest.Needs+" "+res.Row.Version, "from_image", res.FromSeed)
 	}
 	b.workers = sup
+}
+
+// invoke runs one of a plugin's exports with nobody waiting on the answer.
+//
+// The same envelope a page's provider gets, in a different role. A task is not
+// a provider: nothing renders what it returns, and an author reading the role
+// knows whether they are answering a person or doing work.
+func (b *backends) invoke(ctx context.Context, id, export string, args json.RawMessage) error {
+	if b == nil {
+		return fmt.Errorf("this install runs no plugin backends")
+	}
+	tier, has := b.tier[id]
+	if !has {
+		return fmt.Errorf("plugin %q has no backend, so it has nothing to run", id)
+	}
+
+	req := abi.Request{Export: export, Role: abi.RoleEvent, Input: args}
+
+	var resp abi.Response
+	var err error
+	switch tier {
+	case plugin.TierImage:
+		resp, err = b.images.Call(ctx, imagert.Spec{
+			Plugin: id, Image: b.imageOf[id], Dir: b.dirOf[id],
+			Network: len(b.grants[id].Hosts()) > 0,
+		}, req)
+	case plugin.TierProvisioned, plugin.TierNative:
+		resp, err = b.workers.Call(ctx, id, req)
+	default:
+		b.mu.Lock()
+		resp, err = b.wasm.Call(ctx, id, req)
+		b.mu.Unlock()
+	}
+	if err != nil {
+		return err
+	}
+	if resp.Error != "" {
+		// The plugin failing on purpose, in its own words. Returned rather
+		// than logged and swallowed, so the queue marks the unit dead with a
+		// reason somebody can read.
+		return fmt.Errorf("%s", resp.Error)
+	}
+	return nil
 }
 
 // attachAPI hands the gateway this server's routes.

@@ -61,6 +61,10 @@ const (
 	KindDelivery = "delivery"
 	KindChat     = "chat"
 	KindCallback = "callback"
+	// KindPlugin is a plugin's own background task. Its workspace_id is 0: a
+	// plugin task is ordinarily the install's work rather than a workspace's,
+	// and zero is not a workspace id anywhere in this schema.
+	KindPlugin = "plugin"
 )
 
 // Unit is one piece of work.

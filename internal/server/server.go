@@ -167,7 +167,11 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// Compiled at boot rather than on the first request, so a module that will
 	// not load is a line in the startup log rather than a page that fails the
 	// first time somebody visits it.
-	pluginBackends := startBackends(context.Background(), plugins, plugins.live, cfg.DataDir, sb, db, cfg.Plugins, gate)
+	// Before the backends, because a plugin's cog.enqueue goes on this queue
+	// and the gateway is built with it.
+	queue := work.NewStore(db)
+	pluginBackends := startBackends(context.Background(), plugins, plugins.live, cfg.DataDir,
+		sb, db, cfg.Plugins, gate, queue)
 
 	cat := catalog.NewStore(db)
 	ws := workspace.NewStore(db)
@@ -188,7 +192,6 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	}
 	lib := library.NewStore(db)
 	broker := egress.New()
-	queue := work.NewStore(db)
 	// Zero means unset, not "refuse everything". A Config built in code rather
 	// than read from a file — which is what every test and every embedding
 	// does — would otherwise turn the queue's bound into a door that is shut,

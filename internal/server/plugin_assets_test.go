@@ -1,9 +1,12 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/orkcom-tech/cogitorium/internal/abi"
+	"github.com/orkcom-tech/cogitorium/internal/store"
+	"github.com/orkcom-tech/cogitorium/internal/work"
 	"os"
 	"path/filepath"
 	"strings"
@@ -296,7 +299,7 @@ func TestAPluginThatOnlyMountsAPanelReachesTheDocument(t *testing.T) {
 func TestWithoutTheGateAnOutboundRequestIsRefusedRatherThanMade(t *testing.T) {
 	g := newHostGateway(
 		map[string]plugin.Grants{"p": mustGrants(t, plugin.Manifest{ID: "p", Hosts: []string{"example.com"}})},
-		nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
 	)
 
 	reply := g.Call("p", abi.HostRequest{
@@ -316,7 +319,7 @@ func TestWithoutTheGateAnOutboundRequestIsRefusedRatherThanMade(t *testing.T) {
 func TestAnUngrantedHostIsRefusedByName(t *testing.T) {
 	g := newHostGateway(
 		map[string]plugin.Grants{"p": mustGrants(t, plugin.Manifest{ID: "p", Hosts: []string{"api.github.com"}})},
-		nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
 	)
 
 	reply := g.Call("p", abi.HostRequest{
@@ -367,7 +370,7 @@ func TestTheScopeACallNeedsFollowsFromItsMethodAndSubject(t *testing.T) {
 func TestAPluginMayOnlyCallTheDescribedAPI(t *testing.T) {
 	g := newHostGateway(
 		map[string]plugin.Grants{"p": mustGrants(t, plugin.Manifest{ID: "p", API: []string{"workspaces:read"}})},
-		nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
 	)
 	for _, path := range []string{"/", "/workspaces", "/p/other/page", "/metrics"} {
 		reply := g.Call("p", abi.HostRequest{
@@ -391,4 +394,72 @@ func TestAWriteGrantImpliesTheMatchingReadAndNoOther(t *testing.T) {
 	if err := gr.AllowScope("gears:read"); err == nil {
 		t.Error("a workspaces grant allowed reading gears")
 	}
+}
+
+// An idempotency key is scoped to the plugin that chose it.
+//
+// Two plugins both enqueuing "nightly" is two tasks. Without the scope one of
+// them would silently win, and the loser would be a plugin whose background
+// work simply never ran — with nothing anywhere to read about why.
+func TestAnEnqueueKeyIsScopedToItsPlugin(t *testing.T) {
+	db := testDB(t)
+	q := work.NewStore(db)
+	grants := map[string]plugin.Grants{
+		"a": mustGrants(t, plugin.Manifest{ID: "a"}),
+		"b": mustGrants(t, plugin.Manifest{ID: "b"}),
+	}
+	g := newHostGateway(grants, db, nil, nil, nil, q)
+
+	for _, id := range []string{"a", "b"} {
+		reply := g.Call(id, abi.HostRequest{
+			Call:  abi.CallEnqueue,
+			Input: json.RawMessage(`{"export":"sweep","key":"nightly"}`),
+		})
+		if reply.Err != "" {
+			t.Fatalf("%s could not enqueue: %s", id, reply.Err)
+		}
+	}
+
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM work WHERE kind = 'plugin'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("two plugins with the same key produced %d units, want 2", n)
+	}
+}
+
+// And the same plugin twice is one, which is what lets a plugin re-enqueue on
+// every start without accumulating a task per restart.
+func TestOnePluginEnqueuingTwiceWithOneKeyIsOneUnit(t *testing.T) {
+	db := testDB(t)
+	g := newHostGateway(
+		map[string]plugin.Grants{"a": mustGrants(t, plugin.Manifest{ID: "a"})},
+		db, nil, nil, nil, work.NewStore(db),
+	)
+	for i := 0; i < 2; i++ {
+		if reply := g.Call("a", abi.HostRequest{
+			Call:  abi.CallEnqueue,
+			Input: json.RawMessage(`{"export":"sweep","key":"nightly"}`),
+		}); reply.Err != "" {
+			t.Fatalf("enqueue %d: %s", i, reply.Err)
+		}
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM work WHERE kind = 'plugin'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("one key produced %d units, want 1", n)
+	}
+}
+
+func testDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return db
 }
