@@ -64,9 +64,11 @@ type Entry struct {
 	// is read from: no new party learns anything that reading the catalog did
 	// not already tell them.
 	//
-	// Filled in by the catalog's CI, like Version, and refused here if it
-	// points anywhere else. A hand-written entry that names a tracker does not
-	// load; it fails validation.
+	// Written by the author in their own submission — unlike Version, which
+	// the catalog's CI fills in. Nothing needs to fill this one, because the
+	// pin is what makes it safe rather than the process: an entry naming a
+	// tracker fails validation here, in the client, whatever the submission
+	// process did or did not check.
 	Cover string `json:"cover,omitempty"`
 
 	// bundleBase overrides where the bundle is fetched from. Unexported and
