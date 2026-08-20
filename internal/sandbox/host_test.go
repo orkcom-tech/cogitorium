@@ -18,6 +18,21 @@ func TestAHostShellRunsWhatYouTypeAndEndsWhenYouLeave(t *testing.T) {
 	if !HostTerminals() {
 		t.Skip("this platform has no host terminal to open")
 	}
+	// A LOGIN shell, which is the point of the product — your profile, your
+	// PATH, your prompt — and therefore a test that reads whoever is running
+	// it. On a bare CI runner that is nothing; on the machine this was written
+	// on it was oh-my-zsh asking "Would you like to update? [Y/n]", which
+	// swallowed the first character of the command and left `s: command not
+	// found`. The test passed on CI and failed on the author's laptop, which is
+	// the worst direction for that to fail in.
+	//
+	// So the profile is emptied rather than the login shell abandoned: what is
+	// under test is that a real shell on a real pty runs what you type and
+	// honours a resize, not whose dotfiles are on the machine. Not parallel,
+	// because t.Setenv and t.Parallel cannot both be used.
+	empty := t.TempDir()
+	t.Setenv("HOME", empty)
+	t.Setenv("ZDOTDIR", empty)
 
 	dir := t.TempDir()
 	// A file whose name the shell can only print by having actually run in

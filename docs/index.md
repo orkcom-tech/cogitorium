@@ -2112,6 +2112,15 @@ catalogue no longer has cannot be conjured back.
 Not the same thing as an export. A bundle crosses a machine boundary, so it
 drops approvals and credentials and names models by shape; a version stays here
 and restores exactly, or says why it could not.
+
+A bundle can also carry the **doors** — the receiver address and every task
+behind it, with its input schema, its instruction and what success is — so an
+integration behaves the same on both installs. Never the key: a restored door is
+inert until somebody issues one, and `inlet_keys` in the configuration is how a
+deployment does that from its own environment rather than by hand. And it can
+**declare** what it needs (`requires`) without being granted any of it, so an
+operator learns that a workspace wants the web while they are looking at the
+import instead of from a run that failed.
 [→](/cogitorium/guide/#versions)
 
 ## Configuration reference

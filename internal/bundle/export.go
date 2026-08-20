@@ -90,6 +90,12 @@ func Export(ctx context.Context, s Stores, wsID int64, opts Options) (Bundle, er
 			return Bundle{}, err
 		}
 	}
+	if opts.Inlets && s.Inlets != nil {
+		b.Inlets, err = exportInlets(ctx, s, wsID)
+		if err != nil {
+			return Bundle{}, err
+		}
+	}
 	// Who reads what, always. It is three fields of wiring rather than a
 	// document, it is meaningless without the agents it names, and an agent
 	// arriving without what it was told to read is a different agent.
@@ -107,7 +113,7 @@ func Export(ctx context.Context, s Stores, wsID int64, opts Options) (Bundle, er
 
 	slog.Info("workspace exported as a bundle", "workspace_id", wsID, "name", ws.Name,
 		"agents", len(b.Agents), "wires", len(b.Wires), "gears", len(b.Gears),
-		"mcp_servers", len(b.MCPServers), "context_files", len(b.Context))
+		"mcp_servers", len(b.MCPServers), "inlets", len(b.Inlets), "context_files", len(b.Context))
 	return b, nil
 }
 
@@ -318,6 +324,49 @@ func exportPlanboards(ctx context.Context, s Stores, wsID int64, nameOf map[int6
 		}
 		if b.AgentID != nil {
 			entry.BoundTo = nameOf[*b.AgentID]
+		}
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
+// exportInlets carries the doors into this workspace and the tasks behind
+// them: the address, the name a caller selects, what it accepts, who does the
+// work, what they are told, and what success is.
+//
+// The KEY is not read here and there is nowhere in the document to put it. The
+// store does not hand it out either — the hash is unexported and never leaves
+// the inlet package — so this is not a rule this function has to keep so much
+// as one it could not break.
+//
+// What travels is the shape a caller depends on. Everything in a task is part
+// of the contract with whatever calls it: the schema is checked before a model
+// is reached, the instruction is what the agent is actually told, and `expect`
+// is what makes a wrong answer a refusal instead of a 200. A door whose shape
+// did not travel is a door with the same name and different behaviour.
+func exportInlets(ctx context.Context, s Stores, wsID int64) ([]Inlet, error) {
+	doors, err := s.Inlets.ListInlets(ctx, wsID)
+	if err != nil {
+		return nil, fmt.Errorf("read this workspace's inlets: %w", err)
+	}
+	out := []Inlet{}
+	for _, d := range doors {
+		entry := Inlet{Address: d.Address, Description: d.Description, Tasks: []InletTask{}}
+		for _, t := range d.Tasks {
+			task := InletTask{
+				Name: t.Name, Accepts: t.Accepts, Schema: t.Schema,
+				ContentType: t.ContentType, Agent: t.AgentName,
+				Instruction: t.Instruction, CallbackURL: t.CallbackURL,
+			}
+			if t.Expect.Declared() {
+				task.Expect = &InletExpect{
+					ProducesFiles: t.Expect.ProducesFiles,
+					RunsGear:      t.Expect.RunsGear,
+					Schema:        string(t.Expect.Schema),
+					AnswerFrom:    t.Expect.AnswerFrom,
+				}
+			}
+			entry.Tasks = append(entry.Tasks, task)
 		}
 		out = append(out, entry)
 	}

@@ -740,6 +740,7 @@ export default function WorkspacePage({ me }: { me: User }) {
 function ExportDialog({ wsId, name, onClose }: { wsId: number; name: string; onClose: () => void }) {
   const [gears, setGears] = useState(false)
   const [withContext, setWithContext] = useState(false)
+  const [inlets, setInlets] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -747,7 +748,7 @@ function ExportDialog({ wsId, name, onClose }: { wsId: number; name: string; onC
     setBusy(true)
     setError(null)
     api.workspaces
-      .exportBundle(wsId, { gears, context: withContext })
+      .exportBundle(wsId, { gears, context: withContext, inlets })
       .then(({ text, filename }) => {
         const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
         const a = document.createElement('a')
@@ -804,6 +805,15 @@ function ExportDialog({ wsId, name, onClose }: { wsId: number; name: string; onC
           <span className="hint">
             The documents on this workspace's branches — shared notes and each agent's own memory. Read them
             first if the bundle is leaving your machine.
+          </span>
+          <label className="row">
+            <input type="checkbox" checked={inlets} onChange={(e) => setInlets(e.target.checked)} />
+            include receivers
+          </label>
+          <span className="hint">
+            The doors into this workspace and every task behind them — the address, what each accepts, who
+            does the work and what success is. Never the key: a restored door exists and refuses every
+            delivery until somebody on the other install issues one.
           </span>
           {error && <p className="error">{error}</p>}
           <div className="row">

@@ -2,6 +2,7 @@ package bundle
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
+	"github.com/orkcom-tech/cogitorium/internal/inlet"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/planboard"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
@@ -34,6 +36,10 @@ type ImportOptions struct {
 	// IncludeMCP recreates the external MCP servers the bundle carried. Every
 	// one arrives PENDING with no credential resolved — see importMCP.
 	IncludeMCP bool
+	// IncludeInlets recreates the doors and the tasks behind them. Every door
+	// arrives with NO KEY and refuses every delivery until somebody issues one
+	// — see importInlets.
+	IncludeInlets bool
 }
 
 // Result is what an import did, in the operator's terms. It reports the parts
@@ -59,6 +65,38 @@ type Result struct {
 	Reads              int               `json:"reads"`
 	ReadsSkipped       []SkippedGear     `json:"reads_skipped,omitempty"`
 	UnresolvedModels   []UnresolvedModel `json:"unresolved_models"`
+
+	// InletsImported names each door that was created, as
+	// "address/task, task" — and every one of them is shut. See NeedsKey.
+	InletsImported []string      `json:"inlets_imported,omitempty"`
+	InletsSkipped  []SkippedGear `json:"inlets_skipped,omitempty"`
+	// NeedsKey is the addresses that exist and cannot be used yet. Said
+	// separately from InletsImported because "the door is there" and "the door
+	// opens" are different facts, and the second one is the one somebody
+	// integrating against this install is waiting on.
+	NeedsKey []string `json:"needs_key,omitempty"`
+
+	// Requires is what the bundle SAID it needs, carried through to the
+	// operator unchanged. Nothing here was granted by importing — it is the
+	// document asking, and the answer is the outward grant a human draws.
+	Requires []Requirement `json:"requires,omitempty"`
+}
+
+// Requirement is one thing the bundle declared it needs, in the words it used,
+// as the import hands it on. It exists so an operator learns what a workspace
+// wants while they are looking at it, instead of from a run that failed.
+type Requirement struct {
+	// Kind is what is being asked for. "egress" is the only one today; a
+	// second would be a second decision rather than a second string.
+	Kind string `json:"kind"`
+	// Agent is who needs it, or empty for the workspace.
+	Agent  string   `json:"agent,omitempty"`
+	Reason string   `json:"reason,omitempty"`
+	Hosts  []string `json:"hosts,omitempty"`
+	// Granted is always false. The field is here so the shape does not change
+	// if this ever becomes something an operator answers in place, and so that
+	// nothing reading this can mistake a declaration for a permission.
+	Granted bool `json:"granted"`
 }
 
 type SkippedGear struct {
@@ -191,6 +229,15 @@ func Import(ctx context.Context, s Stores, b Bundle, opts ImportOptions) (Result
 			return res, err
 		}
 	}
+	if opts.IncludeInlets && s.Inlets != nil {
+		if err := importInlets(ctx, s, b, ws, created, &res); err != nil {
+			return res, err
+		}
+	}
+	// Carried through whatever else was imported, and whatever else was left
+	// out: what the workspace needs is true of the workspace rather than of
+	// the parts somebody ticked.
+	res.Requires = declaredRequirements(b)
 	if opts.IncludeContext {
 		for _, f := range b.Context {
 			path, err := ContextPath(ws.Branch, f.Path)
@@ -494,4 +541,99 @@ func importPlanboards(ctx context.Context, s Stores, b Bundle, ws workspace.Work
 		res.PlanboardsImported = append(res.PlanboardsImported, saved.Name)
 	}
 	return nil
+}
+
+// importInlets rebuilds the doors, shut.
+//
+// The shape is recreated exactly — address, tasks, schemas, instructions, what
+// success is — and the key is not, because there is none in the document to
+// recreate from. That is the property this whole design turns on: a bundle can
+// describe a door in enough detail that two installs are the same install, and
+// cannot open one. Somebody on the receiving side issues a key deliberately,
+// and until they do every delivery is refused.
+//
+// A clashing address is left alone rather than merged into. An address is what
+// a caller outside has in its configuration; quietly adding a task to
+// somebody's existing door would change what an unrelated system gets back.
+func importInlets(ctx context.Context, s Stores, b Bundle, ws workspace.Workspace,
+	created map[string]workspace.Agent, res *Result) error {
+	for _, d := range b.Inlets {
+		existing, err := s.Inlets.ByAddress(ctx, d.Address)
+		if err == nil && existing.ID != 0 {
+			res.InletsSkipped = append(res.InletsSkipped, SkippedGear{
+				Name: d.Address,
+				Why: "a door with this address already exists on this install; it was left untouched, " +
+					"because the address is what a caller outside has in its configuration",
+			})
+			continue
+		}
+
+		door, err := s.Inlets.CreateInlet(ctx, ws.ID, d.Address, d.Description)
+		if err != nil {
+			res.InletsSkipped = append(res.InletsSkipped, SkippedGear{Name: d.Address, Why: err.Error()})
+			continue
+		}
+
+		for _, t := range d.Tasks {
+			// The agent is named the way everything else in a bundle names
+			// one. A task pointing at an agent this bundle does not have would
+			// answer every delivery with a failure nobody could read.
+			if _, ok := created[t.Agent]; !ok {
+				res.InletsSkipped = append(res.InletsSkipped, SkippedGear{
+					Name: d.Address + "/" + t.Name,
+					Why: fmt.Sprintf("it names agent %q, which this bundle does not have; "+
+						"the task was not created", t.Agent),
+				})
+				continue
+			}
+			task := inlet.Task{
+				Name: t.Name, Accepts: t.Accepts, Schema: t.Schema,
+				ContentType: t.ContentType, AgentName: t.Agent,
+				Instruction: t.Instruction, CallbackURL: t.CallbackURL,
+			}
+			if t.Expect != nil {
+				task.Expect = inlet.Expect{
+					ProducesFiles: t.Expect.ProducesFiles,
+					RunsGear:      t.Expect.RunsGear,
+					AnswerFrom:    t.Expect.AnswerFrom,
+				}
+				if strings.TrimSpace(t.Expect.Schema) != "" {
+					task.Expect.Schema = json.RawMessage(t.Expect.Schema)
+				}
+			}
+			if _, err := s.Inlets.AddTask(ctx, door.ID, task); err != nil {
+				// A bundle from a newer install may carry a shape this one
+				// refuses. Named with the reason rather than failing an import
+				// that is otherwise fine — the same rule the gears follow.
+				res.InletsSkipped = append(res.InletsSkipped, SkippedGear{
+					Name: d.Address + "/" + t.Name, Why: err.Error(),
+				})
+				continue
+			}
+			res.InletsImported = append(res.InletsImported, d.Address+"/"+t.Name)
+		}
+		res.NeedsKey = append(res.NeedsKey, d.Address)
+	}
+	return nil
+}
+
+// declaredRequirements is what the bundle asked for, handed on unchanged.
+//
+// It grants nothing and it is not stored as a permission anywhere: this
+// function exists so that "this workspace needs to reach the web, and here is
+// what for" reaches the operator at the moment they are looking at the import,
+// rather than three days later as a run that failed with nothing to read.
+func declaredRequirements(b Bundle) []Requirement {
+	if b.Requires == nil {
+		return nil
+	}
+	out := []Requirement{}
+	for _, e := range b.Requires.Egress {
+		out = append(out, Requirement{
+			Kind: "egress", Agent: e.Agent, Reason: e.Reason, Hosts: e.Hosts,
+			// Always. See the field's comment.
+			Granted: false,
+		})
+	}
+	return out
 }

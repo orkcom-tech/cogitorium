@@ -12,6 +12,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
+	"github.com/orkcom-tech/cogitorium/internal/inlet"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/store"
@@ -54,6 +55,7 @@ func newInstallWith(t *testing.T, contextdBin string) *install {
 		Gears:      gear.NewStore(db),
 		Context:    contextstore.New(contextdBin),
 		MCP:        mcpstore.NewStore(db),
+		Inlets:     inlet.NewStore(db),
 	}}
 
 	// The owner is a real user row: an imported workspace belongs to whoever

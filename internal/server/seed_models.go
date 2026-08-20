@@ -132,3 +132,55 @@ func (s *Server) seedOrchestratorModel(ctx context.Context, want string) {
 	slog.Error("orchestrator_model names a model this install does not offer; "+
 		"every new workspace will be asked which model to use instead", "value", want)
 }
+
+// Doors a prepared workspace arrived with, opened from the environment.
+//
+// A bundle carries the shape of an inlet and never its key — that is what makes
+// a restored door inert, and it is right. It is also the last manual step in a
+// deployment that is otherwise one command: import the workspace, then visit a
+// screen before anything outside can call it.
+//
+// This closes that without weakening the rule. The key does not come from the
+// document; it comes from the environment, where the deployment already keeps
+// its secrets and where the CALLER's copy comes from too. Both sides are
+// configured from one source rather than one being read out of the other at run
+// time.
+//
+// Applied on EVERY start, unlike the provider seeds. A provider's address is
+// something an operator may reasonably change on a screen afterwards; an inlet
+// key is one half of a pair, and an install that had drifted from the value the
+// caller holds would refuse deliveries with nothing to read. If the environment
+// says what the key is, the environment is right.
+func (s *Server) openSeededInlets(ctx context.Context, seeds []config.SeedInletKey) {
+	for _, seed := range seeds {
+		address := strings.TrimSpace(seed.Address)
+		if address == "" || strings.TrimSpace(seed.KeyEnv) == "" {
+			slog.Error("an inlet_keys entry needs both an address and key_env; it was skipped",
+				"address", address, "key_env", seed.KeyEnv)
+			continue
+		}
+		key := os.Getenv(seed.KeyEnv)
+		if key == "" {
+			// Loud, because the failure it causes otherwise is a 401 at
+			// somebody else's integration, hours later, with nothing here
+			// saying why.
+			slog.Error("inlet_keys names an environment variable that is empty, so this door stays shut",
+				"address", address, "key_env", seed.KeyEnv)
+			continue
+		}
+		door, err := s.inlets.ByAddress(ctx, address)
+		if err != nil {
+			// Ordinary on a first start where the workspace has not been
+			// imported yet. Said at info: the next start will find it.
+			slog.Info("inlet_keys names a door this install does not have yet",
+				"address", address, "err", err)
+			continue
+		}
+		if _, err := s.inlets.SetKey(ctx, door.ID, key); err != nil {
+			slog.Error("the key from the environment could not be set on this door",
+				"address", address, "key_env", seed.KeyEnv, "err", err)
+			continue
+		}
+		slog.Info("inlet key set from the environment", "address", address, "key_env", seed.KeyEnv)
+	}
+}
