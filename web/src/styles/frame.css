@@ -307,6 +307,12 @@
   width: 32px;
   height: 16px;
   background: currentColor;
+  /* The file, for the rail the SERVER renders — the application's own rail
+     sets the same image inline and that wins where it applies. One mark, two
+     renderers; see TestTheRailsCarryTheSameDestinations for the rest of that
+     seam. */
+  mask-image: url('/ork-mark.png');
+  -webkit-mask-image: url('/ork-mark.png');
   mask-repeat: no-repeat;
   mask-position: center;
   mask-size: contain;

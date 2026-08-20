@@ -1219,7 +1219,19 @@ a[role='tab'].is-current {
  * cut off. The gear form's submit button sat a thousand pixels below a page
  * that would not move.
  */
-.cavity > main.page {
+/* Any screen in the cavity, not only the ones the server renders.
+ *
+ * This said `main.page`, which is the tag the templates use — so the screens
+ * the APPLICATION renders as `div.page` were missed and simply lost whatever
+ * did not fit. On People that was four hundred pixels of the user list, with
+ * no scrollbar and no way to reach it. The class is the screen; the tag is an
+ * accident of which half of the product drew it.
+ *
+ * The canvases are not `.page` and keep managing their own space: the
+ * blueprint, the map and the workbench are drawn surfaces, and a scrollbar on
+ * one of those would be a second way to move that fights the first.
+ */
+.cavity > .page {
   flex: 1;
   min-height: 0;
   overflow-y: auto;

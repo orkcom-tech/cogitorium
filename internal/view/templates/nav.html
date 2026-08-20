@@ -17,6 +17,13 @@
 */}}
 <a class="rail-brand" href="/workspaces" title="Cogitorium">
   <img src="/icon-128.png" alt="Cogitorium" width="26" height="26">
+  {{/* The same "by ORK" the application's rail carries. Masked rather than
+       drawn, so it takes the ink colour of whatever ground it is on — which is
+       why it is one file and not one per look. */}}
+  <span class="by">
+    <span>by</span>
+    <span class="ork" aria-hidden="true"></span>
+  </span>
 </a>
 <div class="rail-group">
 {{range .Nav}}{{if .InBody}}{{template "cog.row.nav" .}}{{end}}{{end}}{{template "cog.slot.rail" .}}</div>
