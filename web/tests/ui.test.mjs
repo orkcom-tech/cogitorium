@@ -130,7 +130,21 @@ describe('a plugin', () => {
     await ui.page.waitForSelector('nav.rail')
     const entry = ui.page.locator('nav.rail a[href="/p/release-radar/guide"]')
     assert.equal(await entry.count(), 1, "the plugin's entry is not in the rendered rail")
-    assert.equal(await entry.getAttribute('title'), 'Releases')
+
+    // Named, and named the way this rail names anything. It used to assert a
+    // title attribute, which was the template rail's mechanism; there is one
+    // rail on every screen now and it carries the name twice — once for a
+    // screen reader, and once as a tooltip it draws itself on hover, because
+    // the native one takes a second to appear and cannot be styled.
+    assert.equal(
+      await entry.locator('.sr-only').textContent(),
+      'Releases',
+      "the plugin's entry has no accessible name",
+    )
+    await entry.hover()
+    const tip = ui.page.locator('nav.rail [role="tooltip"]')
+    await tip.waitFor({ state: 'visible', timeout: 5000 })
+    assert.equal(await tip.textContent(), 'Releases', 'hovering the entry does not name it')
   })
 
   test('its nav entry reaches the rail the application draws', async () => {
