@@ -53,7 +53,7 @@ to find out what is enabled.
 | `log_level` | `COGITORIUM_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error`. |
 | `log_format` | `COGITORIUM_LOG_FORMAT` | `text` | `text` or `json`. |
 | `metrics_listen` | `COGITORIUM_METRICS_LISTEN` | empty (**off**) | The Prometheus endpoint's own address. It is unauthenticated, which is why it is a separate listener and why it has to be asked for. |
-| `gear_proxy_listen` | `COGITORIUM_GEAR_PROXY_LISTEN` | `127.0.0.1:8689` | Where the gear network gate listens. Only a gear granted the network is given the credential for it. |
+| `gear_proxy_listen` | `COGITORIUM_GEAR_PROXY_LISTEN` | `127.0.0.1:0` — a loopback port the kernel picks | Where the gear network gate listens; only a gear granted the network is given the credential for it. That is enough on Docker Desktop, where a container reaches a host loopback service through `host.docker.internal`. On Linux, where that name is the bridge gateway rather than the host's loopback, an operator with granted gears names the gateway address here. |
 | `update_check` | `COGITORIUM_UPDATE_CHECK` | `ask` | `ask`, `on` or `off`. `ask` is what keeps a fresh install from talking to GitHub before anybody agreed to it. |
 
 ## Credentials

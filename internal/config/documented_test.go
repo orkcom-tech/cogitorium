@@ -1,7 +1,9 @@
 package config
 
 import (
+	"io/fs"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
@@ -52,21 +54,31 @@ func TestEveryConfigurationKeyIsDocumented(t *testing.T) {
 	}
 }
 
-// The reference must not describe settings this server does not have either —
-// a documented key that silently does nothing is worse than an undocumented
-// one, because somebody writes it and believes it took effect.
+// The documentation must not describe settings this server does not have — a
+// documented key that silently does nothing is worse than an undocumented one,
+// because somebody writes it and believes it took effect.
+//
+// Both pages, not only the reference. docs/index.md carries the same settings
+// with the reasoning attached, and it is where `COGITORIUM_QUEUE_WORKERS` and
+// `COGITORIUM_QUEUE_MAX_PER_WORKSPACE` sat for three releases: two variables
+// this server has never read, in a table headed "Environment", beside two
+// settings that are real and file-only.
 func TestTheConfigurationReferenceInventsNothing(t *testing.T) {
-	doc, err := os.ReadFile(docsPath)
-	if err != nil {
-		t.Fatalf("the configuration reference could not be read: %v", err)
+	var doc []byte
+	for _, page := range []string{docsPath, "../../docs/index.md"} {
+		b, err := os.ReadFile(page)
+		if err != nil {
+			t.Fatalf("%s could not be read: %v", page, err)
+		}
+		doc = append(doc, b...)
 	}
 
-	real := map[string]bool{}
-	for _, env := range envLookups(t) {
-		real[env] = true
-	}
-	// Named in prose rather than read by this package, and real: the CLI reads
-	// it, and the guide points at it.
+	// Everything the REPOSITORY reads, not only what this package does: the
+	// documentation covers the command line too, and COGITORIUM_URL and
+	// COGITORIUM_TOKEN are read by internal/client rather than here.
+	real := readEverywhere(t)
+	// Named in prose rather than read by any package, and real: it is what
+	// --config falls back to, resolved before a Config exists.
 	real["COGITORIUM_CONFIG"] = true
 
 	var invented []string
@@ -77,8 +89,9 @@ func TestTheConfigurationReferenceInventsNothing(t *testing.T) {
 	}
 	if len(invented) > 0 {
 		sort.Strings(invented)
-		t.Fatalf("%s documents environment variables this server never reads:\n  %s",
-			docsPath, strings.Join(invented, "\n  "))
+		t.Fatalf("the documentation names environment variables this server never reads:\n  %s\n\n"+
+			"Checked in %s and docs/index.md. Somebody sets one of these and believes it took effect.",
+			strings.Join(invented, "\n  "), docsPath)
 	}
 }
 
@@ -122,4 +135,48 @@ func envLookups(t *testing.T) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// readEverywhere is every COGITORIUM_* any Go file in this repository looks up.
+//
+// Walked rather than listed, for the same reason the rest of this test walks
+// the struct: a list beside the code is the thing that drifts. Test files are
+// included deliberately — a variable only a test reads is still a variable the
+// documentation may honestly describe.
+func readEverywhere(t *testing.T) map[string]bool {
+	t.Helper()
+	pattern := regexp.MustCompile(`os\.Getenv\("(COGITORIUM_[A-Z_]+)"\)`)
+	found := map[string]bool{}
+	root := "../.."
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case "node_modules", ".git", "dist", "vendor":
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, m := range pattern.FindAllStringSubmatch(string(b), -1) {
+			found[m[1]] = true
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking the repository: %v", err)
+	}
+	if len(found) == 0 {
+		t.Fatal("no environment lookups were found anywhere in the repository, which means this " +
+			"test is checking nothing — the pattern it greps for must have changed")
+	}
+	return found
 }
