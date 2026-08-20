@@ -26,6 +26,16 @@ Environment=HOME=/var/lib/cogitorium
 # address it requires a token — that is the same binary behaving differently,
 # not a second mode, so widening the bind is a deliberate edit here.
 ExecStart=/usr/bin/cogitorium serve --listen 127.0.0.1:8688 --data /var/lib/cogitorium
+# THE TERMINAL IS ON, and here it is a shell as the `cogitorium` system user
+# above — not as you. That user owns /var/lib/cogitorium and, under the
+# hardening below, can write nothing else; ProtectSystem=strict and
+# ProtectHome=true apply to it exactly as they apply to the server, because it
+# IS the server's process tree.
+#
+# That is the right shape on a machine one person administers. If this install
+# is reachable by people you would not hand that shell to, write
+# `terminal: false` in /var/lib/cogitorium/config.yaml, or set
+# Environment=COGITORIUM_TERMINAL=0 here.
 Restart=always
 RestartSec=3
 TimeoutStopSec=30

@@ -144,9 +144,25 @@ config:
     cpu: "1"
     memory: 512Mi
 
-  # The in-UI shell. It needs a sandbox and the chart refuses it without one —
-  # interactive code execution with the server's file access is not something a
-  # value should be able to turn on.
+  # The in-UI shell. OFF here, and written explicitly, which is NOT the binary's
+  # own default any more — on a laptop the terminal is on, because that is the
+  # operator's own machine and the shell an editor would have given them.
+  #
+  # A cluster is not a laptop. Setting this true gives you a shell IN THIS POD,
+  # as the account this container runs as, reachable by whoever can open the
+  # interface — which means the database and the provider keys in it. It is a
+  # real capability and it works; the chart used to refuse it at template time
+  # and no longer does, because that was the chart deciding something you are
+  # entitled to decide. The default stays false because on a cluster the person
+  # who opens the interface is not necessarily the person who applied this
+  # chart.
+  #
+  # Written `false` rather than left out on purpose: the setting distinguishes
+  # "written false" from "not written", so this holds whatever the binary's
+  # default becomes.
+  #
+  # A workspace terminal on this install is sandboxed rather than in-pod, since
+  # a member is not the operator — see the guide's Terminal section.
   terminal: false
 
   # May this install ask GitHub whether a newer Cogitorium or Contextverse has
@@ -189,10 +205,13 @@ config:
   # shape a ConfigMap and a Secret take when they are mounted. Rotation is
   # therefore the cluster's own — update the object and the files change under
   # a running server. This chart deliberately does NOT let the server read the
-  # cluster API for these: that would need a service account token in the pod,
-  # and gears currently run as a subprocess of the server, so agent-authored
-  # code would hold it. serviceAccount.automount stays false for the same
-  # reason.
+  # cluster API for these: that would need a broader Role than creating Jobs,
+  # for a job the kubelet already does by mounting the objects.
+  #
+  # (The token the server DOES hold is for creating gear Jobs, which is what
+  # sandbox: kubernetes is — the gear's own pod mounts none. The two sentences
+  # that used to be here said gears run as a subprocess of the server and that
+  # automount stays false; on this chart's own defaults neither is true.)
   #
   #   kubectl create configmap cogitorium-variables --from-literal=REGION=eu-west-1
   #   kubectl create secret generic cogitorium-secrets --from-literal=S3_KEY=...

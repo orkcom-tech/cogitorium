@@ -82,9 +82,15 @@ cogitorium plugins approve hello
 cogitorium plugins enable hello
 ```
 
-Then restart, or press the button the Plugins screen offers. **Restart to
-activate is the model**: the template stack is composed once, at boot, so a
-plugin cannot half-apply.
+**It is live on the next page.** The template stack is rebuilt from what is on
+disk and swapped in whole, on install, enable, disable, reorder, revoke and
+remove, so a plugin cannot half-apply and you do not have to restart anything to
+see it. That was not always true — the stack used to be composed once at boot,
+and removing a plugin left its rail entry sitting there through a reload.
+
+The one exception is a **backend**. A plugin that declares `needs:` has HTTP
+routes attached at boot and there is no way to take a route back, so those still
+ask for a restart, and the screen tells you which.
 
 ## The naming rule
 
@@ -139,9 +145,23 @@ mounts:
     page: hello.page.panel
 ```
 
-A mount is a panel that opens over the work without leaving it; a page is a
-destination somebody navigates to. The mount points are a closed set, and an
-unknown one is refused at install rather than ignored.
+A page is a destination somebody navigates to. A **mount** is inside a
+workspace, and there are two points:
+
+| Point | What you get |
+|---|---|
+| `workspace.drawer` | a panel that crawls out over the work without leaving it |
+| `workspace.stage` | a **view of its own** on the workspace's track, beside Chat, the Blueprint and the Editor |
+
+The set is closed, and an unknown point is refused at install rather than
+ignored.
+
+`workspace.stage` exists because four screens are not templates and cannot
+honestly become ones: the blueprint and the map are drawn canvases, the editor
+is live text, the terminal is a socket, and a template renders a thing that
+exists at a moment. A stage does not try to override them — it stands beside
+them, on the same track, with the same guarantee that every view stays mounted
+for its whole life.
 
 ### Taking over a screen that shipped
 
@@ -158,7 +178,8 @@ of earlier ones:
 ```
 
 Two things make this safe to rely on. **Late binding**: the stack is composed by
-name at boot, so a plugin layered above yours overrides what you produced, and
+name — at boot and again on every plugin change — so a plugin layered above
+yours overrides what you produced, and
 your backend returning a template name rather than finished HTML is what keeps
 you inside that mechanism. And **validation**: every template is rendered
 against a zero-value model at load, so one that would panic on an empty list is
@@ -191,6 +212,21 @@ existed:
 ```html
 {% raw %}{{define "cog.slot.head"}}<meta name="hello" content="1">{{end}}{% endraw %}
 ```
+
+**`cog.slot.stagehead`** is the one that reaches the screens a template cannot
+render. It is a strip above whichever view is on screen — `chat`, `blueprint`,
+`workbench`, `terminal` or `map` — rendered through the same composed stack as
+everything else, and told which screen is asking and which workspace it belongs
+to (`.Workspace` is zero where there is none):
+
+```html
+{% raw %}{{define "cog.slot.stagehead"}}
+  <span>{{.Screen}} in workspace {{.Workspace}}</span>
+{{end}}{% endraw %}
+```
+
+It renders nothing at all until somebody overrides it, so an install with no
+plugins is unchanged by its existence.
 
 ### Stylesheets, scripts and files
 
@@ -261,23 +297,31 @@ number rather than from an error.
 A refusal is a value, not a crash: the host answers "you may not reach that"
 with a sentence naming both what you asked for and what you were granted.
 
-### Roles an export can have
+### Roles, and where they are not
+
+An export is a named function your plugin registers. **There is no `exports:`
+block in the manifest** — a page names the export that supplies it, and that is
+the only declaration there is:
 
 ```yaml
-exports:
-  - name: home
-    role: provider       # supplies a page's model
-  - name: refresh
-    role: schedule       # runs on a timer the operator approved
+pages:
+  - path: /p/hello/
+    template: hello.page.home
+    provider: home          # the export that supplies this page's model
 ```
 
-The roles are `route`, `provider`, `filter`, `event`, `tool`, `schedule` and
-`command`. An export whose role this build does not know is refused at load with
-the list, rather than registered as something nobody calls.
+The **role** is what the host says when it calls, on the request rather than in
+the manifest, so one export can be reached more than one way without being
+declared twice. The ABI names seven — `route`, `provider`, `filter`, `event`,
+`tool`, `schedule`, `command` — and this build issues two of them: `provider`
+when a page is rendered, and `event` when something you put on the queue with
+`cog.enqueue` comes back to you. The rest are named because the contract is
+versioned and adding a role later must not be a breaking change; a host that
+does not call them yet is not a promise that it never will.
 
 ### The SDKs
 
-Four, all offering the same nine calls under the same names:
+Three, all offering the same nine calls under the same names:
 
 - **[Python](https://github.com/orkcom-tech/cogitorium/tree/main/sdk/python)** —
   one file, standard library only, copied in beside your code.

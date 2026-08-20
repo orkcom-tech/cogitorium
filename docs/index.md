@@ -47,6 +47,7 @@ install: `scripts/ci/install-contextd.sh` fetches the matching one.
 | Homebrew | `brew install orkcom-tech/tap/cogitorium` | yes |
 | Scoop | `scoop bucket add contextverse https://github.com/orkcom-tech/scoop-bucket` then `scoop install cogitorium` | yes |
 | Docker | `docker compose up --build` | yes, in the image |
+| Docker, with a model | `docker compose -f docker-compose.starter.yml up` — brings up an Ollama container, pulls the model, and comes up with the provider registered and the orchestrator's model already chosen | yes, in the image |
 | deb / rpm | from the [releases page](https://github.com/orkcom-tech/cogitorium/releases) | yes, in the package |
 | Desktop app | attached to each release | yes, beside the app |
 | Archive | download and unpack | yes, beside the binary |
@@ -102,13 +103,13 @@ helm install cogitorium ./deploy/helm/cogitorium \
 To run your own build instead, push it and name it:
 
 ```sh
-docker build -t <your-registry>/cogitorium:1.0.1 .
-docker push <your-registry>/cogitorium:1.0.1
+docker build -t <your-registry>/cogitorium:3.2.0 .
+docker push <your-registry>/cogitorium:3.2.0
 
 helm install cogitorium ./deploy/helm/cogitorium \
   --namespace cogitorium --create-namespace \
   --set image.repository=<your-registry>/cogitorium \
-  --set image.tag=1.0.1 \
+  --set image.tag=3.2.0 \
   --set auth.adminToken="$(openssl rand -hex 24)"
 ```
 
@@ -128,8 +129,10 @@ cannot attach.
 Two caveats the chart states rather than hides. "No network unless granted" is a
 NetworkPolicy in-cluster, and a NetworkPolicy is enforced by the CNI plugin
 rather than by Kubernetes — on kindnet or plain flannel it is accepted and
-enforces nothing. And the **terminal is not available in-cluster**: it is an
-interactive attachment, and a Job is run-to-completion. `sandbox: subprocess` is
+enforces nothing. And the **terminal is off in the chart** rather than
+unavailable: setting `config.terminal: true` gives whoever can open the
+interface a shell in the Cogitorium pod, as the account it runs as — which is a
+real capability and the operator's decision, not the chart's. `sandbox: subprocess` is
 still there for a cluster whose policy forbids the Role, with the same warning
 it always carried — and the image ships no `python3`, `node` or `bash`, so on
 that setting only a `binary` gear runs at all.
@@ -137,7 +140,7 @@ that setting only a `binary` gear runs at all.
 
 **From source.** Go 1.25 and Node (the UI is built by Vite 7). Docker is
 optional but strongly recommended — without it, gears run with the server's own
-file access and the terminal refuses to open at all.
+file access.
 
 ```sh
 git clone https://github.com/orkcom-tech/cogitorium
@@ -360,8 +363,9 @@ what still holds:
 - **Dry runs are refused entirely.** Unapproved code never runs at all here —
   the one path that bypasses approval exists only because a container makes it
   cheap, so without a container it is closed.
-- **The terminal is refused**, for the same reason: a shell would hold the
-  server's own access.
+- **The terminal still opens**, and is a shell on this machine as this server's
+  user — which is what it is with a sandbox present too, and is the one
+  capability here whose reach is the operator's own rather than an agent's.
 - The environment is still minimal — `PATH`, `HOME` and the gear's name, never
   the server's own environment, which may hold credentials.
 - A gear gets its own process group and the timeout kills the group, not just
@@ -598,6 +602,52 @@ Prohibitions are per agent. There is no workspace-wide setting.
 
 ---
 
+## Planboards — the order of work
+
+An instruction says how an agent should behave. A gear says what it may call.
+Neither says what comes first, and in a conversation that does not matter
+because a person is there to correct the order. On a clock it does: a run that
+chose a different order than last night is a run nobody can compare to last
+night's.
+
+A planboard is a sequence, and **the engine walks it**. The agent is handed one
+step — with the count, `step 3 of 7`, and nothing else about the plan — and
+cannot skip to step five because step five is not in front of it. It closes one
+with `plan_step_done` or says why it cannot with `plan_step_blocked`, and until
+it calls one of those, the step does not move. A blocked step keeps its position
+and its note is put in front of the next run.
+
+The whole plan is deliberately not in the prompt. A model shown seven steps
+reasons about seven steps: it works ahead, reports two of them done at once, and
+the order stops being a fact about the workflow and becomes a suggestion the
+model weighed.
+
+Two modes. **`resume`** carries the position between runs, so tonight continues
+last night. **`restart`** begins at step one every run, for a procedure rather
+than a journey. At the end of a pass the position wraps and a cycle count goes
+up, which is what `step 2 of 4 (pass 3)` means.
+
+A planboard is bound **to one agent** or **to the whole workspace**, and the
+difference is whose position it is: an agent's plan is that agent's running
+order; a workspace's is the workflow's, whoever runs next.
+
+```bash
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/planboards -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"planboard":"research-then-write"}'
+```
+
+The orchestrator has `planboard_list`, `planboard_create`, `planboard_attach`,
+`planboard_detach`, `planboard_move` and `planboard_delete`. A worker has only
+the two that move its own position: an agent that could rewrite its plan would
+be an agent with no plan.
+
+A saved [version](/cogitorium/guide/#versions) carries the **position** as well
+as the steps. Restoring the steps and leaving the marker where the run that went
+wrong pushed it would be a rollback that returns the map and keeps the wrong pin
+on it.
+[→](/cogitorium/guide/#planboards)
+
+---
+
 ## Export and import
 
 A workspace exports as one JSON document in the format
@@ -653,7 +703,7 @@ first turn.
 
 [`docs/openapi.yaml`](https://github.com/orkcom-tech/cogitorium/blob/main/docs/openapi.yaml)
 is an OpenAPI 3.1 document listing every endpoint this server has: 97 path
-items carrying 150 operations, their path parameters, and which credential
+items carrying 154 operations, their path parameters, and which credential
 opens each — a user's token, a receiver's own key, or nothing.
 
 **It is generated from the server's own route table**, by a test that fails when
@@ -1523,9 +1573,9 @@ The four capsules, in order down the rail:
 | Capsule | What it answers |
 |---|---|
 | **Where am I** | the brand, and — inside a workspace — the way back out |
-| **What is the cavity showing** | the stages: Chat, Blueprint, Editor |
+| **What is the cavity showing** | outside a workspace, the destinations: Workspaces, Map, Gears, Models, Instructions, Planboards, Context, People, Terminal. Inside one, the stages: Chat, Blueprint, Editor |
 | **What can crawl out over it** | the drawers: Agents, Gears, Instructions, Memory, Receivers, Queue, Variables, Terminal |
-| **The rest** | More, Appearance, and the account |
+| **The rest** | More, Appearance, updates, plugins, and the account |
 
 Nothing is written on the rail. Each button is an icon that raises its name on
 hover, and the on-state is a tint plus a bar in the bezel's margin, so the
@@ -1533,13 +1583,22 @@ column stays a column of controls rather than a list of words.
 
 ![A workspace: the stages down the rail, the drawers below them, and the roster crawled out](assets/02-workspace-chat.png)
 
-**More** holds what you configure rather than what you navigate: Models,
-People, Context, this documentation, and sign out. The split is by frequency,
-not by kind — what you move between all day is a button on the rail, what you
-configure occasionally is one click further away, and nothing that was
-reachable before is unreachable now.
+**Every screen shares one rail** — the same component, fed by one description
+the server publishes at `GET /api/v1/rail`. It was written twice for a while,
+once in the application and once as a template, and the two differed in a dozen
+small ways that each reached somebody as "why is this screen not like that
+one": a logo on one half, destinations on the other, a plugin's entry drawn
+twice where they overlapped. A screen the server renders still draws a rail into
+the document — that is what somebody sees before the application runs, what a
+plugin overriding `cog.shell.rail` changes, and what a browser with no
+JavaScript keeps — and the application replaces it with the same component its
+own screens use.
 
-![The rail’s More menu: the install-wide pages, the documentation, and the way out](assets/13-rail-menu.png)
+**A destination belongs in one place per screen.** Outside a workspace the
+destinations are on the rail, so More does not repeat them; inside one the rail
+belongs to that workspace's stages and drawers, so More is where the
+destinations live and is how you get back out. It always holds Appearance, the
+documentation and the way to sign out.
 
 There are **no global keybindings** at all. `Escape` is deliberately left to
 whichever dialog is open, because the egress approval owns it, scoped to
@@ -1549,9 +1608,11 @@ the editor.
 
 ### Stages, and drawers
 
-**A STAGE is a place you go.** Three of them — **Chat**, **Blueprint**,
-**Editor** — sitting on a track that slides vertically, one on screen at a
-time. Vertically because the control that moves it is a vertical rail: going
+**A STAGE is a place you go.** Three of the product's own — **Chat**,
+**Blueprint**, **Editor** — plus whatever a plugin adds at `workspace.stage`,
+sitting on a track that slides vertically, one on screen at a time. The track is
+as long as the views it is given; it used to be the host's three, which left
+nowhere for a fourth. Vertically because the control that moves it is a vertical rail: going
 down the capsule sends the work down and brings the next stage up from below. A
 horizontal slide driven by a vertical column reads as two unrelated motions.
 
@@ -1569,8 +1630,11 @@ edge exactly as the bezel does, and is rounded only on the side facing the
 cavity. The cavity shrinks to make room rather than being covered, so nothing
 you were working on ends up half underneath something.
 
-Eight of them: **Agents**, **Gears**, **Instructions**, **Memory**,
-**Receivers**, **Queue**, **Variables**, **Terminal**. One at a time. Each can
+Eleven, and twelve for an administrator: **Agents**, **Gears**, **MCP servers**,
+**Instructions**, **Planboards**, **Memory**, **Receivers**, **Queue**,
+**Variables**, **Versions**, **Context** (admin only) and **Terminal** — plus
+whatever a plugin mounts, after the host's own, because a plugin adding a panel
+is adding to this workspace rather than rearranging it. One at a time. Each can
 be docked to any of the four edges from the buttons in its own head — the
 control beside the thing it moves, rather than in a settings screen — and
 resized from the grip on the edge facing the work, which is the only edge that
@@ -1853,18 +1917,29 @@ human in the loop — a leak someone approved rather than a silent one.
 
 ## The terminal
 
-Off by default. Set `terminal: true` and restart. It requires a sandbox: without
-Docker the request is refused rather than served with the server's own file
-access.
+**On by default**, and it starts when you open it — there is no button. Write
+`terminal: false` to refuse it, and on an install other people can reach, do.
+
+**It is a shell on the machine this server runs on**, as the account it runs as:
+the same reach the operator already has by sitting at that machine, said out
+loud in the log at every start. It used to be off and to require a sandbox,
+which is the right default for a server somebody else operates and the wrong one
+for a person on their own laptop.
 
 There are two of them, and only one is an administrator's.
 
 - **A workspace's own shell** lives in the Editor view, is scoped to that
   workspace's directory, and is open to **anyone who can reach the workspace**.
-  It starts only when you press the button, because a session is never
-  restored.
-- **The server-wide Terminal**, a drawer on the rail, is **admin-only**. It is
-  not scoped to anything, which is the whole of the reason.
+  On an install other people can reach it runs in the **sandbox** instead of on
+  the machine — a workspace member is not the operator — and gets a copy of the
+  workspace's files that is not carried back out. On a loopback install it is
+  the machine, in that workspace's real directory.
+- **The server-wide Terminal** is **admin-only**. It is not scoped to anything,
+  which is the whole of the reason, and it is always the machine.
+
+**A session outlives its connection.** Leave the screen and come back and it is
+the same shell — same directory, same history, and 256 KB of scrollback replayed
+into it. It ends when the shell does, or after an hour with nobody attached.
 
 No agent can open either.
 
@@ -1874,8 +1949,11 @@ No agent can open either.
 
 A plugin adds functionality *and* changes the interface. It can put a screen in
 the rail, hang a panel inside a workspace, take over a template the core never
-designated as extensible, and run code of its own. Restart-to-activate is the
-model, and the plugins screen can perform the restart.
+designated as extensible, and run code of its own. **It takes effect on the next
+page**: the template stack is rebuilt from what is on disk and swapped in whole
+after every install, enable, disable, reorder, revoke and remove. Only a plugin
+with a backend of its own asks for a restart, because its HTTP routes were
+attached at boot and there is no way to take a route back.
 
 ### Installing one
 
@@ -1968,7 +2046,7 @@ never as whoever installed it, so a grant is not decorative.
 `enqueue` puts work on the durable queue, so a background task survives a
 restart instead of being a goroutine nothing recorded.
 
-There are four SDKs, all offering those same nine calls under the same names:
+There are three SDKs, all offering those same nine calls under the same names:
 [Python](https://github.com/orkcom-tech/cogitorium/tree/main/sdk/python) — one
 file, standard library only, copied in beside your code —
 [Go](https://github.com/orkcom-tech/cogitorium/tree/main/sdk/go), which builds
@@ -2030,6 +2108,12 @@ Configuration comes from, in order of precedence: command-line flags, then
 `COGITORIUM_*` environment variables, then `config.yaml` in the data directory,
 then defaults.
 
+**[Configuration](/cogitorium/configuration/) is the complete list**, and it is
+checked: a test reads the `Config` struct and every `COGITORIUM_*` this server
+looks up and fails if one of them is missing from that page. What follows here
+is the same settings with the reasoning attached — the ones where the default is
+a decision rather than a value.
+
 | Key (`config.yaml`) | Environment | Default | What it does |
 |---|---|---|---|
 | `listen` | `COGITORIUM_LISTEN` | `127.0.0.1:8688` | HTTP listen address. A loopback address marks this a local install: first-run setup does not ask for the admin token, and browsers are told to remember the session. |
@@ -2047,7 +2131,9 @@ then defaults.
 | `kube_cpu`, `kube_memory` | `COGITORIUM_KUBE_CPU`, `COGITORIUM_KUBE_MEMORY` | — | Limits on one gear Job. Empty means the cluster's own defaults. |
 | `sandbox_image` | `COGITORIUM_SANDBOX_IMAGE` | `python:3.12-alpine` | The image gears run in. Fetched once at startup so the first gear does not pay for the pull inside its own timeout. |
 | `sandbox_runtime` | `COGITORIUM_SANDBOX_RUNTIME` | — | The OCI runtime the daemon uses for gear containers: `runsc` for gVisor, `kata-runtime` for Kata. Empty means the daemon's own default. Checked against `docker info` at startup and **refused** if the daemon does not have it. |
-| `terminal` | `COGITORIUM_TERMINAL` | off | Enables the in-UI shell. Requires a sandbox. |
+| `terminal` | `COGITORIUM_TERMINAL` | **on** | The in-UI shell — on the machine this server runs on, as the account it runs as, which is the same reach the operator has by sitting at it. It was off and required a sandbox: the right default for a server somebody else operates, the wrong one for a person on their own laptop. `false` refuses it, and the setting distinguishes *written false* from *not written* so writing it once holds. A **workspace** terminal on an install other people can reach is sandboxed instead, because a member is not the operator. |
+| `providers` | — | — | Providers and their models, known on **first start**, so a deployment comes up ready rather than empty. A **seed**: created only when nothing by that name exists, never updated, never removed — an address you change on the Models screen stays changed. `key_env` names the environment variable holding a key; a key is never written in the file. |
+| `orchestrator_model` | — | — | The model a new workspace's orchestrator thinks with, as `<provider>/<model>`. Seeded like the above, and only when nobody has chosen one. |
 | `metrics_listen` | `COGITORIUM_METRICS_LISTEN` | — | Where the Prometheus endpoint listens, e.g. `127.0.0.1:9090`. **Empty is off**, and off is the default. Its own port and never a route on the API: the API is authenticated and a scrape is not. |
 | `log_format` | `COGITORIUM_LOG_FORMAT` | `text` | `text` for a person at a terminal, `json` for a collector — one object per line with stable field names. Cogitorium ships logs nowhere; this is the format it owes whatever does. |
 | `update_check` | `COGITORIUM_UPDATE_CHECK` | `ask` | Whether this install may ask GitHub if a newer Cogitorium or Contextverse exists: `ask`, `on` or `off`. Under `ask` nothing leaves the machine until an operator answers the question the interface puts on the rail; the answer is remembered across restarts. `off` never asks and never checks — including for *check now* — and the interface cannot lift it. |
@@ -2140,7 +2226,9 @@ What is actually true, without softening:
   granted gear chooses to *send* through the gate is still not redacted and
   cannot be — that is what granting a key and a network means together, and the
   approval screen is the whole of the control.
-- **The terminal** is off by default, requires a sandbox, and is never reachable
+- **The terminal** is on by default and is a shell on this machine as this
+  server's user; `terminal: false` refuses it. A *workspace* terminal on an
+  install other people can reach is sandboxed instead. It is never reachable
   by an agent. A workspace's own shell is open to anyone who can reach that
   workspace and confined to its directory; the server-wide one, confined to
   nothing, is an administrator's alone.

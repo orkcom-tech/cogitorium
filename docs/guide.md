@@ -37,17 +37,27 @@ The frame's left edge is the **rail**, and it is four groups of buttons with
 gaps between them, answering four questions:
 
 1. **where am I** — the brand, and inside a workspace the way back out;
-2. **what is the hole showing** — the stages: Chat, Blueprint, Editor;
+2. **what is the hole showing** — outside a workspace, the destinations:
+   Workspaces, Map, Gears, Models, Instructions, Planboards, Context, People,
+   Terminal. Inside one, the stages: Chat, Blueprint, Editor;
 3. **what can crawl out over it** — the drawers: Agents, Gears, Instructions,
-   Memory, Receivers, Queue, Variables, Terminal;
-4. **the rest** — More, Appearance, and your account.
+   Planboards, Memory, Receivers, Queue, Variables, Terminal;
+4. **the rest** — More, Appearance, updates, plugins, and your account.
 
 Nothing is written on the rail. Each button is an icon that raises its name
 when you hover it, and the one you are on takes a tint and a bar in the margin.
 
-**More** holds what you configure rather than what you navigate: **Models**,
-**People**, **Context**, this guide, and sign out. Variables and the
-server-wide Terminal are drawers inside a workspace.
+**Every screen has the same rail** — one component, fed by one description this
+server publishes. A destination belongs in **one place per screen**: outside a
+workspace they are on the rail, so **More** does not repeat them; inside a
+workspace the rail belongs to that workspace, so More is where the destinations
+are and is how you get back out. Whatever else is in it, More ends with this
+guide and ORKCOM.
+
+Appearance is not in that menu — it is its own button lower in the same group, a
+small bead painted in the colour you chose. Signing out is not there either: it
+is under the account button at the foot, beside the server's version and the way
+to change your password.
 
 There is no keyboard shortcut for any of this chrome, and that is deliberate:
 Escape belongs to the search approval dialog and to nothing else, so one
@@ -66,14 +76,29 @@ Not a screen — the four minutes before you have one worth looking at.
 brew install orkcom-tech/tap/cogitorium && cogitorium serve
 ```
 
+**Or with a model already in it**, if you have no provider yet:
+
+```bash
+docker compose -f docker-compose.starter.yml up
+```
+
+That brings up Cogitorium, an Ollama container to think with, and a one-shot job
+that pulls the model. When it settles the provider is registered, the model is
+offered and the orchestrator already has one — so the first thing you do is make
+a workspace and talk to it, rather than fill in a settings screen. It is a
+starter and reads like one: change the model, point it at a GPU box, or point it
+at Anthropic instead.
+
 Other routes are in [Install](./#install). The server listens on
 `127.0.0.1:8688` and keeps everything in `~/.cogitorium`. Open
 <http://127.0.0.1:8688>.
 
 `serve` takes exactly four flags — `--config`, `--data`, `--listen`,
 `--log-level`. There is no `--port`, no `--debug`, and no `cogitorium init`.
-The other subcommands are a client for a running server and an MCP bridge; they
-are in [From a terminal, and from a script](#from-a-terminal-and-from-a-script).
+Everything else is set in `config.yaml` or the environment, and all of it is in
+[Configuration](/cogitorium/configuration/). The other subcommands are a client
+for a running server and an MCP bridge; they are in [From a terminal, and from a
+script](#from-a-terminal-and-from-a-script).
 
 ### Signing in the first time
 
@@ -163,8 +188,9 @@ answer the same way, on every address including your own machine:
 ## Workspaces
 
 ![The workspaces list: coloured cards, one of them shared with two teams. The
-colour is the stripe down the left edge, and clicking that stripe is how you
-change it.](assets/01-workspaces.png)
+colour is the stripe down the left edge. This picture predates the dot beside
+the name that now sets it — in it, the stripe was still the
+control.](assets/01-workspaces.png)
 
 The list of every workspace you can reach: the ones you own, plus the ones
 shared with a team you belong to. A workspace is a group of agents behind one
@@ -197,8 +223,10 @@ The workspace opens with one agent already in it, called `orchestrator`.
 
 ### Give it a colour
 
-The stripe down the left edge of a card is the colour, and it is also the
-picker: click it, choose one of ten hues, or **clear**.
+The stripe down the left edge of a card is the colour. The **dot beside the
+name** is the picker — press it and choose one of ten hues, or **clear**. They
+used to be the same thing, which made the control four pixels wide: a target
+nobody hits, so the picker was there all along and read as missing.
 
 ```bash
 curl -X PATCH http://127.0.0.1:8688/api/v1/workspaces/1 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"hue": 210}'
@@ -612,11 +640,13 @@ Nothing is silently substituted. The timing gear is not in the file: gears
 travel only when you ask for them, and this arrangement is more useful with one
 you wrote for your own language and your own definition of fast.
 
-#### Dropping a gear or an instruction on an agent
+#### Dropping a gear, an instruction or a plan on an agent
 
-Open the **Gears** or **Instructions** drawer, pick up a card and drop it on the
-canvas. **Where it lands is the sentence.** On an agent: that agent gets it. On
-empty canvas: every agent in this workspace does — a real target rather than the
+Open the **Gears**, **Instructions** or **Planboards** drawer, pick up a card and
+drop it on the canvas. **Where it lands is the sentence.** On an agent: that
+agent gets it — a plan attaches at step one. On empty canvas: every agent in this
+workspace does, and a plan becomes the workspace's, with one position everybody
+shares — a real target rather than the
 absence of one, and the same thing the `+ gear` control does, which is still
 there because a drag is not reachable from a keyboard.
 
@@ -671,28 +701,40 @@ server with the reason in place of the file, and that limit is not
 configurable. There
 is no upload, no download, no rename and no delete.
 
-**The shell.** It is behind a button, and the button explains itself:
-
-> A shell is not reconnected automatically. Opening this again brings the panel
-> back, not the session — the previous one is gone, along with its scrollback
-> and working directory.
-
-That is not caution. A shell that mounted itself on load would spawn a container
-on every page load and then lie about it, showing a panel with none of the
-scrollback, working directory or running process of the one before. Four
-reloads, four containers — measured, not theorised.
+**The shell.** It starts when you open it — there was a button, and the button
+existed to warn that the session would not come back. It does now: the session
+lives on the server, outlives the socket, and reopening the panel returns to the
+same shell with the same directory and its scrollback replayed. One session per
+person per workspace, ended by `exit` or by an hour with nobody attached.
 
 This shell is **open to anyone who can reach the workspace**, and it is not the
-server-wide [Terminal](#terminal) drawer. It runs in the same
-sandbox gears run in: no network, nothing of the server's mounted, and **a copy
-of this workspace's files that is not carried back**. A file written here is
-gone when the session ends.
+server-wide [Terminal](#terminal). Where it runs depends on who else can reach
+this install:
+
+- **On a shared install** it runs in the sandbox gears run in: no network,
+  nothing of the server's mounted, and **a copy of this workspace's files that
+  is not carried back**. A file written there is gone when the session ends. A
+  workspace member is not the operator, which is the whole reason.
+- **On a loopback install** — one person, their own machine — it is that
+  machine, opened in this workspace's real directory, and what you write stays.
+
+The status line above it says which, every time, rather than leaving you to find
+out by writing a file.
 
 ### The Agents drawer
 
 Every agent in the workspace as a card: a state dot, its running spend, its
 model, and a bar showing its share of what this workspace has spent in total. A
 share tells you where the money went; a number nobody can act on is decoration.
+
+**add an agent** at the top of the panel takes a name, a model and a role — the
+same three things `+ agent` on the blueprint takes, offered where you are when
+you notice nobody does the job. It arrives unwired: nothing may delegate to it
+and it may delegate to nothing until you draw an edge.
+
+Every panel that lists a thing has a control like it now. The drawers used to
+list what exists and offer no way to add to it — two of them saying "write one
+above" with nothing above.
 
 Clicking a card opens the inspector — the drawer retitles itself with the
 agent's name, because opening the inspector *is* selecting an agent.
@@ -701,10 +743,12 @@ agent's name, because opening the inspector *is* selecting an agent.
 is assembled, and each part can be changed or dropped:
 
 1. its **role** — the system prompt it always carries
-2. its **prohibitions** — see below
-3. its **memory**: its own Contextverse branch, documents bound to the workspace
+2. its **memory**: its own Contextverse branch, documents bound to the workspace
    or to it alone, and instructions from the library
-4. the **conversation**, replayed in full
+3. **the step in front of it**, when a [planboard](#planboards) is attached —
+   one step and the count, never the whole plan
+4. its **prohibitions** — last on purpose; see below
+5. the **conversation**, replayed in full
 
 Click **show what this agent sees** for the exact assembled prompt, character
 count and all. Under **Memory**, every piece is shown with its source, an
@@ -1563,7 +1607,8 @@ which agent saved it and in which workspace.
 ![The model catalog: providers with their keys unstated, and every model those
 providers have been asked for.](assets/12-models.png)
 
-Two sections: the providers, and the models drawn from them. Nothing else in the
+Three sections: the providers, the models drawn from them, and **the
+orchestrator** — the one agent this product makes by itself. Nothing else in the
 product can create a workspace or an agent until there is at least one model
 here.
 
@@ -1583,9 +1628,14 @@ JSON encoder cannot see it.
 
 Two provider types exist: `anthropic` and `openai-compatible`. Anthropic has a
 default address; an openai-compatible provider does not, and leaving it empty is
-refused with *"base_url is required for openai-compatible providers"*. There is
-no environment variable and no config file key for a provider key — this catalog
-is the only place keys live.
+refused with *"base_url is required for openai-compatible providers"*.
+
+**This catalog is where keys live.** A key can be *seeded* on first start —
+`providers:` in `config.yaml`, with `key_env` naming the environment variable
+holding it, which is how a deployment comes up ready — but it is stored here
+like any other, and there is no key written in a config file anywhere. See
+[The orchestrator](#the-orchestrator) below and
+[Configuration](/cogitorium/configuration/).
 
 **test / list models** on a provider card asks it what it has and offers each
 one as a button; the ones already in the catalog are ticked and disabled. For a
@@ -1601,6 +1651,136 @@ curl -X POST http://127.0.0.1:8688/api/v1/models -H "Authorization: Bearer $TOKE
 
 Deleting a provider takes its catalog models with it, and the confirmation says
 so.
+
+### The orchestrator
+
+Every workspace is created with one, and until this section existed the only
+place it was visible was a picker on the new-workspace form. So it is here, as
+what it is: a role this product already wrote, with one blank in it.
+
+Open **What it is told** to read the role in full — an orchestrator is not a
+mystery box, and the fastest way to learn what one is is to read what it is
+told. The blank is the model. Choose one, press **Use it**, and every workspace
+made afterwards starts with it; the new-workspace picker opens on it instead of
+asking, and a workspace created through the API with no `orchestrator_model_id`
+falls back to it too.
+
+Choose **— ask me each time —** to put the question back.
+
+Each workspace edits its own copy of the role afterwards, in the Agents drawer,
+without touching this one.
+
+The same two things can be written in `config.yaml`, which is how the
+[starter](https://github.com/orkcom-tech/cogitorium/blob/main/docker-compose.starter.yml)
+comes up ready:
+
+```yaml
+providers:
+  - name: local
+    kind: openai-compatible
+    base_url: http://ollama:11434/v1
+    models:
+      - name: qwen2.5:7b
+        label: local
+orchestrator_model: local/qwen2.5:7b
+```
+
+Both are **seeds**. A provider is created only when no provider by that name
+exists, the orchestrator's model is set only when nobody has chosen one, and
+nothing is ever updated or removed afterwards — so an address you change on this
+screen stays changed across restarts. Every key is in
+[Configuration](/cogitorium/configuration/).
+
+---
+
+## Planboards
+
+**The order of work, written down before the work starts.**
+
+An instruction says how an agent should behave. A gear says what it may call.
+Neither says what comes first — and in a conversation that is fine, because you
+are there to correct the order. On a clock at three in the morning it is not: a
+run that chose a different order than last night is a run nobody can compare to
+last night's.
+
+So a planboard is a sequence, and **the engine walks it**. The agent is handed
+one step and asked to do that step. It cannot skip to step five, because step
+five is not in front of it.
+
+### Writing one
+
+The screen is a name and the steps, one per line:
+
+```
+research-then-write
+  1. read the tickets closed since the last release
+  2. draft the notes
+  3. check every claim against the diff
+  4. hand them to the reviewer
+```
+
+A step may carry a body as well as a title, which is where the detail goes —
+the title is what the agent sees first, and the body is what it needs to do it.
+
+Two modes, and the difference matters more than it looks:
+
+| Mode | What happens at the start of a run |
+|---|---|
+| **Resume** | It carries on from where the last run stopped. A nightly job works through a backlog. |
+| **Restart** | It begins at step one every time. The plan is a procedure to be walked from the top. |
+
+### Attaching one
+
+A planboard is attached either **to one agent** or **to the whole workspace**.
+The difference is whose position it is: an agent's plan is that agent's running
+order, and a workspace's plan is the workflow's, whoever runs next.
+
+Drag one onto an agent on the [Blueprint](#blueprint) and it attaches at step
+one; drop it on empty canvas and it belongs to the workspace.
+
+### What the agent actually sees
+
+One step, and the count:
+
+```
+## The step in front of you
+Work written down in advance, in order. Do the step below and nothing
+past it — the steps after this one are not yours to start yet, and you
+are not shown them.
+
+### research-then-write — step 3 of 4
+check every claim against the diff
+```
+
+The other steps' titles are **not** in the prompt. A model shown seven steps
+reasons about seven steps: it works ahead, reports two of them done at once, and
+the order stops being a fact about the workflow and becomes a suggestion the
+model weighed. The count is given, because a worker that cannot tell whether it
+is near the end writes as if every step were the last.
+
+Two tools move it, and only these two:
+
+- `plan_step_done` — the step is finished. The position advances; at the end it
+  wraps and the pass count goes up, which is what "step 2 of 4 (pass 3)" means.
+- `plan_step_blocked` — it cannot be. The position **stays**, and the note is
+  put in front of the next run so it does not walk into the same wall unaware.
+
+Until one of them is called, it is still the same step. That is the whole
+mechanism.
+
+The orchestrator has six more — `planboard_list`, `planboard_create`,
+`planboard_attach`, `planboard_detach`, `planboard_move` and `planboard_delete`
+— so a plan can be written by asking for it, like everything else here. A worker
+never gets those: an agent that could rewrite its own plan would be an agent
+with no plan.
+
+### What this screen will not do
+
+It will not let you save a plan with no steps in it — a position that can never
+be satisfied is an agent waiting forever for a step that is not there. It will
+not seek to a step that does not exist. And it does not run anything itself:
+a planboard is the order, and something else — a message, a clock, a receiver —
+is what starts the run.
 
 ---
 
@@ -1700,9 +1880,6 @@ workspace with a team, and the internet gate.
 
 ## Variables & secrets
 
-![The rail's More menu: the install-wide pages, the documentation, and the way
-out.](assets/13-rail-menu.png)
-
 A drawer on the rail, and administrators only. The install-wide half of
 the mechanism a gear's credentials come from — the per-workspace half is the
 Variables drawer inside a workspace.
@@ -1736,27 +1913,58 @@ until something else supplies it."*
 
 ## Terminal
 
-The last drawer on the rail, and administrators only. A shell over HTTP, on the
-server rather than in a workspace.
+A shell, on the machine this server runs on. Administrators only, and not tied
+to a workspace.
 
-![The Terminal screen, with the shell not yet started.](assets/19-terminal.png)
+**It is on, and it starts when you open it.** There is no button. It used to be
+off, and to need a sandbox, and to be a thing you started — which was the right
+default for a server somebody else operates and the wrong one for the ordinary
+case, which is a person running this on their own machine and wanting the
+terminal their editor would have given them.
 
-It is off by default: it is interactive code execution reachable over a network.
-Turning it on takes `terminal: true`, and it **also** requires a sandbox —
-without one the request is refused rather than served with the server's own file
-access, which is exactly the hole that made sandboxing necessary in the first
-place. When it is unavailable the page says which of the two is missing and
-names the gear execution backend it would have used.
+### Which machine you are on
 
-In Kubernetes the chart refuses to enable it at all, because there is no Docker
-inside a pod: a terminal is an interactive attachment and a gear Job is
-run-to-completion.
+The server's own, as the account it runs as. That is the same reach you already
+have by sitting at that machine, and it is what makes the terminal useful: your
+prompt, your `PATH`, your files.
 
-This is **not** the shell inside a workspace's [Editor](#editor) view. That one
-is open to anyone who can reach the workspace and starts in a copy of the
-workspace's files; this one is the administrator's and is not tied to a
-workspace at all. Both run in the sandbox, with no network and nothing of the
-server's mounted, and neither survives being closed.
+There is one exception, and it is the one that matters. A **workspace** terminal
+on an install other people can reach runs in the sandbox instead, because a
+workspace is open to its members and a member is not the operator — handing them
+the server's own shell would hand them its database and the provider keys in it.
+On a one-person install that distinction is between somebody and themselves, so
+there the workspace terminal is the machine too, opened in that workspace's own
+directory.
+
+The status line says which, every time: `connected · this machine, as this
+server's user`, or `connected · sandboxed, no network, nothing of the server's
+mounted`. A sandboxed workspace terminal gets a **copy** of the workspace's
+files and nothing is carried back out, so a file written there is gone when the
+session ends. On the machine it is the real directory, and what you write stays.
+
+### It stays where you left it
+
+Walk to another screen and come back and it is the same shell: the same working
+directory, the same history, and the output it printed while you were away
+replayed into it. The session lives on the server and outlives the socket, which
+is what a terminal is — a place you leave and come back to.
+
+One session per person per place. It ends when the shell does — type `exit` —
+or after an hour with nobody attached.
+
+### Switching it off
+
+`terminal: false` refuses it outright, and on an install other people can reach
+it should. The setting distinguishes *written false* from *not written*, so
+writing it once holds across restarts and across changes to the default. The
+Helm chart writes `false` for exactly this reason.
+
+`COGITORIUM_TERMINAL` is a strict parse like every other boolean here: only `1`
+and `true` count as on, so `COGITORIUM_TERMINAL=yes` switches it **off**.
+
+The **server-wide** terminal — this screen — is an administrator's and belongs
+to no workspace. The one in a workspace is open to whoever may use that
+workspace. That has not changed.
 
 ---
 
@@ -1770,19 +1978,27 @@ The swatch near the bottom of the rail opens two choices and nothing else.
 **A mode** — system, light or dark. `system` follows the operating system and
 changes with it.
 
-**A colour** — eight offered, or any hex you type. It is not just the accent:
-**every neutral in the palette is mixed towards it**, so the ground, the
-surfaces, the borders and the hover washes all carry a little of it. That is
-what stops a chosen colour looking pasted onto somebody else's design.
+**A colour** — eight offered, or any hex you type; **turquoise** unless you say
+otherwise. It is not just the accent: **every neutral in the palette is mixed
+towards it**, so the ground, the surfaces, the borders and the hover washes all
+carry a little of it. That is what stops a chosen colour looking pasted onto
+somebody else's design, and it is why the default decides whether a fresh
+install reads warm or cool.
 
 The eight are not arbitrary. Each has to survive two constraints at once: dark
 enough to carry white text as a filled button on the light ground, and light
-enough to read as text on the dark one. Type your own and that is your risk and
-your business.
+enough to read as text on the dark one. Turquoise `#00807a` is as saturated as
+that rule allows — it carries white text at 4.81:1, and the next step brighter
+drops to 4.18 and fails. Type your own and that is your risk and your business.
 
-The choice is stored on the device, in `localStorage` under
-`cogitorium.theme`, and nothing about it is fetched or sent anywhere. If the
-browser refuses to store it the dialog says so rather than losing it quietly.
+The choice is stored on the device, in `localStorage` under `cogitorium.theme`,
+and nothing about it is fetched or sent anywhere. It is also written to a
+`cogitorium_look` cookie, because half the screens here are rendered by the
+server and it has to paint them the same — without it, choosing light left the
+application light and every server-rendered screen dark. Read defensively: a
+mode that is not light or dark is no choice at all, and a colour reaches a style
+attribute only as six hex digits. If the browser refuses to store either, the
+dialog says so rather than losing it quietly.
 
 Changing either one repaints everything that draws itself rather than being
 styled: an open shell re-reads its colours, and so does the map, so neither is
@@ -2007,9 +2223,12 @@ are separate on purpose.
 
 1. **Installed** — the files are on the machine. Nothing has run.
 2. **Approved** — somebody read it and said yes. Still nothing has run.
-3. **Enabled** — it is in the stack. It runs after the next restart.
+3. **Enabled** — it is in the stack, and it is rendering on the next page. The
+   template stack is rebuilt from what is on disk after every change.
 
-The screen will offer to restart when a change is waiting.
+The screen offers to restart only when a change is waiting that a rebuild cannot
+reach — which is a plugin with a **backend** of its own, because its HTTP routes
+were attached at boot and there is no way to take a route back.
 
 **Approval is bound to the bytes, not the name.** The digest is taken from what
 is on disk, so what you approved is what you could have read. Rebuild the plugin
@@ -2072,13 +2291,37 @@ below it is drawing the same thing.
 cogitorium plugins order first second third
 ```
 
-### Turning one off
+### Turning one off, and taking several off at once
 
 - **Disable** takes it out of the stack and leaves the approval standing. Use
   this to find out whether a plugin is what broke something.
 - **Withdraw approval** switches it off *and* forgets that anybody said yes. It
   has to be read and approved again.
-- **Remove** deletes it.
+- **Remove** deletes its files. Anything it wrote — rows in the database, files
+  in a workspace — stays, because that was never its to take back.
+
+**It takes effect now.** The interface is rebuilt from what is on disk after
+every one of these, so the entry a plugin added to the rail is gone from the
+next page. It used to wait for a restart, which meant removing a plugin and
+reloading showed it still sitting there — indistinguishable from a removal that
+had failed.
+
+The one thing a rebuild cannot reach is a **backend**: a plugin that declares
+`needs:` has HTTP routes attached at boot, and there is no way to take a route
+back. Those still owe a restart, and they are the only ones that say so.
+
+**Tick as many as you like.** Each card has a checkbox, and a bar appears under
+the list with **Switch off**, **Update** and **Remove**. It leads to the same
+screen a card's own Disable or Remove leads to — one plugin or twenty, the same
+question:
+
+- what is about to happen, and to which plugins, by name and version;
+- which of them run code of their own, marked;
+- and one decision: **restart Cogitorium afterwards**.
+
+That box is ticked for you only when something in the selection actually needs
+it. Otherwise it is not, and the screen says why you would not want it: a
+restart drops every open connection, including any terminal you have running.
 
 If a plugin cannot load — its templates do not compile, it names something that
 is not there — it is **dropped and the rest are composed without it**, and the
@@ -2613,6 +2856,9 @@ So that you do not go looking:
 - No browser an agent drives directly: a gear given the browser environment
   drives one, and the agent calls the gear. There is no live page an agent
   clicks around in, and no session that survives a run.
-- No terminal in-cluster, and no shell session that survives being closed.
+- No shell session that survives the SERVER restarting: a session lives in one
+  process, so a restart ends it. Closing the panel does not — that changed, and
+  so did "no terminal in-cluster": the chart can offer one now, and it is a
+  shell in the Cogitorium pod.
 - No private thread inside a shared workspace: two people in one workspace share its
   conversation. Separate workspaces are how two people stay out of each other's way.

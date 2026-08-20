@@ -48,12 +48,21 @@ are refusals the server itself also makes; failing here means failing before
 anything is applied.
 */}}
 {{- define "cogitorium.validate" -}}
-{{- if and .Values.config.terminal (eq .Values.config.sandbox "subprocess") -}}
-{{- fail "config.terminal needs a sandbox: the shell is interactive code execution, and on sandbox: subprocess there is nothing containing it. The server refuses it too — this is the earlier of the two refusals. Use sandbox: kubernetes." -}}
-{{- end -}}
-{{- if and .Values.config.terminal (eq .Values.config.sandbox "kubernetes") -}}
-{{- fail "config.terminal is not available on sandbox: kubernetes. A terminal is an interactive attachment and a gear Job is run-to-completion; the Kubernetes backend implements running a gear, not attaching to one. The server refuses it too." -}}
-{{- end -}}
+{{/*
+  The terminal is NOT validated here any more, and that is a decision rather
+  than an omission.
+
+  It used to fail the render on either sandbox: the shell needed a sandbox to
+  contain it, and the Kubernetes backend runs a gear Job to completion rather
+  than attaching to one. Neither is the shape of it now — the terminal opens a
+  shell on the machine the server runs on, which in a cluster is this pod, as
+  the account this container runs as. That works here, and refusing it would be
+  this chart deciding something the operator is entitled to decide.
+
+  What it means is said in values.yaml beside the setting, and the default is
+  still false, because on a cluster the person who opens the interface is not
+  necessarily the person who applied this chart.
+*/}}
 {{- if and .Values.config.egress (eq .Values.config.sandbox "subprocess") -}}
 {{- fail "config.egress needs a sandbox. An unsandboxed gear runs with the server's file access and can rewrite the configuration and the grants table, so the gate would be decorative. Use sandbox: kubernetes." -}}
 {{- end -}}

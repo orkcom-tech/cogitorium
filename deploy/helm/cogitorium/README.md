@@ -49,14 +49,21 @@ Two properties this chart cannot deliver on its own, stated rather than assumed:
 
 `sandbox: subprocess` is still available for a cluster whose policy forbids the
 Role above, and on it a gear runs as a child of the server with the server's own
-file access — approving one grants it everything the server has, and the
-terminal and the outward gate stay refused. Note also that this image carries no
+file access — approving one grants it everything the server has, and the outward
+gate stays refused. Note also that this image carries no
 `python3`, `node` or `bash`: on that setting only a `binary` gear can run at all.
 
-**The terminal is not available in-cluster on either setting.** A terminal is an
-interactive attachment and a gear Job is run-to-completion; the Kubernetes
-backend implements running a gear, not attaching to one. The chart refuses it at
-template time and the server refuses it at startup.
+**The terminal is available in-cluster, and it is a shell in this pod.** It used
+to be refused on both settings — a terminal was an interactive attachment and a
+gear Job is run-to-completion. That is no longer its shape: the terminal opens a
+shell on the machine the server runs on, which here is this container, as the
+account it runs as. So `config.terminal: true` works, and what it gives whoever
+can open the interface is this pod's filesystem, including the database and the
+provider keys in it. The default is `false` and this chart no longer refuses the
+other value — that is your decision, not the chart's.
+
+A *workspace* terminal on this install stays sandboxed, because a workspace
+member is not the operator.
 
 ## Credentials
 
@@ -139,8 +146,6 @@ so `HOME` is set there rather than into the image.
 A chart that renders something broken and lets the cluster discover it turns a
 five-second failure into a debugging session. These fail at template time:
 
-- `config.terminal: true` — on `subprocess` there is no sandbox containing it;
-  on `kubernetes` there is no interactive attachment to give.
 - `config.egress: true` on `sandbox: subprocess` — an unsandboxed gear can
   rewrite the configuration and the grants table, so the gate would be
   decorative.
@@ -151,7 +156,9 @@ five-second failure into a debugging session. These fail at template time:
 - `persistence.enabled: false` with no `existingClaim` — the database would live
   in the pod and be destroyed on every restart.
 - An `auth.adminToken` shorter than 24 characters.
-- An `auth.adminPassword` shorter than 8 characters.
+- An `auth.adminPassword` shorter than 8 characters, or longer than 72 bytes.
+  Seventy-two is bcrypt's ceiling rather than a policy — it refuses rather than
+  truncates, so a longer one would fail at every start instead of once.
 
 ## Values
 

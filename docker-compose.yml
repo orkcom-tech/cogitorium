@@ -1,5 +1,11 @@
 # Cogitorium, with Contextverse inside the same image.
 #
+# This one brings up the product and nothing else — you add a provider on the
+# Models screen. If you have no provider yet, docker-compose.starter.yml brings
+# up a model container beside it and comes up ready; it is a separate project
+# (`name: cogitorium-starter`) with volumes of its own, so running both gives
+# you two installs rather than one confused one.
+#
 # Requirement 15 is that this installs together with Contextverse. On this
 # channel that means the image carries contextd and initialises its space on
 # first start: there is no published contextd container to pull, and a compose

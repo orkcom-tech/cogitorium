@@ -82,7 +82,7 @@ workflow, so you can get back to it after an afternoon of changing your mind.
   workspace is how a metrics database runs out of memory.
   [→](https://orkcom-tech.github.io/cogitorium/#metrics--what-an-operator-can-alert-on)
 - 📐 **A described API** — `docs/openapi.yaml` is generated from the server's own
-  route table by a test that fails when the two disagree — **113 paths, 150
+  route table by a test that fails when the two disagree — **116 paths, 154
   operations** — so a route cannot exist without appearing in it.
   [→](https://orkcom-tech.github.io/cogitorium/#the-api-description)
 - 🔌 **Speaks MCP** — `cogitorium mcp` serves your approved gears and receiver
@@ -109,6 +109,14 @@ workflow, so you can get back to it after an afternoon of changing your mind.
   else on the volume. No token in the gear's pod, every capability dropped, the
   timeout enforced by the cluster as well as by the server.
   [→](https://orkcom-tech.github.io/cogitorium/#install)
+- 🖥 **A terminal that behaves like one** — on by default, opens when you open
+  it, and it is a shell on the machine this server runs on, as the account it
+  runs as. Leave the screen and come back and it is the same shell: same
+  directory, same history, and what it printed while you were away replayed into
+  it. On an install other people can reach, a *workspace* terminal is sandboxed
+  instead — a member is not the operator — and `terminal: false` refuses it
+  outright.
+  [→](https://orkcom-tech.github.io/cogitorium/guide/#terminal)
 - ⌨️ **A command line over the same API** — `cogitorium gears run`,
   `receivers deliver`, `queue cancel`, `workspaces export | import`. It exits
   with the gear's own code, so a shell script branches on what the gear said.
@@ -122,6 +130,14 @@ workflow, so you can get back to it after an afternoon of changing your mind.
   actually ran: which tools, which files appeared, what it cost. A task states
   its own success conditions and they are checked against that record, so a
   confident answer over an empty record fails.
+- 📋 **Planboards: the order of work, written down before it starts** — an
+  instruction says how an agent behaves and a gear says what it may call;
+  neither says what comes first. A planboard is a sequence and **the engine
+  walks it**: the agent is handed one step and cannot skip to step five, because
+  step five is not in front of it. What the model decides is *how*, which is the
+  part worth a model. Resume carries the position between runs; restart begins
+  at the top every time. Attach one to an agent or to the whole workspace.
+  [→](https://orkcom-tech.github.io/cogitorium/guide/#planboards)
 - ⏱ **It can be left alone** — work queues instead of being dropped, starts on a
   cron line or an interval, can be handed off with `Prefer: respond-async` and
   called back when it finishes, and can be stopped mid-run — the work, not just
@@ -133,13 +149,16 @@ workflow, so you can get back to it after an afternoon of changing your mind.
   exact query.
   [→](https://orkcom-tech.github.io/cogitorium/#letting-agents-reach-the-web)
 - 🧩 **Plugins: change the platform, not just what runs on it** — a plugin adds a
-  screen, hangs a panel inside every workspace, **takes over a screen that
-  shipped**, and runs code of its own. Every product screen is a template
-  addressable by name, so overriding one is a file rather than a fork. Five
-  tiers — templates, WebAssembly, a fetched interpreter, a container, a native
+  screen, hangs a panel or a **whole view** inside every workspace, **takes over
+  a screen that shipped**, and runs code of its own. Every screen the server
+  renders is a template addressable by name, so overriding one is a file rather
+  than a fork; the four that are drawn rather than rendered — the blueprint, the
+  map, the editor, the terminal — get a strip above them instead of a pretence.
+  Installing, enabling or removing one **takes effect on the next page**: only a
+  plugin with a backend of its own asks for a restart. Five tiers — templates, WebAssembly, a fetched interpreter, a container, a native
   binary — and the author declares a technology while the host picks the lane.
-  Nine host calls, identical on every tier. SDKs for Python, Go, TinyGo and
-  Rust; `needs: js` needs no SDK at all. It arrives switched off, and approval
+  Nine host calls, identical on every tier. SDKs for Python, Go and Rust — and
+  the Go one takes TinyGo unchanged; `needs: js` needs no SDK at all. It arrives switched off, and approval
   is bound to the sha256 of the bytes on disk — rebuild it and it drops back to
   pending by itself.
   [→](https://orkcom-tech.github.io/cogitorium/plugins/)
@@ -150,7 +169,9 @@ workflow, so you can get back to it after an afternoon of changing your mind.
 - 🕰 **Versions of a workflow** — save what a workflow is, with a message, and
   get back to it. A version is the whole of it: the agents, the wires, the gears
   they may call **pinned to the version they were pinned to**, what each reads,
-  and the clocks that start them. Rolling back keeps what it replaces — the
+  the clocks that start them, and the plans they are working through — **with the
+  step each had reached**, because returning the map and leaving the wrong pin in
+  it is not a rollback. Rolling back keeps what it replaces — the
   current state is saved first and the rollback is recorded as its own version,
   because a history that can be rewritten cannot be produced in an argument
   about what ran.
@@ -173,13 +194,13 @@ people already run. Each row is a structural difference, not a feature tick.
 |---|---|---|---|---|
 | **What you install** | one Go binary with the interface inside it | a pnpm workspace of Workers | an npm package, Node 22+ | containers, with Postgres and Redis beside them |
 | **Where it actually runs** | your laptop, your Docker, your cluster | Cloudflare Workers and Durable Objects; `workerd` locally | one Node process on your machine | your host, plus its datastores |
-| **Who may change the interface** | anyone — a plugin installs into a running server, and every product screen is a template it can take over by name | whoever owns the deployment repository | anyone — the UI is itself a swappable plugin row | node and component authors, through a review you do not control |
+| **Who may change the interface** | anyone — a plugin installs into a running server and is rendering on the next page, no restart, and every screen the server renders is a template it can take over by name | whoever owns the deployment repository | anyone — the UI is itself a swappable plugin row | node and component authors, through a review you do not control |
 | **What isolates a third party's code** | tiered and running: WebAssembly, a fetched interpreter, a container, or native with no isolation and said so in red | Workers isolates; agent frames with outbound networking off | nothing — plugins mount in-process with full host rights | nothing to partial, depending on product and mode |
 | **Before an extension runs** | approval bound to the sha256 of the bytes on disk; a new build drops back to pending | review of the deployment repository | no manifest, no prompt, no signature | install and it runs |
 | **Code an agent wrote for itself** | will not execute until a person approves that exact version | gadgets run in sandboxed frames | registered by a plugin, runs unsandboxed | executes when saved |
 | **Outbound: an allowlist *and* a record** | per-host at approval, and a row per connection — allowed and refused alike | Gatekeepers mediate per resource and operation, and every resource an agent observes is recorded | neither; the docs put network "outside this vocabulary" | Dify: Squid ACL with a log. n8n: off unless switched on. Flowise: a denylist, empty, no log |
 | **Governance without paying** | accounts, teams, workspace sharing and per-host records, Apache-2.0, no licence key | Apache-2.0 | MIT | SSO, roles and audit behind a paid licence in five of six |
-| **Maturity** | v3.0.0; the plugin system ships, with four SDKs and a catalog | 8.6k stars, run daily inside Cloudflare | developer preview at `rc.7`, warning of breaking changes | years in production |
+| **Maturity** | v3.2.0; plugins, planboards and a catalog, with SDKs for three languages | 8.6k stars, run daily inside Cloudflare | developer preview at `rc.7`, warning of breaking changes | years in production |
 
 ### Where it loses
 

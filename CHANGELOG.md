@@ -1,5 +1,281 @@
 # Changelog
 
+## v3.2.0
+
+**The release where the product was used rather than read.** Every screen was
+opened, every button pressed, and what did not work was written down and fixed —
+three audits, fourteen faults, and a class of fault behind most of them: screens
+converted from the application to server-rendered templates had arrived with
+only their read half. The two features that carry the release are **planboards**
+and a **terminal that behaves like one**, and the rest is the product agreeing
+with itself.
+
+### Planboards — the order of work, written down before it starts
+
+An instruction says how an agent should behave. A gear says what it may call.
+**Neither says what comes first**, and in a conversation that is fine because
+you are there to correct the order. On a clock at three in the morning it is
+not: a run that chose a different order than last night is a run nobody can
+compare to last night's.
+
+So a planboard is a sequence, and **the engine walks it**. The agent is handed
+one step and asked to do that step; it cannot skip to step five because step
+five is not in front of it. It closes a step with `plan_step_done` or says why
+it cannot with `plan_step_blocked`, and until it calls one of those, the step
+does not move. What the model decides is *how*, which is the part worth a model.
+
+The whole plan is deliberately **not** in the prompt. A model shown seven steps
+reasons about seven steps: it works ahead, it reports two of them done at once,
+and the order stops being a fact about the workflow and becomes a suggestion the
+model weighed. It is given the count — "step 3 of 7" — because a worker that
+cannot tell whether it is near the end writes as if every step were the last.
+
+Two modes, because both are ordinary. **Resume** carries the position between
+runs, so tonight continues last night. **Restart** begins at step one every run,
+for a procedure rather than a journey. Attached to one agent it is that agent's
+running order; attached to a workspace, every agent shares one position and
+whoever runs next picks up the step the last one left.
+
+The orchestrator can write, attach, move and delete them, like everything else
+in a workflow. A worker cannot: it follows a plan, it does not rewrite one. And
+a saved version carries the **position** as well as the steps — restoring the
+steps while leaving the marker where the run that went wrong pushed it would be
+a rollback that returns the map and keeps the wrong pin on it.
+
+### A terminal that behaves like a terminal
+
+Three things, which are one thing.
+
+**It is on.** It was off, and it required a sandbox — the right default for a
+server somebody else operates, and the wrong one for the ordinary case, which is
+a person running this on their own machine and wanting the terminal their editor
+would have given them. `terminal: false` still refuses it outright, and the
+setting distinguishes *written false* from *not written*, so a shared install
+writes it once and it holds.
+
+**It is this machine.** A terminal that quietly landed in a container because
+Docker happened to be installed is a terminal whose `ls` shows somebody else's
+filesystem. It is a shell on the machine this server runs on, as the account it
+runs as — the same reach the operator already has by sitting at it, said out
+loud in the log at every start. One exception, and it is the one that matters: a
+**workspace** terminal on an install other people can reach runs in the sandbox
+instead, because a workspace is open to its members and a member is not the
+operator.
+
+**It stays where you left it.** Every connection used to start a fresh shell and
+kill it on disconnect, so walking to another screen and coming back lost the
+directory you were in and everything you had run. The session outlives the
+socket now, keeps 256 KB of scrollback and replays it on reattach. One reader on
+the pty, one session per person per place, and an hour with nobody attached ends
+it.
+
+And there is no start button — opening the panel is starting the shell. The
+button existed to warn that the session would not come back, which was
+describing a limitation rather than a design.
+
+### One rail, on every screen
+
+The rail was written twice — a template for the screens the server renders, a
+React component for the ones the application draws — and the two differed in a
+dozen small ways. Every one of them reached somebody as the same question: *why
+is this screen not like that one.* A logo on one half. Destinations on the
+other. Different feet. A plugin's entry drawn twice where the halves overlapped.
+
+**One renderer.** A server-rendered page carries the application's module, which
+finds no application root and mounts exactly one thing: the rail, over the one
+the template drew. Nothing else of the application runs there. **One list**, too
+— `GET /api/v1/rail`, plugins included. The template still draws a rail into the
+document, which is what somebody sees before the module runs, what a plugin
+overriding `cog.shell.rail` changes, and what a browser with no JavaScript
+keeps.
+
+**A destination belongs in one place per screen.** Outside a workspace the
+destinations are the rail, so the menu drops them; inside one the rail belongs to
+that workspace's stages and drawers, so the menu is where the destinations are
+and is the way back out. Feeding both from the same list had listed the whole
+install twice on one screen.
+
+### The half of every drawer that makes something
+
+Receivers, MCP and the queue drew their controls, submitted them, and had
+nothing on the other end: *add a receiver*, *rotate the key*, *delete*, *add a
+server*, *probe*, *approve*, *add a schedule* and the on/off switch every one of
+them answered `404 page not found`. The read side worked, which is why they
+looked finished.
+
+Then the drawers that had no create control at all — agents, context,
+planboards, instructions, two of them saying "write one above" with nothing
+above. Every panel that lists a thing has one now: a labelled column behind a
+button that looks like a button, shared with the page it also lives on so the
+two cannot drift.
+
+Two forms could not have worked even with a route. The receiver form posted to a
+bare `/receivers`, naming no workspace, and a receiver belongs to one. The
+schedule form asked for a name, a time and a timezone — not what the clock
+starts, nor what to say when it fires — so it could only ever have built a timer
+going off in an empty room.
+
+### Plugins take effect when you press the button
+
+The interface was composed once, at boot, so removing a plugin left everything
+it contributed on screen until somebody restarted — the entry it added to the
+menu was still there after a reload, which is indistinguishable from a removal
+that failed. It is **recomposed in place** now, on every install, enable,
+disable, reorder, revoke and remove. The only thing a rebuild cannot reach is a
+backend, whose routes were attached at boot, and those are now the only ones
+that ask for a restart.
+
+**One question before anything destructive, for one plugin or twenty.** Tick as
+many as you like and a bar appears under the list; it leads to the same screen a
+card's own Disable or Remove leads to. What is about to happen, to which
+plugins, which of them run code of their own — and one decision, *restart
+afterwards*, ticked for you only when something in the selection actually needs
+it, with what a restart costs said plainly: it drops every open connection,
+including any terminal you have running.
+
+**And a way into the four screens that are not templates.** The blueprint and
+the map are drawn canvases, the editor is live text, the terminal is a socket —
+a template renders a thing that exists at a moment, and these exist in motion.
+So a plugin gets a second mount point, `workspace.stage`: a view on the
+workspace's own track, beside chat, the blueprint and the editor. And
+`cog.slot.stagehead`, a strip above whichever of the four is on screen, told
+which screen is asking and which workspace it belongs to. Empty unless somebody
+overrides it.
+
+### The two halves of the product agreed about how they look
+
+Choose light in the application and every screen the server rendered stayed
+dark. The choice lived in `localStorage`, which the server cannot see, so half
+the product painted from it and half never heard about it — with nothing on
+screen to explain the difference. It is written to a cookie as well now, read
+defensively: a mode that is not light or dark is no choice, and an accent
+reaches a style attribute only as six hex digits.
+
+- **Every input and textarea in the product was transparent.** The tokens gave a
+  field its own surface and the base control rule, loaded after them, set
+  `background: transparent` over the top. On a card the hairline was just enough
+  to see; on a panel the boxes disappeared and a form read as a column of labels
+  with gaps.
+- **Ordinary buttons had a 5% wash and a transparent border**, so *delete*,
+  *save* and *back to chat* read as words with a smudge behind them.
+- **A screen taller than the cavity was cut off** — People lost four hundred
+  pixels of its user list with no scrollbar and nothing to say it was there. The
+  rule was written for the tag the templates use, so every screen the
+  application draws was missed.
+- **The scrollbar sat two hundred pixels short of the edge**, floating in the
+  middle of the page.
+- **Rows in every panel are spaced.** Cards were touching, so a list read as one
+  block with lines through it.
+- **The default accent is turquoise** — `#00807a`, fully saturated at hue 177.
+  What was there was described as "the most turquoise of the eight" and was not:
+  at 77% saturation it reads as dark green-blue.
+
+### The orchestrator is a thing you can see
+
+Every workspace is created with one — that was never optional — but the only
+place it was ever visible was a picker on the new-workspace form. Somebody
+looking for where an orchestrator comes from opened the Models screen, found a
+catalogue of models and no orchestrator anywhere, and reasonably concluded there
+was a step they were missing.
+
+The Models screen carries the template now: **the role this product already
+writes, in full**, because an orchestrator is not a mystery box and the fastest
+way to say what one is is to let somebody read what it is told — with one blank
+in it, which is the model. Fill it in and the next workspace is not asked again.
+
+### A starter that comes up with a model already in it
+
+```sh
+docker compose -f docker-compose.starter.yml up
+```
+
+Cogitorium, an Ollama container to think with, and a one-shot job that pulls the
+model. When it settles the provider is registered, the model is offered and the
+orchestrator already has one — nothing to type into a settings screen first.
+Make a workspace and talk to it.
+
+That needed the server to know about a provider before anybody opens a screen,
+so **`providers:` and `orchestrator_model:` are configuration**. Both are
+*seeds*: created only when nothing by that name exists, never updated, never
+removed — an operator who repoints an address on the Models screen has repointed
+it, and a restart must not put it back. Keys are **named, not written**:
+`key_env` points at an environment variable, which is what a Docker secret and a
+Kubernetes Secret already know how to fill.
+
+The file is an example and reads like one — one machine, one volume, a small
+model chosen because it fits on a laptop and calls tools reliably, which
+delegation and gears both need.
+
+### Every setting, in one place, checked against the source
+
+There was no list. The guide explained a dozen settings where they came up and
+the rest existed only in `internal/config/config.go`, so the honest answer to
+"what can I set" was *read the source*.
+**[Configuration](https://orkcom-tech.github.io/cogitorium/configuration/)** is
+all of them: where a value comes from and in what order, every `config.yaml` key
+with its environment variable and its default, and what each one refuses to do.
+
+A list maintained by hand rots on the first commit that adds a field, so it is
+checked: one test reads the `Config` struct and every `COGITORIUM_*` this server
+looks up and fails if one is missing from that page; another fails if the page
+describes a variable this server never reads, because a documented setting that
+silently does nothing is worse than an undocumented one — somebody writes it and
+believes it took effect.
+
+### Found by using it
+
+- **A refusal that says what it refused.** A member who pressed an
+  administrator's control was redirected to the workspace list in silence — and
+  if that list had a complaint of its own showing, the complaint became the
+  answer: *add a user* once replied "a workspace needs a model for its
+  orchestrator to think with".
+- **An answer with no text and no tool call is an error**, not a stored blank. A
+  provider replying in a shape this build cannot read produced exactly that: a
+  turn recorded as a success, an empty bubble, and nothing anywhere to act on.
+- **A gear granted in the agent panel now appears on the canvas.** The blueprint
+  redrew on its own actions and nothing else, so the thing you just did was
+  simply not there.
+- **Choosing from a dropdown inside a drawer closed the drawer.** The list is
+  rendered on `<body>` because the panel clips, so the drawer's own
+  click-outside saw a click on an option as a click away.
+- **Memory sat in a band across the top of the blueprint** with no relation to
+  whose memory it was, so every dotted link crossed the whole canvas. Each one
+  sits above its own agent, and double-clicking memory, a clock or a gear opens
+  the panel it belongs to.
+- **The prompt preview says what it is** — the finished system prompt, not a
+  broken text box — and names where each part of it is actually changed.
+- **A workspace's colour is chosen from a dot beside its name.** The control was
+  the four-pixel edge stripe, which is a target nobody hits, so the picker was
+  there all along and read as missing.
+- **Pressing Back out of a workspace landed on a blank screen.** History restores
+  the application at `/workspaces` without a request, and the router matches
+  nothing there because that screen belongs to the server.
+- **A model with no label read as "— house"** in the workspace picker: a
+  provider, a dash, and no sign of which model. An option later read "house —
+  house" where a model labelled *house* came from a provider called *house*,
+  which is two correct words that together say nothing.
+- **A plugin that will not unpack** was refused by the name of this server's temp
+  file — a name the person has never seen — on the one screen where they are
+  being asked to trust a file.
+- **The published image could not say what it was.** The Dockerfile stamped
+  contextd's version and never its own, so `ghcr.io/orkcom-tech/cogitorium:3.0.0`
+  reported `cogitorium 0.0.0-dev`.
+- **The docs offered `winget install`**, which nothing publishes. That row is
+  gone rather than left as a command that fails.
+- **A published screenshot named a machine account**, because a plugin approved
+  from the command line records `$USER` and the approval line shows it.
+
+### Upgrading
+
+- **The terminal is now on.** On an install other people can reach, write
+  `terminal: false`. The Helm chart already writes it.
+- **The default accent changed**, and it is a default — anybody who chose a
+  colour keeps theirs.
+- The Helm chart is **0.4.0**, and its `appVersion` tracks this release again
+  after standing at 1.0.1.
+- Nothing else needs doing. There is no migration to run beyond the one the
+  server applies at start.
+
 ## v3.0.0
 
 **The platform became something you change from the inside.** Two things carry
