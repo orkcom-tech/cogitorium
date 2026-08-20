@@ -24,16 +24,28 @@ if (root) {
     </StrictMode>,
   )
 } else {
-  const rail = document.querySelector('nav.rail')
-  if (rail) {
-    // Replaced rather than hydrated: the template's rail is markup, not a
-    // React tree, and pretending otherwise is how hydration mismatches start.
-    // What the template drew is what a plugin overriding it changes and what a
-    // browser with no JavaScript keeps — it has already done its job by now.
-    rail.replaceChildren()
-    createRoot(rail as HTMLElement).render(
+  const drawn = document.querySelector('nav.rail')
+  if (drawn) {
+    // The template's rail STAYS until this one is ready to paint.
+    //
+    // Emptying it first and mounting into it left the column blank for as long
+    // as whoami took — the frame disappearing and coming back, which reads as
+    // the page loading twice. So the new rail is mounted beside it, hidden,
+    // and RailOnly removes the old one at the moment it has something to show.
+    //
+    // Not hydration: the template's rail is markup, not a React tree, and
+    // pretending otherwise is how mismatches start. It has already done its
+    // job — it is what a browser with no JavaScript keeps, and what a plugin
+    // overriding cog.shell.rail changes.
+    const mine = document.createElement('div')
+    mine.hidden = true
+    drawn.after(mine)
+    createRoot(mine).render(
       <StrictMode>
-        <RailOnly />
+        <RailOnly onReady={() => {
+          drawn.remove()
+          mine.hidden = false
+        }} />
       </StrictMode>,
     )
   }

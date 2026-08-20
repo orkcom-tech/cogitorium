@@ -493,13 +493,20 @@ export default function Rail({
               Plain anchors: every one of these is a document the server
               renders, so routing to it in the browser would land on a screen
               this application does not have. */}
-          {(rail?.items ?? [])
-            .filter((d) => !d.foot)
-            .map((d) => (
-              <a key={d.href} href={d.href}>
-                {d.label}
-              </a>
-            ))}
+          {/* What the rail is NOT already showing.
+              Inside a workspace the rail carries that workspace's own stages
+              and drawers and no destinations at all, so this menu is the way
+              to leave. Outside one they are right there as icons, and listing
+              them here as well says everything twice. */}
+          {shell?.back
+            ? (rail?.items ?? [])
+                .filter((d) => !d.foot)
+                .map((d) => (
+                  <a key={d.href} href={d.href}>
+                    {d.label}
+                  </a>
+                ))
+            : null}
           <hr />
           <a href={DOCS_URL} target="_blank" rel="noreferrer">
             Documentation

@@ -25,7 +25,7 @@ import { ShellProvider } from './shell'
  * over a document the server already rendered. The rail is not that; it is the
  * frame around it, and the frame is the thing that has to be the same.
  */
-export default function RailOnly() {
+export default function RailOnly({ onReady }: { onReady: () => void }) {
   const [user, setUser] = useState<User | null>(null)
   const [health, setHealth] = useState<{ status: string; version: string } | null>(null)
 
@@ -73,8 +73,12 @@ export default function RailOnly() {
       })
   }, [])
 
-  // Until whoami answers, the server's own rail is what is on screen — this
-  // renders nothing rather than an empty column in its place.
+  // The template's rail is on screen until this one can replace it, so there
+  // is no moment with no frame at all.
+  useEffect(() => {
+    if (user) onReady()
+  }, [user, onReady])
+
   if (!user) return null
 
   return (
