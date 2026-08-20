@@ -277,8 +277,14 @@ believes it took effect.
 
 ### Upgrading
 
-- **The terminal is now on.** On an install other people can reach, write
-  `terminal: false`. The Helm chart already writes it.
+- **The terminal is now on**, and it is a shell on the machine this server runs
+  on. On an install other people can reach, write `terminal: false`. The Helm
+  chart already writes it.
+- **A second account changes what a workspace terminal is.** With one account it
+  is the machine; with two or more it is the sandbox, and where there is no
+  sandbox to put a member in it is refused. So adding your first colleague to a
+  Docker or Kubernetes install takes their workspace terminal away, on purpose.
+  The server-wide one, which is an administrator's, is unaffected.
 - **The default accent changed**, and it is a default — anybody who chose a
   colour keeps theirs.
 - The Helm chart is **0.4.0**, and its `appVersion` tracks this release again
