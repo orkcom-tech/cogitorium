@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"github.com/orkcom-tech/cogitorium/internal/update"
 	"html/template"
 	"net/http"
 	"sort"
@@ -201,11 +202,13 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, page, fragme
 		// From what the checker already knows. Never a request: drawing a rail
 		// must not depend on reaching the internet.
 		UpdateWaiting: s.updates != nil && s.updates.Report().Any(),
-		Title:         title,
-		Body:          template.HTML(body.String()),
-		Nav:           rt.navFor(r.URL.Path, callerFrom(r.Context()).IsAdmin()),
-		Styles:        rt.styles,
-		Scripts:       rt.scripts,
+		UpdateUnasked: s.updates != nil && callerFrom(r.Context()).IsAdmin() &&
+			s.updates.Report().Mode == update.ModeAsk,
+		Title:   title,
+		Body:    template.HTML(body.String()),
+		Nav:     rt.navFor(r.URL.Path, callerFrom(r.Context()).IsAdmin()),
+		Styles:  rt.styles,
+		Scripts: rt.scripts,
 	}
 	if err := rt.set.Execute(&out, "cog.shell.document", shell); err != nil {
 		http.Error(w, "this page could not be rendered", http.StatusInternalServerError)

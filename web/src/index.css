@@ -2722,7 +2722,8 @@ button.big {
  * the look's, and ten cards each washed a different colour is a fruit salad
  * that fights every theme. One saturated edge identifies the room and leaves
  * the surface alone. */
-.ws-card {
+.ws-card,
+.card.workspace {
   position: relative;
   overflow: hidden;
 }

@@ -1433,7 +1433,8 @@ button.danger:hover:not(:disabled),
   background: color-mix(in srgb, var(--text) 3%, var(--surface));
 }
 .card.workspace form,
-.card.workspace details,
+/* Not .ws-hue: it IS positioned, deliberately, as the card's leading edge. */
+.card.workspace details:not(.ws-hue),
 .card.workspace .share-row,
 .card.workspace .sel,
 .card.workspace button,
@@ -1588,4 +1589,111 @@ input::placeholder,
 textarea::placeholder {
   color: var(--text-dim);
   opacity: 1;
+}
+
+/* The appearance menu on a screen the server renders.
+ *
+ * The same two choices the application's own menu offers, drawn with a
+ * <details> and one small form per option, because these screens carry no
+ * application JavaScript. A control that only cycled hid what the options were
+ * and could not reach the colour at all.
+ */
+.rail-look > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.rail-look > summary::-webkit-details-marker {
+  display: none;
+}
+/* The bead paints itself from the accent in effect, so the control shows the
+   choice rather than describing it. */
+.look-bead {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--accent) 0 50%, var(--surface-2) 50% 100%);
+  border: 1px solid var(--border-strong);
+}
+.look-pop {
+  /* Fixed, not absolute: the rail scrolls on a short window, so anything
+     absolutely placed inside it is clipped by that scroll box — the menu
+     opened and could not be seen. It joins onto the rail from outside, which
+     is what every other panel on this frame does. */
+  position: fixed;
+  left: calc(var(--rail-w) + var(--bezel) + var(--s2));
+  bottom: var(--s3);
+  z-index: 40;
+  width: 15rem;
+  padding: var(--s3);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop, 0 8px 30px rgb(0 0 0 / 0.18));
+}
+.look-modes,
+.look-colours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-top: var(--s2);
+}
+.look-option {
+  padding: var(--s1) var(--s2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r1);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: var(--t-ui);
+}
+.look-option.on {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+.look-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.look-swatch.on {
+  border-color: var(--text);
+}
+
+/* The colour a workspace was given, on the card the SERVER renders.
+ *
+ * The spine and its picker are styled for `.ws-card`, which is what the client
+ * drew; the template draws `card workspace`, so none of it applied — the
+ * leading edge was never coloured and the picker showed as a bare disclosure
+ * triangle in the corner of every card. The same mismatch that had stopped the
+ * whole card being a door.
+ */
+.card.workspace > .ws-hue {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+}
+.card.workspace .ws-spine {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: hsl(var(--ws-hue, 210) 68% 52%);
+  cursor: pointer;
+  list-style: none;
+}
+.card.workspace .ws-spine::-webkit-details-marker {
+  display: none;
+}
+.card.workspace .ws-spine:hover {
+  width: 7px;
 }

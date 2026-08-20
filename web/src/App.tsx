@@ -29,13 +29,24 @@ type Health = { status: string; version: string }
  */
 function Elsewhere() {
   const path = window.location.pathname + window.location.search
-  const tried = sessionStorage.getItem(RETRIED) === path
+  // Only a loop is worth stopping, and a loop is immediate: ask the server,
+  // and if we are back here within a moment for the same path, neither side
+  // serves it. Remembering the path for ever was worse than not remembering
+  // it at all — coming back to /workspaces an hour later showed the dead end
+  // instead of the page, because the note from the first visit was still
+  // there.
+  const looping = (() => {
+    const last = sessionStorage.getItem(RETRIED)
+    if (!last) return false
+    const [when, was] = last.split('|')
+    return was === path && Date.now() - Number(when) < 4000
+  })()
   useEffect(() => {
-    if (tried) return
-    sessionStorage.setItem(RETRIED, path)
+    if (looping) return
+    sessionStorage.setItem(RETRIED, `${Date.now()}|${path}`)
     window.location.replace(path)
-  }, [tried, path])
-  if (!tried) return null
+  }, [looping, path])
+  if (!looping) return null
   return (
     <p className="hint">
       There is no screen at <code>{path}</code>. <a href="/workspaces">Back to your workspaces</a>.

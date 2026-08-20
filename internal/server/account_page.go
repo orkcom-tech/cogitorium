@@ -92,37 +92,55 @@ func (s *Server) handleAccountSignOutForm(w http.ResponseWriter, r *http.Request
 // handleLookForm changes the appearance from the rail.
 //
 // A cookie, set here and read by viewCtx, because these screens carry no
-// application JavaScript: the rail's control is an ordinary form, and the
-// answer is the page it was pressed on.
+// application JavaScript: each choice in the menu is its own small form, and
+// the answer is the page it was pressed on.
 //
-// The value is a closed list rather than whatever arrived: this ends up in an
-// attribute on <html>, and a cookie is written by whoever holds the browser.
+// One field at a time — a mode or a colour — so choosing a colour does not
+// silently also decide the ground. Whichever is not being set keeps its value.
+//
+// Both are read as a closed list rather than as whatever arrived: this ends up
+// in an attribute and a style on <html>, and a cookie is written by whoever
+// holds the browser.
 func (s *Server) handleLookForm(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, "/workspaces", http.StatusSeeOther)
 		return
 	}
-	mode := r.PostFormValue("to")
-	if mode != "light" && mode != "dark" {
-		mode = "system"
+	mode, accent := look(r)
+
+	if v := r.PostFormValue("mode"); v != "" {
+		if v != "light" && v != "dark" {
+			v = ""
+		}
+		mode = v
 	}
-	// "system" is the absence of a choice, so it clears rather than storing a
-	// third word nothing else reads.
-	value := ""
-	if mode != "system" {
-		value = url.QueryEscape(`{"mode":"` + mode + `"}`)
+	if v := r.PostFormValue("accent"); v != "" {
+		accent = ""
+		for _, a := range view.Accents {
+			if strings.EqualFold(a.Hex, v) {
+				accent = a.Hex
+				break
+			}
+		}
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name: "cogitorium_look", Value: value, Path: "/",
-		MaxAge: 31536000, SameSite: http.SameSiteLaxMode,
-	})
-	if value == "" {
+
+	if mode == "" && accent == "" {
+		// No choice at all is the absence of the cookie, not a cookie saying
+		// so — otherwise "follow this machine" would be a stored preference
+		// that outlives somebody clearing their browser.
 		http.SetCookie(w, &http.Cookie{Name: "cogitorium_look", Value: "", Path: "/", MaxAge: -1})
+	} else {
+		http.SetCookie(w, &http.Cookie{
+			Name:   "cogitorium_look",
+			Value:  url.QueryEscape(`{"mode":"` + mode + `","accent":"` + accent + `"}`),
+			Path:   "/",
+			MaxAge: 31536000, SameSite: http.SameSiteLaxMode,
+		})
 	}
 
 	// Back where they were, so changing the look does not also move them.
 	back := r.Header.Get("Referer")
-	if back == "" || !strings.HasPrefix(back, "/") && !strings.Contains(back, r.Host) {
+	if back == "" || (!strings.HasPrefix(back, "/") && !strings.Contains(back, r.Host)) {
 		back = "/workspaces"
 	}
 	http.Redirect(w, r, back, http.StatusSeeOther)

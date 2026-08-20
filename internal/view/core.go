@@ -238,6 +238,12 @@ type Shell struct {
 	// UpdateWaiting is true when a newer release is known. Read from what the
 	// checker already has; this never asks the network.
 	UpdateWaiting bool
+	// UpdateUnasked is true for an administrator on an install that has never
+	// answered the question. The application's rail shows the notice in that
+	// case too — something to ASK is as much a reason to draw it as something
+	// to say — and a rail that only appeared once an update existed would
+	// never appear on an install that was never allowed to look.
+	UpdateUnasked bool
 	// AppHead is the application's own head, carried through as-is.
 	//
 	// Vite writes hashed asset names into it on every build, so restating them
@@ -1526,6 +1532,60 @@ func (p PlanboardRow) StepText() string {
 		lines = append(lines, st.Title)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// Accent is one of the colours the appearance menu offers.
+type Accent struct {
+	Name string
+	Hex  string
+	// Chosen marks the one in effect, decided here because the template
+	// function set has no eq.
+	Chosen bool
+}
+
+// LookMode is light, dark, or following the machine.
+type LookMode struct {
+	// Value is what the form posts; Label is what a person reads.
+	Value  string
+	Label  string
+	Chosen bool
+}
+
+// Accents are the colours this product offers, and they are the same eight the
+// application offers. Stated here as well because the server draws the same
+// menu on the screens it renders, and a menu with different colours on half
+// the product would be two products.
+//
+// TestTheAccentsMatchTheApplication reads web/src/styles/theme.ts and fails if
+// these two lists ever part company.
+var Accents = []Accent{
+	{Name: "Green", Hex: "#0a8624"},
+	{Name: "Teal", Hex: "#0f766e"},
+	{Name: "Blue", Hex: "#2563c9"},
+	{Name: "Indigo", Hex: "#4f46e5"},
+	{Name: "Violet", Hex: "#7c3aed"},
+	{Name: "Rose", Hex: "#be3455"},
+	{Name: "Amber", Hex: "#8a5406"},
+	{Name: "Slate", Hex: "#4a5568"},
+}
+
+// Looks is the three grounds, with the one in effect marked.
+func (s Shell) Looks() []LookMode {
+	return []LookMode{
+		{Value: "system", Label: "follow this machine", Chosen: s.Look == ""},
+		{Value: "light", Label: "light", Chosen: s.Look == "light"},
+		{Value: "dark", Label: "dark", Chosen: s.Look == "dark"},
+	}
+}
+
+// Colours is the accents, with the chosen one marked.
+func (s Shell) Colours() []Accent {
+	out := make([]Accent, len(Accents))
+	for i, a := range Accents {
+		a.Chosen = strings.EqualFold(a.Hex, s.Ctx.Accent)
+		out[i] = a
+	}
+	return out
 }
 
 // LookName is the appearance in words.

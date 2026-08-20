@@ -2607,6 +2607,10 @@
           "type": "bool"
         },
         {
+          "path": "UpdateUnasked",
+          "type": "bool"
+        },
+        {
           "path": "AppHead",
           "type": "HTML"
         },
@@ -2627,7 +2631,7 @@
           "type": "[]Asset"
         }
       ],
-      "body": "\u003cform method=\"post\" action=\"/account/look\" class=\"rail-look\"\u003e\n  \u003cinput type=\"hidden\" name=\"to\" value=\"{{.NextLook}}\"\u003e\n  \u003cbutton class=\"rail-item\" type=\"submit\" title=\"Appearance: {{.LookName}}. Press for {{.NextLookName}}\"\u003e\n    \u003csvg viewBox=\"0 0 24 24\" aria-hidden=\"true\"\u003e\u003ccircle cx=\"12\" cy=\"12\" r=\"8\"/\u003e\u003cpath d=\"M12 4v16\" fill=\"none\"/\u003e\u003cpath d=\"M12 4a8 8 0 0 1 0 16Z\"/\u003e\u003c/svg\u003e\n    \u003cspan class=\"sr-only\"\u003eAppearance: {{.LookName}}\u003c/span\u003e\n  \u003c/button\u003e\n\u003c/form\u003e",
+      "body": "\u003cdetails class=\"rail-look\"\u003e\n  \u003csummary class=\"rail-item\" title=\"Appearance\"\u003e\n    \u003cspan class=\"look-bead\" aria-hidden=\"true\"\u003e\u003c/span\u003e\n    \u003cspan class=\"sr-only\"\u003eAppearance: {{.LookName}}\u003c/span\u003e\n  \u003c/summary\u003e\n  \u003cdiv class=\"look-pop\"\u003e\n    \u003cp class=\"hint\"\u003eThe ground, and the colour everything else is mixed towards.\u003c/p\u003e\n    \u003cdiv class=\"look-modes\"\u003e\n      {{range .Looks}}\n      \u003cform method=\"post\" action=\"/account/look\"\u003e\n        \u003cinput type=\"hidden\" name=\"mode\" value=\"{{.Value}}\"\u003e\n        \u003cbutton type=\"submit\" data-own class=\"look-option{{if .Chosen}} on{{end}}\"\u003e{{.Label}}\u003c/button\u003e\n      \u003c/form\u003e\n      {{end}}\n    \u003c/div\u003e\n    \u003cdiv class=\"look-colours\"\u003e\n      {{range .Colours}}\n      \u003cform method=\"post\" action=\"/account/look\"\u003e\n        \u003cinput type=\"hidden\" name=\"accent\" value=\"{{.Hex}}\"\u003e\n        \u003cbutton type=\"submit\" data-own class=\"look-swatch{{if .Chosen}} on{{end}}\"\n                style=\"background: {{.Hex}}\" title=\"{{.Name}}\"\u003e\u003cspan class=\"sr-only\"\u003e{{.Name}}\u003c/span\u003e\u003c/button\u003e\n      \u003c/form\u003e\n      {{end}}\n    \u003c/div\u003e\n  \u003c/div\u003e\n\u003c/details\u003e",
       "appends": false
     },
     {
@@ -7902,6 +7906,10 @@
           "type": "bool"
         },
         {
+          "path": "UpdateUnasked",
+          "type": "bool"
+        },
+        {
           "path": "AppHead",
           "type": "HTML"
         },
@@ -8022,6 +8030,10 @@
         },
         {
           "path": "UpdateWaiting",
+          "type": "bool"
+        },
+        {
+          "path": "UpdateUnasked",
           "type": "bool"
         },
         {
@@ -8148,6 +8160,10 @@
           "type": "bool"
         },
         {
+          "path": "UpdateUnasked",
+          "type": "bool"
+        },
+        {
           "path": "AppHead",
           "type": "HTML"
         },
@@ -8271,6 +8287,10 @@
           "type": "bool"
         },
         {
+          "path": "UpdateUnasked",
+          "type": "bool"
+        },
+        {
           "path": "AppHead",
           "type": "HTML"
         },
@@ -8291,7 +8311,7 @@
           "type": "[]Asset"
         }
       ],
-      "body": "\u003cnav class=\"rail\" aria-label=\"{{.Ctx.T.Navigation}}\"\u003e\n\u003cdiv class=\"rail-group\"\u003e\n{{range .Nav}}{{if .InBody}}{{template \"cog.row.nav\" .}}{{end}}{{end}}{{template \"cog.slot.rail\" .}}\u003c/div\u003e\n{{/*\n  The bottom of the rail: what is about this INSTALL rather than about the\n  work. The application's own rail has always had this group, and the screens\n  this server renders did not — so somebody who signed in and stayed out of a\n  workspace had no account, no plugins, and no way to change the appearance at\n  all.\n*/}}\n\u003cdiv class=\"rail-group rail-foot\"\u003e\n  {{if .UpdateWaiting}}\u003ca class=\"rail-item has-news\" href=\"/account\" title=\"A newer release is out\"\u003e\n    \u003csvg viewBox=\"0 0 24 24\" aria-hidden=\"true\"\u003e\u003cpath d=\"M12 3.5v12\"/\u003e\u003cpath d=\"M7.5 11 12 15.5 16.5 11\"/\u003e\u003cpath d=\"M4.5 20h15\"/\u003e\u003c/svg\u003e\n    \u003cspan class=\"sr-only\"\u003eA newer release is out\u003c/span\u003e\n  \u003c/a\u003e{{end}}\n  {{template \"cog.frag.appearance\" .}}\n  {{range .Nav}}{{if .Foot}}{{template \"cog.row.nav\" .}}{{end}}{{end}}\n\u003c/div\u003e\u003c/nav\u003e",
+      "body": "\u003cnav class=\"rail\" aria-label=\"{{.Ctx.T.Navigation}}\"\u003e\n\u003cdiv class=\"rail-group\"\u003e\n{{range .Nav}}{{if .InBody}}{{template \"cog.row.nav\" .}}{{end}}{{end}}{{template \"cog.slot.rail\" .}}\u003c/div\u003e\n{{/*\n  The bottom of the rail: what is about this INSTALL rather than about the\n  work. The application's own rail has always had this group, and the screens\n  this server renders did not — so somebody who signed in and stayed out of a\n  workspace had no account, no plugins, and no way to change the appearance at\n  all.\n*/}}\n\u003cdiv class=\"rail-group rail-foot\"\u003e\n  {{if .UpdateWaiting}}\u003ca class=\"rail-item has-news\" href=\"/account\" title=\"A newer release is out\"\u003e\n    \u003csvg viewBox=\"0 0 24 24\" aria-hidden=\"true\"\u003e\u003cpath d=\"M12 3.5v12\"/\u003e\u003cpath d=\"M7.5 11 12 15.5 16.5 11\"/\u003e\u003cpath d=\"M4.5 20h15\"/\u003e\u003c/svg\u003e\n    \u003cspan class=\"sr-only\"\u003eA newer release is out\u003c/span\u003e\n  \u003c/a\u003e{{end}}\n  {{if .UpdateUnasked}}\u003ca class=\"rail-item has-news\" href=\"/account\" title=\"This install has not been asked whether it may check for updates\"\u003e\n    \u003csvg viewBox=\"0 0 24 24\" aria-hidden=\"true\"\u003e\u003cpath d=\"M12 3.5v12\"/\u003e\u003cpath d=\"M7.5 11 12 15.5 16.5 11\"/\u003e\u003cpath d=\"M4.5 20h15\"/\u003e\u003c/svg\u003e\n    \u003cspan class=\"sr-only\"\u003eUpdates — this install has not been asked yet\u003c/span\u003e\n  \u003c/a\u003e{{end}}\n  {{template \"cog.frag.appearance\" .}}\n  {{range .Nav}}{{if .Foot}}{{template \"cog.row.nav\" .}}{{end}}{{end}}\n\u003c/div\u003e\u003c/nav\u003e",
       "appends": false
     },
     {
@@ -8391,6 +8411,10 @@
         },
         {
           "path": "UpdateWaiting",
+          "type": "bool"
+        },
+        {
+          "path": "UpdateUnasked",
           "type": "bool"
         },
         {
@@ -8517,6 +8541,10 @@
           "type": "bool"
         },
         {
+          "path": "UpdateUnasked",
+          "type": "bool"
+        },
+        {
           "path": "AppHead",
           "type": "HTML"
         },
@@ -8637,6 +8665,10 @@
         },
         {
           "path": "UpdateWaiting",
+          "type": "bool"
+        },
+        {
+          "path": "UpdateUnasked",
           "type": "bool"
         },
         {

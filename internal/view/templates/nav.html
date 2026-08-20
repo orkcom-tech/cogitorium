@@ -23,26 +23,50 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v12"/><path d="M7.5 11 12 15.5 16.5 11"/><path d="M4.5 20h15"/></svg>
     <span class="sr-only">A newer release is out</span>
   </a>{{end}}
+  {{if .UpdateUnasked}}<a class="rail-item has-news" href="/account" title="This install has not been asked whether it may check for updates">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v12"/><path d="M7.5 11 12 15.5 16.5 11"/><path d="M4.5 20h15"/></svg>
+    <span class="sr-only">Updates — this install has not been asked yet</span>
+  </a>{{end}}
   {{template "cog.frag.appearance" .}}
   {{range .Nav}}{{if .Foot}}{{template "cog.row.nav" .}}{{end}}{{end}}
 </div></nav>{{end}}
 
 {{/*
-  The appearance, as a form rather than a menu.
+  The appearance, as the same menu the application offers — three grounds and
+  eight colours — drawn without any JavaScript, because these screens carry
+  none. A <details> is the popover; each choice is its own small form.
 
-  A form because these screens carry no application JavaScript: the choice is
-  a cookie, the server reads it, and pressing this is an ordinary post. It
-  cycles rather than opening a picker — three states is a short enough round
-  trip that a menu would be more ceremony than choice.
+  It was a button that cycled. Cycling hides what the options are, gives no way
+  to reach the colour at all, and made half the product offer a different
+  appearance menu from the other half.
 */}}
 {{define "cog.frag.appearance"}}
-<form method="post" action="/account/look" class="rail-look">
-  <input type="hidden" name="to" value="{{.NextLook}}">
-  <button class="rail-item" type="submit" title="Appearance: {{.LookName}}. Press for {{.NextLookName}}">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v16" fill="none"/><path d="M12 4a8 8 0 0 1 0 16Z"/></svg>
+<details class="rail-look">
+  <summary class="rail-item" title="Appearance">
+    <span class="look-bead" aria-hidden="true"></span>
     <span class="sr-only">Appearance: {{.LookName}}</span>
-  </button>
-</form>{{end}}
+  </summary>
+  <div class="look-pop">
+    <p class="hint">The ground, and the colour everything else is mixed towards.</p>
+    <div class="look-modes">
+      {{range .Looks}}
+      <form method="post" action="/account/look">
+        <input type="hidden" name="mode" value="{{.Value}}">
+        <button type="submit" data-own class="look-option{{if .Chosen}} on{{end}}">{{.Label}}</button>
+      </form>
+      {{end}}
+    </div>
+    <div class="look-colours">
+      {{range .Colours}}
+      <form method="post" action="/account/look">
+        <input type="hidden" name="accent" value="{{.Hex}}">
+        <button type="submit" data-own class="look-swatch{{if .Chosen}} on{{end}}"
+                style="background: {{.Hex}}" title="{{.Name}}"><span class="sr-only">{{.Name}}</span></button>
+      </form>
+      {{end}}
+    </div>
+  </div>
+</details>{{end}}
 
 {{/*
   One destination. The label is read aloud rather than drawn, because the rail
