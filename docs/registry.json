@@ -76,6 +76,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -172,6 +176,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -326,6 +334,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -461,6 +473,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -572,6 +588,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -679,6 +699,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -779,6 +803,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -897,6 +925,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -1005,6 +1037,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -1123,6 +1159,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -1219,6 +1259,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -1345,6 +1389,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -1453,6 +1501,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -1618,6 +1670,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -1753,6 +1809,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -1864,6 +1924,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -1960,6 +2024,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -2075,6 +2143,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -2233,6 +2305,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -2341,6 +2417,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -2455,6 +2535,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -2566,6 +2650,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -2666,6 +2754,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -2816,6 +2908,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -2974,6 +3070,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -3125,6 +3225,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -3260,6 +3364,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -3371,6 +3479,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -3467,6 +3579,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -3588,6 +3704,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -3700,6 +3820,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -3858,6 +3982,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -3954,6 +4082,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -4064,6 +4196,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -4168,6 +4304,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -4282,6 +4422,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -4393,6 +4537,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -4493,6 +4641,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -4647,6 +4799,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -4782,6 +4938,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -4893,6 +5053,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -4989,6 +5153,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -5096,6 +5264,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -5214,6 +5386,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -5314,6 +5490,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -5472,6 +5652,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -5592,6 +5776,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -5958,7 +6146,7 @@
           "type": "bool"
         }
       ],
-      "body": "\u003carticle class=\"card gear{{if .Open}} is-open{{end}}\"\n  draggable=\"true\" title=\"Drag onto the blueprint to give this to an agent\"\n  data-gear-id=\"{{.ID}}\" data-gear-name=\"{{.Name}}\" data-gear-status=\"{{.Status}}\"\u003e\n  \u003cheader class=\"gear-head\"\u003e\n    \u003ch3\u003e{{.Name}} \u003cspan class=\"muted\"\u003ev{{.Version}}\u003c/span\u003e\u003c/h3\u003e\n    {{if .Approved}}\u003cspan class=\"badge is-ok\"\u003e{{.Status}}\u003c/span\u003e{{else}}\u003cspan class=\"badge is-warn\"\u003e{{.Status}}\u003c/span\u003e{{end}}\n    {{range .Tags}}\u003cspan class=\"badge\"\u003e{{.}}\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n  {{if .Description}}\u003cp class=\"hint\"\u003e{{.Description}}\u003c/p\u003e{{end}}\n  \u003cp class=\"muted\"\u003e{{.Runtime}} · \u003ccode\u003e{{.Entrypoint}}\u003c/code\u003e\u003c/p\u003e\n\n  {{if .Open}}\n    {{if .PreviousVersion}}\n      \u003cdiv class=\"row\"\u003e\n        {{if .Comparing}}\u003ca href=\"/gears?open={{.ID}}\"\u003eshowing changes from v{{.PreviousVersion}}\u003c/a\u003e\n        {{else}}\u003ca href=\"/gears?open={{.ID}}\u0026amp;compare=1\"\u003ecompare with v{{.PreviousVersion}}\u003c/a\u003e{{end}}\n        \u003cspan class=\"muted\"\u003ean approval covers exact content, so this is what changed since the version you last saw\u003c/span\u003e\n      \u003c/div\u003e\n    {{end}}\n\n    {{range .Files}}\n      \u003cdetails{{if .Entrypoint}} open{{end}}\u003e\n        \u003csummary\u003e\u003ccode\u003e{{.Path}}\u003c/code\u003e{{if .Entrypoint}}\u003cspan class=\"muted\"\u003e — entrypoint\u003c/span\u003e{{end}}{{if .Binary}}\u003cspan class=\"muted\"\u003e — binary\u003c/span\u003e{{end}}\u003c/summary\u003e\n        {{if .TooBig}}\n          \u003cp class=\"hint\"\u003eThis file is too large to compare line by line. Its current contents are below.\u003c/p\u003e\n          \u003cpre class=\"prompt-preview\"\u003e{{.Content}}\u003c/pre\u003e\n        {{else if .Diff}}\n          \u003cpre class=\"prompt-preview diff\"\u003e{{range .Diff}}\u003cspan class=\"d-{{.Kind}}\"\u003e{{.Text}}\u003c/span\u003e\n{{end}}\u003c/pre\u003e\n        {{else if .Binary}}\n          {{/* Showing megabytes of base64 helps nobody, and pretending a blob\n               is reviewable source would be worse. */}}\n          \u003cp class=\"hint\"\u003e{{.KB}} KB of compiled code — it cannot be read here. Approve it only if you trust\n          where it came from, and use the dry run below to see what it does.\u003c/p\u003e\n        {{else}}\n          \u003cpre class=\"prompt-preview\"\u003e{{.Content}}\u003c/pre\u003e\n        {{end}}\n      \u003c/details\u003e\n    {{end}}\n\n    {{if .Editable}}\n    {{/* Saving forges the next version, which returns this gear to pending and\n         drops its network grant. Said here rather than discovered: an approval\n         covers exact content, and a correction is different content. */}}\n    \u003cdetails class=\"edit-gear\"\u003e\n      \u003csummary\u003ecorrect this gear\u003c/summary\u003e\n      \u003cform class=\"author-gear-edit\" method=\"post\" action=\"/gears\"\u003e\n        \u003cinput type=\"hidden\" name=\"name\" value=\"{{.Name}}\"\u003e\n        \u003cinput type=\"hidden\" name=\"runtime\" value=\"{{.Runtime}}\"\u003e\n        \u003cinput type=\"hidden\" name=\"entrypoint\" value=\"{{.Entrypoint}}\"\u003e\n        \u003clabel\u003eDescription \u003cinput name=\"description\" value=\"{{.Description}}\"\u003e\u003c/label\u003e\n        \u003clabel\u003eTags \u003cinput name=\"tags\" value=\"{{.TagList}}\" placeholder=\"comma, separated\"\u003e\u003c/label\u003e\n        \u003clabel\u003eSource \u003ctextarea name=\"source\" rows=\"14\" spellcheck=\"false\"\u003e{{.Source}}\u003c/textarea\u003e\u003c/label\u003e\n        \u003cp class=\"hint\"\u003eSaving makes this v{{.Version}} into the next version. It goes back to pending and\n        its network grant is dropped, because an approval covers exact content and this is different\n        content.\u003c/p\u003e\n        \u003cbutton type=\"submit\"\u003eSave as a new version\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/details\u003e\n    {{end}}\n\n    \u003cdetails\u003e\u003csummary\u003earguments schema\u003c/summary\u003e\u003cpre class=\"prompt-preview\"\u003e{{.ArgsSchema}}\u003c/pre\u003e\u003c/details\u003e\n\n    \u003cdiv class=\"grants\"\u003e\n      \u003ch4\u003eWhat approving this grants\u003c/h4\u003e\n\n      \u003cdiv class=\"grant\"\u003e\n        \u003cspan class=\"grant-label\"\u003ecredentials\u003c/span\u003e\n        {{if .Grants}}\n          \u003cul class=\"grant-list\"\u003e\n            {{range .Grants}}\u003cli\u003e\u003ccode\u003e{{.Name}}\u003c/code\u003e\n              {{if .Found}}\u003cspan class=\"muted\"\u003e{{.Kind}} · from {{.Source}}\u003c/span\u003e\n              {{else}}{{/* Learning this at approval beats learning it at three\n                           in the morning from a run that refused. */}}\n                \u003cspan class=\"error\"\u003enothing on this install supplies it, so every run of this gear will be refused\u003c/span\u003e\n              {{end}}\n            \u003c/li\u003e{{end}}\n          \u003c/ul\u003e\n        {{else}}\n          \u003cp class=\"muted\"\u003eNone. This gear is given no named values, and its environment holds nothing but its own name.\u003c/p\u003e\n        {{end}}\n      \u003c/div\u003e\n\n      \u003cform class=\"grant\" method=\"post\" action=\"/gears/{{.ID}}/approve\"\u003e\n        \u003cspan class=\"grant-label\"\u003enetwork\u003c/span\u003e\n        \u003clabel class=\"row grant-check\"\u003e\n          \u003cinput type=\"checkbox\" name=\"network\" value=\"on\"{{if .NetworkOn}} checked{{end}}\u003e\n          it may reach the hosts below, and nothing else\n        \u003c/label\u003e\n        \u003ctextarea name=\"hosts\" rows=\"3\" spellcheck=\"false\"\n                  placeholder=\"api.example.com\u0026#10;*.internal.example.com\"\u003e{{.Hosts}}\u003c/textarea\u003e\n\n        \u003clabel class=\"row\"\u003etimeout\n          \u003cinput type=\"number\" name=\"timeout\" min=\"1\" value=\"{{.Timeout}}\"\u003e seconds\n        \u003c/label\u003e\n\n        \u003cdiv class=\"gear-actions\"\u003e\n          \u003cbutton type=\"submit\"\u003eapprove this version\u003c/button\u003e\n        \u003c/div\u003e\n      \u003c/form\u003e\n    \u003c/div\u003e\n\n    {{/* A dry run executes the gear NOW, even while pending, so approval is\n         an informed decision rather than a reading of source. Anyone may run\n         one; only an administrator may approve. */}}\n    \u003cdiv class=\"field\"\u003e\n      \u003cspan class=\"muted\"\u003edry run — executes the gear right now, even while pending, so approval is an informed decision\u003c/span\u003e\n      \u003cform class=\"row\" method=\"post\" action=\"/gears/{{.ID}}/run\"\u003e\n        \u003cinput class=\"grow\" name=\"args\" value=\"{{.DryArgs}}\" aria-label=\"Arguments\"\n               placeholder='{\"numbers\": [1, 2, 3]}'\u003e\n        \u003cbutton type=\"submit\"\u003erun\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/div\u003e\n    {{if .DryRan}}\u003cpre class=\"prompt-preview{{if .DryFailed}} run-failed{{end}}\"\u003e{{.DryOutput}}\u003c/pre\u003e{{end}}\n\n    {{if .Runs}}\n      \u003cdetails\u003e\n        \u003csummary\u003ewhat it has done\u003c/summary\u003e\n        {{range .Runs}}\u003cdiv class=\"gear-run\"\u003e\n          \u003cspan class=\"muted\"\u003e{{.At}} · exit {{.ExitCode}}\u003c/span\u003e\n          \u003cpre class=\"prompt-preview{{if .Failed}} run-failed{{end}}\"\u003e{{.Output}}\u003c/pre\u003e\n        \u003c/div\u003e{{end}}\n      \u003c/details\u003e\n    {{end}}\n\n    {{if .Connections}}\n      \u003cdetails\u003e\n        \u003csummary\u003ewhere it reached\u003c/summary\u003e\n        \u003ctable\u003e\n          \u003cthead\u003e\u003ctr\u003e\u003cth\u003ehost\u003c/th\u003e\u003cth\u003eport\u003c/th\u003e\u003cth\u003emethod\u003c/th\u003e\u003cth\u003eoutcome\u003c/th\u003e\u003cth\u003ewhen\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e\n          \u003ctbody\u003e{{range .Connections}}\u003ctr\u003e\n            \u003ctd\u003e\u003ccode\u003e{{.Host}}\u003c/code\u003e\u003c/td\u003e\u003ctd\u003e{{.Port}}\u003c/td\u003e\u003ctd\u003e{{.Method}}\u003c/td\u003e\n            \u003ctd\u003e{{if .Refused}}\u003cspan class=\"error\"\u003e{{.State}}\u003c/span\u003e{{else}}{{.State}}{{end}}\u003c/td\u003e\n            \u003ctd\u003e{{.At}}\u003c/td\u003e\n          \u003c/tr\u003e{{end}}\u003c/tbody\u003e\n        \u003c/table\u003e\n      \u003c/details\u003e\n    {{end}}\n\n    \u003cdiv class=\"gear-actions\"\u003e\n      \u003cform method=\"post\" action=\"/gears/{{.ID}}/disable\"\u003e\u003cbutton type=\"submit\"\u003edisable\u003c/button\u003e\u003c/form\u003e\n      \u003cform method=\"post\" action=\"/gears/{{.ID}}/delete\"\n            hx-confirm=\"Delete {{.Name}}? Its runs stay on the record; the gear goes.\"\u003e\n        \u003cbutton type=\"submit\" class=\"danger\"\u003edelete\u003c/button\u003e\n      \u003c/form\u003e\n      \u003ca class=\"action\" href=\"/gears\"\u003eclose\u003c/a\u003e\n    \u003c/div\u003e\n\n    {{if .Approvals}}\n      \u003cdetails\u003e\n        \u003csummary\u003ewho approved it\u003c/summary\u003e\n        \u003ctable\u003e\n          \u003cthead\u003e\u003ctr\u003e\u003cth\u003eversion\u003c/th\u003e\u003cth\u003ewho\u003c/th\u003e\u003cth\u003ewhen\u003c/th\u003e\u003cth\u003enetwork\u003c/th\u003e\u003cth\u003etimeout\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e\n          \u003ctbody\u003e{{range .Approvals}}\u003ctr\u003e\n            \u003ctd\u003ev{{.Version}}\u003c/td\u003e\u003ctd\u003e{{.By}}\u003c/td\u003e\u003ctd\u003e{{.At}}\u003c/td\u003e\n            \u003ctd\u003e{{.Network}}\u003c/td\u003e\u003ctd\u003e{{.Timeout}}\u003c/td\u003e\n          \u003c/tr\u003e{{end}}\u003c/tbody\u003e\n        \u003c/table\u003e\n      \u003c/details\u003e\n    {{end}}\n  {{else}}\n    \u003cdiv class=\"gear-actions\"\u003e\n      \u003ca class=\"action\" href=\"/gears?open={{.ID}}\"\u003e{{if .Approved}}review \u0026amp; run{{else}}review \u0026amp; approve{{end}}\u003c/a\u003e\n    \u003c/div\u003e\n  {{end}}\n\u003c/article\u003e",
+      "body": "\u003carticle class=\"card gear{{if .Open}} is-open{{end}}\"\n  draggable=\"true\" title=\"Drag onto the blueprint to give this to an agent\"\n  data-gear-id=\"{{.ID}}\" data-gear-name=\"{{.Name}}\" data-gear-status=\"{{.Status}}\"\u003e\n  \u003cheader class=\"gear-head\"\u003e\n    \u003ch3\u003e{{.Name}} \u003cspan class=\"muted\"\u003ev{{.Version}}\u003c/span\u003e\u003c/h3\u003e\n    {{if .Approved}}\u003cspan class=\"badge is-ok\"\u003e{{.Status}}\u003c/span\u003e{{else}}\u003cspan class=\"badge is-warn\"\u003e{{.Status}}\u003c/span\u003e{{end}}\n    {{range .Tags}}\u003cspan class=\"badge\"\u003e{{.}}\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n  {{if .Description}}\u003cp class=\"hint\"\u003e{{.Description}}\u003c/p\u003e{{end}}\n  \u003cp class=\"muted\"\u003e{{.Runtime}} · \u003ccode\u003e{{.Entrypoint}}\u003c/code\u003e\u003c/p\u003e\n\n  {{if .Open}}\n    {{if .PreviousVersion}}\n      \u003cdiv class=\"row\"\u003e\n        {{if .Comparing}}\u003ca href=\"/gears?open={{.ID}}\"\u003eshowing changes from v{{.PreviousVersion}}\u003c/a\u003e\n        {{else}}\u003ca href=\"/gears?open={{.ID}}\u0026amp;compare=1\"\u003ecompare with v{{.PreviousVersion}}\u003c/a\u003e{{end}}\n        \u003cspan class=\"muted\"\u003ean approval covers exact content, so this is what changed since the version you last saw\u003c/span\u003e\n      \u003c/div\u003e\n    {{end}}\n\n    {{range .Files}}\n      \u003cdetails{{if .Entrypoint}} open{{end}}\u003e\n        \u003csummary\u003e\u003ccode\u003e{{.Path}}\u003c/code\u003e{{if .Entrypoint}}\u003cspan class=\"muted\"\u003e — entrypoint\u003c/span\u003e{{end}}{{if .Binary}}\u003cspan class=\"muted\"\u003e — binary\u003c/span\u003e{{end}}\u003c/summary\u003e\n        {{if .TooBig}}\n          \u003cp class=\"hint\"\u003eThis file is too large to compare line by line. Its current contents are below.\u003c/p\u003e\n          \u003cpre class=\"prompt-preview\"\u003e{{.Content}}\u003c/pre\u003e\n        {{else if .Diff}}\n          \u003cpre class=\"prompt-preview diff\"\u003e{{range .Diff}}\u003cspan class=\"d-{{.Kind}}\"\u003e{{.Text}}\u003c/span\u003e\n{{end}}\u003c/pre\u003e\n        {{else if .Binary}}\n          {{/* Showing megabytes of base64 helps nobody, and pretending a blob\n               is reviewable source would be worse. */}}\n          \u003cp class=\"hint\"\u003e{{.KB}} KB of compiled code — it cannot be read here. Approve it only if you trust\n          where it came from, and use the dry run below to see what it does.\u003c/p\u003e\n        {{else}}\n          \u003cpre class=\"prompt-preview\"\u003e{{.Content}}\u003c/pre\u003e\n        {{end}}\n      \u003c/details\u003e\n    {{end}}\n\n    {{if .Editable}}\n    {{/* Saving forges the next version, which returns this gear to pending and\n         drops its network grant. Said here rather than discovered: an approval\n         covers exact content, and a correction is different content. */}}\n    \u003cdetails class=\"edit-gear\"\u003e\n      \u003csummary\u003ecorrect this gear\u003c/summary\u003e\n      \u003cform class=\"author-gear-edit\" method=\"post\" action=\"/gears\"\u003e\n        \u003cinput type=\"hidden\" name=\"name\" value=\"{{.Name}}\"\u003e\n        \u003cinput type=\"hidden\" name=\"runtime\" value=\"{{.Runtime}}\"\u003e\n        \u003cinput type=\"hidden\" name=\"entrypoint\" value=\"{{.Entrypoint}}\"\u003e\n        \u003clabel\u003eDescription \u003cinput name=\"description\" value=\"{{.Description}}\"\u003e\u003c/label\u003e\n        \u003clabel\u003eTags \u003cinput name=\"tags\" value=\"{{.TagList}}\" placeholder=\"comma, separated\"\u003e\u003c/label\u003e\n        \u003clabel\u003eSource \u003ctextarea name=\"source\" rows=\"14\" spellcheck=\"false\"\u003e{{.Source}}\u003c/textarea\u003e\u003c/label\u003e\n        \u003cp class=\"hint\"\u003eSaving makes this v{{.Version}} into the next version. It goes back to pending and\n        its network grant is dropped, because an approval covers exact content and this is different\n        content.\u003c/p\u003e\n        \u003cbutton type=\"submit\"\u003eSave as a new version\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/details\u003e\n    {{end}}\n\n    \u003cdetails\u003e\u003csummary\u003earguments schema\u003c/summary\u003e\u003cpre class=\"prompt-preview\"\u003e{{.ArgsSchema}}\u003c/pre\u003e\u003c/details\u003e\n\n    \u003cdiv class=\"grants\"\u003e\n      \u003ch4\u003eWhat approving this grants\u003c/h4\u003e\n\n      \u003cdiv class=\"grant\"\u003e\n        \u003cspan class=\"grant-label\"\u003ecredentials\u003c/span\u003e\n        {{if .Grants}}\n          \u003cul class=\"grant-list\"\u003e\n            {{range .Grants}}\u003cli\u003e\u003ccode\u003e{{.Name}}\u003c/code\u003e\n              {{if .Found}}\u003cspan class=\"muted\"\u003e{{.Kind}} · from {{.Source}}\u003c/span\u003e\n              {{else}}{{/* Learning this at approval beats learning it at three\n                           in the morning from a run that refused. */}}\n                \u003cspan class=\"error\"\u003enothing on this install supplies it, so every run of this gear will be refused\u003c/span\u003e\n              {{end}}\n            \u003c/li\u003e{{end}}\n          \u003c/ul\u003e\n        {{else}}\n          \u003cp class=\"muted\"\u003eNone. This gear is given no named values, and its environment holds nothing but its own name.\u003c/p\u003e\n        {{end}}\n      \u003c/div\u003e\n\n      \u003cform class=\"grant\" method=\"post\" action=\"/gears/{{.ID}}/approve\"\u003e\n        \u003cspan class=\"grant-label\"\u003enetwork\u003c/span\u003e\n        \u003clabel class=\"row grant-check\"\u003e\n          \u003cinput type=\"checkbox\" name=\"network\" value=\"on\"{{if .NetworkOn}} checked{{end}}\u003e\n          it may reach the hosts below, and nothing else\n        \u003c/label\u003e\n        \u003ctextarea name=\"hosts\" rows=\"3\" spellcheck=\"false\"\n                  placeholder=\"api.example.com\u0026#10;*.internal.example.com\"\u003e{{.Hosts}}\u003c/textarea\u003e\n\n        \u003clabel class=\"row\"\u003etimeout\n          \u003cinput type=\"number\" name=\"timeout\" min=\"1\" value=\"{{.Timeout}}\"\u003e seconds\n        \u003c/label\u003e\n\n        \u003cdiv class=\"gear-actions\"\u003e\n          \u003cbutton type=\"submit\"\u003eapprove this version\u003c/button\u003e\n        \u003c/div\u003e\n      \u003c/form\u003e\n    \u003c/div\u003e\n\n    {{/* A dry run executes the gear NOW, even while pending, so approval is\n         an informed decision rather than a reading of source. Anyone may run\n         one; only an administrator may approve. */}}\n    \u003cdiv class=\"field\"\u003e\n      \u003cspan class=\"muted\"\u003edry run — executes the gear right now, even while pending, so approval is an informed decision\u003c/span\u003e\n      {{/* In place, for the same reason the connection test is: a dry run's\n           address is not a page, and reloading it runs the gear again. */}}\n      \u003cform class=\"row\" method=\"post\" action=\"/gears/{{.ID}}/run\"\n            hx-post=\"/gears/{{.ID}}/run\" hx-target=\"#gear-list\" hx-swap=\"outerHTML\"\u003e\n        \u003cinput class=\"grow\" name=\"args\" value=\"{{.DryArgs}}\" aria-label=\"Arguments\"\n               placeholder='{\"numbers\": [1, 2, 3]}'\u003e\n        \u003cbutton type=\"submit\"\u003erun\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/div\u003e\n    {{if .DryRan}}\u003cpre class=\"prompt-preview{{if .DryFailed}} run-failed{{end}}\"\u003e{{.DryOutput}}\u003c/pre\u003e{{end}}\n\n    {{if .Runs}}\n      \u003cdetails\u003e\n        \u003csummary\u003ewhat it has done\u003c/summary\u003e\n        {{range .Runs}}\u003cdiv class=\"gear-run\"\u003e\n          \u003cspan class=\"muted\"\u003e{{.At}} · exit {{.ExitCode}}\u003c/span\u003e\n          \u003cpre class=\"prompt-preview{{if .Failed}} run-failed{{end}}\"\u003e{{.Output}}\u003c/pre\u003e\n        \u003c/div\u003e{{end}}\n      \u003c/details\u003e\n    {{end}}\n\n    {{if .Connections}}\n      \u003cdetails\u003e\n        \u003csummary\u003ewhere it reached\u003c/summary\u003e\n        \u003ctable\u003e\n          \u003cthead\u003e\u003ctr\u003e\u003cth\u003ehost\u003c/th\u003e\u003cth\u003eport\u003c/th\u003e\u003cth\u003emethod\u003c/th\u003e\u003cth\u003eoutcome\u003c/th\u003e\u003cth\u003ewhen\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e\n          \u003ctbody\u003e{{range .Connections}}\u003ctr\u003e\n            \u003ctd\u003e\u003ccode\u003e{{.Host}}\u003c/code\u003e\u003c/td\u003e\u003ctd\u003e{{.Port}}\u003c/td\u003e\u003ctd\u003e{{.Method}}\u003c/td\u003e\n            \u003ctd\u003e{{if .Refused}}\u003cspan class=\"error\"\u003e{{.State}}\u003c/span\u003e{{else}}{{.State}}{{end}}\u003c/td\u003e\n            \u003ctd\u003e{{.At}}\u003c/td\u003e\n          \u003c/tr\u003e{{end}}\u003c/tbody\u003e\n        \u003c/table\u003e\n      \u003c/details\u003e\n    {{end}}\n\n    \u003cdiv class=\"gear-actions\"\u003e\n      \u003cform method=\"post\" action=\"/gears/{{.ID}}/disable\"\u003e\u003cbutton type=\"submit\"\u003edisable\u003c/button\u003e\u003c/form\u003e\n      \u003cform method=\"post\" action=\"/gears/{{.ID}}/delete\"\n            hx-confirm=\"Delete {{.Name}}? Its runs stay on the record; the gear goes.\"\u003e\n        \u003cbutton type=\"submit\" class=\"danger\"\u003edelete\u003c/button\u003e\n      \u003c/form\u003e\n      \u003ca class=\"action\" href=\"/gears\"\u003eclose\u003c/a\u003e\n    \u003c/div\u003e\n\n    {{if .Approvals}}\n      \u003cdetails\u003e\n        \u003csummary\u003ewho approved it\u003c/summary\u003e\n        \u003ctable\u003e\n          \u003cthead\u003e\u003ctr\u003e\u003cth\u003eversion\u003c/th\u003e\u003cth\u003ewho\u003c/th\u003e\u003cth\u003ewhen\u003c/th\u003e\u003cth\u003enetwork\u003c/th\u003e\u003cth\u003etimeout\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e\n          \u003ctbody\u003e{{range .Approvals}}\u003ctr\u003e\n            \u003ctd\u003ev{{.Version}}\u003c/td\u003e\u003ctd\u003e{{.By}}\u003c/td\u003e\u003ctd\u003e{{.At}}\u003c/td\u003e\n            \u003ctd\u003e{{.Network}}\u003c/td\u003e\u003ctd\u003e{{.Timeout}}\u003c/td\u003e\n          \u003c/tr\u003e{{end}}\u003c/tbody\u003e\n        \u003c/table\u003e\n      \u003c/details\u003e\n    {{end}}\n  {{else}}\n    \u003cdiv class=\"gear-actions\"\u003e\n      \u003ca class=\"action\" href=\"/gears?open={{.ID}}\"\u003e{{if .Approved}}review \u0026amp; run{{else}}review \u0026amp; approve{{end}}\u003c/a\u003e\n    \u003c/div\u003e\n  {{end}}\n\u003c/article\u003e",
       "appends": false
     },
     {
@@ -6460,7 +6648,7 @@
           "type": "[]string"
         }
       ],
-      "body": "\u003carticle class=\"card provider\"\u003e\n  \u003cheader class=\"provider-head\"\u003e\n    \u003ch4\u003e{{.Name}}\u003c/h4\u003e\n    \u003cspan class=\"badge\"\u003e{{.Kind}}\u003c/span\u003e\n    {{if .HasKey}}\u003cspan class=\"badge is-ok\"\u003ekey stored\u003c/span\u003e{{else}}\u003cspan class=\"badge\"\u003eno key\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n  {{if .BaseURL}}\u003cp class=\"hint\"\u003e\u003ccode\u003e{{.BaseURL}}\u003c/code\u003e\u003c/p\u003e{{end}}\n\n  {{/* The result of a check somebody just made, not a property of the row. A\n       connection that worked an hour ago is not a fact about now. */}}\n  {{if .Tested}}\n    {{if .TestOK}}\u003cp class=\"hint\"\u003eIt answered. It offers: {{range .Offers}}\u003ccode\u003e{{.}}\u003c/code\u003e {{end}}\u003c/p\u003e\n    {{else}}\u003cp class=\"error\"\u003e{{.TestError}}\u003c/p\u003e{{end}}\n  {{end}}\n\n  \u003cdiv class=\"provider-models\"\u003e\n    {{range .Models}}\u003cspan class=\"badge\"\u003e{{.Name}}\u003c/span\u003e{{end}}\n  \u003c/div\u003e\n\n  \u003cform class=\"provider-add\" method=\"post\" action=\"/models/providers/{{.ID}}/models\"\u003e\n    \u003cinput name=\"model_name\" required placeholder=\"A model this provider serves\"\u003e\n    \u003cinput name=\"label\" placeholder=\"What you will read on a screen\"\u003e\n    \u003cbutton type=\"submit\"\u003eOffer it\u003c/button\u003e\n  \u003c/form\u003e\n\n  \u003cdiv class=\"provider-actions\"\u003e\n    \u003cform method=\"post\" action=\"/models/providers/{{.ID}}/test\"\u003e\n      \u003cbutton type=\"submit\"\u003eTest the connection\u003c/button\u003e\n    \u003c/form\u003e\n    \u003cform method=\"post\" action=\"/models/providers/{{.ID}}/delete\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eRemove\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/div\u003e\n\u003c/article\u003e",
+      "body": "\u003carticle class=\"card provider\"\u003e\n  \u003cheader class=\"provider-head\"\u003e\n    \u003ch4\u003e{{.Name}}\u003c/h4\u003e\n    \u003cspan class=\"badge\"\u003e{{.Kind}}\u003c/span\u003e\n    {{if .HasKey}}\u003cspan class=\"badge is-ok\"\u003ekey stored\u003c/span\u003e{{else}}\u003cspan class=\"badge\"\u003eno key\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n  {{if .BaseURL}}\u003cp class=\"hint\"\u003e\u003ccode\u003e{{.BaseURL}}\u003c/code\u003e\u003c/p\u003e{{end}}\n\n  {{/* The result of a check somebody just made, not a property of the row. A\n       connection that worked an hour ago is not a fact about now. */}}\n  {{if .Tested}}\n    {{if .TestOK}}\u003cp class=\"hint\"\u003eIt answered. It offers: {{range .Offers}}\u003ccode\u003e{{.}}\u003c/code\u003e {{end}}\u003c/p\u003e\n    {{else}}\u003cp class=\"error\"\u003e{{.TestError}}\u003c/p\u003e{{end}}\n  {{end}}\n\n  \u003cdiv class=\"provider-models\"\u003e\n    {{range .Models}}\u003cspan class=\"badge\"\u003e{{.Name}}\u003c/span\u003e{{end}}\n  \u003c/div\u003e\n\n  \u003cform class=\"provider-add\" method=\"post\" action=\"/models/providers/{{.ID}}/models\"\u003e\n    \u003cinput name=\"model_name\" required placeholder=\"A model this provider serves\"\u003e\n    \u003cinput name=\"label\" placeholder=\"What you will read on a screen\"\u003e\n    \u003cbutton type=\"submit\"\u003eOffer it\u003c/button\u003e\n  \u003c/form\u003e\n\n  \u003cdiv class=\"provider-actions\"\u003e\n    {{/* Swapped in place rather than navigated to, so the browser is not left\n         sitting on /models/providers/1/test — an address whose reload asks the\n         provider again. With JavaScript off it is an ordinary post and still\n         works, which is the only reason it may be an ordinary post at all. */}}\n    \u003cform method=\"post\" action=\"/models/providers/{{.ID}}/test\"\n          hx-post=\"/models/providers/{{.ID}}/test\" hx-target=\"#providers\" hx-swap=\"outerHTML\"\u003e\n      \u003cbutton type=\"submit\"\u003eTest the connection\u003c/button\u003e\n    \u003c/form\u003e\n    \u003cform method=\"post\" action=\"/models/providers/{{.ID}}/delete\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eRemove\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/div\u003e\n\u003c/article\u003e",
       "appends": false
     },
     {
@@ -6757,6 +6945,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -6868,6 +7060,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -6936,7 +7132,7 @@
           "type": "[]Asset"
         }
       ],
-      "body": "\u003c!doctype html\u003e\n\u003chtml lang=\"{{.Ctx.Lang}}\"{{if .Ctx.Theme}} data-theme=\"{{.Ctx.Theme}}\"{{end}}\u003e\n\u003chead\u003e\n{{template \"cog.shell.head\" .}}\n\u003c/head\u003e\n\u003cbody\u003e\n{{template \"cog.shell.body\" .}}\n\u003c/body\u003e\n\u003c/html\u003e",
+      "body": "\u003c!doctype html\u003e\n\u003chtml lang=\"{{.Ctx.Lang}}\"{{if .Ctx.Theme}} data-theme=\"{{.Ctx.Theme}}\"{{end}}{{if .Ctx.Accent}} style=\"--accent-chosen: {{.Ctx.Accent}}\"{{end}}\u003e\n\u003chead\u003e\n{{template \"cog.shell.head\" .}}\n\u003c/head\u003e\n\u003cbody\u003e\n{{template \"cog.shell.body\" .}}\n\u003c/body\u003e\n\u003c/html\u003e",
       "appends": false
     },
     {
@@ -6976,6 +7172,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -7090,6 +7290,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -7198,6 +7402,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {
@@ -7312,6 +7520,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -7423,6 +7635,10 @@
           "type": "string"
         },
         {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
           "path": "Ctx.Lang",
           "type": "string"
         },
@@ -7531,6 +7747,10 @@
         },
         {
           "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
           "type": "string"
         },
         {

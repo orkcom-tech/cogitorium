@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -9,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -523,8 +525,49 @@ func (s *Server) viewCtx(r *http.Request, caller identity.User) view.Ctx {
 			ID: caller.ID, Name: caller.Name, IsAdmin: caller.IsAdmin(), SignedIn: true,
 		}
 	}
+	c.Theme, c.Accent = look(r)
 	return c
 }
+
+// look reads the appearance the person chose in the application.
+//
+// The choice used to live only in localStorage, which this server cannot see,
+// so a person who chose light in the app got light on the app's screens and
+// DARK on every screen the server renders. Two halves of one product
+// disagreeing about what it looks like, with nothing on screen to explain it.
+//
+// Anything unrecognised is no choice at all rather than an error: an
+// appearance is not worth failing a page over, and following the system is
+// what having made no choice means.
+func look(r *http.Request) (mode, accent string) {
+	c, err := r.Cookie("cogitorium_look")
+	if err != nil {
+		return "", ""
+	}
+	raw, err := url.QueryUnescape(c.Value)
+	if err != nil {
+		return "", ""
+	}
+	var chosen struct {
+		Mode   string `json:"mode"`
+		Accent string `json:"accent"`
+	}
+	if err := json.Unmarshal([]byte(raw), &chosen); err != nil {
+		return "", ""
+	}
+	if chosen.Mode != "light" && chosen.Mode != "dark" {
+		chosen.Mode = ""
+	}
+	// A colour, and only a colour: this value is written into a style
+	// attribute, so anything that is not six hex digits does not go near one.
+	if !hexColour.MatchString(chosen.Accent) {
+		chosen.Accent = ""
+	}
+	return chosen.Mode, chosen.Accent
+}
+
+// hexColour is the whole vocabulary an accent may be written in.
+var hexColour = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 // flattenQuery keeps the first value per key. A template asking for .Query.q
 // wants a string, and handing it a slice would make every plugin write index 0.

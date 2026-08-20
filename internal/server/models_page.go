@@ -71,7 +71,7 @@ func (s *Server) handleTestProviderForm(w http.ResponseWriter, r *http.Request) 
 	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		s.renderModels(w, r, "that is not a provider", nil)
+		s.renderModelsInto(w, r, "that is not a provider", nil, "cog.list.providers")
 		return
 	}
 
@@ -79,7 +79,7 @@ func (s *Server) handleTestProviderForm(w http.ResponseWriter, r *http.Request) 
 	client, _, err := s.catalog.Client(r.Context(), id)
 	if err != nil {
 		result.err = err.Error()
-		s.renderModels(w, r, "", result)
+		s.renderModelsInto(w, r, "", result, "cog.list.providers")
 		return
 	}
 	models, err := client.ListModels(r.Context())
@@ -87,11 +87,11 @@ func (s *Server) handleTestProviderForm(w http.ResponseWriter, r *http.Request) 
 		// The provider being unreachable is a result, not a fault of this
 		// server, and it belongs on the row rather than at the top of the page.
 		result.err = err.Error()
-		s.renderModels(w, r, "", result)
+		s.renderModelsInto(w, r, "", result, "cog.list.providers")
 		return
 	}
 	result.ok, result.offers = true, models
-	s.renderModels(w, r, "", result)
+	s.renderModelsInto(w, r, "", result, "cog.list.providers")
 }
 
 // handleCreateModelForm offers one of a provider's models to agents.
@@ -150,6 +150,14 @@ type providerTest struct {
 }
 
 func (s *Server) renderModels(w http.ResponseWriter, r *http.Request, problem string, test *providerTest) {
+	s.renderModelsInto(w, r, problem, test, "cog.list.models")
+}
+
+// renderModelsInto is renderModels naming which panel an htmx request should
+// get back. The catalogue is the usual one; testing a connection writes its
+// answer onto the PROVIDER's row, so that action asks for the provider list
+// instead — otherwise the swap would replace the providers with the catalogue.
+func (s *Server) renderModelsInto(w http.ResponseWriter, r *http.Request, problem string, test *providerTest, fragment string) {
 	model := view.ModelCatalog{
 		Ctx:   s.viewCtx(r, callerFrom(r.Context())),
 		Error: problem,
@@ -188,5 +196,5 @@ func (s *Server) renderModels(w http.ResponseWriter, r *http.Request, problem st
 		model.Providers = append(model.Providers, row)
 	}
 
-	s.renderPage(w, r, "cog.page.models", "cog.list.models", "Model catalogue", model)
+	s.renderPage(w, r, "cog.page.models", fragment, "Model catalogue", model)
 }

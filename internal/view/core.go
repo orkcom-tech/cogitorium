@@ -66,6 +66,11 @@ type Ctx struct {
 	Path string
 	// Theme is the operator's choice, empty when they follow the system.
 	Theme string
+	// Accent is the colour they chose, empty when they kept the default. It
+	// reaches the page as a custom property, which is the same route the
+	// application's own stylesheet uses — so both halves of the product paint
+	// from one value.
+	Accent string
 	// Lang is the document language.
 	Lang string
 	// RequestToken is what a form has to carry back. Present on every model so

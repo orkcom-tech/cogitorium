@@ -13,7 +13,7 @@
 */}}
 
 {{define "cog.shell.document"}}<!doctype html>
-<html lang="{{.Ctx.Lang}}"{{if .Ctx.Theme}} data-theme="{{.Ctx.Theme}}"{{end}}>
+<html lang="{{.Ctx.Lang}}"{{if .Ctx.Theme}} data-theme="{{.Ctx.Theme}}"{{end}}{{if .Ctx.Accent}} style="--accent-chosen: {{.Ctx.Accent}}"{{end}}>
 <head>
 {{template "cog.shell.head" .}}
 </head>

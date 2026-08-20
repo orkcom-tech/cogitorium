@@ -108,4 +108,25 @@ export function applyTheme(t: Theme) {
   if (t.mode === 'system') root.removeAttribute('data-theme')
   else root.setAttribute('data-theme', t.mode)
   root.style.setProperty('--accent-chosen', t.accent)
+  tellTheServer(t)
+}
+
+/**
+ * The same choice, somewhere the SERVER can read it.
+ *
+ * Half this product's screens are rendered by the server, and the theme lived
+ * only in localStorage — which the server cannot see. So choosing light in the
+ * app left every server-rendered screen dark: two halves of one product
+ * disagreeing about what it looks like, with nothing to explain it.
+ *
+ * A cookie rather than a request, because it must be in hand for the FIRST
+ * paint of a full page load. localStorage stays the client's own copy: it is
+ * read synchronously before React mounts, which a cookie parse could also do
+ * but which there is no reason to change.
+ */
+function tellTheServer(t: Theme) {
+  const value = encodeURIComponent(JSON.stringify({ mode: t.mode, accent: t.accent }))
+  // A year, and Lax: it is a preference, not a credential, and it must survive
+  // arriving from a link somebody sent.
+  document.cookie = `cogitorium_look=${value}; path=/; max-age=31536000; SameSite=Lax`
 }

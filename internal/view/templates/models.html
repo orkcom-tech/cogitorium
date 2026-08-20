@@ -76,7 +76,12 @@ OpenAI-compatible shape, which is how Ollama, LM Studio, vLLM and llama.cpp are 
   </form>
 
   <div class="provider-actions">
-    <form method="post" action="/models/providers/{{.ID}}/test">
+    {{/* Swapped in place rather than navigated to, so the browser is not left
+         sitting on /models/providers/1/test — an address whose reload asks the
+         provider again. With JavaScript off it is an ordinary post and still
+         works, which is the only reason it may be an ordinary post at all. */}}
+    <form method="post" action="/models/providers/{{.ID}}/test"
+          hx-post="/models/providers/{{.ID}}/test" hx-target="#providers" hx-swap="outerHTML">
       <button type="submit">Test the connection</button>
     </form>
     <form method="post" action="/models/providers/{{.ID}}/delete">

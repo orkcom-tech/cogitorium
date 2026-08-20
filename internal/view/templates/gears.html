@@ -190,7 +190,10 @@
          one; only an administrator may approve. */}}
     <div class="field">
       <span class="muted">dry run — executes the gear right now, even while pending, so approval is an informed decision</span>
-      <form class="row" method="post" action="/gears/{{.ID}}/run">
+      {{/* In place, for the same reason the connection test is: a dry run's
+           address is not a page, and reloading it runs the gear again. */}}
+      <form class="row" method="post" action="/gears/{{.ID}}/run"
+            hx-post="/gears/{{.ID}}/run" hx-target="#gear-list" hx-swap="outerHTML">
         <input class="grow" name="args" value="{{.DryArgs}}" aria-label="Arguments"
                placeholder='{"numbers": [1, 2, 3]}'>
         <button type="submit">run</button>
