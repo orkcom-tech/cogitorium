@@ -307,6 +307,11 @@ func (s *Server) handleImportWorkspaceForm(w http.ResponseWriter, r *http.Reques
 		// imported workspace whose plans stayed behind is a set of agents with
 		// nothing telling them what comes first.
 		IncludePlanboards: true,
+		// The doors, if the document carries any. A bundle only has them
+		// because somebody ticked the box when exporting, and rebuilding them
+		// grants nothing: every one arrives with no key and refuses every
+		// delivery until an operator issues one here.
+		IncludeInlets: true,
 	})
 	if err != nil {
 		s.renderWorkspaces(w, r, err.Error(), "")

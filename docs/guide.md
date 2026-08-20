@@ -346,6 +346,92 @@ them. Neither has a model, because this install has never heard of
 `qwen2.5:0.5b` — and it says so instead of quietly binding them to whatever it
 had. Add the model under **Models**, or point each agent at a local one.
 
+### Taking the door with it
+
+Everything a workspace is made of can travel. What is **off by default** is the
+part that is somebody's work rather than a shape — gear source, context
+documents — and the two things that are nobody's to move: a **secret's value**,
+which has nowhere in the document to go, and a **receiver's key**.
+
+Tick **include receivers** and the bundle carries the doors: the address, and
+behind it every task with what it accepts, its **input schema**, the agent it
+names, the instruction, and `expect`. That matters more than it sounds. The task
+is the entire contract with whatever calls this install from outside, and
+without it a restored workspace answered `404` at `POST /i/{address}/{task}`
+until somebody re-typed all of it by hand — so two installs restored from one
+document were not the same install.
+
+```json
+"inlets": [
+  { "address": "echopage",
+    "tasks": [
+      { "name": "extract", "accepts": "json", "agent": "reader",
+        "schema": "{\"type\":\"object\",\"required\":[\"jobId\",\"sourceUrl\"]…}",
+        "instruction": "Read the page and describe whose it is. Never invent…",
+        "expect": { "schema": "{\"required\":[\"displayName\"]…}" } } ] }
+]
+```
+
+**The key is not there and there is no field for it.** An imported door exists,
+has exactly the right shape, and refuses every delivery until somebody on the
+receiving install issues one — the import says so, in `needs_key`:
+
+```json
+"inlets_imported": ["echopage/extract"],
+"needs_key": ["echopage"]
+```
+
+An address already in use on the receiving install is **left alone**, not merged
+into: an address is what a caller outside has in its configuration, and adding a
+task to somebody's existing door changes what an unrelated system gets back.
+
+To open it without visiting a screen — which is the point, for a workspace that
+ships with a deployment — name the door and the variable holding its key in
+`config.yaml`, and both halves of the integration come from the same place:
+
+```yaml
+inlet_keys:
+  - address: echopage
+    key_env: ECHOPAGE_INLET_KEY
+```
+
+Or `POST /api/v1/inlets/{id}/key` with `{"key": "…"}` to adopt a key you already
+hold. See [Configuration](/cogitorium/configuration/#doors-a-prepared-workspace-arrived-with).
+
+### Saying what it needs
+
+A bundle **never carries a permission** — an imported gear is unapproved, an
+imported MCP server is pending, and nothing in the document can grant the
+internet. That is right and it left a gap: an imported workspace whose agent has
+to read a public page arrived with no way to *say* so, and the operator found
+out by running it and watching it fail.
+
+So a bundle may declare what it needs. `requires` grants nothing:
+
+```json
+"requires": {
+  "egress": [
+    { "agent": "reader",
+      "reason": "reads the public page a customer asked us to import",
+      "hosts": ["*"] }
+  ]
+}
+```
+
+The import hands it straight back, marked ungranted, and the answer is the same
+outward grant you would draw on the blueprint anyway:
+
+```json
+"requires": [
+  { "kind": "egress", "agent": "reader",
+    "reason": "reads the public page a customer asked us to import",
+    "hosts": ["*"], "granted": false }
+]
+```
+
+The **reason** is the whole value of it. "Needs the internet" is not something
+an operator can weigh; "reads the public page a customer asked us to import" is.
+
 ### What this screen will not do
 
 - **No renaming.** A workspace's name and description are fixed at creation.
@@ -360,6 +446,10 @@ had. Add the model under **Models**, or point each agent at a local one.
   relative, and anything trying to climb out of the branch is refused before the
   import creates anything at all — which is why a refused bundle leaves nothing
   behind.
+- **A receiver's key never travels**, and a restored door refuses every delivery
+  until somebody issues one on the receiving install.
+- **A `requires` block grants nothing.** It is the document asking; the answer
+  is a human act, exactly as it was.
 
 ---
 

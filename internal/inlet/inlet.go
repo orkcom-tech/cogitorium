@@ -45,6 +45,11 @@ const (
 // between revoking one inlet and forcing everybody to sign in again.
 const KeyPrefix = "cgi"
 
+// MinKeyLen is the floor under a key somebody supplies rather than generates.
+// A generated one is 71 characters; this is only about what a deployment is
+// allowed to hand in. See SetKey.
+const MinKeyLen = 32
+
 // addressRe and nameRe keep both halves of the delivery URL readable and
 // unambiguous as path segments: no slashes, no escapes, no case that a proxy
 // or a client library might normalise differently on the way in.
@@ -288,13 +293,42 @@ func (s *Store) WorkspaceOfTask(ctx context.Context, taskID int64) (int64, error
 // the moment this returns, so a leaked key is closed by issuing a new one
 // rather than by deleting the door and rebuilding its tasks.
 func (s *Store) IssueKey(ctx context.Context, id int64) (string, error) {
+	return s.SetKey(ctx, id, "")
+}
+
+// SetKey issues a key, or adopts one the caller already has.
+//
+// Generating one and handing it back once is right for a person at a screen:
+// they copy it, and nothing on this machine keeps a copy they could leak. It is
+// the wrong shape for a deployment. A workspace brought up from a bundle needs
+// its door open before anything can call it, and with a generated key that
+// means a script that creates the inlet, reads the key out of the response and
+// writes it where the caller will look — which every consumer of a prepared
+// workspace has to write, and each one gets subtly wrong.
+//
+// So a key may be supplied. The value then comes from wherever the deployment
+// already keeps its secrets — an environment variable, a Docker secret, a
+// Kubernetes Secret — and both sides are configured from one source instead of
+// one being derived from the other at run time. What is STORED is unchanged
+// either way: the hash, and never the value.
+//
+// A supplied key is refused if it is short. Thirty-two characters is not a
+// policy about entropy so much as a floor under the thing this actually
+// guards: an inlet key is a bearer credential on a public path, and a door
+// whose key is "test" is a door.
+func (s *Store) SetKey(ctx context.Context, id int64, supplied string) (string, error) {
 	in, err := s.GetInlet(ctx, id)
 	if err != nil {
 		return "", err
 	}
-	key, err := NewKey(in.Address)
-	if err != nil {
-		return "", err
+	key := strings.TrimSpace(supplied)
+	if key == "" {
+		if key, err = NewKey(in.Address); err != nil {
+			return "", err
+		}
+	} else if len(key) < MinKeyLen {
+		return "", fmt.Errorf("this key is %d characters; an inlet key is a bearer credential on a public path, so at least %d are required",
+			len(key), MinKeyLen)
 	}
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE inlets SET key_hash = ?, key_issued_at = ?, key_last_used_at = NULL, updated_at = ? WHERE id = ?`,
@@ -305,7 +339,8 @@ func (s *Store) IssueKey(ctx context.Context, id int64) (string, error) {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return "", fmt.Errorf("inlet %d: %w", id, ErrNotFound)
 	}
-	slog.Info("inlet key issued", "inlet_id", id, "address", in.Address, "replaced_existing", in.HasKey)
+	slog.Info("inlet key issued", "inlet_id", id, "address", in.Address,
+		"replaced_existing", in.HasKey, "supplied", supplied != "")
 	return key, nil
 }
 

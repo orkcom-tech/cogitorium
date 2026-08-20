@@ -145,6 +145,23 @@ type Config struct {
 	// nobody has chosen one yet.
 	OrchestratorModel string `yaml:"orchestrator_model"`
 
+	// InletKeys opens doors a prepared workspace arrived with.
+	//
+	// A bundle carries the SHAPE of an inlet and never its key, which is the
+	// right rule and the reason a restored door is inert. It is also the last
+	// manual step in a deployment that is otherwise one command: bring the
+	// install up, import the workspace, and then somebody has to visit a screen
+	// before anything outside can call it.
+	//
+	// This closes that without weakening the rule, because the key still does
+	// not come from the document — it comes from the environment, where this
+	// deployment already keeps its secrets, and both sides of the integration
+	// are configured from one source. Applied on every start rather than only
+	// the first: the caller's key is whatever the environment says, and an
+	// install that had drifted from it would refuse deliveries with nothing to
+	// read.
+	InletKeys []SeedInletKey `yaml:"inlet_keys"`
+
 	// MetricsListen is where the Prometheus endpoint listens, e.g.
 	// "127.0.0.1:9090". EMPTY MEANS OFF, and off is the default.
 	//
@@ -624,4 +641,17 @@ type SeedModel struct {
 	Name string `yaml:"name"`
 	// Label is what a person reads on a screen. Empty shows the name.
 	Label string `yaml:"label"`
+}
+
+// SeedInletKey opens one door with a key this deployment already holds.
+//
+// The key itself is never here, for the same reason a provider key is not: a
+// configuration file is read by whatever can read the disk and ends up in a
+// repository. KeyEnv names the variable holding it.
+type SeedInletKey struct {
+	// Address is the door, as the delivery URL spells it: the `echopage` in
+	// POST /i/echopage/extract.
+	Address string `yaml:"address"`
+	// KeyEnv names the environment variable holding the key.
+	KeyEnv string `yaml:"key_env"`
 }

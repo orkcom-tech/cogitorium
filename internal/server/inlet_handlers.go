@@ -766,6 +766,12 @@ func (s *Server) handleDeleteInlet(w http.ResponseWriter, r *http.Request) {
 
 // handleRotateInletKey issues a fresh key and retires the old one. This is the
 // answer to a leaked key: the door and its tasks stay exactly as they are.
+//
+// With a body of {"key": "..."} it adopts one the caller already has instead of
+// generating one. That is what makes a prepared workspace deployable: bring the
+// install up, import the bundle, set the key the caller was already configured
+// with, and nothing had to read a generated value out of a response and write
+// it somewhere. See inlet.SetKey for why a supplied key has a floor under it.
 func (s *Server) handleRotateInletKey(w http.ResponseWriter, r *http.Request) {
 	id, ok := s.nestedScoped(w, r, func(inletID int64) (int64, error) {
 		return s.inlets.WorkspaceOfInlet(r.Context(), inletID)
@@ -773,9 +779,27 @@ func (s *Server) handleRotateInletKey(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	key, err := s.inlets.IssueKey(r.Context(), id)
+	// An empty body is the ordinary case and means "generate one", so a
+	// decode failure is not fatal here — a caller who sends nothing is asking
+	// for exactly what this route always did.
+	var in struct {
+		Key string `json:"key"`
+	}
+	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&in)
+
+	key, err := s.inlets.SetKey(r.Context(), id, in.Key)
 	if err != nil {
 		fail(w, r, err)
+		return
+	}
+	if in.Key != "" {
+		// Not echoed back. The caller supplied it, so returning it would put a
+		// credential in a response body and in whatever logs that response.
+		writeJSON(w, http.StatusOK, map[string]any{
+			"key_set": true,
+			"notice": "The key you supplied is now this door's key, and the previous one stopped " +
+				"working. It is stored as a hash and is not echoed back.",
+		})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

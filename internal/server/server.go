@@ -191,6 +191,9 @@ type Server struct {
 	// empty. See seed_models.go.
 	seedProviders    []config.SeedProvider
 	seedOrchestrator string
+	// seedInletKeys opens doors an imported workspace arrived with, from the
+	// environment rather than from the bundle. See openSeededInlets.
+	seedInletKeys []config.SeedInletKey
 
 	// routes is the inventory every registration adds itself to; see routes.go.
 	routes []Route
@@ -290,6 +293,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		adminSeeds:          identity.Seeds{Token: cfg.AdminToken, Password: cfg.AdminPassword},
 		seedProviders:       cfg.Providers,
 		seedOrchestrator:    cfg.OrchestratorModel,
+		seedInletKeys:       cfg.InletKeys,
 		// The contextd version is fetched at check time, not here: an install
 		// with no contextd should not pay a subprocess on every boot to
 		// discover that, and the check runs at most once a day.
@@ -852,6 +856,10 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	// is printed: the last line of a first start should be the credential
 	// somebody has to copy, not a provider being created underneath it.
 	s.seedModels(ctx, s.seedProviders, s.seedOrchestrator)
+	// And the doors a prepared workspace arrived with, if the environment says
+	// what their keys are. After the models, because an install with neither is
+	// not ready either way and this is the shorter of the two lists.
+	s.openSeededInlets(ctx, s.seedInletKeys)
 
 	_, token, err := s.identity.Bootstrap(ctx, s.adminSeeds)
 	if err != nil {

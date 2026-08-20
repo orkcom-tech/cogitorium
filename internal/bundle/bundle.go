@@ -21,6 +21,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
+	"github.com/orkcom-tech/cogitorium/internal/inlet"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/planboard"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
@@ -92,6 +93,114 @@ type Bundle struct {
 	//
 	// Absent in a bundle written before this field existed.
 	Planboards []Planboard `json:"planboards,omitempty"`
+
+	// Inlets are the doors into this workspace: the address, and behind it the
+	// tasks a caller outside selects by name.
+	//
+	// This is the whole integration surface, and it used not to travel at all.
+	// A workspace restored from a bundle answered 404 at `POST /i/{address}/
+	// {task}` until somebody created the inlet and re-typed every task by hand
+	// — the schema, the instruction, what success is — which meant two installs
+	// restored from one document were not the same install. Everything a caller
+	// depends on lives on the task, so a bundle that carried everything except
+	// the door carried everything except the part other systems talk to.
+	//
+	// The KEY does not travel and there is no field for it. It is a credential,
+	// it is shown once, and a bundle is a document people forward. An imported
+	// door arrives inert: it exists, its shape is right, and it refuses every
+	// delivery until somebody on the receiving install issues a key on purpose.
+	//
+	// Absent in a bundle written before this field existed.
+	Inlets []Inlet `json:"inlets,omitempty"`
+
+	// Requires is what this workspace needs from the install it lands on, and
+	// it grants NOTHING.
+	//
+	// The rule that a bundle never carries a permission is not weakened by
+	// this and must not be: see the Gear comment on the network grant. What was
+	// missing is the other half. An imported workspace whose agent has to read
+	// a public page arrived with no way to SAY so, so the operator found out by
+	// running it and watching it fail — and the document that otherwise
+	// describes the workspace completely was silent about the one capability
+	// without which it does nothing.
+	//
+	// So: a declaration, surfaced on import as something to decide, granted by
+	// the same human act as before. A document that grants itself the internet
+	// is a document that grants itself the internet.
+	//
+	// Absent in a bundle written before this field existed.
+	Requires *Requires `json:"requires,omitempty"`
+}
+
+// Inlet is one door, with the tasks behind it.
+type Inlet struct {
+	Address     string      `json:"address"`
+	Description string      `json:"description,omitempty"`
+	Tasks       []InletTask `json:"tasks"`
+}
+
+// InletTask is one job behind a door: how a caller selects it, what it accepts,
+// who does the work, what they are told, and what success is.
+type InletTask struct {
+	Name string `json:"name"`
+	// Accepts is "json" or "file", spelled as the store spells it.
+	Accepts string `json:"accepts"`
+	// Schema is the JSON Schema a JSON payload is checked against BEFORE any
+	// model is called, which is why it belongs in the document: a task whose
+	// schema did not travel accepts anything on the far side, and the caller
+	// finds out from a model's answer rather than from a 400.
+	Schema string `json:"schema,omitempty"`
+	// ContentType is what a file task accepts. Empty means any.
+	ContentType string `json:"content_type,omitempty"`
+	// Agent is who does the work, by NAME — the way ModelRef names a model,
+	// and for the same reason: an id is a fact about one database.
+	Agent       string `json:"agent"`
+	Instruction string `json:"instruction"`
+	// Expect is what this task declares success to be, checked against the
+	// run's record rather than against what the agent wrote. It travels
+	// because it is the contract the caller relies on: a task that lost its
+	// expect on the way across answers 200 with whatever the model said.
+	Expect *InletExpect `json:"expect,omitempty"`
+	// CallbackURL travels as the shape it is, and is inert until the receiving
+	// install allows the host. Where this machine may talk to is
+	// `callback_hosts` in its own configuration — empty means callbacks are
+	// off — so a bundle can name a destination and cannot reach one.
+	CallbackURL string `json:"callback_url,omitempty"`
+}
+
+// InletExpect mirrors inlet.Expect, in the document's own spelling.
+type InletExpect struct {
+	ProducesFiles int    `json:"produces_files,omitempty"`
+	RunsGear      string `json:"runs_gear,omitempty"`
+	// Schema is a JSON Schema the ANSWER must satisfy. A wrong shape is
+	// refused and never reaches the caller.
+	Schema string `json:"schema,omitempty"`
+	// AnswerFrom decides what the caller is given. Empty means the agent.
+	AnswerFrom string `json:"answer_from,omitempty"`
+}
+
+// Requires is what a bundle asks the receiving operator for. Nothing here is
+// granted by the document.
+type Requires struct {
+	Egress []EgressNeed `json:"egress,omitempty"`
+}
+
+// EgressNeed is one statement of "this will not work without reaching the web".
+//
+// It is a request, and the thing that answers it is the outward grant an
+// operator draws on the blueprint — the same act as before, prompted by the
+// document instead of discovered by a failure.
+type EgressNeed struct {
+	// Agent is who needs it, by name, or empty for "this workspace does".
+	Agent string `json:"agent,omitempty"`
+	// Reason is what it is for, in the words of whoever wrote the bundle. It
+	// is the whole value of the declaration: "needs the internet" is not
+	// something an operator can weigh, and "reads the public page a customer
+	// asked us to import" is.
+	Reason string `json:"reason,omitempty"`
+	// Hosts is what it expects to reach. Empty, or a single "*", means
+	// anywhere — which is a bigger ask and reads as one.
+	Hosts []string `json:"hosts,omitempty"`
 }
 
 // Planboard is one written order of work, with its steps and who follows it.
@@ -256,6 +365,9 @@ type Stores struct {
 	// and a nil store means a bundle simply carries none — not an error, and
 	// not a reason an export fails.
 	MCP *mcpstore.Store
+	// Inlets is the doors. Nil is treated the same way the others are: a
+	// bundle that carries none rather than an export that fails.
+	Inlets *inlet.Store
 }
 
 // Options says which optional parts of a workspace travel. Agents and wires
@@ -272,6 +384,9 @@ type Options struct {
 	// what it runs or what it calls, and the names of the values it wants.
 	// Never a credential and never an approval — see the MCPServer comment.
 	MCP bool
+	// Inlets carries the doors into this workspace and the tasks behind them —
+	// never a key. See the Inlet comment.
+	Inlets bool
 }
 
 // filenameUnsafe matches everything a download filename must not carry. A

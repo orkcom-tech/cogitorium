@@ -27,6 +27,9 @@ func (s *Server) bundleStores() bundle.Stores {
 		// reads as "this bundle carries none" rather than as a failure.
 		MCP:        s.mcp,
 		Planboards: s.plans,
+		// The doors. Carried only when asked for and never with a key — see
+		// bundle.Inlet.
+		Inlets: s.inlets,
 	}
 }
 
@@ -59,9 +62,18 @@ func (s *Server) handleExportWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Off unless asked for, like the rest. A door is the part other systems
+	// have in their configuration, so carrying one is a decision rather than a
+	// convenience — and the key never travels either way.
+	withInlets, err := queryFlag(r, "inlets")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	b, err := bundle.Export(r.Context(), s.bundleStores(), id,
-		bundle.Options{Gears: gears, Context: withContext, MCP: withMCP, Planboards: withPlans})
+		bundle.Options{Gears: gears, Context: withContext, MCP: withMCP,
+			Planboards: withPlans, Inlets: withInlets})
 	if err != nil {
 		failContext(w, r, err)
 		return
@@ -84,6 +96,7 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 		IncludeContext    bool          `json:"include_context"`
 		IncludeMCP        bool          `json:"include_mcp"`
 		IncludePlanboards bool          `json:"include_planboards"`
+		IncludeInlets     bool          `json:"include_inlets"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxBundleBytes)
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -105,6 +118,7 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 		IncludeContext:    in.IncludeContext,
 		IncludeMCP:        in.IncludeMCP,
 		IncludePlanboards: in.IncludePlanboards,
+		IncludeInlets:     in.IncludeInlets,
 	})
 	if err != nil {
 		// A malformed document is the caller's to fix, so it must not read as

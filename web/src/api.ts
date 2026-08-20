@@ -882,8 +882,15 @@ export const api = {
     // than a cookie, so a plain link to this route would arrive unauthenticated
     // — the document has to come back through the same authenticated path as
     // everything else and be handed to the browser as a file.
-    exportBundle: (id: number, opts: { gears: boolean; context: boolean }) => {
-      const p = new URLSearchParams({ gears: opts.gears ? '1' : '0', context: opts.context ? '1' : '0' })
+    exportBundle: (id: number, opts: { gears: boolean; context: boolean; inlets: boolean }) => {
+      const p = new URLSearchParams({
+        gears: opts.gears ? '1' : '0',
+        context: opts.context ? '1' : '0',
+        // The doors. Off unless asked for, like the rest — and the KEY is
+        // never in the document either way, so a restored door is inert until
+        // somebody on the far side opens it.
+        inlets: opts.inlets ? '1' : '0',
+      })
       return fetch(session.url(`/api/v1/workspaces/${id}/export?${p}`), {
         headers: session.headers(),
       }).then(async (r) => {

@@ -94,6 +94,40 @@ providers:
 orchestrator_model: local/qwen2.5:7b
 ```
 
+### Doors a prepared workspace arrived with
+
+A workspace [bundle](/cogitorium/guide/#take-one-to-another-install) can carry
+its **inlets** — the address, and behind it every task with its schema, its
+instruction and what success is — so two installs restored from one document are
+the same install. It never carries the **key**, which is why a restored door is
+inert: it exists, its shape is right, and it refuses every delivery.
+
+That is the right rule and it left one manual step in a deployment that is
+otherwise one command. `inlet_keys` closes it without weakening the rule,
+because the key does not come from the document — it comes from the environment,
+where this deployment already keeps its secrets and where the caller's own copy
+comes from too:
+
+| Key | Environment | Default | What it does |
+|---|---|---|---|
+| `inlet_keys` | — | empty | Doors to open at start, each naming the variable holding its key. Applied on **every** start, not only the first: a key is one half of a pair, and an install that had drifted from the value the caller holds would refuse deliveries with nothing to read. |
+
+```yaml
+inlet_keys:
+  - address: echopage          # the `echopage` in POST /i/echopage/extract
+    key_env: ECHOPAGE_INLET_KEY
+```
+
+A door named here that this install does not have yet is ordinary — on a first
+start the workspace has not been imported — and the next start finds it. An
+empty variable leaves the door **shut** and says so loudly, because the failure
+it would otherwise cause is a 401 at somebody else's integration hours later.
+
+The same thing through the API, for a deployment that would rather script it:
+`POST /api/v1/inlets/{id}/key` with `{"key": "…"}` adopts a key you already
+hold instead of generating one. A supplied key must be at least 32 characters;
+the response never echoes it back.
+
 ## Running agent-authored code
 
 | Key | Environment | Default | What it does |

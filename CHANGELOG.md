@@ -1,5 +1,87 @@
 # Changelog
 
+## v3.3.0
+
+**A prepared workspace you can commit, bring up, and call.** A bundle described
+everything about a workflow except the part other systems talk to, so a
+workspace restored from one had no door and no way to say what it needed. Both
+are in the document now, and neither carries a permission.
+
+### The door travels
+
+A bundle carries its **inlets** when you ask for them: the address, and behind
+it every task with what it accepts, its **input schema**, the agent it names,
+the instruction, and `expect`. That is the whole contract with whatever calls
+this install from outside, and none of it used to survive an export — a restored
+workspace answered `404` at `POST /i/{address}/{task}` until somebody re-typed
+all of it, so two installs restored from one document were not the same install.
+
+**The key does not travel and there is no field for it.** An imported door
+exists, has exactly the right shape, and refuses every delivery until somebody
+on the receiving install issues one; the import says which doors are in that
+state rather than leaving it to be discovered. An address already in use is left
+alone rather than merged into — an address is what a caller outside has in its
+configuration, and adding a task to somebody's existing door changes what an
+unrelated system gets back.
+
+Off unless asked for, like gear source and context documents. What is never
+carried, whatever you tick, is a secret's value and a receiver's key.
+
+### Opening it without visiting a screen
+
+Which left the last manual step in a deployment that is otherwise one command.
+`inlet_keys` closes it without weakening the rule, because the key still does
+not come from the document — it comes from the environment, where the deployment
+already keeps its secrets and where the caller's own copy comes from:
+
+```yaml
+inlet_keys:
+  - address: echopage
+    key_env: ECHOPAGE_INLET_KEY
+```
+
+Applied on every start rather than only the first: a key is one half of a pair,
+and an install that had drifted from the value the caller holds would refuse
+deliveries with nothing to read. A door named here that does not exist yet is
+ordinary — on a first start the workspace has not been imported — and an empty
+variable leaves the door **shut** and says so loudly, because the alternative is
+a 401 at somebody else's integration hours later.
+
+`POST /api/v1/inlets/{id}/key` also accepts `{"key": "…"}` now, for a deployment
+that would rather script it. A supplied key must be at least 32 characters and
+is never echoed back.
+
+### A bundle may say what it needs
+
+A document still cannot grant itself anything: an imported gear is unapproved,
+an imported MCP server is pending, and nothing in a bundle reaches the internet.
+That rule is untouched. What was missing is the other half — an imported
+workspace whose agent has to read a public page arrived with no way to *say* so,
+so the operator found out by running it and watching it fail.
+
+`requires` is a declaration:
+
+```json
+"requires": { "egress": [
+  { "agent": "reader",
+    "reason": "reads the public page a customer asked us to import",
+    "hosts": ["*"] } ] }
+```
+
+The import hands it back marked `"granted": false`, and the answer is the same
+outward grant an operator draws on the blueprint. The **reason** is the whole
+value of it: "needs the internet" is not something anybody can weigh, and
+"reads the public page a customer asked us to import" is.
+
+### Also
+
+- **A test read whoever ran it.** The host-shell test opens a login shell, which
+  is the point of the feature — your profile, your PATH — and therefore ran the
+  author's oh-my-zsh, whose "would you like to update?" swallowed the first
+  character of the command. It passed on CI and failed on a laptop, which is the
+  worst direction for that to fail in. The profile is emptied now; the login
+  shell stays.
+
 ## v3.2.0
 
 **The release where the product was used rather than read.** Every screen was
