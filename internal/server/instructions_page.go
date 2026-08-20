@@ -197,11 +197,15 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, page, fragme
 	shell := view.Shell{
 		Ctx:     s.viewCtx(r, callerFrom(r.Context())),
 		AppHead: s.appHead(),
-		Title:   title,
-		Body:    template.HTML(body.String()),
-		Nav:     rt.navFor(r.URL.Path, callerFrom(r.Context()).IsAdmin()),
-		Styles:  rt.styles,
-		Scripts: rt.scripts,
+		Look:    s.viewCtx(r, callerFrom(r.Context())).Theme,
+		// From what the checker already knows. Never a request: drawing a rail
+		// must not depend on reaching the internet.
+		UpdateWaiting: s.updates != nil && s.updates.Report().Any(),
+		Title:         title,
+		Body:          template.HTML(body.String()),
+		Nav:           rt.navFor(r.URL.Path, callerFrom(r.Context()).IsAdmin()),
+		Styles:        rt.styles,
+		Scripts:       rt.scripts,
 	}
 	if err := rt.set.Execute(&out, "cog.shell.document", shell); err != nil {
 		http.Error(w, "this page could not be rendered", http.StatusInternalServerError)

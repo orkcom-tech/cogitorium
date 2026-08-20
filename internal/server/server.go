@@ -603,6 +603,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.page(mux, "POST /workspaces/{id}/versions/{number}/restore", s.handleRestoreVersionForm)
 	s.page(mux, "GET /account", s.handleAccountPage)
 	s.page(mux, "POST /account/password", s.handleAccountPasswordForm)
+	s.page(mux, "POST /account/look", s.handleLookForm)
 	s.page(mux, "POST /account/signout", s.handleAccountSignOutForm)
 	s.page(mux, "GET /plugins", s.handlePluginsPage)
 	s.page(mux, "POST /plugins", s.handleUploadPluginForm)
@@ -661,6 +662,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 
 	// The write halves of three panels that had none. Every one of these was a
 	// button posting to a path nothing served — see inlets_forms.go.
+	s.page(mux, "POST /workspaces/{id}/agents", s.handleCreateAgentForm)
 	s.page(mux, "POST /workspaces/{id}/receivers", s.handleCreateInletForm)
 	s.page(mux, "POST /receivers/{id}/key", s.handleRotateInletKeyForm)
 	s.page(mux, "POST /receivers/{id}/delete", s.handleDeleteInletForm)

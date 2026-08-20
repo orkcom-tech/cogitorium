@@ -134,9 +134,21 @@
         {
           "path": "Error",
           "type": "string"
+        },
+        {
+          "path": "Workspace",
+          "type": "int64"
+        },
+        {
+          "path": "Models",
+          "type": "[]Model"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
         }
       ],
-      "body": "\u003cdiv class=\"dk-body agent-cards\"\n  hx-get=\"{{.PollURL}}\" hx-trigger=\"every 4s\" hx-swap=\"outerHTML\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{range .Items}}{{template \"cog.row.agent\" .}}{{else}}\n  \u003cp class=\"hint\"\u003eNo agents yet. Tell the orchestrator what you need and it will create them.\u003c/p\u003e\n  {{end}}\n\u003c/div\u003e",
+      "body": "\u003cdiv class=\"dk-body agents\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{if .Notice}}\u003cp class=\"hint\"\u003e✓ {{.Notice}}\u003c/p\u003e{{end}}\n  {{template \"cog.frag.newagent\" .}}\n  {{template \"cog.list.agents\" .}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -291,7 +303,7 @@
           "type": "string"
         }
       ],
-      "body": "\u003cdiv class=\"dk-body context\"\u003e\n  {{if .Available}}\n    {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n    {{if .Notice}}\u003cp class=\"hint\"\u003e✓ {{.Notice}}\u003c/p\u003e{{end}}\n    \u003cform class=\"row\" method=\"get\" action=\"/context\"\u003e\n      \u003cinput class=\"grow\" name=\"q\" value=\"{{.Query}}\" placeholder=\"search inside the files…\"\u003e\n      \u003cbutton type=\"submit\"\u003esearch\u003c/button\u003e\n    \u003c/form\u003e\n    {{if .Searched}}\u003cp class=\"hint\"\u003e\n      {{if .Hits}}{{.Matches}} lines in {{.FilesMatched}} of {{.FilesScanned}} files.{{else}}Nothing in {{.FilesScanned}} files mentions “{{.Query}}”.{{end}}\n    \u003c/p\u003e{{end}}\n    {{template \"cog.list.context\" .}}\n  {{else}}\n    \u003cp class=\"error\"\u003e{{.Unusable}}\u003c/p\u003e\n  {{end}}\n\u003c/div\u003e",
+      "body": "\u003cdiv class=\"dk-body context\"\u003e\n  {{if .Available}}\n    {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n    {{if .Notice}}\u003cp class=\"hint\"\u003e✓ {{.Notice}}\u003c/p\u003e{{end}}\n    \u003cform class=\"row\" method=\"get\" action=\"/context\"\u003e\n      \u003cinput class=\"grow\" name=\"q\" value=\"{{.Query}}\" placeholder=\"search inside the files…\"\u003e\n      \u003cbutton type=\"submit\"\u003esearch\u003c/button\u003e\n    \u003c/form\u003e\n    {{if .Searched}}\u003cp class=\"hint\"\u003e\n      {{if .Hits}}{{.Matches}} lines in {{.FilesMatched}} of {{.FilesScanned}} files.{{else}}Nothing in {{.FilesScanned}} files mentions “{{.Query}}”.{{end}}\n    \u003c/p\u003e{{end}}\n    {{template \"cog.frag.newcontextfile\" .}}\n    {{template \"cog.list.context\" .}}\n  {{else}}\n    \u003cp class=\"error\"\u003e{{.Unusable}}\u003c/p\u003e\n  {{end}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -545,7 +557,7 @@
           "type": "string"
         }
       ],
-      "body": "\u003cdiv class=\"dk-body library\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  \u003cform class=\"library-filters\" method=\"get\" action=\"/instructions\"\n        hx-get=\"/instructions\" hx-target=\"#library-panel\" hx-swap=\"outerHTML\"\n        hx-trigger=\"submit, input from:input[name='q'] delay:250ms\"\u003e\n    \u003cinput type=\"search\" name=\"q\" value=\"{{.Query}}\" placeholder=\"Search names, descriptions and text\"\n           aria-label=\"Search the library\"\u003e\n  \u003c/form\u003e\n  {{template \"cog.list.instructions\" .}}\n\u003c/div\u003e",
+      "body": "\u003cdiv class=\"dk-body library\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{template \"cog.frag.writeinstruction\" .}}\n  \u003cform class=\"library-filters\" method=\"get\" action=\"/instructions\"\n        hx-get=\"/instructions\" hx-target=\"#library-panel\" hx-swap=\"outerHTML\"\n        hx-trigger=\"submit, input from:input[name='q'] delay:250ms\"\u003e\n    \u003cinput type=\"search\" name=\"q\" value=\"{{.Query}}\" placeholder=\"Search names, descriptions and text\"\n           aria-label=\"Search the library\"\u003e\n  \u003c/form\u003e\n  {{template \"cog.list.instructions\" .}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -656,7 +668,7 @@
           "type": "string"
         }
       ],
-      "body": "\u003cdiv class=\"dk-body mcp-page\"\u003e\n  {{if .Enabled}}\n    {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n    {{if .Notice}}\u003cp class=\"hint\"\u003e✓ {{.Notice}}\u003c/p\u003e{{end}}\n\n    {{if .IsAdmin}}\n    \u003cform class=\"row\" method=\"post\" action=\"/mcp\"\u003e\n      \u003cinput name=\"name\" required placeholder=\"jira\" aria-label=\"Name\"\u003e\n      \u003cinput name=\"description\" placeholder=\"our tickets\" aria-label=\"Description\"\u003e\n      \u003cinput name=\"command\" placeholder=\"npx\" aria-label=\"Command\"\u003e\n      {{/* One per line: a single string would have to be split, and splitting\n           is a shell's opinion about quoting rather than the author's. */}}\n      \u003ctextarea name=\"args\" rows=\"2\" placeholder=\"one argument per line\" aria-label=\"Arguments\"\u003e\u003c/textarea\u003e\n      \u003cinput name=\"address\" placeholder=\"https://mcp.example.com/mcp\" aria-label=\"Address\"\u003e\n      \u003cinput name=\"secrets\" placeholder=\"JIRA_TOKEN\" aria-label=\"Named values it is handed\"\u003e\n      \u003cbutton type=\"submit\"\u003eadd it\u003c/button\u003e\n    \u003c/form\u003e\n    {{end}}\n\n    \u003cdiv id=\"mcp-servers\" class=\"mcp-servers\"\u003e\n      {{range .Servers}}{{template \"cog.row.mcpserver\" .}}{{else}}\n      \u003cp class=\"hint\"\u003eNo servers here. An agent reaches only what you have granted it.\u003c/p\u003e\n      {{end}}\n    \u003c/div\u003e\n  {{else}}\n    \u003cp class=\"hint\"\u003e\n      External MCP servers are switched off for this install. They are off unless asked for, and the\n      default is the point: everything else this product runs is either its own code or a gear whose\n      complete source is here, versioned, approved line by line and run in a container. An MCP server\n      is a command — the source is never seen, and the child runs on this host as this server’s user.\n    \u003c/p\u003e\n    \u003cp class=\"hint\"\u003eSet \u003ccode\u003emcp_clients: true\u003c/code\u003e in the configuration and restart.\u003c/p\u003e\n  {{end}}\n\u003c/div\u003e",
+      "body": "\u003cdiv class=\"dk-body mcp-page\"\u003e\n  {{if .Enabled}}\n    {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n    {{if .Notice}}\u003cp class=\"hint\"\u003e✓ {{.Notice}}\u003c/p\u003e{{end}}\n\n    {{if .IsAdmin}}\n    {{/*\n      A labelled column behind a disclosure, like writing a gear.\n\n      It was six bare boxes in a row with their names only in placeholders —\n      which vanish the moment you type in them, so the form could not be read\n      while it was being filled in and could not be checked afterwards. It is\n      also two different things wearing one shape: a server this machine\n      STARTS, and a server it CALLS. The form says which half it is asking for.\n    */}}\n    \u003cdetails class=\"author-mcp\"\u003e\n      \u003csummary\u003eadd a server\u003c/summary\u003e\n      \u003cform method=\"post\" action=\"/mcp\"\u003e\n        \u003clabel\u003eName \u003cinput name=\"name\" required placeholder=\"jira\"\u003e\u003c/label\u003e\n        \u003clabel\u003eWhat it is \u003cinput name=\"description\" placeholder=\"our tickets\"\u003e\u003c/label\u003e\n\n        \u003cp class=\"hint\"\u003eA server is either something this machine starts, or an\n        address it calls. Fill in one of the two.\u003c/p\u003e\n\n        \u003clabel\u003eCommand to run \u003cinput name=\"command\" placeholder=\"npx\"\u003e\u003c/label\u003e\n        {{/* One per line: a single string would have to be split, and\n             splitting is a shell's opinion about quoting rather than the\n             author's. */}}\n        \u003clabel\u003eIts arguments, one per line\n          \u003ctextarea name=\"args\" rows=\"3\" placeholder=\"-y\u0026#10;@acme/jira-mcp\"\u003e\u003c/textarea\u003e\n        \u003c/label\u003e\n        \u003clabel\u003e…or an address to call \u003cinput name=\"address\" placeholder=\"https://mcp.example.com/mcp\"\u003e\u003c/label\u003e\n\n        \u003clabel\u003eNamed values it is handed \u003cinput name=\"secrets\" placeholder=\"JIRA_TOKEN, JIRA_URL\"\u003e\u003c/label\u003e\n        \u003cbutton type=\"submit\"\u003eadd it\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/details\u003e\n    {{end}}\n\n    \u003cdiv id=\"mcp-servers\" class=\"mcp-servers\"\u003e\n      {{range .Servers}}{{template \"cog.row.mcpserver\" .}}{{else}}\n      \u003cp class=\"hint\"\u003eNo servers here. An agent reaches only what you have granted it.\u003c/p\u003e\n      {{end}}\n    \u003c/div\u003e\n  {{else}}\n    \u003cp class=\"hint\"\u003e\n      External MCP servers are switched off for this install. They are off unless asked for, and the\n      default is the point: everything else this product runs is either its own code or a gear whose\n      complete source is here, versioned, approved line by line and run in a container. An MCP server\n      is a command — the source is never seen, and the child runs on this host as this server’s user.\n    \u003c/p\u003e\n    \u003cp class=\"hint\"\u003eSet \u003ccode\u003emcp_clients: true\u003c/code\u003e in the configuration and restart.\u003c/p\u003e\n  {{end}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -882,7 +894,7 @@
           "type": "[]PlanTarget"
         }
       ],
-      "body": "\u003cdiv class=\"dk-body planboards\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  \u003cform class=\"planboard-filters\" method=\"get\" action=\"/planboards\"\n        hx-get=\"/planboards\" hx-target=\"#planboard-panel\" hx-swap=\"outerHTML\"\n        hx-trigger=\"submit, input from:input[name='q'] delay:250ms\"\u003e\n    \u003cinput type=\"search\" name=\"q\" value=\"{{.Query}}\" placeholder=\"Search names and descriptions\"\n           aria-label=\"Search the plans\"\u003e\n  \u003c/form\u003e\n  {{template \"cog.list.planboards\" .}}\n\u003c/div\u003e",
+      "body": "\u003cdiv class=\"dk-body planboards\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{template \"cog.frag.writeplanboard\" .}}\n  \u003cform class=\"planboard-filters\" method=\"get\" action=\"/planboards\"\n        hx-get=\"/planboards\" hx-target=\"#planboard-panel\" hx-swap=\"outerHTML\"\n        hx-trigger=\"submit, input from:input[name='q'] delay:250ms\"\u003e\n    \u003cinput type=\"search\" name=\"q\" value=\"{{.Query}}\" placeholder=\"Search names and descriptions\"\n           aria-label=\"Search the plans\"\u003e\n  \u003c/form\u003e\n  {{template \"cog.list.planboards\" .}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -997,7 +1009,7 @@
           "type": "[]PlanTarget"
         }
       ],
-      "body": "\u003cdiv class=\"dk-body queue-panel\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{if .Notice}}\u003cp class=\"hint\"\u003e✓ {{.Notice}}\u003c/p\u003e{{end}}\n\n  \u003cdiv id=\"queue-units\" class=\"queue-units\"\u003e\n    {{if .Units}}{{range .Units}}{{template \"cog.row.unit\" .}}{{end}}{{else}}\n    \u003cp class=\"hint\"\u003eNothing is waiting. Work queues here instead of being dropped when a workspace is already busy.\u003c/p\u003e\n    {{end}}\n  \u003c/div\u003e\n\n  \u003ch3\u003eSchedules\u003c/h3\u003e\n  {{/* What it starts and what it says are asked for, because a clock without\n       them is a timer going off in an empty room: a turn with an empty prompt,\n       against nobody. */}}\n  \u003cform class=\"row\" method=\"post\" action=\"{{.CreateAction}}\"\u003e\n    \u003cinput name=\"name\" required placeholder=\"morning sweep\" aria-label=\"Name\"\u003e\n    \u003cinput name=\"spec\" required placeholder=\"every 15m\" aria-label=\"When\"\u003e\n    \u003cselect name=\"agent\" required aria-label=\"What it starts\"\u003e\n      \u003coption value=\"\"\u003ewhich agent…\u003c/option\u003e\n      {{range .Targets}}\u003coption value=\"{{.Name}}\"\u003e{{.Name}}\u003c/option\u003e{{end}}\n    \u003c/select\u003e\n    \u003cinput name=\"tell\" required placeholder=\"what to say to it\" aria-label=\"What to say when it fires\"\u003e\n    \u003cinput name=\"tz\" placeholder=\"Europe/Berlin\" aria-label=\"Timezone\"\u003e\n    \u003cbutton type=\"submit\"\u003eadd it\u003c/button\u003e\n  \u003c/form\u003e\n\n  \u003cdiv id=\"queue-schedules\" class=\"queue-schedules\"\u003e\n    {{range .Schedules}}{{template \"cog.row.schedule\" .}}{{else}}\n    \u003cp class=\"hint\"\u003eNo clocks here. A schedule starts work on its own, on a cron line or an interval.\u003c/p\u003e\n    {{end}}\n  \u003c/div\u003e\n\u003c/div\u003e",
+      "body": "\u003cdiv class=\"dk-body queue-panel\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{if .Notice}}\u003cp class=\"hint\"\u003e✓ {{.Notice}}\u003c/p\u003e{{end}}\n\n  \u003cdiv id=\"queue-units\" class=\"queue-units\"\u003e\n    {{if .Units}}{{range .Units}}{{template \"cog.row.unit\" .}}{{end}}{{else}}\n    \u003cp class=\"hint\"\u003eNothing is waiting. Work queues here instead of being dropped when a workspace is already busy.\u003c/p\u003e\n    {{end}}\n  \u003c/div\u003e\n\n  \u003ch3\u003eSchedules\u003c/h3\u003e\n  {{/* What it starts and what it says are asked for, because a clock without\n       them is a timer going off in an empty room: a turn with an empty prompt,\n       against nobody. */}}\n  {{/* Labelled, and in a column: five boxes in a row with their names only in\n       placeholders is a form nobody can read while filling it in. */}}\n  \u003cdetails class=\"author-clock\"\u003e\n    \u003csummary\u003eadd a clock\u003c/summary\u003e\n    \u003cform method=\"post\" action=\"{{.CreateAction}}\"\u003e\n      \u003clabel\u003eName \u003cinput name=\"name\" required placeholder=\"morning sweep\"\u003e\u003c/label\u003e\n      \u003clabel\u003eWhen \u003cinput name=\"spec\" required placeholder=\"every 15m, or a cron line like 0 3 * * 1-5\"\u003e\u003c/label\u003e\n      \u003clabel\u003eWhat it starts\n        \u003cselect name=\"agent\" required\u003e\n          \u003coption value=\"\"\u003ewhich agent…\u003c/option\u003e\n          {{range .Targets}}\u003coption value=\"{{.Name}}\"\u003e{{.Name}}\u003c/option\u003e{{end}}\n        \u003c/select\u003e\n      \u003c/label\u003e\n      \u003clabel\u003eWhat to say when it fires\n        \u003cinput name=\"tell\" required placeholder=\"check the overnight errors and file anything new\"\u003e\n      \u003c/label\u003e\n      \u003clabel\u003eTimezone \u003cinput name=\"tz\" placeholder=\"Europe/Berlin — blank is UTC\"\u003e\u003c/label\u003e\n      \u003cbutton type=\"submit\"\u003eadd it\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/details\u003e\n\n  \u003cdiv id=\"queue-schedules\" class=\"queue-schedules\"\u003e\n    {{range .Schedules}}{{template \"cog.row.schedule\" .}}{{else}}\n    \u003cp class=\"hint\"\u003eNo clocks here. A schedule starts work on its own, on a cron line or an interval.\u003c/p\u003e\n    {{end}}\n  \u003c/div\u003e\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -1346,7 +1358,7 @@
           "type": "string"
         }
       ],
-      "body": "\u003cdiv class=\"dk-body env-panel\"\u003e\n  \u003cp class=\"hint\"\u003e\n    Names a gear is given when it runs. A gear asks for \u003ccode\u003eAPI_KEY\u003c/code\u003e; you say what\n    \u003ccode\u003eAPI_KEY\u003c/code\u003e means. The value goes into the gear's environment and nowhere else — no agent\n    sees it, no model is told it, and anything a gear prints has it removed.\n  \u003c/p\u003e\n  {{if .Workspace}}\u003cp class=\"hint\"\u003e\n    These are this workspace's own. A name set here wins over the same name set install-wide, which is\n    how one gear serves staging and production without being edited.\n  \u003c/p\u003e{{end}}\n\n  {{if .CanStoreSecrets}}{{else}}\u003cp class=\"notice\"\u003e\n    This server has no \u003ccode\u003eCOGITORIUM_SECRET_KEY\u003c/code\u003e, so a secret cannot be stored in its database —\n    it would have to be written to disk in plaintext, and it will not be. Variables work; set the key,\n    or mount a secrets directory.\n  \u003c/p\u003e{{end}}\n\n  {{if .HasDirs}}\u003cp class=\"hint\"\u003e\n    Names are also read from disk, one file per name:\n    {{if .VariablesDir}}variables from \u003ccode\u003e{{.VariablesDir}}\u003c/code\u003e{{end}}\n    {{if .SecretsDir}}secrets from \u003ccode\u003e{{.SecretsDir}}\u003c/code\u003e{{end}}.\n    A file there wins over what is set here install-wide, and a workspace's own value wins over both.\n  \u003c/p\u003e{{end}}\n\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{if .JustSet}}\u003cp class=\"notice\"\u003e\n    \u003cstrong\u003e{{.JustSet}}\u003c/strong\u003e is set. If it is a secret, this was the only time it will be shown\n    anywhere — the server keeps it sealed and has nowhere to put it in a response.\n  \u003c/p\u003e{{end}}\n\n  \u003cform class=\"row\" method=\"post\" action=\"{{.SetAction}}\"\u003e\n    \u003cinput name=\"name\" required placeholder=\"API_KEY\" aria-label=\"Name\"\u003e\n    \u003cselect name=\"kind\" aria-label=\"Kind\"\u003e\n      \u003coption value=\"variable\"\u003evariable — its value is shown afterwards\u003c/option\u003e\n      \u003coption value=\"secret\"\u003esecret — its value is never shown again\u003c/option\u003e\n    \u003c/select\u003e\n    \u003cinput name=\"value\" required aria-label=\"Value\"\u003e\n    \u003cbutton type=\"submit\"\u003eset it\u003c/button\u003e\n  \u003c/form\u003e\n\n  \u003cdiv id=\"env-names\" class=\"env-names\"\u003e\n    {{range .Names}}{{template \"cog.row.envname\" .}}{{else}}\n    \u003cp class=\"hint\"\u003eNothing named yet. A gear that asks for a name it cannot be given is refused before it runs.\u003c/p\u003e\n    {{end}}\n  \u003c/div\u003e\n\u003c/div\u003e",
+      "body": "\u003cdiv class=\"dk-body env-panel\"\u003e\n  \u003cp class=\"hint\"\u003e\n    Names a gear is given when it runs. A gear asks for \u003ccode\u003eAPI_KEY\u003c/code\u003e; you say what\n    \u003ccode\u003eAPI_KEY\u003c/code\u003e means. The value goes into the gear's environment and nowhere else — no agent\n    sees it, no model is told it, and anything a gear prints has it removed.\n  \u003c/p\u003e\n  {{if .Workspace}}\u003cp class=\"hint\"\u003e\n    These are this workspace's own. A name set here wins over the same name set install-wide, which is\n    how one gear serves staging and production without being edited.\n  \u003c/p\u003e{{end}}\n\n  {{if .CanStoreSecrets}}{{else}}\u003cp class=\"notice\"\u003e\n    This server has no \u003ccode\u003eCOGITORIUM_SECRET_KEY\u003c/code\u003e, so a secret cannot be stored in its database —\n    it would have to be written to disk in plaintext, and it will not be. Variables work; set the key,\n    or mount a secrets directory.\n  \u003c/p\u003e{{end}}\n\n  {{if .HasDirs}}\u003cp class=\"hint\"\u003e\n    Names are also read from disk, one file per name:\n    {{if .VariablesDir}}variables from \u003ccode\u003e{{.VariablesDir}}\u003c/code\u003e{{end}}\n    {{if .SecretsDir}}secrets from \u003ccode\u003e{{.SecretsDir}}\u003c/code\u003e{{end}}.\n    A file there wins over what is set here install-wide, and a workspace's own value wins over both.\n  \u003c/p\u003e{{end}}\n\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{if .JustSet}}\u003cp class=\"notice\"\u003e\n    \u003cstrong\u003e{{.JustSet}}\u003c/strong\u003e is set. If it is a secret, this was the only time it will be shown\n    anywhere — the server keeps it sealed and has nowhere to put it in a response.\n  \u003c/p\u003e{{end}}\n\n  {{/* Labelled, in a column. It was three boxes in a row whose names lived in\n       placeholders — and the value box had no placeholder at all, so it was a\n       naked box beside a dropdown, on the one screen where getting the wrong\n       box means typing a credential where it will be shown back to you. */}}\n  \u003cform class=\"set-value\" method=\"post\" action=\"{{.SetAction}}\"\u003e\n    \u003clabel\u003eName \u003cinput name=\"name\" required placeholder=\"API_KEY\"\u003e\u003c/label\u003e\n    \u003clabel\u003eKind\n      \u003cselect name=\"kind\"\u003e\n        \u003coption value=\"variable\"\u003evariable — its value is shown afterwards\u003c/option\u003e\n        \u003coption value=\"secret\"\u003esecret — its value is never shown again\u003c/option\u003e\n      \u003c/select\u003e\n    \u003c/label\u003e\n    \u003clabel\u003eValue \u003cinput name=\"value\" required placeholder=\"what the gear will read\"\u003e\u003c/label\u003e\n    \u003cbutton type=\"submit\"\u003eset it\u003c/button\u003e\n  \u003c/form\u003e\n\n  \u003cdiv id=\"env-names\" class=\"env-names\"\u003e\n    {{range .Names}}{{template \"cog.row.envname\" .}}{{else}}\n    \u003cp class=\"hint\"\u003eNothing named yet. A gear that asks for a name it cannot be given is refused before it runs.\u003c/p\u003e\n    {{end}}\n  \u003c/div\u003e\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -2496,6 +2508,129 @@
       "appends": false
     },
     {
+      "name": "cog.frag.appearance",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Title",
+          "type": "string"
+        },
+        {
+          "path": "Look",
+          "type": "string"
+        },
+        {
+          "path": "UpdateWaiting",
+          "type": "bool"
+        },
+        {
+          "path": "AppHead",
+          "type": "HTML"
+        },
+        {
+          "path": "Body",
+          "type": "HTML"
+        },
+        {
+          "path": "Nav",
+          "type": "[]NavItem"
+        },
+        {
+          "path": "Styles",
+          "type": "[]string"
+        },
+        {
+          "path": "Scripts",
+          "type": "[]Asset"
+        }
+      ],
+      "body": "\u003cform method=\"post\" action=\"/account/look\" class=\"rail-look\"\u003e\n  \u003cinput type=\"hidden\" name=\"to\" value=\"{{.NextLook}}\"\u003e\n  \u003cbutton class=\"rail-item\" type=\"submit\" title=\"Appearance: {{.LookName}}. Press for {{.NextLookName}}\"\u003e\n    \u003csvg viewBox=\"0 0 24 24\" aria-hidden=\"true\"\u003e\u003ccircle cx=\"12\" cy=\"12\" r=\"8\"/\u003e\u003cpath d=\"M12 4v16\" fill=\"none\"/\u003e\u003cpath d=\"M12 4a8 8 0 0 1 0 16Z\"/\u003e\u003c/svg\u003e\n    \u003cspan class=\"sr-only\"\u003eAppearance: {{.LookName}}\u003c/span\u003e\n  \u003c/button\u003e\n\u003c/form\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.frag.authorgear",
       "model": [
         {
@@ -2750,6 +2885,276 @@
       "appends": false
     },
     {
+      "name": "cog.frag.newagent",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Items",
+          "type": "[]AgentCard"
+        },
+        {
+          "path": "PollURL",
+          "type": "string"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Workspace",
+          "type": "int64"
+        },
+        {
+          "path": "Models",
+          "type": "[]Model"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdetails class=\"new-agent\"\u003e\n  \u003csummary\u003eadd an agent\u003c/summary\u003e\n  \u003cform method=\"post\" action=\"/workspaces/{{.Workspace}}/agents\"\u003e\n    \u003clabel\u003eName \u003cinput name=\"name\" required pattern=\"[^/]+\" placeholder=\"reviewer\"\u003e\u003c/label\u003e\n    \u003clabel\u003eModel\n      \u003cselect name=\"model_id\" required\u003e\n        \u003coption value=\"\"\u003ewhat it thinks with…\u003c/option\u003e\n        {{range .Models}}\u003coption value=\"{{.ID}}\"\u003e{{.Label}} — {{.Provider}}\u003c/option\u003e{{end}}\n      \u003c/select\u003e\n    \u003c/label\u003e\n    \u003clabel\u003eRole — the system prompt it always carries\n      \u003ctextarea name=\"role\" rows=\"4\" required\n                placeholder=\"You review code for correctness. Say what is wrong and why, and nothing else.\"\u003e\u003c/textarea\u003e\n    \u003c/label\u003e\n    \u003cp class=\"hint\"\u003eIt arrives unwired: nothing may delegate to it and it may\n    delegate to nothing until you draw an edge on the blueprint.\u003c/p\u003e\n    \u003cbutton type=\"submit\"\u003eadd it\u003c/button\u003e\n  \u003c/form\u003e\n\u003c/details\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.frag.newcontextfile",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Available",
+          "type": "bool"
+        },
+        {
+          "path": "Unusable",
+          "type": "string"
+        },
+        {
+          "path": "SpaceRoot",
+          "type": "string"
+        },
+        {
+          "path": "Files",
+          "type": "[]ContextFile"
+        },
+        {
+          "path": "Open",
+          "type": "string"
+        },
+        {
+          "path": "OpenedAt",
+          "type": "string"
+        },
+        {
+          "path": "Text",
+          "type": "string"
+        },
+        {
+          "path": "Matches",
+          "type": "int"
+        },
+        {
+          "path": "Searched",
+          "type": "bool"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Hits",
+          "type": "[]ContextHit"
+        },
+        {
+          "path": "FilesScanned",
+          "type": "int"
+        },
+        {
+          "path": "FilesMatched",
+          "type": "int"
+        },
+        {
+          "path": "Truncated",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdetails class=\"new-context\"\u003e\n  \u003csummary\u003ewrite a document\u003c/summary\u003e\n  \u003cform method=\"post\" action=\"/context/save\"\u003e\n    \u003clabel\u003ePath \u003cinput name=\"path\" required placeholder=\"team/how-we-review.md\"\u003e\u003c/label\u003e\n    \u003clabel\u003eText \u003ctextarea name=\"text\" rows=\"8\" required placeholder=\"What it says. It is versioned by Contextverse from here on.\"\u003e\u003c/textarea\u003e\u003c/label\u003e\n    \u003cbutton type=\"submit\"\u003esave it\u003c/button\u003e\n  \u003c/form\u003e\n\u003c/details\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.frag.password",
       "model": [
         {
@@ -2976,6 +3381,240 @@
       "appends": false
     },
     {
+      "name": "cog.frag.writeinstruction",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Items",
+          "type": "[]Instruction"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Tag",
+          "type": "string"
+        },
+        {
+          "path": "Tags",
+          "type": "[]Tag"
+        },
+        {
+          "path": "Narrowed",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdetails class=\"library-write\"\u003e\n    \u003csummary\u003eWrite one\u003c/summary\u003e\n    {{/* A plain POST to this page. The answer is the page again, which is what\n         makes it work with nothing loaded. */}}\n    \u003cform method=\"post\" action=\"/instructions\"\u003e\n      \u003clabel\u003eName \u003cinput name=\"name\" required pattern=\"[a-z][a-z0-9-]*\"\n                         placeholder=\"lowercase-with-dashes\"\u003e\u003c/label\u003e\n      \u003clabel\u003eDescription \u003cinput name=\"description\" placeholder=\"What it is for, in one line\"\u003e\u003c/label\u003e\n      \u003clabel\u003eTags \u003cinput name=\"tags\" placeholder=\"comma, separated\"\u003e\u003c/label\u003e\n      \u003clabel\u003eText \u003ctextarea name=\"text\" rows=\"8\" required\n                            placeholder=\"The instruction itself. It is versioned in Contextverse.\"\u003e\u003c/textarea\u003e\u003c/label\u003e\n      \u003cbutton type=\"submit\"\u003eSave it\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/details\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.frag.writeplanboard",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Items",
+          "type": "[]PlanboardRow"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Tag",
+          "type": "string"
+        },
+        {
+          "path": "Tags",
+          "type": "[]Tag"
+        },
+        {
+          "path": "Narrowed",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Agents",
+          "type": "[]PlanTarget"
+        }
+      ],
+      "body": "\u003cdetails class=\"planboard-write\"\u003e\n    \u003csummary\u003eWrite one\u003c/summary\u003e\n    \u003cform method=\"post\" action=\"/planboards\"\u003e\n      \u003clabel\u003eName \u003cinput name=\"name\" required pattern=\"[a-z][a-z0-9_-]*\"\n                         placeholder=\"lowercase-with-dashes\"\u003e\u003c/label\u003e\n      \u003clabel\u003eDescription \u003cinput name=\"description\" placeholder=\"What this plan is for, in one line\"\u003e\u003c/label\u003e\n      \u003clabel\u003eTags \u003cinput name=\"tags\" placeholder=\"comma, separated\"\u003e\u003c/label\u003e\n      \u003clabel\u003eSteps \u003ctextarea name=\"steps\" rows=\"8\" required\n                             placeholder=\"One step per line, in order.\u0026#10;Add detail after a dash:\u0026#10;Gather the overnight errors — from the queue, not the log\"\u003e\u003c/textarea\u003e\u003c/label\u003e\n      \u003clabel\u003eWhen a run begins\n        \u003cselect name=\"mode\"\u003e\n          \u003coption value=\"resume\"\u003eresume — carry on where the last run stopped\u003c/option\u003e\n          \u003coption value=\"restart\"\u003erestart — begin at step one every run\u003c/option\u003e\n        \u003c/select\u003e\n      \u003c/label\u003e\n      \u003cbutton type=\"submit\"\u003eSave it\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/details\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.list.actions",
       "model": [
         {
@@ -3008,6 +3647,121 @@
         }
       ],
       "body": "{{range .}}{{template \"cog.action.button\" .}}{{end}}",
+      "appends": false
+    },
+    {
+      "name": "cog.list.agents",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Items",
+          "type": "[]AgentCard"
+        },
+        {
+          "path": "PollURL",
+          "type": "string"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Workspace",
+          "type": "int64"
+        },
+        {
+          "path": "Models",
+          "type": "[]Model"
+        },
+        {
+          "path": "Notice",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cdiv class=\"agent-cards\"\n  hx-get=\"{{.PollURL}}\" hx-trigger=\"every 4s\" hx-swap=\"outerHTML\"\u003e\n  {{range .Items}}{{template \"cog.row.agent\" .}}{{else}}\n  \u003cp class=\"hint\"\u003eNo agents yet. Add one above, or tell the orchestrator what you need and it will.\u003c/p\u003e\n  {{end}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -5149,7 +5903,7 @@
           "type": "string"
         }
       ],
-      "body": "\u003cmain class=\"page library\"\u003e\n  \u003ch2\u003e{{.Ctx.T.Instructions}}\u003c/h2\u003e\n\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n\n  \u003cdetails class=\"library-write\"\u003e\n    \u003csummary\u003eWrite one\u003c/summary\u003e\n    {{/* A plain POST to this page. The answer is the page again, which is what\n         makes it work with nothing loaded. */}}\n    \u003cform method=\"post\" action=\"/instructions\"\u003e\n      \u003clabel\u003eName \u003cinput name=\"name\" required pattern=\"[a-z][a-z0-9-]*\"\n                         placeholder=\"lowercase-with-dashes\"\u003e\u003c/label\u003e\n      \u003clabel\u003eDescription \u003cinput name=\"description\" placeholder=\"What it is for, in one line\"\u003e\u003c/label\u003e\n      \u003clabel\u003eTags \u003cinput name=\"tags\" placeholder=\"comma, separated\"\u003e\u003c/label\u003e\n      \u003clabel\u003eText \u003ctextarea name=\"text\" rows=\"8\" required\n                            placeholder=\"The instruction itself. It is versioned in Contextverse.\"\u003e\u003c/textarea\u003e\u003c/label\u003e\n      \u003cbutton type=\"submit\"\u003eSave it\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/details\u003e\n\n  {{template \"cog.frag.library\" .}}\n\u003c/main\u003e",
+      "body": "\u003cmain class=\"page library\"\u003e\n  \u003ch2\u003e{{.Ctx.T.Instructions}}\u003c/h2\u003e\n\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n\n  {{template \"cog.frag.writeinstruction\" .}}\n\n  {{template \"cog.frag.library\" .}}\n\u003c/main\u003e",
       "appends": false
     },
     {
@@ -5482,7 +6236,7 @@
           "type": "[]PlanTarget"
         }
       ],
-      "body": "\u003cmain class=\"page planboards\"\u003e\n  \u003ch2\u003ePlanboards\u003c/h2\u003e\n  \u003cp class=\"hint\"\u003eWork written down before it starts. The engine hands an agent\n  one step at a time and will not go past it until that step is closed — so a\n  workflow that fires on a clock runs the same way every night.\u003c/p\u003e\n\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n\n  \u003cdetails class=\"planboard-write\"\u003e\n    \u003csummary\u003eWrite one\u003c/summary\u003e\n    \u003cform method=\"post\" action=\"/planboards\"\u003e\n      \u003clabel\u003eName \u003cinput name=\"name\" required pattern=\"[a-z][a-z0-9_-]*\"\n                         placeholder=\"lowercase-with-dashes\"\u003e\u003c/label\u003e\n      \u003clabel\u003eDescription \u003cinput name=\"description\" placeholder=\"What this plan is for, in one line\"\u003e\u003c/label\u003e\n      \u003clabel\u003eTags \u003cinput name=\"tags\" placeholder=\"comma, separated\"\u003e\u003c/label\u003e\n      \u003clabel\u003eSteps \u003ctextarea name=\"steps\" rows=\"8\" required\n                             placeholder=\"One step per line, in order.\u0026#10;Add detail after a dash:\u0026#10;Gather the overnight errors — from the queue, not the log\"\u003e\u003c/textarea\u003e\u003c/label\u003e\n      \u003clabel\u003eWhen a run begins\n        \u003cselect name=\"mode\"\u003e\n          \u003coption value=\"resume\"\u003eresume — carry on where the last run stopped\u003c/option\u003e\n          \u003coption value=\"restart\"\u003erestart — begin at step one every run\u003c/option\u003e\n        \u003c/select\u003e\n      \u003c/label\u003e\n      \u003cbutton type=\"submit\"\u003eSave it\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/details\u003e\n\n  {{template \"cog.frag.planboards\" .}}\n\u003c/main\u003e",
+      "body": "\u003cmain class=\"page planboards\"\u003e\n  \u003ch2\u003ePlanboards\u003c/h2\u003e\n  \u003cp class=\"hint\"\u003eWork written down before it starts. The engine hands an agent\n  one step at a time and will not go past it until that step is closed — so a\n  workflow that fires on a clock runs the same way every night.\u003c/p\u003e\n\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n\n  {{template \"cog.frag.writeplanboard\" .}}\n\n  {{template \"cog.frag.planboards\" .}}\n\u003c/main\u003e",
       "appends": false
     },
     {
@@ -6379,7 +7133,7 @@
           "type": "int"
         }
       ],
-      "body": "\u003carticle class=\"card mcp-server\"\u003e\n  \u003cheader class=\"row\"\u003e\n    \u003cstrong\u003e{{.Name}}\u003c/strong\u003e\n    \u003cspan class=\"badge\"\u003e{{.Kind}}\u003c/span\u003e\n    {{if .Approved}}\u003cspan class=\"badge is-ok\"\u003e{{.Status}}\u003c/span\u003e{{else}}\u003cspan class=\"badge is-warn\"\u003e{{.Status}}\u003c/span\u003e{{end}}\n    \u003cspan class=\"muted\"\u003e{{.ApprovedTools}} of {{.TotalTools}} tools approved\u003c/span\u003e\n  \u003c/header\u003e\n  {{if .Command}}\u003cp class=\"muted\"\u003e\u003ccode\u003e{{.Command}}\u003c/code\u003e\u003c/p\u003e{{end}}\n  {{if .Address}}\u003cp class=\"muted\"\u003e\u003ccode\u003e{{.Address}}\u003c/code\u003e\u003c/p\u003e{{end}}\n\n  \u003cdiv class=\"grants\"\u003e\n    \u003ch4\u003eWhat approving this grants\u003c/h4\u003e\n    {{if .Hosted}}\n      {{/* A hosted server is a genuinely different risk, and saying the same\n           four things would be false in two of them. Nothing runs here — which\n           is safer — and what leaves is the part that matters. */}}\n      \u003cp\u003e\u003cstrong\u003eNothing runs on this machine.\u003c/strong\u003e There is no process, no file access and nothing\n      to sandbox, which is the one way this is safer than a packaged server.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eYour agents’ words leave this install.\u003c/strong\u003e Every argument of every call to it goes\n      to a host somebody else operates, along with whatever the agent wrote to get there.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIt is sent a real credential\u003c/strong\u003e, on every request, belonging to a real account\n      with that account’s permissions.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eA URL can be repointed and look identical.\u003c/strong\u003e That is why the address is part of\n      what you approve here: change it and this server goes back to pending.\u003c/p\u003e\n    {{else}}\n      \u003cp\u003e\u003cstrong\u003eIt is not sandboxed.\u003c/strong\u003e It runs on this host as this server’s user, outside the\n      container gears run in — so it can read this install’s database, and the provider keys in it.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIt reaches the network by definition.\u003c/strong\u003e That is what it is for, and the gate that\n      covers agent web search does not cover it at all.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIts code is fetched when it starts\u003c/strong\u003e, every time it starts. What you approve is\n      the command line, not the bytes that command will fetch tomorrow.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIt is handed real credentials\u003c/strong\u003e — by name, resolved at spawn, belonging to a real\n      account with that account’s permissions.\u003c/p\u003e\n    {{end}}\n\n    {{if .Secrets}}\u003cp class=\"muted\"\u003eNamed values it is handed:\n      {{range .Secrets}}\u003ccode\u003e{{.}}\u003c/code\u003e {{end}}\u003c/p\u003e{{end}}\n  \u003c/div\u003e\n\n  {{/* One at a time. A server's tool list is its own to change, so approving\n       the server is not approving whatever it offers next week. */}}\n  \u003cdetails\u003e\n    \u003csummary\u003eits tools\u003c/summary\u003e\n    {{range .Tools}}\u003cdiv class=\"mcp-tool\"\u003e\n      \u003ccode\u003e{{.Name}}\u003c/code\u003e\n      {{if .Description}}\u003cspan class=\"muted\"\u003e{{.Description}}\u003c/span\u003e{{end}}\n      \u003cform method=\"post\" action=\"/mcp/tools/{{.ID}}/approve\"\u003e\n        \u003cbutton type=\"submit\"\u003e{{if .Approved}}withdraw{{else}}approve this tool{{end}}\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/div\u003e{{else}}\u003cp class=\"hint\"\u003eIt has not been probed yet, so nothing here knows what it offers.\u003c/p\u003e{{end}}\n  \u003c/details\u003e\n\n  \u003cdiv class=\"mcp-actions\"\u003e\n    \u003cform method=\"post\" action=\"/mcp/{{.ID}}/probe\"\u003e\n      \u003cbutton type=\"submit\"\u003eask it what it offers\u003c/button\u003e\n    \u003c/form\u003e\n    \u003cform method=\"post\" action=\"/mcp/{{.ID}}/delete\"\n          hx-confirm=\"Remove {{.Name}}? Every agent granted it loses those tools.\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eremove\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/div\u003e\n\u003c/article\u003e",
+      "body": "\u003carticle class=\"card mcp-server\"\u003e\n  \u003cheader class=\"row\"\u003e\n    \u003cstrong\u003e{{.Name}}\u003c/strong\u003e\n    \u003cspan class=\"badge\"\u003e{{.Kind}}\u003c/span\u003e\n    {{if .Approved}}\u003cspan class=\"badge is-ok\"\u003e{{.Status}}\u003c/span\u003e{{else}}\u003cspan class=\"badge is-warn\"\u003e{{.Status}}\u003c/span\u003e{{end}}\n    \u003cspan class=\"muted\"\u003e{{.ApprovedTools}} of {{.TotalTools}} tools approved\u003c/span\u003e\n  \u003c/header\u003e\n  {{if .Command}}\u003cp class=\"muted\"\u003e\u003ccode\u003e{{.Command}}\u003c/code\u003e\u003c/p\u003e{{end}}\n  {{if .Address}}\u003cp class=\"muted\"\u003e\u003ccode\u003e{{.Address}}\u003c/code\u003e\u003c/p\u003e{{end}}\n\n  \u003cdiv class=\"grants\"\u003e\n    \u003ch4\u003eWhat approving this grants\u003c/h4\u003e\n    {{if .Hosted}}\n      {{/* A hosted server is a genuinely different risk, and saying the same\n           four things would be false in two of them. Nothing runs here — which\n           is safer — and what leaves is the part that matters. */}}\n      \u003cp\u003e\u003cstrong\u003eNothing runs on this machine.\u003c/strong\u003e There is no process, no file access and nothing\n      to sandbox, which is the one way this is safer than a packaged server.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eYour agents’ words leave this install.\u003c/strong\u003e Every argument of every call to it goes\n      to a host somebody else operates, along with whatever the agent wrote to get there.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIt is sent a real credential\u003c/strong\u003e, on every request, belonging to a real account\n      with that account’s permissions.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eA URL can be repointed and look identical.\u003c/strong\u003e That is why the address is part of\n      what you approve here: change it and this server goes back to pending.\u003c/p\u003e\n    {{else}}\n      \u003cp\u003e\u003cstrong\u003eIt is not sandboxed.\u003c/strong\u003e It runs on this host as this server’s user, outside the\n      container gears run in — so it can read this install’s database, and the provider keys in it.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIt reaches the network by definition.\u003c/strong\u003e That is what it is for, and the gate that\n      covers agent web search does not cover it at all.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIts code is fetched when it starts\u003c/strong\u003e, every time it starts. What you approve is\n      the command line, not the bytes that command will fetch tomorrow.\u003c/p\u003e\n      \u003cp\u003e\u003cstrong\u003eIt is handed real credentials\u003c/strong\u003e — by name, resolved at spawn, belonging to a real\n      account with that account’s permissions.\u003c/p\u003e\n    {{end}}\n\n    {{if .Secrets}}\u003cp class=\"muted\"\u003eNamed values it is handed:\n      {{range .Secrets}}\u003ccode\u003e{{.}}\u003c/code\u003e {{end}}\u003c/p\u003e{{end}}\n  \u003c/div\u003e\n\n  {{/* One at a time. A server's tool list is its own to change, so approving\n       the server is not approving whatever it offers next week. */}}\n  \u003cdetails\u003e\n    \u003csummary\u003eits tools\u003c/summary\u003e\n    {{range .Tools}}\u003cdiv class=\"mcp-tool\"\u003e\n      \u003ccode\u003e{{.Name}}\u003c/code\u003e\n      {{if .Description}}\u003cspan class=\"muted\"\u003e{{.Description}}\u003c/span\u003e{{end}}\n      \u003cform method=\"post\" action=\"/mcp/tools/{{.ID}}/approve\"\u003e\n        \u003cbutton type=\"submit\"\u003e{{if .Approved}}withdraw{{else}}approve this tool{{end}}\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/div\u003e{{else}}\u003cp class=\"hint\"\u003eNothing here knows what it can do yet. Press\n    \u003cstrong\u003elist its tools\u003c/strong\u003e below and they appear here, each one still\n    needing your approval before an agent may call it.\u003c/p\u003e{{end}}\n  \u003c/details\u003e\n\n  \u003cdiv class=\"mcp-actions\"\u003e\n    {{/* \"ask it what it offers\" said what the request was and nothing about\n         why anybody would make it. This says what you get and what it costs:\n         the server is contacted once, and no tool becomes callable by it. */}}\n    \u003cform method=\"post\" action=\"/mcp/{{.ID}}/probe\"\u003e\n      \u003cbutton type=\"submit\" title=\"Contacts it once and writes down the tools it says it has. Nothing becomes callable — each tool still needs approving.\"\u003elist its tools\u003c/button\u003e\n    \u003c/form\u003e\n    \u003cform method=\"post\" action=\"/mcp/{{.ID}}/delete\"\n          hx-confirm=\"Remove {{.Name}}? Every agent granted it loses those tools.\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eremove\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/div\u003e\n\u003c/article\u003e",
       "appends": false
     },
     {
@@ -6526,6 +7280,10 @@
     {
       "name": "cog.row.nav",
       "model": [
+        {
+          "path": "Foot",
+          "type": "bool"
+        },
         {
           "path": "Label",
           "type": "string"
@@ -7136,6 +7894,14 @@
           "type": "string"
         },
         {
+          "path": "Look",
+          "type": "string"
+        },
+        {
+          "path": "UpdateWaiting",
+          "type": "bool"
+        },
+        {
           "path": "AppHead",
           "type": "HTML"
         },
@@ -7249,6 +8015,14 @@
         {
           "path": "Title",
           "type": "string"
+        },
+        {
+          "path": "Look",
+          "type": "string"
+        },
+        {
+          "path": "UpdateWaiting",
+          "type": "bool"
         },
         {
           "path": "AppHead",
@@ -7366,6 +8140,14 @@
           "type": "string"
         },
         {
+          "path": "Look",
+          "type": "string"
+        },
+        {
+          "path": "UpdateWaiting",
+          "type": "bool"
+        },
+        {
           "path": "AppHead",
           "type": "HTML"
         },
@@ -7481,6 +8263,14 @@
           "type": "string"
         },
         {
+          "path": "Look",
+          "type": "string"
+        },
+        {
+          "path": "UpdateWaiting",
+          "type": "bool"
+        },
+        {
           "path": "AppHead",
           "type": "HTML"
         },
@@ -7501,7 +8291,7 @@
           "type": "[]Asset"
         }
       ],
-      "body": "\u003cnav class=\"rail\" aria-label=\"{{.Ctx.T.Navigation}}\"\u003e\n{{range .Nav}}{{template \"cog.row.nav\" .}}{{end}}{{template \"cog.slot.rail\" .}}\u003c/nav\u003e",
+      "body": "\u003cnav class=\"rail\" aria-label=\"{{.Ctx.T.Navigation}}\"\u003e\n\u003cdiv class=\"rail-group\"\u003e\n{{range .Nav}}{{if .InBody}}{{template \"cog.row.nav\" .}}{{end}}{{end}}{{template \"cog.slot.rail\" .}}\u003c/div\u003e\n{{/*\n  The bottom of the rail: what is about this INSTALL rather than about the\n  work. The application's own rail has always had this group, and the screens\n  this server renders did not — so somebody who signed in and stayed out of a\n  workspace had no account, no plugins, and no way to change the appearance at\n  all.\n*/}}\n\u003cdiv class=\"rail-group rail-foot\"\u003e\n  {{if .UpdateWaiting}}\u003ca class=\"rail-item has-news\" href=\"/account\" title=\"A newer release is out\"\u003e\n    \u003csvg viewBox=\"0 0 24 24\" aria-hidden=\"true\"\u003e\u003cpath d=\"M12 3.5v12\"/\u003e\u003cpath d=\"M7.5 11 12 15.5 16.5 11\"/\u003e\u003cpath d=\"M4.5 20h15\"/\u003e\u003c/svg\u003e\n    \u003cspan class=\"sr-only\"\u003eA newer release is out\u003c/span\u003e\n  \u003c/a\u003e{{end}}\n  {{template \"cog.frag.appearance\" .}}\n  {{range .Nav}}{{if .Foot}}{{template \"cog.row.nav\" .}}{{end}}{{end}}\n\u003c/div\u003e\u003c/nav\u003e",
       "appends": false
     },
     {
@@ -7594,6 +8384,14 @@
         {
           "path": "Title",
           "type": "string"
+        },
+        {
+          "path": "Look",
+          "type": "string"
+        },
+        {
+          "path": "UpdateWaiting",
+          "type": "bool"
         },
         {
           "path": "AppHead",
@@ -7711,6 +8509,14 @@
           "type": "string"
         },
         {
+          "path": "Look",
+          "type": "string"
+        },
+        {
+          "path": "UpdateWaiting",
+          "type": "bool"
+        },
+        {
           "path": "AppHead",
           "type": "HTML"
         },
@@ -7824,6 +8630,14 @@
         {
           "path": "Title",
           "type": "string"
+        },
+        {
+          "path": "Look",
+          "type": "string"
+        },
+        {
+          "path": "UpdateWaiting",
+          "type": "bool"
         },
         {
           "path": "AppHead",

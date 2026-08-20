@@ -1114,6 +1114,11 @@ a[role='tab'].is-current {
  */
 .library-write form,
 .planboard-write form,
+.author-mcp form,
+.author-clock form,
+.new-agent form,
+.new-context form,
+.set-value,
 .author-gear form,
 .account form,
 .instruction-edit,
@@ -1128,6 +1133,11 @@ a[role='tab'].is-current {
 
 .library-write form label,
 .planboard-write form label,
+.author-mcp form label,
+.author-clock form label,
+.new-agent form label,
+.new-context form label,
+.set-value label,
 .author-gear form label,
 .account form label,
 .instruction-edit label,
@@ -1146,6 +1156,17 @@ a[role='tab'].is-current {
 .planboard-write form label input,
 .planboard-write form label textarea,
 .planboard-write form label select,
+.set-value label input,
+.set-value label select,
+.new-agent form label input,
+.new-agent form label select,
+.new-agent form label textarea,
+.new-context form label input,
+.new-context form label textarea,
+.author-mcp form label input,
+.author-mcp form label textarea,
+.author-clock form label input,
+.author-clock form label select,
 .planboard-edit input,
 .planboard-edit textarea,
 .planboard-edit select,
@@ -1163,6 +1184,11 @@ a[role='tab'].is-current {
 
 .library-write form button[type='submit'],
 .planboard-write form button[type='submit'],
+.set-value button[type='submit'],
+.new-agent form button[type='submit'],
+.new-context form button[type='submit'],
+.author-mcp form button[type='submit'],
+.author-clock form button[type='submit'],
 .author-gear form button[type='submit'],
 .account form button[type='submit'],
 .instruction-edit button[type='submit'],
@@ -1260,10 +1286,33 @@ a[role='tab'].is-current {
 .team-list,
 .workspace-list,
 .catalog-list,
-.delivery-list {
+.delivery-list,
+/* The panels, which were missed the first time and are where a list is most
+   often met: rows touching each other read as one block with lines through it. */
+.agent-cards,
+.mcp-servers,
+.queue-schedules,
+.queue-units,
+.env-names,
+.context-files,
+.receiver-tasks,
+.provider-models {
   display: grid;
   gap: var(--s3);
   margin-top: var(--s3);
+}
+
+/* Room under the control that opens a form, so the first row of the list is
+   not sitting on it. */
+.author-gear,
+.author-mcp,
+.author-clock,
+.new-agent,
+.new-context,
+.library-write,
+.planboard-write {
+  display: block;
+  margin-bottom: var(--s3);
 }
 
 .instruction-actions,
@@ -1386,4 +1435,120 @@ button.danger:hover:not(:disabled),
 .card.workspace input {
   position: relative;
   z-index: 1;
+}
+
+/* The disclosure that opens a form for making something.
+ *
+ * It was a line of text with a triangle, on panels whose whole job is to let
+ * you add one of the thing being listed — so the one control that matters read
+ * as a caption. It is the primary action of these panels, and it now looks
+ * like one: the same accent fill as "+ New workspace", which is the product's
+ * own word for "this is the thing to press".
+ */
+.author-gear > summary,
+.author-mcp > summary,
+.author-clock > summary,
+.new-agent > summary,
+.new-context > summary,
+.library-write > summary,
+.planboard-write > summary,
+.plugin-write > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  padding: var(--s2) var(--s3);
+  font-size: var(--t-ui);
+  cursor: pointer;
+  /* The browser's own triangle is drawn outside the fill and looks detached
+     from it. The marker below is inside, and turns when it opens. */
+  list-style: none;
+}
+.author-gear > summary::-webkit-details-marker,
+.author-mcp > summary::-webkit-details-marker,
+.author-clock > summary::-webkit-details-marker,
+.new-agent > summary::-webkit-details-marker,
+.new-context > summary::-webkit-details-marker,
+.library-write > summary::-webkit-details-marker,
+.planboard-write > summary::-webkit-details-marker,
+.plugin-write > summary::-webkit-details-marker {
+  display: none;
+}
+.author-gear > summary::before,
+.author-mcp > summary::before,
+.author-clock > summary::before,
+.new-agent > summary::before,
+.new-context > summary::before,
+.library-write > summary::before,
+.planboard-write > summary::before,
+.plugin-write > summary::before {
+  content: '+';
+  font-weight: 600;
+}
+.author-gear[open] > summary::before,
+.author-mcp[open] > summary::before,
+.author-clock[open] > summary::before,
+.new-agent[open] > summary::before,
+.new-context[open] > summary::before,
+.library-write[open] > summary::before,
+.planboard-write[open] > summary::before,
+.plugin-write[open] > summary::before {
+  content: '×';
+}
+.author-gear > summary:hover,
+.author-mcp > summary:hover,
+.author-clock > summary:hover,
+.new-agent > summary:hover,
+.new-context > summary:hover,
+.library-write > summary:hover,
+.planboard-write > summary:hover,
+.plugin-write > summary:hover {
+  background: color-mix(in srgb, var(--accent) 85%, black);
+}
+
+/* The bottom of the rail on a screen the server renders.
+ *
+ * Pushed down, so what is about the install sits away from where you go —
+ * the same shape the application's own rail has always had.
+ */
+.rail-foot {
+  margin-top: auto;
+}
+.rail-look {
+  display: contents;
+}
+/* Something is waiting. A dot rather than a number: what matters is that there
+   is news, and the account screen is where the news is. */
+.rail-item.has-news {
+  position: relative;
+}
+.rail-item.has-news::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* A dropdown's own label, on one line.
+ *
+ * The trigger is a flex box with a caret pinned to its right, so a long label
+ * in a narrow panel wrapped inside it — "bind a / context / file…" over three
+ * lines, in a control the same height as the two beside it. One line, cut with
+ * an ellipsis, which is what every other picker in the product does.
+ */
+.sel-btn > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.sel-caret {
+  flex: none;
 }

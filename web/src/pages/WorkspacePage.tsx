@@ -445,6 +445,18 @@ export default function WorkspacePage({ me }: { me: User }) {
                     setSelectedAgent(a)
                     setOverlay('agent')
                   }}
+                  onOpenMemory={(agentID) => {
+                    // The workspace's own memory belongs to no agent, and the
+                    // panel that answers for it is Context.
+                    if (agentID === null) {
+                      setOverlay('context')
+                      return
+                    }
+                    const owner = agents.find((a) => a.id === agentID)
+                    if (owner) setSelectedAgent(owner)
+                    setOverlay('memory')
+                  }}
+                  onOpenClocks={() => setOverlay('queue')}
                   onReviewGear={(id) => {
                     setReviewGear(id)
                     setOverlay('gears')

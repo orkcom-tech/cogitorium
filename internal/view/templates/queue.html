@@ -21,17 +21,26 @@
   {{/* What it starts and what it says are asked for, because a clock without
        them is a timer going off in an empty room: a turn with an empty prompt,
        against nobody. */}}
-  <form class="row" method="post" action="{{.CreateAction}}">
-    <input name="name" required placeholder="morning sweep" aria-label="Name">
-    <input name="spec" required placeholder="every 15m" aria-label="When">
-    <select name="agent" required aria-label="What it starts">
-      <option value="">which agent…</option>
-      {{range .Targets}}<option value="{{.Name}}">{{.Name}}</option>{{end}}
-    </select>
-    <input name="tell" required placeholder="what to say to it" aria-label="What to say when it fires">
-    <input name="tz" placeholder="Europe/Berlin" aria-label="Timezone">
-    <button type="submit">add it</button>
-  </form>
+  {{/* Labelled, and in a column: five boxes in a row with their names only in
+       placeholders is a form nobody can read while filling it in. */}}
+  <details class="author-clock">
+    <summary>add a clock</summary>
+    <form method="post" action="{{.CreateAction}}">
+      <label>Name <input name="name" required placeholder="morning sweep"></label>
+      <label>When <input name="spec" required placeholder="every 15m, or a cron line like 0 3 * * 1-5"></label>
+      <label>What it starts
+        <select name="agent" required>
+          <option value="">which agent…</option>
+          {{range .Targets}}<option value="{{.Name}}">{{.Name}}</option>{{end}}
+        </select>
+      </label>
+      <label>What to say when it fires
+        <input name="tell" required placeholder="check the overnight errors and file anything new">
+      </label>
+      <label>Timezone <input name="tz" placeholder="Europe/Berlin — blank is UTC"></label>
+      <button type="submit">add it</button>
+    </form>
+  </details>
 
   <div id="queue-schedules" class="queue-schedules">
     {{range .Schedules}}{{template "cog.row.schedule" .}}{{else}}

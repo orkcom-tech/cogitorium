@@ -65,26 +65,35 @@ export function Select({
       if (box.current?.contains(t) || list.current?.contains(t)) return
       setOpen(false)
     }
-    // A dropdown anchored to a control that scrolls away from under it is
-    // worse than one that closes, so it closes.
+    // A scroll FOLLOWS the control now; it does not shut the list.
     //
-    // But NOT on a scroll the list itself caused. Keeping the active option in
-    // view used to call scrollIntoView, that scrolled the card the control sits
-    // in, this listener saw the scroll and shut the list — in the same frame it
-    // opened. The control killed itself, and only on cards that could scroll at
-    // all, which is why it looked intermittent. The list is scrolled by hand
-    // now (see below) and a scroll that starts inside it is ignored outright.
-    const scrolled = (e: Event) => {
+    // Closing on scroll was a fix for the list being anchored to a control that
+    // had moved out from under it — and it kept coming back as its own bug,
+    // because opening a list can itself move something: a panel gains a
+    // scrollbar, a card settles, and the listener sees a scroll and closes in
+    // the same frame it opened. It looked intermittent, and it was, because it
+    // depended on whether the thing around the control happened to scroll.
+    //
+    // Following costs one measurement per scroll and cannot misfire. The list
+    // closes only when the control has actually left the viewport, which is
+    // the case the old rule was really about.
+    const follow = (e: Event) => {
       const t = e.target as Node
       if (list.current?.contains(t) || list.current === t) return
-      setOpen(false)
+      const b = box.current?.getBoundingClientRect()
+      if (!b) return
+      if (b.bottom < 0 || b.top > window.innerHeight) {
+        setOpen(false)
+        return
+      }
+      setAt({ left: b.left, top: b.bottom + 4, width: b.width })
     }
     const t = setTimeout(() => document.addEventListener('mousedown', away), 0)
-    window.addEventListener('scroll', scrolled, true)
+    window.addEventListener('scroll', follow, true)
     return () => {
       clearTimeout(t)
       document.removeEventListener('mousedown', away)
-      window.removeEventListener('scroll', scrolled, true)
+      window.removeEventListener('scroll', follow, true)
     }
   }, [open, options, value])
 

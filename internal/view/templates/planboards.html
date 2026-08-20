@@ -19,24 +19,7 @@
 
   {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
 
-  <details class="planboard-write">
-    <summary>Write one</summary>
-    <form method="post" action="/planboards">
-      <label>Name <input name="name" required pattern="[a-z][a-z0-9_-]*"
-                         placeholder="lowercase-with-dashes"></label>
-      <label>Description <input name="description" placeholder="What this plan is for, in one line"></label>
-      <label>Tags <input name="tags" placeholder="comma, separated"></label>
-      <label>Steps <textarea name="steps" rows="8" required
-                             placeholder="One step per line, in order.&#10;Add detail after a dash:&#10;Gather the overnight errors — from the queue, not the log"></textarea></label>
-      <label>When a run begins
-        <select name="mode">
-          <option value="resume">resume — carry on where the last run stopped</option>
-          <option value="restart">restart — begin at step one every run</option>
-        </select>
-      </label>
-      <button type="submit">Save it</button>
-    </form>
-  </details>
+  {{template "cog.frag.writeplanboard" .}}
 
   {{template "cog.frag.planboards" .}}
 </main>
@@ -142,6 +125,32 @@
   </div>
 </article>{{end}}
 
+
+{{/*
+  Writing one, named on its own so the page and the drawer share a single
+  copy. The drawer said "write one above" and offered nothing above it.
+*/}}
+{{define "cog.frag.writeplanboard"}}
+  <details class="planboard-write">
+    <summary>Write one</summary>
+    <form method="post" action="/planboards">
+      <label>Name <input name="name" required pattern="[a-z][a-z0-9_-]*"
+                         placeholder="lowercase-with-dashes"></label>
+      <label>Description <input name="description" placeholder="What this plan is for, in one line"></label>
+      <label>Tags <input name="tags" placeholder="comma, separated"></label>
+      <label>Steps <textarea name="steps" rows="8" required
+                             placeholder="One step per line, in order.&#10;Add detail after a dash:&#10;Gather the overnight errors — from the queue, not the log"></textarea></label>
+      <label>When a run begins
+        <select name="mode">
+          <option value="resume">resume — carry on where the last run stopped</option>
+          <option value="restart">restart — begin at step one every run</option>
+        </select>
+      </label>
+      <button type="submit">Save it</button>
+    </form>
+  </details>
+{{end}}
+
 {{define "cog.empty.planboards"}}<p class="hint">
 {{if .Narrowed}}No plan matches that.{{else}}Nothing is written down yet. A planboard is the order a workflow runs in — write one above, or ask the orchestrator to.{{end}}
 </p>{{end}}
@@ -153,6 +162,7 @@
 */}}
 {{define "cog.drawer.planboards"}}<div class="dk-body planboards">
   {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  {{template "cog.frag.writeplanboard" .}}
   <form class="planboard-filters" method="get" action="/planboards"
         hx-get="/planboards" hx-target="#planboard-panel" hx-swap="outerHTML"
         hx-trigger="submit, input from:input[name='q'] delay:250ms">

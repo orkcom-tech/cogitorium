@@ -97,6 +97,8 @@ export default function BlueprintEditor({
   onChanged,
   onSelectAgent,
   onReviewGear,
+  onOpenMemory,
+  onOpenClocks,
   onError,
 }: {
   wsId: number
@@ -109,8 +111,17 @@ export default function BlueprintEditor({
   /** Open a gear's review, wherever gears are shown. Used by the note a drop
    *  leaves behind when the gear that landed is not approved. */
   onReviewGear: (gearId: number) => void
+  /** Open what an agent knows. A memory node is a thing on this canvas, and a
+   *  thing on a canvas that answers a double click everywhere else but here
+   *  reads as broken rather than as deliberate. */
+  onOpenMemory: (agentID: number | null) => void
+  /** Open the clocks. Same reason. */
+  onOpenClocks: () => void
   onError: (msg: string) => void
 }) {
+  // Which agent each memory node belongs to, kept for the double click: the
+  // nodes are rebuilt on every structural change and the handler is not.
+  const ownerOfNode = useRef(new Map<string, number>())
   const [adding, setAdding] = useState(false)
   const [wires, setWires] = useState<Wire[]>([])
   const [bindings, setBindings] = useState<GearBinding[]>([])
@@ -225,18 +236,49 @@ export default function BlueprintEditor({
       }
     })
 
-    // Memory sits above the agents it feeds, on the opposite side of the
-    // canvas from the gears, so the two layers never fight for the same space.
+    // Memory sits ABOVE THE AGENT IT BELONGS TO, not in a row of its own.
+    //
+    // It used to be laid out by index along a single band at the top, with no
+    // relation to whose memory it was — so every dotted link ran diagonally
+    // across the whole canvas and the picture became a cross-hatch. With seven
+    // agents it was unreadable, which is exactly when somebody turns the layer
+    // on. Placed over its owner, each link is short and local, and the layer
+    // answers its question: what does THIS agent know.
+    //
+    // Anything nobody owns — the workspace's shared memory — keeps a place of
+    // its own, off to the left of the agents, because it belongs to all of them.
+    const ownerOf = ownerOfNode.current
+    ownerOf.clear()
+    for (const e of graph?.edges ?? []) {
+      if (e.kind !== 'knows') continue
+      const agentID = Number(String(e.to).replace(/^a-/, ''))
+      if (!Number.isNaN(agentID)) ownerOf.set(String(e.from), agentID)
+    }
+    const unowned: string[] = []
     const memoryNodes: Node<NodeData>[] = !layers.memory
       ? []
       : (graph?.nodes ?? [])
           .filter((n) => MEMORY_KINDS.has(n.kind))
-          .map((n, i, all) => ({
-            id: n.id,
-            position: { x: (i - (all.length - 1) / 2) * 230, y: -260 },
-            data: { kind: 'memory', memory: n, state: 'idle' },
-            className: `bp-node bp-memory ${KINDS[n.kind]?.className ?? ''}`,
-          }))
+          .map((n) => {
+            const owner = ownerOf.get(n.id)
+            const seat = owner === undefined ? undefined : positions.get(owner)
+            if (!seat) {
+              unowned.push(n.id)
+              const slot = unowned.length - 1
+              return {
+                id: n.id,
+                position: { x: -560, y: -260 + slot * 120 },
+                data: { kind: 'memory', memory: n, state: 'idle' },
+                className: `bp-node bp-memory ${KINDS[n.kind]?.className ?? ''}`,
+              }
+            }
+            return {
+              id: n.id,
+              position: { x: seat.x, y: seat.y - 190 },
+              data: { kind: 'memory', memory: n, state: 'idle' },
+              className: `bp-node bp-memory ${KINDS[n.kind]?.className ?? ''}`,
+            }
+          })
 
     // One singleton node, pinned above the agents. When the master switch is
     // off no edges are drawn even where grants exist: "nobody can go out" and
@@ -981,7 +1023,23 @@ export default function BlueprintEditor({
           onConnect={onConnect}
           onNodeDoubleClick={(_, n) => {
             const d = n.data as NodeData
-            if (d.kind === 'agent' && d.agent) onSelectAgent(d.agent)
+            if (d.kind === 'agent' && d.agent) {
+              onSelectAgent(d.agent)
+              return
+            }
+            // Everything else drawn here opens the panel it belongs to. They
+            // could be dragged and not opened, which is the worst of both: it
+            // moves, so it looks alive, and it answers nothing.
+            if (d.kind === 'memory') {
+              const owner = ownerOfNode.current.get(String(n.id))
+              onOpenMemory(owner ?? null)
+              return
+            }
+            if (d.kind === 'clock') {
+              onOpenClocks()
+              return
+            }
+            if (d.kind === 'gear' && d.gear) onReviewGear(d.gear.id)
           }}
           edgeTypes={edgeTypes}
           onInit={(i) => {

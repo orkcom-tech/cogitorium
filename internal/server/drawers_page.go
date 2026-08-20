@@ -60,6 +60,15 @@ func (s *Server) handleWorkspaceDrawer(w http.ResponseWriter, r *http.Request) {
 			return s.memoryModel(r, agentID, r.URL.Query().Get("edit"))
 		})
 	case "agents":
+		// The roster alone, for the poll. See agentsModel: a refresh that
+		// replaced the panel would take the form with it.
+		if r.URL.Query().Get("only") == "roster" {
+			selected, _ := strconv.ParseInt(r.URL.Query().Get("selected"), 10, 64)
+			s.renderDrawer(w, r, "cog.list.agents", func() any {
+				return s.agentsModel(r, wsID, selected)
+			})
+			return
+		}
 		// The row somebody has open, so the roster comes back with it still
 		// marked. Without it a poll every four seconds would clear the
 		// selection under whoever was reading it.

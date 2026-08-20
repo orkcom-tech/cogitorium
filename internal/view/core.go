@@ -150,6 +150,14 @@ type Action struct {
 // manifest's nav list; the host merges it in, so N plugins adding N entries
 // all get theirs.
 type NavItem struct {
+	// Foot puts it at the bottom of the rail, with the things that are about
+	// this INSTALL rather than about the work: the appearance, an update, the
+	// plugins, the account. The application's own rail has always had that
+	// group; the screens this server renders did not, so signing in and
+	// staying out of a workspace meant no account, no plugins and no way to
+	// change the theme at all.
+	Foot bool
+
 	Label   string
 	Icon    string
 	Href    string
@@ -160,6 +168,11 @@ type NavItem struct {
 	// answer "where did this button come from".
 	From string
 }
+
+// InBody is the other half of Foot, because the function set has no `not` and
+// adding one would be a permanent promise to every plugin in exchange for one
+// negation.
+func (n NavItem) InBody() bool { return !n.Foot }
 
 // Glyph is the shape for this item's icon, empty when there is no shape for
 // that name.
@@ -218,6 +231,13 @@ type Asset struct {
 type Shell struct {
 	Ctx   Ctx
 	Title string
+	// Look is the appearance in effect — "light", "dark", or empty for
+	// following the system. The rail's own control reads it so the button
+	// shows what pressing it would do rather than what is on.
+	Look string
+	// UpdateWaiting is true when a newer release is known. Read from what the
+	// checker already has; this never asks the network.
+	UpdateWaiting bool
 	// AppHead is the application's own head, carried through as-is.
 	//
 	// Vite writes hashed asset names into it on every build, so restating them
@@ -362,11 +382,17 @@ func CoreModels() Models {
 		// The gear catalogue. cog.row.gear is the name the documentation uses
 		// as its recurring override example, so it has to be small enough to
 		// be worth overriding on its own.
-		"cog.page.gears":      Gears{Ctx: Ctx{T: DefaultStrings()}},
-		"cog.list.gears":      Gears{Ctx: Ctx{T: DefaultStrings()}},
-		"cog.row.gear":        Gear{},
-		"cog.frag.authorgear": Gears{Ctx: Ctx{T: DefaultStrings()}},
-		"cog.empty.gears":     Gears{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.page.gears":            Gears{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.gears":            Gears{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.gear":              Gear{},
+		"cog.frag.authorgear":       Gears{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.frag.writeinstruction": Instructions{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.frag.writeplanboard":   Planboards{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.frag.newagent":         Agents{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.frag.newcontextfile":   Context{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.frag.appearance":       Shell{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.agents":           Agents{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.empty.gears":           Gears{Ctx: Ctx{T: DefaultStrings()}},
 
 		"cog.page.context":    Context{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.list.context":    Context{Ctx: Ctx{T: DefaultStrings()}},
@@ -868,6 +894,15 @@ type Agents struct {
 	// nobody notices, because a poll that 404s just stops refreshing.
 	PollURL string
 	Error   string
+	// Workspace is which one this roster belongs to, so the form that adds an
+	// agent knows where to post.
+	Workspace int64
+	// Models is what a new agent can think with. Offered rather than assumed:
+	// an agent with no model is an agent that cannot answer, and the blueprint
+	// already refuses to make one.
+	Models []Model
+	// Notice is what just happened, when something did.
+	Notice string
 }
 
 // MCPTool is one capability a server offers, approved on its own.
@@ -1493,6 +1528,40 @@ func (p PlanboardRow) StepText() string {
 	return strings.Join(lines, "\n")
 }
 
+// LookName is the appearance in words.
+func (s Shell) LookName() string {
+	switch s.Look {
+	case "light":
+		return "light"
+	case "dark":
+		return "dark"
+	}
+	return "whatever this machine is set to"
+}
+
+// NextLook is what pressing the control switches to, and NextLookName is that
+// in words. Light, dark, and back to following the machine — a round trip of
+// three, which is why it is a button rather than a menu.
+func (s Shell) NextLook() string {
+	switch s.Look {
+	case "light":
+		return "dark"
+	case "dark":
+		return "system"
+	}
+	return "light"
+}
+
+func (s Shell) NextLookName() string {
+	switch s.NextLook() {
+	case "light":
+		return "light"
+	case "dark":
+		return "dark"
+	}
+	return "whatever this machine is set to"
+}
+
 // HostNav is the product's own rail, as the server knows it.
 //
 // Here rather than only in the client so a page this shell serves looks like
@@ -1517,7 +1586,7 @@ func HostNav(current string, admin bool) []NavItem {
 		{Label: "Instructions", Href: "/instructions", Icon: "text", Order: 500},
 		{Label: "Planboards", Href: "/planboards", Icon: "steps", Order: 550},
 		{Label: "Context", Href: "/context", Icon: "layers", Order: 600},
-		{Label: "Plugins", Href: "/plugins", Icon: "plug", Order: 700},
+		{Label: "Plugins", Href: "/plugins", Icon: "plug", Order: 700, Foot: true},
 	}
 	if admin {
 		items = append(items,
@@ -1528,7 +1597,7 @@ func HostNav(current string, admin bool) []NavItem {
 	// Last, always: it is where the account lives on every screen in the
 	// product, and a rail whose end moved would be a rail somebody has to look
 	// for.
-	items = append(items, NavItem{Label: "Account", Href: "/account", Icon: "person", Order: 10_000})
+	items = append(items, NavItem{Label: "Account", Href: "/account", Icon: "person", Order: 10_000, Foot: true})
 	for i := range items {
 		// Prefix rather than equality: /workspaces/4 is still Workspaces, and
 		// a rail that forgets where you are the moment you open something is

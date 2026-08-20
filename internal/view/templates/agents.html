@@ -11,11 +11,49 @@
   lets the roster be a template before the workspace around it is one.
 */}}
 
-{{define "cog.drawer.agents"}}<div class="dk-body agent-cards"
-  hx-get="{{.PollURL}}" hx-trigger="every 4s" hx-swap="outerHTML">
+{{define "cog.drawer.agents"}}<div class="dk-body agents">
   {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  {{if .Notice}}<p class="hint">✓ {{.Notice}}</p>{{end}}
+  {{template "cog.frag.newagent" .}}
+  {{template "cog.list.agents" .}}
+</div>{{end}}
+
+{{/*
+  Making one, from the roster.
+
+  The orchestrator can do this, and so can the blueprint — and neither is where
+  somebody stands when they are looking at who exists and finds nobody who does
+  the thing they want. This panel listed agents and offered no way to have one.
+
+  It sits OUTSIDE the polling list on purpose: the roster refreshes itself every
+  four seconds, and a form inside it would throw away half-typed text.
+*/}}
+{{define "cog.frag.newagent"}}
+<details class="new-agent">
+  <summary>add an agent</summary>
+  <form method="post" action="/workspaces/{{.Workspace}}/agents">
+    <label>Name <input name="name" required pattern="[^/]+" placeholder="reviewer"></label>
+    <label>Model
+      <select name="model_id" required>
+        <option value="">what it thinks with…</option>
+        {{range .Models}}<option value="{{.ID}}">{{.Label}} — {{.Provider}}</option>{{end}}
+      </select>
+    </label>
+    <label>Role — the system prompt it always carries
+      <textarea name="role" rows="4" required
+                placeholder="You review code for correctness. Say what is wrong and why, and nothing else."></textarea>
+    </label>
+    <p class="hint">It arrives unwired: nothing may delegate to it and it may
+    delegate to nothing until you draw an edge on the blueprint.</p>
+    <button type="submit">add it</button>
+  </form>
+</details>{{end}}
+
+{{/* The roster, which polls. Its own name so the poll can ask for it alone. */}}
+{{define "cog.list.agents"}}<div class="agent-cards"
+  hx-get="{{.PollURL}}" hx-trigger="every 4s" hx-swap="outerHTML">
   {{range .Items}}{{template "cog.row.agent" .}}{{else}}
-  <p class="hint">No agents yet. Tell the orchestrator what you need and it will create them.</p>
+  <p class="hint">No agents yet. Add one above, or tell the orchestrator what you need and it will.</p>
   {{end}}
 </div>{{end}}
 

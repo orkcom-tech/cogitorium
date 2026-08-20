@@ -17,17 +17,37 @@
     {{if .Notice}}<p class="hint">✓ {{.Notice}}</p>{{end}}
 
     {{if .IsAdmin}}
-    <form class="row" method="post" action="/mcp">
-      <input name="name" required placeholder="jira" aria-label="Name">
-      <input name="description" placeholder="our tickets" aria-label="Description">
-      <input name="command" placeholder="npx" aria-label="Command">
-      {{/* One per line: a single string would have to be split, and splitting
-           is a shell's opinion about quoting rather than the author's. */}}
-      <textarea name="args" rows="2" placeholder="one argument per line" aria-label="Arguments"></textarea>
-      <input name="address" placeholder="https://mcp.example.com/mcp" aria-label="Address">
-      <input name="secrets" placeholder="JIRA_TOKEN" aria-label="Named values it is handed">
-      <button type="submit">add it</button>
-    </form>
+    {{/*
+      A labelled column behind a disclosure, like writing a gear.
+
+      It was six bare boxes in a row with their names only in placeholders —
+      which vanish the moment you type in them, so the form could not be read
+      while it was being filled in and could not be checked afterwards. It is
+      also two different things wearing one shape: a server this machine
+      STARTS, and a server it CALLS. The form says which half it is asking for.
+    */}}
+    <details class="author-mcp">
+      <summary>add a server</summary>
+      <form method="post" action="/mcp">
+        <label>Name <input name="name" required placeholder="jira"></label>
+        <label>What it is <input name="description" placeholder="our tickets"></label>
+
+        <p class="hint">A server is either something this machine starts, or an
+        address it calls. Fill in one of the two.</p>
+
+        <label>Command to run <input name="command" placeholder="npx"></label>
+        {{/* One per line: a single string would have to be split, and
+             splitting is a shell's opinion about quoting rather than the
+             author's. */}}
+        <label>Its arguments, one per line
+          <textarea name="args" rows="3" placeholder="-y&#10;@acme/jira-mcp"></textarea>
+        </label>
+        <label>…or an address to call <input name="address" placeholder="https://mcp.example.com/mcp"></label>
+
+        <label>Named values it is handed <input name="secrets" placeholder="JIRA_TOKEN, JIRA_URL"></label>
+        <button type="submit">add it</button>
+      </form>
+    </details>
     {{end}}
 
     <div id="mcp-servers" class="mcp-servers">
@@ -95,12 +115,17 @@
       <form method="post" action="/mcp/tools/{{.ID}}/approve">
         <button type="submit">{{if .Approved}}withdraw{{else}}approve this tool{{end}}</button>
       </form>
-    </div>{{else}}<p class="hint">It has not been probed yet, so nothing here knows what it offers.</p>{{end}}
+    </div>{{else}}<p class="hint">Nothing here knows what it can do yet. Press
+    <strong>list its tools</strong> below and they appear here, each one still
+    needing your approval before an agent may call it.</p>{{end}}
   </details>
 
   <div class="mcp-actions">
+    {{/* "ask it what it offers" said what the request was and nothing about
+         why anybody would make it. This says what you get and what it costs:
+         the server is contacted once, and no tool becomes callable by it. */}}
     <form method="post" action="/mcp/{{.ID}}/probe">
-      <button type="submit">ask it what it offers</button>
+      <button type="submit" title="Contacts it once and writes down the tools it says it has. Nothing becomes callable — each tool still needs approving.">list its tools</button>
     </form>
     <form method="post" action="/mcp/{{.ID}}/delete"
           hx-confirm="Remove {{.Name}}? Every agent granted it loses those tools.">

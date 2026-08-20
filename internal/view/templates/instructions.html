@@ -17,6 +17,28 @@
 
   {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
 
+  {{template "cog.frag.writeinstruction" .}}
+
+  {{template "cog.frag.library" .}}
+</main>
+{{end}}
+
+{{/*
+  The filter and the rows together, because the filter's options are BUILT from
+  the rows. Swapping the rows alone left the tag list offering a tag that
+  belonged to the instruction just deleted — a filter that finds nothing and
+  cannot be got out of except by reloading.
+
+  The write form stays outside it, so searching does not fold it shut mid-typing.
+*/}}
+
+{{/*
+  Writing one, named on its own so the page and the drawer are one copy of
+  it. The drawer's empty state said "write one above" and there was nothing
+  above: the form lived on the page, which is not where somebody stands when
+  they realise an agent needs to be told something.
+*/}}
+{{define "cog.frag.writeinstruction"}}
   <details class="library-write">
     <summary>Write one</summary>
     {{/* A plain POST to this page. The answer is the page again, which is what
@@ -31,19 +53,8 @@
       <button type="submit">Save it</button>
     </form>
   </details>
-
-  {{template "cog.frag.library" .}}
-</main>
 {{end}}
 
-{{/*
-  The filter and the rows together, because the filter's options are BUILT from
-  the rows. Swapping the rows alone left the tag list offering a tag that
-  belonged to the instruction just deleted — a filter that finds nothing and
-  cannot be got out of except by reloading.
-
-  The write form stays outside it, so searching does not fold it shut mid-typing.
-*/}}
 {{define "cog.frag.library"}}<div id="library-panel">
   <form class="library-filters" method="get" action="/instructions"
         hx-get="/instructions" hx-target="#library-panel" hx-swap="outerHTML"
@@ -119,6 +130,7 @@
 */}}
 {{define "cog.drawer.instructions"}}<div class="dk-body library">
   {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  {{template "cog.frag.writeinstruction" .}}
   <form class="library-filters" method="get" action="/instructions"
         hx-get="/instructions" hx-target="#library-panel" hx-swap="outerHTML"
         hx-trigger="submit, input from:input[name='q'] delay:250ms">

@@ -116,6 +116,25 @@
   What THIS workspace's agents read is Memory, on each agent, which is a
   different drawer and a different question.
 */}}
+{{/*
+  Writing a new document.
+
+  The panel listed what exists and offered no way to add to it: the editor only
+  appears once a file is open, so there was nothing to open when there was
+  nothing there — and nothing to press when there was.
+
+  No version travels with it, because a file that does not exist yet has none.
+*/}}
+{{define "cog.frag.newcontextfile"}}
+<details class="new-context">
+  <summary>write a document</summary>
+  <form method="post" action="/context/save">
+    <label>Path <input name="path" required placeholder="team/how-we-review.md"></label>
+    <label>Text <textarea name="text" rows="8" required placeholder="What it says. It is versioned by Contextverse from here on."></textarea></label>
+    <button type="submit">save it</button>
+  </form>
+</details>{{end}}
+
 {{define "cog.drawer.context"}}<div class="dk-body context">
   {{if .Available}}
     {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
@@ -127,6 +146,7 @@
     {{if .Searched}}<p class="hint">
       {{if .Hits}}{{.Matches}} lines in {{.FilesMatched}} of {{.FilesScanned}} files.{{else}}Nothing in {{.FilesScanned}} files mentions “{{.Query}}”.{{end}}
     </p>{{end}}
+    {{template "cog.frag.newcontextfile" .}}
     {{template "cog.list.context" .}}
   {{else}}
     <p class="error">{{.Unusable}}</p>
