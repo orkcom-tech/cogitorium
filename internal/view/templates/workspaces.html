@@ -72,27 +72,32 @@
 
 {{define "cog.row.workspace"}}<article class="card workspace{{if .HasHue}} has-hue{{end}}"
   {{if .HasHue}}style="--ws-hue: {{.Hue}}"{{end}}>
-  {{/* The colour is shown by the edge it colours, and choosing one is a
-       click on that edge — which is also where you would point if asked to
-       change it. */}}
-  <details class="ws-hue">
-    <summary class="ws-spine" data-own title="give this workspace a colour"><span class="sr-only">Colour</span></summary>
-    <div class="hue-pop">
-      {{range .Palette}}<form method="post" action="/workspaces/{{$.ID}}/colour">
-        <input type="hidden" name="hue" value="{{.Degrees}}">
-        <button class="hue-dot{{if .Chosen}} on{{end}}" style="background: hsl({{.Degrees}} 68% 52%)"
-                title="give it this colour"></button>
-      </form>{{end}}
-      {{/* Clearing is not choosing grey: it hands the workspace back the
-           colour derived from its id and records that nobody picked. */}}
-      <form method="post" action="/workspaces/{{.ID}}/colour">
-        <input type="hidden" name="hue" value="">
-        <button class="hue-clear" type="submit">clear</button>
-      </form>
-    </div>
-  </details>
+  {{/* The colour is shown by the edge it colours, and CHOSEN by a dot beside
+       the name.
+
+       The edge used to be the control as well — a four-pixel strip that had to
+       be hit exactly, which meant the picker was there and read as missing.
+       The edge is now only the label; the thing you press is round, visible,
+       and next to what it belongs to. */}}
+  <span class="ws-edge" aria-hidden="true"></span>
 
   <div class="card-head">
+    <details class="ws-hue">
+      <summary class="ws-dot" data-own title="Give this workspace a colour"><span class="sr-only">Colour</span></summary>
+      <div class="hue-pop">
+        {{range .Palette}}<form method="post" action="/workspaces/{{$.ID}}/colour">
+          <input type="hidden" name="hue" value="{{.Degrees}}">
+          <button class="hue-dot{{if .Chosen}} on{{end}}" style="background: hsl({{.Degrees}} 68% 52%)"
+                  title="give it this colour"></button>
+        </form>{{end}}
+        {{/* Clearing is not choosing grey: it hands the workspace back the
+             colour derived from its id and records that nobody picked. */}}
+        <form method="post" action="/workspaces/{{$.ID}}/colour">
+          <input type="hidden" name="hue" value="">
+          <button class="hue-clear" type="submit">clear</button>
+        </form>
+      </div>
+    </details>
     <a class="ws-title" href="/workspaces/{{.ID}}"><strong>{{.Name}}</strong></a>
     <span class="muted">{{.Description}}</span>
     {{if .SharedWithMe}}<span class="badge">shared with you</span>{{end}}
