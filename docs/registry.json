@@ -2607,6 +2607,10 @@
           "type": "bool"
         },
         {
+          "path": "Embedded",
+          "type": "bool"
+        },
+        {
           "path": "UpdateUnasked",
           "type": "bool"
         },
@@ -7906,6 +7910,10 @@
           "type": "bool"
         },
         {
+          "path": "Embedded",
+          "type": "bool"
+        },
+        {
           "path": "UpdateUnasked",
           "type": "bool"
         },
@@ -7930,7 +7938,7 @@
           "type": "[]Asset"
         }
       ],
-      "body": "{{template \"cog.shell.rail\" .}}\u003cdiv class=\"frame\"\u003e\u003cmain class=\"cavity\"\u003e{{.Body}}\u003c/main\u003e\u003c/div\u003e",
+      "body": "{{if .Embedded}}\u003cmain class=\"cavity embedded\"\u003e{{.Body}}\u003c/main\u003e{{else}}{{template \"cog.shell.rail\" .}}\u003cdiv class=\"frame\"\u003e\u003cmain class=\"cavity\"\u003e{{.Body}}\u003c/main\u003e\u003c/div\u003e{{end}}",
       "appends": false
     },
     {
@@ -8030,6 +8038,10 @@
         },
         {
           "path": "UpdateWaiting",
+          "type": "bool"
+        },
+        {
+          "path": "Embedded",
           "type": "bool"
         },
         {
@@ -8160,6 +8172,10 @@
           "type": "bool"
         },
         {
+          "path": "Embedded",
+          "type": "bool"
+        },
+        {
           "path": "UpdateUnasked",
           "type": "bool"
         },
@@ -8284,6 +8300,10 @@
         },
         {
           "path": "UpdateWaiting",
+          "type": "bool"
+        },
+        {
+          "path": "Embedded",
           "type": "bool"
         },
         {
@@ -8414,6 +8434,10 @@
           "type": "bool"
         },
         {
+          "path": "Embedded",
+          "type": "bool"
+        },
+        {
           "path": "UpdateUnasked",
           "type": "bool"
         },
@@ -8541,6 +8565,10 @@
           "type": "bool"
         },
         {
+          "path": "Embedded",
+          "type": "bool"
+        },
+        {
           "path": "UpdateUnasked",
           "type": "bool"
         },
@@ -8665,6 +8693,10 @@
         },
         {
           "path": "UpdateWaiting",
+          "type": "bool"
+        },
+        {
+          "path": "Embedded",
           "type": "bool"
         },
         {

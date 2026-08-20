@@ -533,7 +533,10 @@ export default function WorkspacePage({ me }: { me: User }) {
                  leak into the workspace around them. */
               <iframe
                 className="dk-body plugin-stage"
-                src={m.page}
+                /* embed=1: the same page at the same URL, without the frame
+                   it would bring if somebody opened it in a tab. Inside a
+                   panel that frame is a second rail beside the first. */
+                src={`${m.page}${m.page.includes('?') ? '&' : '?'}embed=1`}
                 title={m.title}
                 sandbox="allow-scripts allow-same-origin"
               />
@@ -563,7 +566,7 @@ export default function WorkspacePage({ me }: { me: User }) {
              and the plugin's styles cannot leak into the workspace around it. */
           <iframe
             className="dk-body plugin-panel"
-            src={openMount.page}
+            src={`${openMount.page}${openMount.page.includes('?') ? '&' : '?'}embed=1`}
             title={openMount.title}
             sandbox="allow-scripts allow-same-origin"
           />

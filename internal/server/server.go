@@ -130,8 +130,10 @@ type Server struct {
 	pageSpaces map[string]bool
 
 	// The application's stylesheet links, read from the embedded index once.
-	appHeadOnce sync.Once
-	appHeadHTML template.HTML
+	appStylesOnce sync.Once
+	appStylesHTML template.HTML
+	appHeadOnce   sync.Once
+	appHeadHTML   template.HTML
 	// catalogClient fetches the shared plugin catalog. Nil in production, which
 	// means the default client — it is a field so a test can point the fetch
 	// at a server it controls, since the catalog's URL is a compiled-in
@@ -1022,6 +1024,31 @@ func (s *Server) uiHandler() http.Handler {
 //
 // Computed once and cached, because it is the same answer for the life of the
 // process: the file is embedded in the binary.
+// appStyles is appHead without the application's module.
+//
+// For a page shown inside the product: it needs the product's stylesheet to
+// look like the product, and has nothing for the module to do — there is no
+// rail in an embedded page for it to replace, and it would ask for the rail's
+// description once per panel that opens.
+func (s *Server) appStyles() template.HTML {
+	s.appStylesOnce.Do(func() {
+		dist, err := fs.Sub(web.Dist, "dist")
+		if err != nil {
+			return
+		}
+		raw, err := fs.ReadFile(dist, "index.html")
+		if err != nil {
+			return
+		}
+		var b strings.Builder
+		for _, m := range stylesheetLink.FindAll(raw, -1) {
+			b.Write(crossorigin.ReplaceAll(m, nil))
+		}
+		s.appStylesHTML = template.HTML(b.String())
+	})
+	return s.appStylesHTML
+}
+
 func (s *Server) appHead() template.HTML {
 	s.appHeadOnce.Do(func() {
 		dist, err := fs.Sub(web.Dist, "dist")

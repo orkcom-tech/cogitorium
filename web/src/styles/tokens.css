@@ -1928,3 +1928,11 @@ textarea::placeholder {
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
 }
+
+/* A page shown inside the product: no frame of its own, and no rounded corner
+   inset from the panel's own — it IS the panel's contents. */
+.cavity.embedded {
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}

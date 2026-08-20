@@ -57,7 +57,14 @@
   of it, and every converted screen looked like a page with its navigation
   spilled across the text.
 */}}
-{{define "cog.shell.body"}}{{template "cog.shell.rail" .}}<div class="frame"><main class="cavity">{{.Body}}</main></div>{{end}}
+{{/*
+  The frame, and the hole in it.
+
+  A page shown INSIDE the product — a plugin's panel, a plugin's stage — is
+  already inside a frame with a rail, so it draws neither: two rails, one
+  nested in the other down the same left edge, is what it looked like before.
+*/}}
+{{define "cog.shell.body"}}{{if .Embedded}}<main class="cavity embedded">{{.Body}}</main>{{else}}{{template "cog.shell.rail" .}}<div class="frame"><main class="cavity">{{.Body}}</main></div>{{end}}{{end}}
 
 {{/*
   Append slots. Definitions of these CONCATENATE rather than replace, so two

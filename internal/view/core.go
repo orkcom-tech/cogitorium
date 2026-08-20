@@ -238,6 +238,10 @@ type Shell struct {
 	// UpdateWaiting is true when a newer release is known. Read from what the
 	// checker already has; this never asks the network.
 	UpdateWaiting bool
+	// Embedded says this document is being shown INSIDE the product — in a
+	// mounted panel or a mounted stage — rather than on its own. The frame is
+	// already around it, so it draws none of its own.
+	Embedded bool
 	// UpdateUnasked is true for an administrator on an install that has never
 	// answered the question. The application's rail shows the notice in that
 	// case too — something to ASK is as much a reason to draw it as something

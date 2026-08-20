@@ -435,9 +435,19 @@ func (s *Server) pluginHandler() http.Handler {
 			return
 		}
 
+		// A page opened INSIDE the product — a mounted drawer or a mounted
+		// stage — is chrome inside chrome: the panel already sits in a frame
+		// with a rail, and the page drew a second one down its left edge.
+		//
+		// The plugin's page is the same page either way, at the same URL: what
+		// changes is whether it brings a frame with it. Opened in a tab it
+		// does, so somebody can leave it the way they arrived.
+		embedded := r.URL.Query().Get("embed") == "1"
+
 		shell := view.Shell{
-			Ctx:   model.Ctx,
-			Title: page.Title,
+			Ctx:      model.Ctx,
+			Title:    page.Title,
+			Embedded: embedded,
 			// The application's stylesheet links and nothing else. A plugin's
 			// page sits inside the product and has to look like it does; its
 			// module script would boot the single-page app over the top of
@@ -451,6 +461,13 @@ func (s *Server) pluginHandler() http.Handler {
 			Nav:     rt.navFor(r.URL.Path, callerFrom(r.Context()).IsAdmin()),
 			Styles:  rt.styles,
 			Scripts: rt.scripts,
+		}
+		if embedded {
+			// No rail, and no application module to replace one: there is
+			// nothing for it to do here and it would ask for the rail's
+			// description on every panel that opens.
+			shell.Nav = nil
+			shell.AppHead = s.appStyles()
 		}
 
 		var out bytes.Buffer
