@@ -1,0 +1,24 @@
+name: Something is missing
+description: You wanted to do a thing and there was no way to.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: stuck
+    attributes:
+      label: What you were trying to do
+      description: >-
+        The job, not the feature. "I want every nightly run to work through the
+        same checklist in the same order" leads somewhere; "add a queue
+        setting" leads to a queue setting nobody needed.
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: What you do instead today
+      description: The workaround, if there is one, and what it costs.
+  - type: textarea
+    id: shape
+    attributes:
+      label: What you think it should look like
+      description: Optional. A guess is useful; a wrong guess is still useful.
