@@ -105,6 +105,12 @@ const I = {
       <path d="M4.6 15.6v2.6a2 2 0 0 0 2 2h10.8a2 2 0 0 0 2-2v-2.6" />
     </svg>
   ),
+  terminal: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+      <path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5" />
+    </svg>
+  ),
   more: (
     <svg viewBox="0 0 24 24" aria-hidden>
       <circle cx="12" cy="5.5" r="1.4" fill="currentColor" stroke="none" />
@@ -138,6 +144,25 @@ function pluginNav(user: User): PluginNavItem[] {
     }
   })
 }
+
+/** Where you can go from a screen that offers nothing of its own.
+ *
+ * The same list, in the same order, that the server draws on the screens it
+ * renders — see HostNav in internal/view. TestTheRailsAgree keeps them from
+ * parting company.
+ */
+const DESTINATIONS: { label: string; href: string; icon: keyof typeof I; admin?: boolean }[] = [
+  { label: "Workspaces", href: "/workspaces", icon: "workspaces" },
+  { label: "Map", href: "/map", icon: "map" },
+  { label: "Gears", href: "/gears", icon: "gears" },
+  { label: "Models", href: "/models", icon: "models" },
+  { label: "Instructions", href: "/instructions", icon: "instructions" },
+  { label: "Planboards", href: "/planboards", icon: "planboards" },
+  { label: "Context", href: "/context", icon: "context" },
+  { label: "Plugins", href: "/plugins", icon: "plugins" },
+  { label: "People", href: "/people", icon: "people", admin: true },
+  { label: "Terminal", href: "/terminal", icon: "terminal", admin: true },
+]
 
 export default function Rail({
   user,
@@ -257,6 +282,40 @@ export default function Rail({
             {I.workspaces}
             <span className="sr-only">Workspaces</span>
           </button>
+        </div>
+      )}
+
+      {/* The destinations, on a screen that publishes nothing.
+       *
+       * They were taken off this rail when every screen became a drawer inside
+       * a workspace — correct there, and wrong on the three screens that are
+       * still the application's own: the map, People and the terminal. On
+       * those the rail held the logo and one or two stages, while the screens
+       * the SERVER renders carried the full list. Two rails, and the emptier
+       * one on the screens you cannot navigate away from.
+       *
+       * `back` is the test rather than the stages: the map publishes stages of
+       * its own and is still not a workspace. Only a workspace sets back.
+       */}
+      {!shell?.back && (
+        <div className="rail-group">
+          {DESTINATIONS.filter((d) => !d.admin || user.role === "admin").map((d) => {
+            const on = loc.pathname === d.href
+            return (
+              <a
+                key={d.href}
+                data-own
+                className={`rail-btn ${on ? "on" : ""}`}
+                href={d.href}
+                aria-current={on ? "page" : undefined}
+                onMouseEnter={hover(d.label)}
+                onMouseLeave={unhover}
+              >
+                {I[d.icon]}
+                <span className="sr-only">{d.label}</span>
+              </a>
+            )
+          })}
         </div>
       )}
 

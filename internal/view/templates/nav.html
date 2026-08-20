@@ -9,6 +9,15 @@
 */}}
 
 {{define "cog.shell.rail"}}<nav class="rail" aria-label="{{.Ctx.T.Navigation}}">
+{{/*
+  The mark, which the application's rail has always carried and this one did
+  not — so half the screens in the product had a logo at the top of the rail
+  and half had a gap. The two rails are drawn in two places, and every
+  difference between them shows up as exactly this kind of question.
+*/}}
+<a class="rail-brand" href="/workspaces" title="Cogitorium">
+  <img src="/icon-128.png" alt="Cogitorium" width="26" height="26">
+</a>
 <div class="rail-group">
 {{range .Nav}}{{if .InBody}}{{template "cog.row.nav" .}}{{end}}{{end}}{{template "cog.slot.rail" .}}</div>
 {{/*

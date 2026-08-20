@@ -1678,16 +1678,24 @@ textarea::placeholder {
   bottom: 0;
   z-index: 2;
 }
+/* The stripe is 4px because that is how wide it should LOOK. The thing you
+   click is 14, because a four-pixel target is one nobody hits — which is why
+   the colour picker read as not being there at all. The paint is a gradient
+   rather than the box, so widening the target changes nothing visible. */
 .card.workspace .ws-spine {
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
-  width: 4px;
+  width: 14px;
   padding: 0;
   border: 0;
   border-radius: 0;
-  background: hsl(var(--ws-hue, 210) 68% 52%);
+  background: linear-gradient(
+    to right,
+    hsl(var(--ws-hue, 210) 68% 52%) 0 4px,
+    transparent 4px
+  );
   cursor: pointer;
   list-style: none;
 }
@@ -1695,5 +1703,48 @@ textarea::placeholder {
   display: none;
 }
 .card.workspace .ws-spine:hover {
-  width: 7px;
+  background: linear-gradient(
+    to right,
+    hsl(var(--ws-hue, 210) 68% 52%) 0 7px,
+    color-mix(in srgb, var(--text) 6%, transparent) 7px
+  );
+}
+
+/* Moving between screens.
+ *
+ * Half this product's screens are documents the server renders, and a document
+ * navigation is a white flash and a jump — beside the workspace's own views,
+ * which slide, it reads as leaving the application and coming back to it.
+ *
+ * A cross-document view transition costs one at-rule and no JavaScript: the
+ * browser holds the old page, paints the new one, and cross-fades between
+ * them. The rail is named so it stays PUT rather than fading with the page —
+ * it is the same rail on both sides of the navigation, and a frame that
+ * flickers on every move is worse than no transition at all.
+ *
+ * Browsers without it navigate exactly as they did.
+ */
+@view-transition {
+  navigation: auto;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(page),
+  ::view-transition-new(page) {
+    animation-duration: var(--ef-default-d, 180ms);
+  }
+}
+
+/* The frame does not travel: it is the same on both sides. */
+.rail {
+  view-transition-name: rail;
+}
+
+/* And a person who asked for less movement gets none. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
 }
