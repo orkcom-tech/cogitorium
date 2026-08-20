@@ -1951,7 +1951,8 @@ A plugin adds functionality *and* changes the interface. It can put a screen in
 the rail, hang a panel inside a workspace, take over a template the core never
 designated as extensible, and run code of its own. **It takes effect on the next
 page**: the template stack is rebuilt from what is on disk and swapped in whole
-after every install, enable, disable, reorder, revoke and remove. Only a plugin
+after every enable, disable, reorder, revoke and remove — installing needs no
+rebuild, because a plugin arrives switched off. Only a plugin
 with a backend of its own asks for a restart, because its HTTP routes were
 attached at boot and there is no way to take a route back.
 

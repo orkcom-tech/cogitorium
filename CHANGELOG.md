@@ -4,9 +4,9 @@
 
 **The release where the product was used rather than read.** Every screen was
 opened, every button pressed, and what did not work was written down and fixed —
-three audits, fourteen faults, and a class of fault behind most of them: screens
-converted from the application to server-rendered templates had arrived with
-only their read half. The two features that carry the release are **planboards**
+three passes over the whole interface, and one class of fault behind most of
+what they found: screens converted from the application to server-rendered
+templates had arrived with only their read half. The two features that carry the release are **planboards**
 and a **terminal that behaves like one**, and the rest is the product agreeing
 with itself.
 
@@ -120,10 +120,11 @@ going off in an empty room.
 The interface was composed once, at boot, so removing a plugin left everything
 it contributed on screen until somebody restarted — the entry it added to the
 menu was still there after a reload, which is indistinguishable from a removal
-that failed. It is **recomposed in place** now, on every install, enable,
-disable, reorder, revoke and remove. The only thing a rebuild cannot reach is a
-backend, whose routes were attached at boot, and those are now the only ones
-that ask for a restart.
+that failed. It is **recomposed in place** now, on every enable, disable,
+reorder, revoke and remove — installing does not need it, because a plugin
+arrives switched off and contributes nothing until it is on. The only thing a
+rebuild cannot reach is a backend, whose routes were attached at boot, and those
+are now the only ones that ask for a restart.
 
 **One question before anything destructive, for one plugin or twenty.** Tick as
 many as you like and a bar appears under the list; it leads to the same screen a
@@ -272,7 +273,12 @@ believes it took effect.
 - **The default accent changed**, and it is a default — anybody who chose a
   colour keeps theirs.
 - The Helm chart is **0.4.0**, and its `appVersion` tracks this release again
-  after standing at 1.0.1.
+  after standing at 1.0.1. It no longer refuses `config.terminal: true` at
+  template time — that refusal was written when a terminal needed a sandbox to
+  contain it, and a terminal is a shell in the pod now. The default is still
+  `false`, and values.yaml says what turning it on gives away.
+- `GET /api/v1/rail` and the two planboard binding routes are new; the API
+  description is 116 paths and 154 operations.
 - Nothing else needs doing. There is no migration to run beyond the one the
   server applies at start.
 

@@ -83,9 +83,10 @@ cogitorium plugins enable hello
 ```
 
 **It is live on the next page.** The template stack is rebuilt from what is on
-disk and swapped in whole, on install, enable, disable, reorder, revoke and
-remove, so a plugin cannot half-apply and you do not have to restart anything to
-see it. That was not always true — the stack used to be composed once at boot,
+disk and swapped in whole, on enable, disable, reorder, revoke and remove, so a
+plugin cannot half-apply and you do not have to restart anything to see it.
+(Installing does not rebuild anything, because a plugin arrives switched off and
+contributes nothing until you enable it.) That was not always true — the stack used to be composed once at boot,
 and removing a plugin left its rail entry sitting there through a reload.
 
 The one exception is a **backend**. A plugin that declares `needs:` has HTTP

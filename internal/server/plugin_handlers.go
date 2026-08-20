@@ -28,9 +28,11 @@ import (
 // same as not saying it.
 //
 // Almost nothing needs one now. The interface is recomposed in place after each
-// of these — see recomposePlugins — so enabling, disabling, reordering and
-// removing all take effect on the next page, which is what somebody who just
-// removed a plugin and reloaded expects to see. What a recomposition cannot
+// of these that changes it — see recomposePlugins — so enabling, disabling,
+// reordering and removing all take effect on the next page, which is what
+// somebody who just removed a plugin and reloaded expects to see. Installing is
+// the one verb that does not recompose, and does not need to: a plugin arrives
+// switched off and contributes nothing until it is on. What a recomposition cannot
 // reach is a backend: its routes were attached to the mux at boot and Go's mux
 // cannot take one back. So the restart line is for exactly those plugins, and
 // needsRestart is the one place that decides it.
