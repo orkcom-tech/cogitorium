@@ -1408,6 +1408,15 @@ function AgentPanel({
       })()}
 
       <h3>Assembled prompt</h3>
+      {/* Said, because it was asked. The preview is the finished thing the
+          model receives and is not editable HERE — every part of it is edited
+          somewhere, and naming those places is the difference between a
+          read-only box and a read-only box that reads as broken. */}
+      <p className="hint">
+        What this agent is actually sent, assembled: its role, then whatever is bound to it. Change it by
+        changing a part — the role above, what it knows under Memory, its tools under Gears, and its plan
+        in Planboards.
+      </p>
       {prompt === null ? (
         <div className="row">
           <button
