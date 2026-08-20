@@ -57,6 +57,11 @@ install: `scripts/ci/install-contextd.sh` fetches the matching one.
 from an empty install to agents with tools, with every command and every error
 message taken from a real run.
 
+**Deploying it:** [Configuration](configuration/) is every setting this server
+accepts — the config file, the environment, the defaults, and what each one
+refuses to do. A test reads the source and fails if a setting is missing from
+that page, so it cannot fall behind.
+
 **Desktop application.** Attached to each release for macOS (Apple silicon and
 Intel), Windows and Linux — the same server and the same interface in a native
 window instead of a browser tab. It is not a second application: it imports the

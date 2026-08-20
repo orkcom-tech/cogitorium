@@ -8,6 +8,13 @@
 # provider is already registered, the model is already offered, and the
 # orchestrator already has one. Nothing to type into a settings screen first.
 #
+# What you do next: make a workspace. It arrives with its orchestrator already
+# thinking with the model above, so you can talk to it immediately. The AGENTS
+# are not pre-made and could not be — an agent belongs to a workspace, and
+# there is no workspace until you make one. You either draw them on the
+# blueprint or, more usually, ask the orchestrator for them: creating worker
+# agents and delegating to them is what it is for.
+#
 # THIS IS A STARTER. It is an example, not a deployment: one machine, one
 # volume, a small model chosen because it fits on a laptop. Change it. Point it
 # at a bigger model, at a GPU, at Anthropic instead — the file is short on

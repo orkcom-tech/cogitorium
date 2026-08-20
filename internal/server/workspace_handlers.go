@@ -34,6 +34,12 @@ func (s *Server) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &in) {
 		return
 	}
+	if in.OrchestratorModelID == 0 {
+		// The house orchestrator's model, if somebody has chosen one on the
+		// Models screen. The same fallback the page form has: a caller should
+		// not have to name the answer this install already gave.
+		in.OrchestratorModelID = s.orchestratorModelID(r.Context())
+	}
 	if _, err := s.catalog.GetModel(r.Context(), in.OrchestratorModelID); err != nil {
 		fail(w, r, err)
 		return

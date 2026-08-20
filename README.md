@@ -468,8 +468,11 @@ network service.
 - **[The guide](https://orkcom-tech.github.io/cogitorium/guide/)** — one section
   per screen, with worked examples: a panel of models judging each other's code,
   a receiver behind an API, a scheduled run.
-- **[The reference](https://orkcom-tech.github.io/cogitorium/)** — every setting,
-  every endpoint, and what each one refuses to do.
+- **[Configuration](https://orkcom-tech.github.io/cogitorium/configuration/)** —
+  every setting this server accepts, with its environment variable and its
+  default. A test fails if one is missing from that page.
+- **[The reference](https://orkcom-tech.github.io/cogitorium/)** — every
+  endpoint, and what each one refuses to do.
 - **[Contextverse](https://github.com/orkcom-tech/contextverse)** — where the
   context and the memory actually live.
 

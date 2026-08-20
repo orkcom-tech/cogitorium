@@ -2572,7 +2572,7 @@ Every message below is the exact text.
 | Named a model id that is not in the catalog | `model 1: not found` (404) |
 | Left `base_url` empty on an openai-compatible provider | `base_url is required for openai-compatible providers` |
 | Seeded a short admin token | `COGITORIUM_ADMIN_TOKEN is 5 characters; it seeds the admin's credential, so at least 24 are required` |
-| Set `COGITORIUM_TERMINAL=yes` | Nothing. Only `1`/`true` count; the terminal stays off |
+| Set `COGITORIUM_TERMINAL=yes` | Nothing. Only `1`/`true` count, so this reads as OFF — and the terminal is on by default, so it switches one off rather than leaving it as it was |
 | Pointed `--config` at a file that is not there | `read config /path/nope.yaml: open /path/nope.yaml: no such file or directory` |
 | Turned on egress without a sandbox | `egress is enabled but gears are not sandboxed…` |
 | Asked for `sandbox: docker` with the daemon down | `sandbox: docker was requested but the daemon does not answer` |
