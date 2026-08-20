@@ -277,6 +277,7 @@ export default function WorkspacePage({ me }: { me: User }) {
     gears: 'right',
     mcp: 'right',
     instructions: 'right',
+    planboards: 'right',
     memory: 'right',
     env: 'right',
     agent: 'right',
@@ -297,6 +298,9 @@ export default function WorkspacePage({ me }: { me: User }) {
     // differ, which is on every axis and not in this list's favour.
     { id: 'mcp', title: 'MCP servers' },
     { id: 'instructions', title: 'Instructions' },
+    // Beside Instructions, because they answer two halves of one question: an
+    // instruction is how an agent works, a planboard is the order it works in.
+    { id: 'planboards', title: 'Planboards' },
     { id: 'memory', title: 'Memory' },
     { id: 'inlets', title: 'Receivers' },
     { id: 'queue', title: 'Queue' },
@@ -572,6 +576,7 @@ export default function WorkspacePage({ me }: { me: User }) {
 
         {(overlay === 'gears' ||
           overlay === 'instructions' ||
+          overlay === 'planboards' ||
           overlay === 'context' ||
           overlay === 'env' ||
           overlay === 'inlets' ||

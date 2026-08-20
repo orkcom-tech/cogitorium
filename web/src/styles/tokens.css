@@ -1113,9 +1113,11 @@ a[role='tab'].is-current {
  * One column, because these are forms somebody reads top to bottom.
  */
 .library-write form,
+.planboard-write form,
 .author-gear form,
 .account form,
 .instruction-edit,
+.planboard-edit,
 .author-gear-edit,
 .plugin-drop form {
   display: flex;
@@ -1125,9 +1127,11 @@ a[role='tab'].is-current {
 }
 
 .library-write form label,
+.planboard-write form label,
 .author-gear form label,
 .account form label,
 .instruction-edit label,
+.planboard-edit label,
 .author-gear-edit label {
   display: flex;
   flex-direction: column;
@@ -1139,6 +1143,12 @@ a[role='tab'].is-current {
 .library-write form label input,
 .library-write form label textarea,
 .library-write form label select,
+.planboard-write form label input,
+.planboard-write form label textarea,
+.planboard-write form label select,
+.planboard-edit input,
+.planboard-edit textarea,
+.planboard-edit select,
 .author-gear form label input,
 .author-gear form label textarea,
 .author-gear form label select,
@@ -1152,9 +1162,11 @@ a[role='tab'].is-current {
 }
 
 .library-write form button[type='submit'],
+.planboard-write form button[type='submit'],
 .author-gear form button[type='submit'],
 .account form button[type='submit'],
 .instruction-edit button[type='submit'],
+.planboard-edit button[type='submit'],
 .author-gear-edit button[type='submit'] {
   align-self: flex-start;
 }
@@ -1180,4 +1192,162 @@ a[role='tab'].is-current {
   min-height: 0;
   overflow-y: auto;
   padding: var(--s5);
+}
+
+/* Where an attached plan stands.
+ *
+ * One line per place the plan is attached, and the controls for moving that
+ * marker on the same line. Stacked, three attachments became twelve rows of
+ * a number box and two buttons, and the thing somebody opened the screen to
+ * read — which step it is on — was the smallest part of it.
+ */
+.planboard-position {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  margin: var(--s2) 0;
+}
+.planboard-position form {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+}
+.planboard-position input[type='number'] {
+  width: 4.5rem;
+}
+/* The error sits under the line rather than in it: a plan stuck on a step is
+   a sentence, not a control. */
+.planboard-position .error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* The steps, when the plan is open. Numbered by the list itself, because the
+   order IS the numbering — a step that carried its own number could disagree
+   with where it sits. */
+.planboard-steps {
+  margin: var(--s3) 0;
+  padding-left: var(--s4);
+}
+.planboard-steps li {
+  margin-bottom: var(--s2);
+}
+.planboard-steps .hint {
+  margin: 0;
+}
+
+/* Rows on a screen the server renders, and the controls on them.
+ *
+ * Every one of these lists was a stack of cards with no gap: three instructions
+ * read as one block with lines through it, and the two buttons on each card
+ * sat border-to-border, so "Read" and "Delete" looked like one control with a
+ * seam. Neither had a rule anywhere — the markup was written and the layout
+ * was never given to it.
+ *
+ * One rule for all of them rather than per screen, because they are the same
+ * thing: a list of cards, and a strip of actions at the bottom of each card.
+ */
+.library-list,
+.planboard-list,
+.gear-list,
+.plugin-list,
+.model-list,
+.provider-list,
+.receiver-list,
+.version-list,
+.user-list,
+.team-list,
+.workspace-list,
+.catalog-list,
+.delivery-list {
+  display: grid;
+  gap: var(--s3);
+  margin-top: var(--s3);
+}
+
+.instruction-actions,
+.planboard-actions,
+.gear-actions,
+.mcp-actions,
+.provider-actions,
+.receiver-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  margin-top: var(--s3);
+}
+
+/* Red before it is hovered, not after.
+ *
+ * It was only red on hover, which is the wrong way round: the colour is there
+ * to be read BEFORE the pointer arrives. Somebody scanning a row of buttons
+ * for the dangerous one had to find it by hovering over each in turn. */
+button.danger,
+.action.danger {
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 45%, var(--border));
+}
+button.danger:hover:not(:disabled),
+.action.danger:hover {
+  border-color: var(--danger);
+  background: color-mix(in oklab, var(--danger) 12%, transparent);
+}
+
+/* A status is meant to be seen rather than read.
+ *
+ * The tones already existed and only two screens used them. They are here for
+ * every screen that has a state at all: green is done or running, amber is
+ * waiting on a person, red is broken or refused. A plain badge stays plain —
+ * a tag is not a status, and colouring tags would drown the states.
+ */
+.badge.is-ok {
+  color: var(--ok);
+  border-color: color-mix(in oklab, var(--ok) 45%, var(--border));
+}
+.badge.is-warn {
+  color: var(--warn);
+  border-color: color-mix(in oklab, var(--warn) 45%, var(--border));
+}
+.badge.is-danger {
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 45%, var(--border));
+}
+
+/* Cards on these screens carry more than a line, so they need room inside as
+ * well as between. */
+.dk-body .card,
+.page .card {
+  padding: var(--s4);
+}
+.dk-body .card > * + *,
+.page .card > * + * {
+  margin-top: var(--s2);
+}
+
+/* A card's heading line: the name, then whatever badges belong to it.
+ *
+ * Without this the badges sit shoulder to shoulder and three tags read as one
+ * long pill. The plugins screen already had its own version of this rule; the
+ * rest of the screens were written expecting it and never given it.
+ */
+.instruction-head,
+.planboard-head,
+.gear-head,
+.provider-head,
+.version-head,
+.card-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+.instruction-head h3,
+.planboard-head h3,
+.gear-head h3,
+.provider-head h3,
+.version-head h3,
+.card-head h3 {
+  margin: 0;
 }

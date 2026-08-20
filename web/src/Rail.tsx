@@ -66,6 +66,14 @@ const I = {
       <path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4" />
     </svg>
   ),
+  planboards: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M3.5 6.5l1.6 1.6 3-3" />
+      <circle cx="5" cy="12" r="1.4" />
+      <circle cx="5" cy="17.5" r="1.4" />
+      <path d="M11 6.5h9.5M11 12h9.5M11 17.5h6" />
+    </svg>
+  ),
   models: (
     <svg viewBox="0 0 24 24" aria-hidden>
       <rect x="7.5" y="7.5" width="9" height="9" rx="2" />

@@ -38,6 +38,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/mcpoauth"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/metrics"
+	"github.com/orkcom-tech/cogitorium/internal/planboard"
 	"github.com/orkcom-tech/cogitorium/internal/plugin"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
 	"github.com/orkcom-tech/cogitorium/internal/schedule"
@@ -86,8 +87,11 @@ type Server struct {
 	// what runs it. queueMax bounds the waiting, because a queue with no bound
 	// is a way to run a server out of disk politely.
 	schedules *schedule.Store
-	settings  *settings.Store
-	versions  *workflow.Store
+
+	// plans is the written orders of work.
+	plans    *planboard.Store
+	settings *settings.Store
+	versions *workflow.Store
 	// orchestratorSecrets is what the config file said: "off" is absolute.
 	orchestratorSecrets string
 	queue               *work.Store
@@ -258,6 +262,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 			engine.Budgets{Run: cfg.BudgetRunTokens}, cfg.DataDir),
 		queue:               queue,
 		schedules:           schedule.NewStore(db),
+		plans:               planboard.NewStore(db),
 		settings:            settings.NewStore(db),
 		versions:            workflow.NewStore(db),
 		orchestratorSecrets: cfg.OrchestratorSecrets,
@@ -644,6 +649,12 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.page(mux, "POST /models/providers/{id}/models", s.handleCreateModelForm)
 	s.page(mux, "POST /models/{id}/delete", s.handleDeleteModelForm)
 
+	s.page(mux, "GET /planboards", s.handlePlanboardsPage)
+	s.page(mux, "POST /planboards", s.handleSavePlanboardForm)
+	s.page(mux, "POST /planboards/{id}/delete", s.handleDeletePlanboardForm)
+	s.page(mux, "POST /planboards/{id}/attach", s.handleAttachPlanboardForm)
+	s.page(mux, "POST /planboards/{id}/detach", s.handleDetachPlanboardForm)
+	s.page(mux, "POST /planboards/{id}/move", s.handleMovePlanboardForm)
 	s.page(mux, "GET /instructions", s.handleInstructionsPage)
 	s.page(mux, "POST /instructions", s.handleCreateInstructionForm)
 	s.page(mux, "POST /instructions/{id}/delete", s.handleDeleteInstructionForm)
@@ -695,6 +706,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	// would run nightly and then has to tell somebody to go and set the timer
 	// themselves, which is not what an orchestrator is for.
 	s.engine.SetSchedules(s.schedules)
+	s.engine.SetPlanboards(s.plans)
 	// Whether the orchestrator may read and write named values. On unless an
 	// operator says otherwise: an orchestrator that cannot configure what it
 	// builds hands the job back. Read per turn, so switching it off takes

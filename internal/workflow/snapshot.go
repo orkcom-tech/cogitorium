@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/orkcom-tech/cogitorium/internal/gear"
+	"github.com/orkcom-tech/cogitorium/internal/planboard"
 	"github.com/orkcom-tech/cogitorium/internal/schedule"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
@@ -43,11 +44,12 @@ type Snapshot struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 
-	Agents    []Agent    `json:"agents"`
-	Wires     []Wire     `json:"wires"`
-	Gears     []Gear     `json:"gears"`
-	Context   []Context  `json:"context"`
-	Schedules []Schedule `json:"schedules"`
+	Agents     []Agent     `json:"agents"`
+	Wires      []Wire      `json:"wires"`
+	Gears      []Gear      `json:"gears"`
+	Context    []Context   `json:"context"`
+	Schedules  []Schedule  `json:"schedules"`
+	Planboards []Planboard `json:"planboards,omitempty"`
 }
 
 // Agent is one agent, by name.
@@ -118,9 +120,24 @@ type Schedule struct {
 // implementation each, which is indirection that buys nothing and costs a
 // reader every time.
 type Stores struct {
-	Spaces    *workspace.Store
-	Gears     *gear.Store
-	Schedules *schedule.Store
+	Spaces     *workspace.Store
+	Gears      *gear.Store
+	Schedules  *schedule.Store
+	Planboards *planboard.Store
+}
+
+// Planboard is a plan attached here, AND where it had got to.
+//
+// The position is the reason this is in a version at all. Restoring the plan
+// without it would put the steps back and leave the marker wherever the run
+// that went wrong had pushed it — a rollback that returns the map and keeps
+// the wrong pin on it.
+type Planboard struct {
+	Name string `json:"name"`
+	// Agent is empty for the attachment the whole workspace shares.
+	Agent string `json:"agent,omitempty"`
+	Step  int    `json:"step"`
+	Cycle int    `json:"completed_passes"`
 }
 
 // Take reads a workflow as it stands.
@@ -206,6 +223,24 @@ func Take(ctx context.Context, st Stores, wsID int64) (Snapshot, error) {
 		}
 	}
 
+	if st.Planboards != nil {
+		bindings, err := st.Planboards.Bindings(ctx, wsID)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		for _, b := range bindings {
+			state, err := st.Planboards.State(ctx, b.ID)
+			if err != nil {
+				return Snapshot{}, err
+			}
+			entry := Planboard{Name: b.Planboard, Step: state.Step, Cycle: state.Cycle}
+			if b.AgentID != nil {
+				entry.Agent = byID[*b.AgentID]
+			}
+			snap.Planboards = append(snap.Planboards, entry)
+		}
+	}
+
 	snap.sort()
 	return snap, nil
 }
@@ -236,6 +271,12 @@ func (s *Snapshot) sort() {
 		return s.Context[i].Agent < s.Context[j].Agent
 	})
 	sort.Slice(s.Schedules, func(i, j int) bool { return s.Schedules[i].Name < s.Schedules[j].Name })
+	sort.Slice(s.Planboards, func(i, j int) bool {
+		if s.Planboards[i].Name != s.Planboards[j].Name {
+			return s.Planboards[i].Name < s.Planboards[j].Name
+		}
+		return s.Planboards[i].Agent < s.Planboards[j].Agent
+	})
 }
 
 // Same reports whether two snapshots describe the same workflow.
@@ -432,6 +473,55 @@ func Restore(ctx context.Context, st Stores, wsID int64, snap Snapshot) ([]strin
 				OnMiss: sc.OnMiss, Enabled: sc.Enabled,
 			}); err != nil {
 				missing = append(missing, fmt.Sprintf("the clock %q: %v", sc.Name, err))
+			}
+		}
+	}
+
+	if st.Planboards != nil {
+		// Detach everything first, so a plan attached since the version was
+		// taken goes away with the rollback. Unbinding drops the position with
+		// the attachment, which is what makes the restore below authoritative
+		// rather than merged with whatever was there.
+		bindings, err := st.Planboards.Bindings(ctx, wsID)
+		if err != nil {
+			return nil, err
+		}
+		for _, b := range bindings {
+			if err := st.Planboards.Unbind(ctx, b.PlanboardID, wsID, b.AgentID); err != nil {
+				return nil, err
+			}
+		}
+		for _, pb := range snap.Planboards {
+			plan, err := st.Planboards.GetByName(ctx, pb.Name)
+			if err != nil {
+				// The plan itself is global, like a gear: a version records
+				// that it was attached here, not the plan's own text. Deleted
+				// from the catalogue, it cannot come back by rolling a
+				// workflow back, and saying so beats restoring silently
+				// without it.
+				missing = append(missing, fmt.Sprintf("the plan %q is no longer in the catalogue, so it was not re-attached", pb.Name))
+				continue
+			}
+			var agentID *int64
+			if pb.Agent != "" {
+				id, ok := byName[pb.Agent]
+				if !ok {
+					missing = append(missing, fmt.Sprintf("the plan %q was attached to %q, and there is no such agent now", pb.Name, pb.Agent))
+					continue
+				}
+				agentID = &id
+			}
+			b, err := st.Planboards.Bind(ctx, plan.ID, wsID, agentID)
+			if err != nil {
+				missing = append(missing, fmt.Sprintf("the plan %q: %v", pb.Name, err))
+				continue
+			}
+			// The marker, not only the plan. SetState rather than Seek: a
+			// position that was legal when it was recorded must go back even
+			// if the plan has been shortened since, and the pass count is part
+			// of what happened.
+			if err := st.Planboards.SetState(ctx, b.ID, pb.Step, pb.Cycle); err != nil {
+				missing = append(missing, fmt.Sprintf("the plan %q could not be put back on step %d: %v", pb.Name, pb.Step, err))
 			}
 		}
 	}

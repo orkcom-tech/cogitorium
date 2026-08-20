@@ -48,8 +48,33 @@ const gearFilesArg = "_files"
 
 // toolsFor returns the tools an agent may use: built-ins by role, delegation
 // along its outgoing wires, and every approved gear bound to it.
-func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gears []gear.Gear, mcpTools []mcpstore.Tool, egressGranted, secretsGranted, unattended bool) []llm.Tool {
+func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gears []gear.Gear, mcpTools []mcpstore.Tool, egressGranted, secretsGranted, unattended, planned bool) []llm.Tool {
 	var tools []llm.Tool
+
+	// Only when a plan is actually in front of this agent. A tool for closing
+	// a step, offered to an agent with no step, is an invitation to invent one.
+	if planned {
+		tools = append(tools,
+			llm.Tool{
+				Name: "plan_step_done",
+				Description: "Report the step in front of you finished, and move the plan to the next one. " +
+					"Call it once, for the step you were given — it is the only thing that advances the plan.",
+				InputSchema: obj(map[string]any{
+					"plan": str("plan name; omit when only one is in front of you"),
+					"note": str("one line on what was done, for whoever reads the plan later"),
+				}),
+			},
+			llm.Tool{
+				Name: "plan_step_blocked",
+				Description: "Report that the step cannot be finished, and why. The plan does not move: the next run " +
+					"meets this step again, and is told your reason. Use it instead of skipping ahead.",
+				InputSchema: obj(map[string]any{
+					"plan":   str("plan name; omit when only one is in front of you"),
+					"reason": str("what stopped it, in enough detail that the next run is better off"),
+				}, "reason"),
+			},
+		)
+	}
 
 	if agent.IsOrchestrator {
 		tools = append(tools,
@@ -183,6 +208,65 @@ func (e *Engine) toolsFor(agent workspace.Agent, targets []workspace.Agent, gear
 					"path":  str("bound file path"),
 					"agent": str("agent name the binding is scoped to; omit for the workspace-wide binding"),
 				}, "path"),
+			},
+			llm.Tool{
+				Name: "planboard_list",
+				Description: "List the written orders of work: their steps, and for the ones attached here, which step " +
+					"the workflow is on.",
+				InputSchema: obj(map[string]any{}),
+			},
+			llm.Tool{
+				Name: "planboard_create",
+				Description: "Write down an order of work, so a workflow runs the same way every time instead of the " +
+					"order being decided again on each run. Saving over an existing name replaces its steps.",
+				InputSchema: obj(map[string]any{
+					"name":        str("short unique plan name, e.g. 'nightly-sweep'"),
+					"description": str("what this plan is for"),
+					"steps": map[string]any{
+						"type":        "array",
+						"description": "the steps, in order; each is a title and optionally a longer body",
+						"items": obj(map[string]any{
+							"title": str("what to do, in one line"),
+							"body":  str("optional detail for whoever does it"),
+						}, "title"),
+					},
+					"mode": str("'resume' (default) carries the position between runs — tonight continues last night; " +
+						"'restart' begins at step one every run"),
+				}, "name", "steps"),
+			},
+			llm.Tool{
+				Name: "planboard_attach",
+				Description: "Attach a plan to an agent, or to the whole workspace. Attached to the workspace, every " +
+					"agent shares ONE position: whoever runs next picks up the step the last one left.",
+				InputSchema: obj(map[string]any{
+					"plan":  str("plan name"),
+					"agent": str("agent to give it to; omit to attach to the whole workspace"),
+				}, "plan"),
+			},
+			llm.Tool{
+				Name:        "planboard_detach",
+				Description: "Take a plan off an agent or off the workspace. Where it had got to is forgotten.",
+				InputSchema: obj(map[string]any{
+					"plan":  str("plan name"),
+					"agent": str("agent to take it from; omit for the workspace-wide attachment"),
+				}, "plan"),
+			},
+			llm.Tool{
+				Name: "planboard_move",
+				Description: "Move where an attached plan stands: back to the top, or to a chosen step. For when the " +
+					"plan and the world have got out of step.",
+				InputSchema: obj(map[string]any{
+					"plan":  str("plan name"),
+					"agent": str("agent whose position to move; omit for the workspace-wide attachment"),
+					"step":  str("step number to move to; omit to go back to the first step"),
+				}, "plan"),
+			},
+			llm.Tool{
+				Name:        "planboard_delete",
+				Description: "Delete a plan, everywhere it is attached, along with where it had got to.",
+				InputSchema: obj(map[string]any{
+					"name": str("plan to delete"),
+				}, "name"),
 			},
 		)
 	}
@@ -1270,6 +1354,11 @@ func (e *Engine) dispatchTool(ctx context.Context, wsID int64, agent workspace.A
 			return "", err
 		}
 		return `{"unbound": true}`, nil
+
+	case "plan_step_done", "plan_step_blocked",
+		"planboard_list", "planboard_create", "planboard_attach",
+		"planboard_detach", "planboard_move", "planboard_delete":
+		return e.dispatchPlanTool(ctx, wsID, agent, call.Name, args)
 
 	case "forge_gear":
 		name, err := args.reqStr("name")

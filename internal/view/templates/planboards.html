@@ -1,0 +1,163 @@
+{{/*
+  Planboards — work written down in advance, in the order it is done.
+
+  The same four names the library uses, for the same reason: a plugin that
+  wants a different step row should not have to reproduce the page around it.
+
+  Everything here is ordinary HTML that works with JavaScript switched off.
+  The steps are written one per line, because that is how a person writes a
+  list; the server splits them. A form that made somebody click "add step" six
+  times would be a form nobody fills in twice.
+*/}}
+
+{{define "cog.page.planboards"}}
+<main class="page planboards">
+  <h2>Planboards</h2>
+  <p class="hint">Work written down before it starts. The engine hands an agent
+  one step at a time and will not go past it until that step is closed — so a
+  workflow that fires on a clock runs the same way every night.</p>
+
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+
+  <details class="planboard-write">
+    <summary>Write one</summary>
+    <form method="post" action="/planboards">
+      <label>Name <input name="name" required pattern="[a-z][a-z0-9_-]*"
+                         placeholder="lowercase-with-dashes"></label>
+      <label>Description <input name="description" placeholder="What this plan is for, in one line"></label>
+      <label>Tags <input name="tags" placeholder="comma, separated"></label>
+      <label>Steps <textarea name="steps" rows="8" required
+                             placeholder="One step per line, in order.&#10;Add detail after a dash:&#10;Gather the overnight errors — from the queue, not the log"></textarea></label>
+      <label>When a run begins
+        <select name="mode">
+          <option value="resume">resume — carry on where the last run stopped</option>
+          <option value="restart">restart — begin at step one every run</option>
+        </select>
+      </label>
+      <button type="submit">Save it</button>
+    </form>
+  </details>
+
+  {{template "cog.frag.planboards" .}}
+</main>
+{{end}}
+
+{{/*
+  The filter and the rows together, because the filter's options are built FROM
+  the rows — swapping the rows alone leaves a tag in the list that belonged to
+  the plan just deleted.
+*/}}
+{{define "cog.frag.planboards"}}<div id="planboard-panel">
+  <form class="planboard-filters" method="get" action="/planboards"
+        hx-get="/planboards" hx-target="#planboard-panel" hx-swap="outerHTML"
+        hx-trigger="submit, input from:input[name='q'] delay:250ms, change from:select">
+    <input type="search" name="q" value="{{.Query}}" placeholder="Search names and descriptions"
+           aria-label="Search the plans">
+    <select name="tag" aria-label="Filter by tag">
+      <option value="">every tag</option>
+      {{range .Tags}}<option value="{{.Name}}"{{if .Selected}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+    <noscript><button type="submit">Search</button></noscript>
+  </form>
+
+  {{template "cog.list.planboards" .}}
+</div>{{end}}
+
+{{define "cog.list.planboards"}}<div id="planboard-list" class="planboard-list">
+{{if .Items}}{{range .Items}}{{template "cog.row.planboard" .}}{{end}}{{else}}{{template "cog.empty.planboards" .}}{{end}}
+</div>{{end}}
+
+{{/*
+  The row carries what it is, so it can be picked up: dragging a plan onto the
+  blueprint is how it is given to an agent, and the card states itself in data
+  attributes because a template draws no handlers.
+*/}}
+{{define "cog.row.planboard"}}<article class="card planboard{{if .Open}} is-open{{end}}"
+  draggable="true" title="Drag onto the blueprint to give this plan to an agent"
+  data-planboard-id="{{.ID}}" data-planboard-name="{{.Name}}">
+  <header class="planboard-head">
+    <h3>{{.Name}}</h3>
+    {{if .Resume}}<span class="badge">resume</span>{{end}}
+    {{if .Restart}}<span class="badge">restart</span>{{end}}
+    {{range .Tags}}<span class="badge">{{.}}</span>{{end}}
+  </header>
+  {{if .Description}}<p class="hint">{{.Description}}</p>{{end}}
+
+  {{/* Where it stands, wherever it is attached. This is the part somebody
+       opens the screen to see: not what the plan says, but how far it has got. */}}
+  {{range .Attached}}
+  <div class="planboard-position">
+    <strong>{{.Where}}</strong>
+    {{/* Seen before it is read: a plan that is stuck is the one thing on this
+         screen somebody has to act on. */}}
+    {{if .Blocked}}<span class="badge is-danger">stuck</span>{{else}}<span class="badge is-ok">running</span>{{end}}
+    <span>step {{.Step}} of {{.Total}} — {{.StepTitle}}</span>
+    {{if .Passes}}<span class="badge">{{.Passes}} passes done</span>{{end}}
+    {{if .Blocked}}<p class="error">Stuck here: {{.Blocked}}</p>{{end}}
+    <form method="post" action="/planboards/{{$.ID}}/move">
+      <input type="hidden" name="agent" value="{{.AgentName}}">
+      <input type="hidden" name="ws" value="{{.WorkspaceID}}">
+      <input type="number" name="step" min="1" max="{{.Total}}" value="{{.Step}}"
+             aria-label="Move to step">
+      <button type="submit">Move</button>
+    </form>
+    <form method="post" action="/planboards/{{$.ID}}/detach">
+      <input type="hidden" name="agent" value="{{.AgentName}}">
+      <input type="hidden" name="ws" value="{{.WorkspaceID}}">
+      <button type="submit" class="danger">Detach</button>
+    </form>
+  </div>
+  {{end}}
+
+  {{if .Open}}
+  <ol class="planboard-steps">
+    {{range .Steps}}<li><strong>{{.Title}}</strong>{{if .Body}}<p class="hint">{{.Body}}</p>{{end}}</li>{{end}}
+  </ol>
+
+  {{/* Editable by name, so there is one way in and one history — the same
+       shape the instruction row uses. */}}
+  <form class="planboard-edit" method="post" action="/planboards">
+    <input type="hidden" name="name" value="{{.Name}}">
+    <label>Description <input name="description" value="{{.Description}}"></label>
+    <label>Tags <input name="tags" value="{{.TagList}}" placeholder="comma, separated"></label>
+    <label>Steps <textarea name="steps" rows="10" spellcheck="false">{{.StepText}}</textarea></label>
+    <label>When a run begins
+      <select name="mode">
+        <option value="resume"{{if .Resume}} selected{{end}}>resume — carry on where the last run stopped</option>
+        <option value="restart"{{if .Restart}} selected{{end}}>restart — begin at step one every run</option>
+      </select>
+    </label>
+    <button type="submit">Save changes</button>
+  </form>
+  {{end}}
+
+  <div class="planboard-actions">
+    <a class="action" href="/planboards?open={{.ID}}">{{if .Open}}Hide{{else}}Read{{end}}</a>
+    <form method="post" action="/planboards/{{.ID}}/delete"
+          hx-post="/planboards/{{.ID}}/delete" hx-target="#planboard-panel" hx-swap="outerHTML"
+          hx-confirm="Delete {{.Name}}? Everywhere it is attached, and where it had got to, goes with it.">
+      <button type="submit" class="danger">Delete</button>
+    </form>
+    {{if .UpdatedAt}}<span class="hint">{{.UpdatedAt}}</span>{{end}}
+  </div>
+</article>{{end}}
+
+{{define "cog.empty.planboards"}}<p class="hint">
+{{if .Narrowed}}No plan matches that.{{else}}Nothing is written down yet. A planboard is the order a workflow runs in — write one above, or ask the orchestrator to.{{end}}
+</p>{{end}}
+
+{{/*
+  The plans as a drawer inside a workspace: the same rows without the page
+  frame, plus the one thing that only means anything inside a workspace —
+  attaching a plan to an agent, or to the whole workspace.
+*/}}
+{{define "cog.drawer.planboards"}}<div class="dk-body planboards">
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  <form class="planboard-filters" method="get" action="/planboards"
+        hx-get="/planboards" hx-target="#planboard-panel" hx-swap="outerHTML"
+        hx-trigger="submit, input from:input[name='q'] delay:250ms">
+    <input type="search" name="q" value="{{.Query}}" placeholder="Search names and descriptions"
+           aria-label="Search the plans">
+  </form>
+  {{template "cog.list.planboards" .}}
+</div>{{end}}

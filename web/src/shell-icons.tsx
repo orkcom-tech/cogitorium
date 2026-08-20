@@ -82,6 +82,14 @@ export const DRAWER_ICON: Record<string, ReactNode> = {
       <path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4" />
     </>,
   ),
+  planboards: svg(
+    <>
+      <path d="M3.5 6.5l1.6 1.6 3-3" />
+      <circle cx="5" cy="12" r="1.4" />
+      <circle cx="5" cy="17.5" r="1.4" />
+      <path d="M11 6.5h9.5M11 12h9.5M11 17.5h6" />
+    </>,
+  ),
   memory: svg(
     <>
       <ellipse cx="12" cy="6.5" rx="7.5" ry="3" />

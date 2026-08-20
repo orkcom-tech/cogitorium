@@ -19,7 +19,7 @@ func TestTheSecretsSwitchWithholdsTheTools(t *testing.T) {
 
 	names := func(granted bool) map[string]bool {
 		out := map[string]bool{}
-		for _, tool := range e.toolsFor(orchestrator, nil, nil, nil, false, granted, true) {
+		for _, tool := range e.toolsFor(orchestrator, nil, nil, nil, false, granted, true, false) {
 			out[tool.Name] = true
 		}
 		return out
@@ -48,7 +48,7 @@ func TestTheSecretsSwitchWithholdsTheTools(t *testing.T) {
 // way a gear does — declared by name, supplied by the host, unseen.
 func TestOnlyTheOrchestratorReachesNamedValues(t *testing.T) {
 	e := &Engine{}
-	for _, tool := range e.toolsFor(workspace.Agent{Name: "worker"}, nil, nil, nil, false, true, true) {
+	for _, tool := range e.toolsFor(workspace.Agent{Name: "worker"}, nil, nil, nil, false, true, true, false) {
 		if strings.HasPrefix(tool.Name, "env_") {
 			t.Errorf("a worker agent is offered %q", tool.Name)
 		}

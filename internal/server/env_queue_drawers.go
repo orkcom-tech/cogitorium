@@ -83,7 +83,8 @@ func (s *Server) queueModel(r *http.Request, wsID int64, problem, notice string)
 		}
 		for _, u := range units {
 			model.Units = append(model.Units, view.Unit{
-				ID: u.ID, Kind: u.Kind, State: u.State, Lane: u.Lane,
+				ID: u.ID, Kind: u.Kind, State: u.State, StateTone: queueTone(u.State, u.LastError),
+				Lane:     u.Lane,
 				Attempts: u.Attempts, MaxAttempts: u.MaxAttempts,
 				LastError: u.LastError, Failed: u.LastError != "",
 			})
@@ -143,4 +144,24 @@ func (s *Server) handleVariablesPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderPage(w, r, "cog.page.variables", "", "Variables & Secrets", s.envModel(r, nil, ""))
+}
+
+// queueTone is how a unit's state reads at a glance.
+//
+// A unit that has failed at least once is amber even while it waits: it is
+// still going to run, and it is not the same as one that has never had a
+// problem. Abandoned is red. Everything else is the ordinary progression and
+// carries no colour, because colouring "queued" would leave nothing for the
+// states somebody needs to spot.
+func queueTone(state, lastError string) string {
+	switch state {
+	case "running":
+		return "ok"
+	case "failed", "dead", "abandoned":
+		return "danger"
+	}
+	if lastError != "" {
+		return "warn"
+	}
+	return ""
 }

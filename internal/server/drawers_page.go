@@ -40,6 +40,10 @@ func (s *Server) handleWorkspaceDrawer(w http.ResponseWriter, r *http.Request) {
 		s.renderDrawer(w, r, "cog.drawer.gears", func() any {
 			return s.gearsModel(r, "", "", nil)
 		})
+	case "planboards":
+		s.renderDrawer(w, r, "cog.drawer.planboards", func() any {
+			return s.planboardsModel(r, "")
+		})
 	case "terminal":
 		// The gate, never the session. What a template can render here is why
 		// there is or is not a shell and what starting one costs — the live

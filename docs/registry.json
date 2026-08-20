@@ -743,6 +743,121 @@
       "appends": false
     },
     {
+      "name": "cog.drawer.planboards",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Items",
+          "type": "[]PlanboardRow"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Tag",
+          "type": "string"
+        },
+        {
+          "path": "Tags",
+          "type": "[]Tag"
+        },
+        {
+          "path": "Narrowed",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Agents",
+          "type": "[]PlanTarget"
+        }
+      ],
+      "body": "\u003cdiv class=\"dk-body planboards\"\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  \u003cform class=\"planboard-filters\" method=\"get\" action=\"/planboards\"\n        hx-get=\"/planboards\" hx-target=\"#planboard-panel\" hx-swap=\"outerHTML\"\n        hx-trigger=\"submit, input from:input[name='q'] delay:250ms\"\u003e\n    \u003cinput type=\"search\" name=\"q\" value=\"{{.Query}}\" placeholder=\"Search names and descriptions\"\n           aria-label=\"Search the plans\"\u003e\n  \u003c/form\u003e\n  {{template \"cog.list.planboards\" .}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.drawer.queue",
       "model": [
         {
@@ -1789,6 +1904,121 @@
       "appends": false
     },
     {
+      "name": "cog.empty.planboards",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Items",
+          "type": "[]PlanboardRow"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Tag",
+          "type": "string"
+        },
+        {
+          "path": "Tags",
+          "type": "[]Tag"
+        },
+        {
+          "path": "Narrowed",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Agents",
+          "type": "[]PlanTarget"
+        }
+      ],
+      "body": "\u003cp class=\"hint\"\u003e\n{{if .Narrowed}}No plan matches that.{{else}}Nothing is written down yet. A planboard is the order a workflow runs in — write one above, or ask the orchestrator to.{{end}}\n\u003c/p\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.empty.plugins",
       "model": [
         {
@@ -2377,6 +2607,121 @@
         }
       ],
       "body": "\u003csection class=\"panel\"\u003e\n  \u003ch3\u003eChange your password\u003c/h3\u003e\n  {{/* The current one is asked for. It was not, and that made a password a\n       thing anybody who found an unlocked screen could replace — the session\n       proves somebody sat down, not that they are who the account is. */}}\n  \u003cform method=\"post\" action=\"/account/password\"\u003e\n    \u003clabel\u003eCurrent password \u003cinput type=\"password\" name=\"current\" required autocomplete=\"current-password\"\u003e\u003c/label\u003e\n    \u003clabel\u003eNew password \u003cinput type=\"password\" name=\"password\" required minlength=\"8\" autocomplete=\"new-password\"\u003e\u003c/label\u003e\n    \u003clabel\u003eNew password again \u003cinput type=\"password\" name=\"again\" required minlength=\"8\" autocomplete=\"new-password\"\u003e\u003c/label\u003e\n    \u003cbutton type=\"submit\"\u003eChange it\u003c/button\u003e\n  \u003c/form\u003e\n\u003c/section\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.frag.planboards",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Items",
+          "type": "[]PlanboardRow"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Tag",
+          "type": "string"
+        },
+        {
+          "path": "Tags",
+          "type": "[]Tag"
+        },
+        {
+          "path": "Narrowed",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Agents",
+          "type": "[]PlanTarget"
+        }
+      ],
+      "body": "\u003cdiv id=\"planboard-panel\"\u003e\n  \u003cform class=\"planboard-filters\" method=\"get\" action=\"/planboards\"\n        hx-get=\"/planboards\" hx-target=\"#planboard-panel\" hx-swap=\"outerHTML\"\n        hx-trigger=\"submit, input from:input[name='q'] delay:250ms, change from:select\"\u003e\n    \u003cinput type=\"search\" name=\"q\" value=\"{{.Query}}\" placeholder=\"Search names and descriptions\"\n           aria-label=\"Search the plans\"\u003e\n    \u003cselect name=\"tag\" aria-label=\"Filter by tag\"\u003e\n      \u003coption value=\"\"\u003eevery tag\u003c/option\u003e\n      {{range .Tags}}\u003coption value=\"{{.Name}}\"{{if .Selected}} selected{{end}}\u003e{{.Name}}\u003c/option\u003e{{end}}\n    \u003c/select\u003e\n    \u003cnoscript\u003e\u003cbutton type=\"submit\"\u003eSearch\u003c/button\u003e\u003c/noscript\u003e\n  \u003c/form\u003e\n\n  {{template \"cog.list.planboards\" .}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -3181,6 +3526,121 @@
         }
       ],
       "body": "\u003cdiv class=\"plugin-rows{{if .Tone}} is-{{.Tone}}{{end}}\"\u003e\n  \u003cspan class=\"muted\"\u003e{{.Label}}\u003c/span\u003e\n  {{range .Names}}\u003ccode\u003e{{.}}\u003c/code\u003e {{end}}\n\u003c/div\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.list.planboards",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Items",
+          "type": "[]PlanboardRow"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Tag",
+          "type": "string"
+        },
+        {
+          "path": "Tags",
+          "type": "[]Tag"
+        },
+        {
+          "path": "Narrowed",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Agents",
+          "type": "[]PlanTarget"
+        }
+      ],
+      "body": "\u003cdiv id=\"planboard-list\" class=\"planboard-list\"\u003e\n{{if .Items}}{{range .Items}}{{template \"cog.row.planboard\" .}}{{end}}{{else}}{{template \"cog.empty.planboards\" .}}{{end}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -4580,6 +5040,121 @@
       "appends": false
     },
     {
+      "name": "cog.page.planboards",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Items",
+          "type": "[]PlanboardRow"
+        },
+        {
+          "path": "Query",
+          "type": "string"
+        },
+        {
+          "path": "Tag",
+          "type": "string"
+        },
+        {
+          "path": "Tags",
+          "type": "[]Tag"
+        },
+        {
+          "path": "Narrowed",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        },
+        {
+          "path": "Agents",
+          "type": "[]PlanTarget"
+        }
+      ],
+      "body": "\u003cmain class=\"page planboards\"\u003e\n  \u003ch2\u003ePlanboards\u003c/h2\u003e\n  \u003cp class=\"hint\"\u003eWork written down before it starts. The engine hands an agent\n  one step at a time and will not go past it until that step is closed — so a\n  workflow that fires on a clock runs the same way every night.\u003c/p\u003e\n\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n\n  \u003cdetails class=\"planboard-write\"\u003e\n    \u003csummary\u003eWrite one\u003c/summary\u003e\n    \u003cform method=\"post\" action=\"/planboards\"\u003e\n      \u003clabel\u003eName \u003cinput name=\"name\" required pattern=\"[a-z][a-z0-9_-]*\"\n                         placeholder=\"lowercase-with-dashes\"\u003e\u003c/label\u003e\n      \u003clabel\u003eDescription \u003cinput name=\"description\" placeholder=\"What this plan is for, in one line\"\u003e\u003c/label\u003e\n      \u003clabel\u003eTags \u003cinput name=\"tags\" placeholder=\"comma, separated\"\u003e\u003c/label\u003e\n      \u003clabel\u003eSteps \u003ctextarea name=\"steps\" rows=\"8\" required\n                             placeholder=\"One step per line, in order.\u0026#10;Add detail after a dash:\u0026#10;Gather the overnight errors — from the queue, not the log\"\u003e\u003c/textarea\u003e\u003c/label\u003e\n      \u003clabel\u003eWhen a run begins\n        \u003cselect name=\"mode\"\u003e\n          \u003coption value=\"resume\"\u003eresume — carry on where the last run stopped\u003c/option\u003e\n          \u003coption value=\"restart\"\u003erestart — begin at step one every run\u003c/option\u003e\n        \u003c/select\u003e\n      \u003c/label\u003e\n      \u003cbutton type=\"submit\"\u003eSave it\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/details\u003e\n\n  {{template \"cog.frag.planboards\" .}}\n\u003c/main\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.page.plugin",
       "model": [
         {
@@ -5656,6 +6231,53 @@
       "appends": false
     },
     {
+      "name": "cog.row.planboard",
+      "model": [
+        {
+          "path": "ID",
+          "type": "int64"
+        },
+        {
+          "path": "Name",
+          "type": "string"
+        },
+        {
+          "path": "Description",
+          "type": "string"
+        },
+        {
+          "path": "Tags",
+          "type": "[]string"
+        },
+        {
+          "path": "Steps",
+          "type": "[]PlanStepRow"
+        },
+        {
+          "path": "Open",
+          "type": "bool"
+        },
+        {
+          "path": "UpdatedAt",
+          "type": "string"
+        },
+        {
+          "path": "Resume",
+          "type": "bool"
+        },
+        {
+          "path": "Restart",
+          "type": "bool"
+        },
+        {
+          "path": "Attached",
+          "type": "[]PlanPosition"
+        }
+      ],
+      "body": "\u003carticle class=\"card planboard{{if .Open}} is-open{{end}}\"\n  draggable=\"true\" title=\"Drag onto the blueprint to give this plan to an agent\"\n  data-planboard-id=\"{{.ID}}\" data-planboard-name=\"{{.Name}}\"\u003e\n  \u003cheader class=\"planboard-head\"\u003e\n    \u003ch3\u003e{{.Name}}\u003c/h3\u003e\n    {{if .Resume}}\u003cspan class=\"badge\"\u003eresume\u003c/span\u003e{{end}}\n    {{if .Restart}}\u003cspan class=\"badge\"\u003erestart\u003c/span\u003e{{end}}\n    {{range .Tags}}\u003cspan class=\"badge\"\u003e{{.}}\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n  {{if .Description}}\u003cp class=\"hint\"\u003e{{.Description}}\u003c/p\u003e{{end}}\n\n  {{/* Where it stands, wherever it is attached. This is the part somebody\n       opens the screen to see: not what the plan says, but how far it has got. */}}\n  {{range .Attached}}\n  \u003cdiv class=\"planboard-position\"\u003e\n    \u003cstrong\u003e{{.Where}}\u003c/strong\u003e\n    {{/* Seen before it is read: a plan that is stuck is the one thing on this\n         screen somebody has to act on. */}}\n    {{if .Blocked}}\u003cspan class=\"badge is-danger\"\u003estuck\u003c/span\u003e{{else}}\u003cspan class=\"badge is-ok\"\u003erunning\u003c/span\u003e{{end}}\n    \u003cspan\u003estep {{.Step}} of {{.Total}} — {{.StepTitle}}\u003c/span\u003e\n    {{if .Passes}}\u003cspan class=\"badge\"\u003e{{.Passes}} passes done\u003c/span\u003e{{end}}\n    {{if .Blocked}}\u003cp class=\"error\"\u003eStuck here: {{.Blocked}}\u003c/p\u003e{{end}}\n    \u003cform method=\"post\" action=\"/planboards/{{$.ID}}/move\"\u003e\n      \u003cinput type=\"hidden\" name=\"agent\" value=\"{{.AgentName}}\"\u003e\n      \u003cinput type=\"hidden\" name=\"ws\" value=\"{{.WorkspaceID}}\"\u003e\n      \u003cinput type=\"number\" name=\"step\" min=\"1\" max=\"{{.Total}}\" value=\"{{.Step}}\"\n             aria-label=\"Move to step\"\u003e\n      \u003cbutton type=\"submit\"\u003eMove\u003c/button\u003e\n    \u003c/form\u003e\n    \u003cform method=\"post\" action=\"/planboards/{{$.ID}}/detach\"\u003e\n      \u003cinput type=\"hidden\" name=\"agent\" value=\"{{.AgentName}}\"\u003e\n      \u003cinput type=\"hidden\" name=\"ws\" value=\"{{.WorkspaceID}}\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eDetach\u003c/button\u003e\n    \u003c/form\u003e\n  \u003c/div\u003e\n  {{end}}\n\n  {{if .Open}}\n  \u003col class=\"planboard-steps\"\u003e\n    {{range .Steps}}\u003cli\u003e\u003cstrong\u003e{{.Title}}\u003c/strong\u003e{{if .Body}}\u003cp class=\"hint\"\u003e{{.Body}}\u003c/p\u003e{{end}}\u003c/li\u003e{{end}}\n  \u003c/ol\u003e\n\n  {{/* Editable by name, so there is one way in and one history — the same\n       shape the instruction row uses. */}}\n  \u003cform class=\"planboard-edit\" method=\"post\" action=\"/planboards\"\u003e\n    \u003cinput type=\"hidden\" name=\"name\" value=\"{{.Name}}\"\u003e\n    \u003clabel\u003eDescription \u003cinput name=\"description\" value=\"{{.Description}}\"\u003e\u003c/label\u003e\n    \u003clabel\u003eTags \u003cinput name=\"tags\" value=\"{{.TagList}}\" placeholder=\"comma, separated\"\u003e\u003c/label\u003e\n    \u003clabel\u003eSteps \u003ctextarea name=\"steps\" rows=\"10\" spellcheck=\"false\"\u003e{{.StepText}}\u003c/textarea\u003e\u003c/label\u003e\n    \u003clabel\u003eWhen a run begins\n      \u003cselect name=\"mode\"\u003e\n        \u003coption value=\"resume\"{{if .Resume}} selected{{end}}\u003eresume — carry on where the last run stopped\u003c/option\u003e\n        \u003coption value=\"restart\"{{if .Restart}} selected{{end}}\u003erestart — begin at step one every run\u003c/option\u003e\n      \u003c/select\u003e\n    \u003c/label\u003e\n    \u003cbutton type=\"submit\"\u003eSave changes\u003c/button\u003e\n  \u003c/form\u003e\n  {{end}}\n\n  \u003cdiv class=\"planboard-actions\"\u003e\n    \u003ca class=\"action\" href=\"/planboards?open={{.ID}}\"\u003e{{if .Open}}Hide{{else}}Read{{end}}\u003c/a\u003e\n    \u003cform method=\"post\" action=\"/planboards/{{.ID}}/delete\"\n          hx-post=\"/planboards/{{.ID}}/delete\" hx-target=\"#planboard-panel\" hx-swap=\"outerHTML\"\n          hx-confirm=\"Delete {{.Name}}? Everywhere it is attached, and where it had got to, goes with it.\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eDelete\u003c/button\u003e\n    \u003c/form\u003e\n    {{if .UpdatedAt}}\u003cspan class=\"hint\"\u003e{{.UpdatedAt}}\u003c/span\u003e{{end}}\n  \u003c/div\u003e\n\u003c/article\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.row.plugin",
       "model": [
         {
@@ -5934,6 +6556,10 @@
           "type": "string"
         },
         {
+          "path": "StateTone",
+          "type": "string"
+        },
+        {
           "path": "Lane",
           "type": "string"
         },
@@ -5958,7 +6584,7 @@
           "type": "bool"
         }
       ],
-      "body": "\u003cdiv class=\"queue-unit\"\u003e\n  \u003ccode\u003e{{.Kind}}\u003c/code\u003e\n  \u003cspan class=\"badge\"\u003e{{.State}}\u003c/span\u003e\n  \u003cspan class=\"muted\"\u003e{{.Lane}}\u003c/span\u003e\n  \u003cspan class=\"muted\"\u003eattempt {{.Attempts}} of {{.MaxAttempts}}\u003c/span\u003e\n  {{if .LastError}}\u003cp class=\"error\"\u003e{{.LastError}}\u003c/p\u003e{{end}}\n\u003c/div\u003e",
+      "body": "\u003cdiv class=\"queue-unit\"\u003e\n  \u003ccode\u003e{{.Kind}}\u003c/code\u003e\n  {{if .StateTone}}\u003cspan class=\"badge is-{{.StateTone}}\"\u003e{{.State}}\u003c/span\u003e{{else}}\u003cspan class=\"badge\"\u003e{{.State}}\u003c/span\u003e{{end}}\n  \u003cspan class=\"muted\"\u003e{{.Lane}}\u003c/span\u003e\n  \u003cspan class=\"muted\"\u003eattempt {{.Attempts}} of {{.MaxAttempts}}\u003c/span\u003e\n  {{if .LastError}}\u003cp class=\"error\"\u003e{{.LastError}}\u003c/p\u003e{{end}}\n\u003c/div\u003e",
       "appends": false
     },
     {

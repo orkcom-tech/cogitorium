@@ -34,7 +34,7 @@
 
 {{define "cog.row.unit"}}<div class="queue-unit">
   <code>{{.Kind}}</code>
-  <span class="badge">{{.State}}</span>
+  {{if .StateTone}}<span class="badge is-{{.StateTone}}">{{.State}}</span>{{else}}<span class="badge">{{.State}}</span>{{end}}
   <span class="muted">{{.Lane}}</span>
   <span class="muted">attempt {{.Attempts}} of {{.MaxAttempts}}</span>
   {{if .LastError}}<p class="error">{{.LastError}}</p>{{end}}

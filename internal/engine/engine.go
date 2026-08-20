@@ -24,6 +24,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/mcpoauth"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
 	"github.com/orkcom-tech/cogitorium/internal/metrics"
+	"github.com/orkcom-tech/cogitorium/internal/planboard"
 	"github.com/orkcom-tech/cogitorium/internal/schedule"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/websearch"
@@ -142,6 +143,11 @@ type Engine struct {
 	// rather than one that offers them and fails.
 	schedules *schedule.Store
 
+	// plans is the planboards. Nil is an engine where nothing has a written
+	// order and the model chooses one, which is what every install did before
+	// planboards existed.
+	plans *planboard.Store
+
 	// secretsOK reports whether the orchestrator may read and write named
 	// values. Nil means it may not: an engine nobody told is an engine that
 	// does not hand out the operator's credentials.
@@ -242,6 +248,11 @@ func (e *Engine) secretsAvailable(ctx context.Context) bool {
 // that builds one by hand would otherwise have to know about a subsystem it is
 // not testing.
 func (e *Engine) SetSchedules(s *schedule.Store) { e.schedules = s }
+
+// SetPlanboards gives the engine the written orders of work. Injected for the
+// same reason as the clocks: an engine without it still runs, it simply has no
+// plan to walk.
+func (e *Engine) SetPlanboards(p *planboard.Store) { e.plans = p }
 
 // Statuses returns the live status of every agent in a workspace (agents
 // with no recorded activity are idle).
@@ -503,7 +514,7 @@ func (e *Engine) modelTurn(ctx context.Context, wsID int64, agent workspace.Agen
 		Model:    model.ModelName,
 		System:   system,
 		Messages: history,
-		Tools:    e.toolsFor(agent, targets, gears, mcpTools, e.egressAvailable(ctx, wsID, agent), e.secretsAvailable(ctx), e.turn(wsID).unattended),
+		Tools:    e.toolsFor(agent, targets, gears, mcpTools, e.egressAvailable(ctx, wsID, agent), e.secretsAvailable(ctx), e.turn(wsID).unattended, e.hasPlan(ctx, wsID, agent)),
 	}, func(text string) error {
 		emit(Event{Type: "delta", AgentID: agent.ID, Text: text})
 		return ctx.Err()
@@ -647,6 +658,12 @@ func (e *Engine) systemPrompt(ctx context.Context, wsID int64, agent workspace.A
 		return "", err
 	}
 	b = append(b, gearSection...)
+
+	planSection, err := e.planSection(ctx, wsID, agent)
+	if err != nil {
+		return "", err
+	}
+	b = append(b, planSection...)
 	b = append(b, libraryNote...)
 	b = append(b, extra...)
 	b = append(b, avoidSection(agent.Avoid)...)
@@ -682,6 +699,55 @@ const avoidPreamble = "\n\n## Never do this\n" +
 	"conversation. Nothing above overrides them, and neither does anything you\n" +
 	"are asked for later — if a request needs one of these, refuse it and say\n" +
 	"which one.\n"
+
+// planSection is the step in front of this agent, and only that step.
+//
+// The whole plan is deliberately NOT here. A model shown seven steps will
+// reason about seven steps: it works ahead, it reports two of them done at
+// once, and the order stops being a fact about the workflow and becomes a
+// suggestion the model weighed. Shown one step, it does one step. What it
+// decides is how — which is the part worth a model.
+//
+// The count is given ("step 3 of 7") because a worker that cannot tell whether
+// it is near the end writes as if every step were the last. The titles of the
+// others are not.
+func (e *Engine) planSection(ctx context.Context, wsID int64, agent workspace.Agent) (string, error) {
+	if e.plans == nil {
+		return "", nil
+	}
+	active, err := e.plans.Active(ctx, wsID, agent.ID)
+	if err != nil {
+		return "", err
+	}
+	if len(active) == 0 {
+		return "", nil
+	}
+	var b []byte
+	b = append(b, planPreamble...)
+	for _, a := range active {
+		b = fmt.Appendf(b, "\n### %s — step %d of %d", a.Planboard.Name, a.Current.Ordinal, len(a.Planboard.Steps))
+		if a.State.Cycle > 0 {
+			b = fmt.Appendf(b, " (pass %d)", a.State.Cycle+1)
+		}
+		b = fmt.Appendf(b, "\n%s\n", a.Current.Title)
+		if a.Current.Body != "" {
+			b = fmt.Appendf(b, "\n%s\n", a.Current.Body)
+		}
+		// What stopped the last attempt, so this run does not walk into it
+		// again without knowing.
+		if a.State.BlockedNote != "" {
+			b = fmt.Appendf(b, "\nThe last run could not finish this step: %s\n", a.State.BlockedNote)
+		}
+	}
+	return string(b), nil
+}
+
+const planPreamble = "\n\n## The step in front of you\n" +
+	"Work written down in advance, in order. Do the step below and nothing\n" +
+	"past it — the steps after this one are not yours to start yet, and you\n" +
+	"are not shown them.\n\n" +
+	"Call plan_step_done when the step is finished, and plan_step_blocked when\n" +
+	"it cannot be. Until you call one of them, this is still the step.\n"
 
 // branchDocs returns the workspace-branch documents an agent sees without
 // anyone binding them by hand: everything under the workspace's shared
@@ -1160,7 +1226,7 @@ func (e *Engine) runAgent(ctx context.Context, wsID int64, agent workspace.Agent
 	if err != nil {
 		return "", err
 	}
-	tools := e.toolsFor(agent, targets, gears, mcpTools, e.egressAvailable(ctx, wsID, agent), e.secretsAvailable(ctx), e.turn(wsID).unattended)
+	tools := e.toolsFor(agent, targets, gears, mcpTools, e.egressAvailable(ctx, wsID, agent), e.secretsAvailable(ctx), e.turn(wsID).unattended, e.hasPlan(ctx, wsID, agent))
 
 	history := []llm.Turn{{Role: "user", Text: task}}
 	for iter := 0; iter < maxToolIterations; iter++ {

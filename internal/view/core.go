@@ -193,6 +193,11 @@ var glyphs = map[string]template.HTML{
 		`<path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg>`,
 	"terminal": `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/>` +
 		`<path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/></svg>`,
+	// A numbered order of work: three marks down the left, three lines beside
+	// them, the first one ticked.
+	"steps": `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5l1.6 1.6 3-3"/>` +
+		`<circle cx="5" cy="12" r="1.4"/><circle cx="5" cy="17.5" r="1.4"/>` +
+		`<path d="M11 6.5h9.5M11 12h9.5M11 17.5h6"/></svg>`,
 }
 
 // Asset is a stylesheet or module the shell injects.
@@ -279,6 +284,16 @@ func CoreModels() Models {
 		"cog.list.instructions":  Instructions{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.instruction":    Instruction{},
 		"cog.empty.instructions": Instructions{Ctx: Ctx{T: DefaultStrings()}},
+
+		// The written orders of work. Same four names as the library, for the
+		// same reason: a plugin that wants a different step row should not
+		// have to redraw the page holding it.
+		"cog.page.planboards":   Planboards{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.frag.planboards":   Planboards{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.planboards":   Planboards{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.planboard":     PlanboardRow{},
+		"cog.empty.planboards":  Planboards{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.drawer.planboards": Planboards{Ctx: Ctx{T: DefaultStrings()}},
 
 		// The model catalogue. Providers and the catalogue are separate lists
 		// on one page because they are separate decisions: where models come
@@ -986,7 +1001,12 @@ type Unit struct {
 	ID    int64
 	Kind  string
 	State string
-	Lane  string
+	// StateTone is "ok", "warn", "danger" or empty, so the state is seen
+	// before it is read. Decided here rather than in the template for the
+	// reason every tone is: the function set has no eq, and a comparison
+	// added to it would be a permanent promise to every plugin.
+	StateTone string
+	Lane      string
 	// Attempts and MaxAttempts say how close this is to being abandoned.
 	Attempts    int
 	MaxAttempts int
@@ -1349,6 +1369,96 @@ type Instructions struct {
 	Error string
 }
 
+// Planboards is the written orders of work.
+type Planboards struct {
+	Ctx      Ctx
+	Items    []PlanboardRow
+	Query    string
+	Tag      string
+	Tags     []Tag
+	Narrowed bool
+	Error    string
+	// Agents is who a plan can be given to on this screen, when it is being
+	// looked at from inside a workspace. Empty on the global page, where there
+	// is no workspace to attach anything in.
+	Agents []PlanTarget
+}
+
+// PlanTarget is one place a plan can be attached.
+type PlanTarget struct {
+	ID   int64
+	Name string
+}
+
+// PlanboardRow is one plan, and where it stands if it is attached here.
+type PlanboardRow struct {
+	ID          int64
+	Name        string
+	Description string
+	Tags        []string
+	Steps       []PlanStepRow
+	Open        bool
+	UpdatedAt   string
+
+	// Resume and Restart are the mode, already decided. The template function
+	// set has no eq, and putting one in for this would be a permanent promise
+	// to every plugin in exchange for one comparison.
+	Resume  bool
+	Restart bool
+
+	// Attached is where this plan stands, once per place it is attached. A
+	// plan attached to nothing has none, which is also how the row knows to
+	// offer attaching it.
+	Attached []PlanPosition
+}
+
+// PlanPosition is one attachment and its marker.
+type PlanPosition struct {
+	// Where is the agent's name, or the words for the whole workspace. Made
+	// here rather than compared in the template.
+	Where string
+	// AgentName is empty for the workspace-wide attachment, and is what the
+	// detach and move forms send back.
+	AgentName string
+	// WorkspaceID is which workspace this attachment is in. Carried because
+	// the plans page is global — one plan can be attached in several
+	// workspaces at once, and a form that only said "detach" would not say
+	// from where.
+	WorkspaceID int64
+	Step        int
+	StepTitle   string
+	Total       int
+	// Passes is how many times the plan has gone round. Zero on the first
+	// pass, and the template shows it only when it is not.
+	Passes  int
+	Blocked string
+}
+
+// PlanStepRow is one step in the order it is done.
+type PlanStepRow struct {
+	Ordinal int
+	Title   string
+	Body    string
+}
+
+// TagList joins the tags the way the edit form wants them back, for the same
+// reason Instruction.TagList exists: a template renders, it does not decide.
+func (p PlanboardRow) TagList() string { return strings.Join(p.Tags, ", ") }
+
+// StepText is the steps as the edit form takes them — one per line, body after
+// a dash. The screen writes plans the same way a person writes a list.
+func (p PlanboardRow) StepText() string {
+	lines := make([]string, 0, len(p.Steps))
+	for _, st := range p.Steps {
+		if st.Body != "" {
+			lines = append(lines, st.Title+" — "+st.Body)
+			continue
+		}
+		lines = append(lines, st.Title)
+	}
+	return strings.Join(lines, "\n")
+}
+
 // HostNav is the product's own rail, as the server knows it.
 //
 // Here rather than only in the client so a page this shell serves looks like
@@ -1371,6 +1481,7 @@ func HostNav(current string, admin bool) []NavItem {
 		{Label: "Gears", Href: "/gears", Icon: "gear", Order: 300},
 		{Label: "Models", Href: "/models", Icon: "model", Order: 400},
 		{Label: "Instructions", Href: "/instructions", Icon: "text", Order: 500},
+		{Label: "Planboards", Href: "/planboards", Icon: "steps", Order: 550},
 		{Label: "Context", Href: "/context", Icon: "layers", Order: 600},
 		{Label: "Plugins", Href: "/plugins", Icon: "plug", Order: 700},
 	}

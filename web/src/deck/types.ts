@@ -29,6 +29,7 @@ export type OverlayId =
   | 'gears'
   | 'mcp'
   | 'instructions'
+  | 'planboards'
   | 'memory'
   | 'inlets'
   | 'queue'
@@ -46,6 +47,7 @@ export const OVERLAY_ORDER: OverlayId[] = [
   'gears',
   'mcp',
   'instructions',
+  'planboards',
   'memory',
   'inlets',
   'queue',
