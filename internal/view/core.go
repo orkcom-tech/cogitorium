@@ -362,10 +362,11 @@ func CoreModels() Models {
 		// The gear catalogue. cog.row.gear is the name the documentation uses
 		// as its recurring override example, so it has to be small enough to
 		// be worth overriding on its own.
-		"cog.page.gears":  Gears{Ctx: Ctx{T: DefaultStrings()}},
-		"cog.list.gears":  Gears{Ctx: Ctx{T: DefaultStrings()}},
-		"cog.row.gear":    Gear{},
-		"cog.empty.gears": Gears{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.page.gears":      Gears{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.gears":      Gears{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.gear":        Gear{},
+		"cog.frag.authorgear": Gears{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.empty.gears":     Gears{Ctx: Ctx{T: DefaultStrings()}},
 
 		"cog.page.context":    Context{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.list.context":    Context{Ctx: Ctx{T: DefaultStrings()}},
