@@ -499,6 +499,17 @@ network service.
 - **[Contextverse](https://github.com/orkcom-tech/contextverse)** — where the
   context and the memory actually live.
 
+## Contributing
+
+Fork, branch, open a pull request — nobody pushes to `main` from outside, and
+that is the only gate. [CONTRIBUTING.md](CONTRIBUTING.md) has what to run before
+you open one and what makes a change easy to take.
+
+A security problem is **not** an issue:
+[report it privately](https://github.com/orkcom-tech/cogitorium/security/advisories/new),
+and see [SECURITY.md](SECURITY.md) for what is in scope and what is a documented
+cost rather than a fault.
+
 ## Licence
 
 Apache 2.0. See [LICENSE](LICENSE).

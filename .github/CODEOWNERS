@@ -1,0 +1,23 @@
+# Who is asked to look at what.
+#
+# A pull request touching a path below asks its owner for review
+# automatically. It is not a wall — the review requirement on `main` asks for
+# zero approvals today, so this is about the request reaching the right person
+# rather than about blocking anybody.
+#
+# @orkcom-tech/devs is the team; naming the team rather than people means
+# somebody joining or leaving is one membership change and not a file edit.
+
+*                       @orkcom-tech/devs
+
+# The parts where a mistake is expensive in a way review catches and tests do
+# not: what the product promises, how it is released, and what runs somebody
+# else's code.
+/README.md              @orkcom-tech/devs
+/CHANGELOG.md           @orkcom-tech/devs
+/docs/                  @orkcom-tech/devs
+/.github/workflows/     @orkcom-tech/devs
+/deploy/                @orkcom-tech/devs
+/internal/sandbox/      @orkcom-tech/devs
+/internal/plugin/       @orkcom-tech/devs
+/internal/gearnet/      @orkcom-tech/devs

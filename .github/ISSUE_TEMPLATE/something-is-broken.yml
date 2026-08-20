@@ -1,0 +1,59 @@
+name: Something is broken
+description: It did the wrong thing, or nothing.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The three things that make this fixable in one round rather than four
+        are below. Everything else is optional.
+  - type: textarea
+    id: what
+    attributes:
+      label: What you did, and what happened
+      description: >-
+        The steps, and the result. If there is an error message, paste it
+        whole — the exact text is usually the fastest route to the cause.
+      placeholder: |
+        1. Opened the Terminal drawer in a workspace
+        2. Typed `ls` and pressed enter
+        3. It printed nothing and the status line still said "connecting…"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`cogitorium version`, or the image tag."
+      placeholder: "v3.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How it is installed
+      options:
+        - Homebrew or Scoop
+        - The desktop application
+        - Docker (docker-compose.yml)
+        - Docker (docker-compose.starter.yml)
+        - Kubernetes (Helm)
+        - Built from source
+        - deb / rpm / archive
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: What the server said
+      description: >-
+        The lines around the moment it went wrong. **Read them before pasting**
+        — a log can carry a workspace name or a path you would rather not
+        publish. It never carries a provider key.
+      render: text

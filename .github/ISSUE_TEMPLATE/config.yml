@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: A security problem
+    url: https://github.com/orkcom-tech/cogitorium/security/advisories/new
+    about: Report it privately. Never as an issue — see SECURITY.md.
+  - name: A question, or an idea you want to talk through first
+    url: https://github.com/orkcom-tech/cogitorium/discussions
+    about: Before it is a bug or a feature, it is usually a question.
+  - name: Writing a plugin
+    url: https://orkcom-tech.github.io/cogitorium/plugins/
+    about: The manifest, the tiers, the host calls, and how to list yours.
