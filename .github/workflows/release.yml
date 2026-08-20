@@ -101,6 +101,10 @@ jobs:
           # or an arm laptop cluster as on an x86 node, and an image that only
           # runs on one of them is an image that fails at the worst moment.
           platforms: linux/amd64,linux/arm64
+          # The tag is the only place the version exists at build time, and
+          # without passing it the image reports 0.0.0-dev.
+          build-args: |
+            VERSION=${{ steps.v.outputs.version }}
           push: true
           tags: |
             ghcr.io/${{ github.repository }}:${{ steps.v.outputs.version }}

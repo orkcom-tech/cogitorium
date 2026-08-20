@@ -26,7 +26,15 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=ui /src/web/dist ./web/dist
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/cogitorium ./cmd/cogitorium
+
+# Stamp the version the same way goreleaser does. Without this the image
+# reports 0.0.0-dev, which is what a container built from a release tag said
+# for three releases: the binary in the tarball knew its version and the one
+# in the image did not.
+ARG VERSION=0.0.0-dev
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+      -ldflags "-s -w -X github.com/orkcom-tech/cogitorium/internal/version.Version=${VERSION}" \
+      -o /out/cogitorium ./cmd/cogitorium
 
 # Stage 2b — Contextverse, built from its own module rather than vendored.
 #

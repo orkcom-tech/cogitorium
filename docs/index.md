@@ -48,7 +48,6 @@ install: `scripts/ci/install-contextd.sh` fetches the matching one.
 | Scoop | `scoop bucket add contextverse https://github.com/orkcom-tech/scoop-bucket` then `scoop install cogitorium` | yes |
 | Docker | `docker compose up --build` | yes, in the image |
 | deb / rpm | from the [releases page](https://github.com/orkcom-tech/cogitorium/releases) | yes, in the package |
-| winget | `winget install OrkcomTech.Cogitorium` | declared; winget records dependencies without installing them |
 | Desktop app | attached to each release | yes, beside the app |
 | Archive | download and unpack | yes, beside the binary |
 | Kubernetes | `helm install` from `deploy/helm/cogitorium`; the image is public on ghcr.io | yes, in the image |

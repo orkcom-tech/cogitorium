@@ -322,6 +322,16 @@ Every route installs the same binary, and every route brings
 as a dependency where a package manager can act on it, carried in the artifact
 where nothing can. The context space is created on first start.
 
+| Where you run it | Routes |
+|---|---|
+| **macOS** | **Desktop app** — the `darwin` zip on the [releases page](https://github.com/orkcom-tech/cogitorium/releases) · **Homebrew** — `brew install orkcom-tech/tap/cogitorium` · **Archive** — the `darwin` tarball · **Source** — `make build`, or `make desktop` for the window |
+| **Linux** | **Desktop app** — the `linux` tarball · **Homebrew** — the same formula · **deb / rpm** — on the releases page · **Archive** — the `linux` tarball · **Source** — `make build`, then `scripts/ci/install-contextd.sh` |
+| **Windows** | **Desktop app** — the `windows` zip · **Scoop** — `scoop install cogitorium`, after adding the bucket below · **Archive** — the `windows` zip |
+| **Docker** | `docker compose up --build`, or the published image `ghcr.io/orkcom-tech/cogitorium` — amd64 and arm64, public, no credentials needed |
+| **Kubernetes** | `helm install` from `deploy/helm/cogitorium`; the chart's `appVersion` tracks the release |
+
+The commands for the common ones, in full:
+
 **macOS and Linux — Homebrew** (brings `contextd` with it):
 
 ```sh
@@ -334,6 +344,26 @@ cogitorium serve
 ```sh
 scoop bucket add contextverse https://github.com/orkcom-tech/scoop-bucket
 scoop install cogitorium
+```
+
+**Docker:**
+
+```sh
+docker compose up --build
+```
+
+Or the published image, which needs no build and no credentials:
+
+```sh
+docker run -p 8688:8688 -v cogitorium:/data ghcr.io/orkcom-tech/cogitorium:latest
+```
+
+**Kubernetes — Helm:**
+
+```sh
+helm install cogitorium ./deploy/helm/cogitorium \
+  --namespace cogitorium --create-namespace \
+  --set auth.adminToken="$(openssl rand -hex 24)"
 ```
 
 **Anywhere — the archive**, from [releases](https://github.com/orkcom-tech/cogitorium/releases).
