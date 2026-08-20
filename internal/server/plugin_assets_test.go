@@ -663,7 +663,17 @@ func TestTheContextPageIsAdminOnlyAndRedirectsAMember(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("a member got %d rather than being sent away", rec.Code)
 	}
-	if got := rec.Header().Get("Location"); got != "/workspaces" {
-		t.Fatalf("sent to %q, want /workspaces — the same place the client router sent them", got)
+	sent, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("sent somewhere unparseable: %v", err)
+	}
+	if sent.Path != "/workspaces" {
+		t.Fatalf("sent to %q, want /workspaces — the same place the client router sent them", sent.Path)
+	}
+	// And it says what was refused. A silent redirect leaves somebody on
+	// another screen with no idea what happened, which is how "add a user"
+	// once answered with a complaint about workspaces needing a model.
+	if sent.Query().Get("refused") != "/context" {
+		t.Fatalf("the redirect does not carry what was refused: %q", sent.RawQuery)
 	}
 }
