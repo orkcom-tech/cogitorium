@@ -1120,6 +1120,7 @@ a[role='tab'].is-current {
  */
 .library-write form,
 .planboard-write form,
+.add-provider form,
 .author-mcp form,
 .author-clock form,
 .new-agent form,
@@ -1139,6 +1140,7 @@ a[role='tab'].is-current {
 
 .library-write form label,
 .planboard-write form label,
+.add-provider form label,
 .author-mcp form label,
 .author-clock form label,
 .new-agent form label,
@@ -1331,6 +1333,7 @@ a[role='tab'].is-current {
 
 /* Room under the control that opens a form, so the first row of the list is
    not sitting on it. */
+.add-provider,
 .author-gear,
 .author-mcp,
 .author-clock,
@@ -1473,6 +1476,7 @@ button.danger:hover:not(:disabled),
  * like one: the same accent fill as "+ New workspace", which is the product's
  * own word for "this is the thing to press".
  */
+.add-provider > summary,
 .author-gear > summary,
 .author-mcp > summary,
 .author-clock > summary,
@@ -1495,6 +1499,7 @@ button.danger:hover:not(:disabled),
      from it. The marker below is inside, and turns when it opens. */
   list-style: none;
 }
+.add-provider > summary::-webkit-details-marker,
 .author-gear > summary::-webkit-details-marker,
 .author-mcp > summary::-webkit-details-marker,
 .author-clock > summary::-webkit-details-marker,
@@ -1505,6 +1510,7 @@ button.danger:hover:not(:disabled),
 .plugin-write > summary::-webkit-details-marker {
   display: none;
 }
+.add-provider > summary::before,
 .author-gear > summary::before,
 .author-mcp > summary::before,
 .author-clock > summary::before,
@@ -1516,6 +1522,7 @@ button.danger:hover:not(:disabled),
   content: '+';
   font-weight: 600;
 }
+.add-provider[open] > summary::before,
 .author-gear[open] > summary::before,
 .author-mcp[open] > summary::before,
 .author-clock[open] > summary::before,
@@ -1526,6 +1533,7 @@ button.danger:hover:not(:disabled),
 .plugin-write[open] > summary::before {
   content: '×';
 }
+.add-provider > summary:hover,
 .author-gear > summary:hover,
 .author-mcp > summary:hover,
 .author-clock > summary:hover,
