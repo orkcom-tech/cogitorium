@@ -213,16 +213,30 @@ section {
   flex: 1;
 }
 
+/* Shape and typography for every control, and NOTHING about colour.
+ *
+ * This rule used to set `background: transparent` and a border shorthand as
+ * well — and because this file is loaded after the tokens, it quietly beat the
+ * rule that gives a field its fill. Every input and textarea in the product
+ * was transparent, which is invisible on a panel: a form read as a column of
+ * labels with gaps where the boxes should be. The fill and the edge are
+ * decided once, in tokens.css, where the rest of the palette lives.
+ */
 input,
 select,
 button,
 textarea {
   font: inherit;
   padding: 0.4rem 0.6rem;
-  border: 1px solid var(--border);
   border-radius: var(--r1);
-  background: transparent;
   color: inherit;
+}
+
+/* A button is not a field: its ground is decided by the button rules in the
+   tokens, and it starts from nothing so those rules have something to set. */
+button {
+  border: 1px solid transparent;
+  background: transparent;
 }
 
 button {

@@ -835,12 +835,18 @@ button:not([data-own]):not(.agent-card):not(.card):not(.look-option):not(.ws-car
  * It was found on the one that mattered most — "approve, with these grants",
  * the decision the gear screen exists to make, rendered as a bare sentence. */
 button:not([data-own]):not(.agent-card):not(.card):not(.look-option):not(.ws-card):not(.dk-view-tab):not(.round):not(.active):not(.primary) {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
+  /* 5% was a wash you could not see on a tinted panel, on a button whose
+     border is deliberately transparent — so "delete", "save" and "back to
+     chat" read as words with a faint smudge behind them rather than as things
+     to press. The fill carries the shape, and an edge makes it a control on
+     every surface rather than only on the pale ones. */
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  border-color: var(--border-strong);
 }
 button:not([data-own]):not(.agent-card):not(.card):not(.ws-card):not(.round):not(.active):not(.primary):hover,
 .chip:hover,
 .dk-view-tab:not(.active):hover {
-  background: color-mix(in srgb, var(--text) 9%, transparent);
+  background: color-mix(in srgb, var(--text) 15%, transparent);
 }
 
 /* A card is a card whatever element it is made of. */
