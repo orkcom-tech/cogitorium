@@ -32,7 +32,7 @@
              differ; just not a question with no default. */}}
         <label>The orchestrator thinks with
           <select name="orchestrator_model_id" required>
-            {{range .Orchestrator.Choices}}<option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Label}} — {{.Provider}}</option>{{end}}
+            {{range .Orchestrator.Choices}}<option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Text}}</option>{{end}}
           </select>
         </label>
         <button type="submit">create it</button>

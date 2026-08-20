@@ -226,19 +226,35 @@ func (s *Server) orchestratorTemplate(r *http.Request, models []view.Model) view
 	}
 	chosen := s.orchestratorModelID(r.Context())
 	for _, m := range models {
-		label := m.Label
-		if label == "" {
-			label = m.Name
-		}
 		c := view.OrchestratorChoice{
-			ID: m.ID, Label: label, Provider: m.Provider, Selected: m.ID == chosen,
+			ID: m.ID, Text: modelLine(m), Label: m.Label,
+			Provider: m.Provider, Selected: m.ID == chosen,
 		}
 		if c.Selected {
-			t.Chosen = label + " — " + m.Provider
+			t.Chosen = c.Text
 		}
 		t.Choices = append(t.Choices, c)
 	}
 	return t
+}
+
+// modelLine names one model in a way somebody can act on.
+//
+// The name its provider knows it by is what identifies it, so that is always
+// here. The nickname goes in front only when it says something the name does
+// not, and the provider only when it is not already the nickname — the first
+// draft was "{{.Label}} — {{.Provider}}" and rendered "house — house" on an
+// install where a model labelled house came from a provider called house, which
+// is two correct words that together tell you nothing.
+func modelLine(m view.Model) string {
+	line := m.Name
+	if m.Label != "" && !strings.EqualFold(m.Label, m.Name) {
+		line = m.Label + " (" + m.Name + ")"
+	}
+	if m.Provider != "" && !strings.EqualFold(m.Provider, m.Label) {
+		line += " — " + m.Provider
+	}
+	return line
 }
 
 // orchestratorModelID is the house orchestrator's model, or 0.

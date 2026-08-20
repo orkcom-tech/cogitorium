@@ -1472,7 +1472,16 @@ type OrchestratorTemplate struct {
 
 // OrchestratorChoice is one model, and whether it is the house orchestrator's.
 type OrchestratorChoice struct {
-	ID       int64
+	ID int64
+	// Text is the whole line, composed on the model rather than in the
+	// template.
+	//
+	// "{{.Label}} — {{.Provider}}" produced "house — house" on an install where
+	// a model labelled house came from a provider called house: two words that
+	// are both correct and together say nothing. What identifies a model is the
+	// name its provider knows it by, so that is always in the line, and the
+	// nickname and the provider only appear when they add something to it.
+	Text     string
 	Label    string
 	Provider string
 	Selected bool
@@ -1870,8 +1879,9 @@ func Exemplars() Models {
 			Role:   "You are the orchestrator of this workspace. Everything the operator wants done here goes through you.",
 			Chosen: "house — anthropic",
 			Choices: []OrchestratorChoice{
-				{ID: 1, Label: "house", Provider: "anthropic", Selected: true},
-				{ID: 2, Label: "local", Provider: "ollama"},
+				{ID: 1, Text: "house (claude-opus-5) — anthropic", Label: "house",
+					Provider: "anthropic", Selected: true},
+				{ID: 2, Text: "local (qwen2.5:7b) — ollama", Label: "local", Provider: "ollama"},
 			},
 		},
 		"cog.empty.models": ModelCatalog{Ctx: ctx},

@@ -1324,11 +1324,41 @@ a[role='tab'].is-current {
 .queue-units,
 .env-names,
 .context-files,
-.receiver-tasks,
-.provider-models {
+.receiver-tasks {
   display: grid;
   gap: var(--s3);
   margin-top: var(--s3);
+}
+
+/* The models a provider offers are BADGES, not cards, and they were in the
+ * rule above: one per row, each stretched the full width of the card, which
+ * reads as a column of empty text inputs rather than as a list of names. They
+ * wrap along a line like the badges they are. */
+.provider-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-top: var(--s3);
+}
+.provider-models:empty {
+  display: none;
+}
+
+/* Offering another model: two fields and a button on one line, with the field
+ * that matters given the room. They were three equal boxes too narrow to read
+ * their own placeholders — "A model this provider s". */
+.provider-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  margin-top: var(--s3);
+}
+.provider-add input[name='model_name'] {
+  flex: 2 1 16rem;
+}
+.provider-add input[name='label'] {
+  flex: 1 1 12rem;
 }
 
 /* Room under the control that opens a form, so the first row of the list is

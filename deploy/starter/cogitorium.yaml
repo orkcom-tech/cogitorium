@@ -1,0 +1,53 @@
+# The starter's configuration — what docker-compose.starter.yml mounts.
+#
+# Read on FIRST START and never re-applied. The provider below is created only
+# if this install has no provider by that name; nothing here is ever updated or
+# removed afterwards. Change an address on the Models screen and your change
+# stands, restart after restart. Delete the provider and restart, and this file
+# puts it back — which is how to start over.
+
+listen: 0.0.0.0:8688
+data_dir: /data
+
+# The model container in this compose file, reachable by service name on the
+# compose network. Ollama speaks the OpenAI shape at /v1, which is also how LM
+# Studio, vLLM and llama.cpp are reached — swap the address and nothing else
+# changes.
+providers:
+  - name: local
+    kind: openai-compatible
+    base_url: http://ollama:11434/v1
+    # No key. A local inference server has no account to bill.
+    models:
+      - name: qwen2.5:7b
+        label: local
+
+# The blank on the orchestrator template, filled in. Every workspace created
+# afterwards starts with this model instead of asking — see the Models screen,
+# where this is the same choice written by hand.
+orchestrator_model: local/qwen2.5:7b
+
+# Adding Anthropic as well: uncomment, and put the key in the environment
+# rather than here. A configuration file is readable by anything that can read
+# the disk and tends to end up in a repository; key_env names an environment
+# variable, which is what a Docker secret and a Kubernetes Secret already know
+# how to fill.
+#
+# providers:
+#   - name: anthropic
+#     kind: anthropic
+#     key_env: ANTHROPIC_API_KEY
+#     models:
+#       - name: claude-opus-5
+#         label: house
+
+# Gears are agent-authored code. Without a Docker socket mounted they run as
+# subprocesses of this server, with this server's file access — which is why
+# the compose file says so out loud rather than leaving it to be discovered.
+sandbox: subprocess
+
+# The terminal is on by default and is a shell in this container, as the user
+# this server runs as. That is the container, not your machine — the starter
+# publishes nothing but 8688 on loopback. On anything other people can reach,
+# write `terminal: false`.
+# terminal: false

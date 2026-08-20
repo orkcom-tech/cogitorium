@@ -81,7 +81,7 @@
       <label>It thinks with
         <select name="model_id">
           <option value="">— ask me each time —</option>
-          {{range .Choices}}<option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Label}} — {{.Provider}}</option>{{end}}
+          {{range .Choices}}<option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Text}}</option>{{end}}
         </select>
       </label>
       <button type="submit" class="primary">Use it</button>

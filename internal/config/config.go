@@ -123,6 +123,28 @@ type Config struct {
 	// `terminal: false` to refuse it entirely; on a shared install, do.
 	Terminal *bool `yaml:"terminal"`
 
+	// Providers are models this install should already know about on its first
+	// start, so a deployment can come up ready rather than come up empty.
+	//
+	// This exists for the starter compose file and for the chart. Bringing up
+	// Cogitorium next to a local inference server and then telling somebody to
+	// open a screen and retype the address of the container that is already in
+	// the same network is a product that installs in one command and works in
+	// three.
+	//
+	// SEEDED, not enforced. Each is created only when this install has no
+	// provider by that name, and nothing is ever updated or removed — an
+	// operator who changes an address on the Models screen has changed it, and
+	// a restart must not put it back. Deleting one and restarting brings it
+	// back, which is the same rule and the way to start over.
+	Providers []SeedProvider `yaml:"providers"`
+
+	// OrchestratorModel is the model a new workspace's orchestrator thinks
+	// with, named as "<provider>/<model>" — the same choice the Models screen
+	// offers. Seeded on first start like the providers above, and only when
+	// nobody has chosen one yet.
+	OrchestratorModel string `yaml:"orchestrator_model"`
+
 	// MetricsListen is where the Prometheus endpoint listens, e.g.
 	// "127.0.0.1:9090". EMPTY MEANS OFF, and off is the default.
 	//
@@ -572,3 +594,34 @@ func boolPtr(v bool) *bool { return &v }
 // TerminalOn reports whether the terminal is offered. Unset means yes; see the
 // field's own comment for why the default moved.
 func (c Config) TerminalOn() bool { return c.Terminal == nil || *c.Terminal }
+
+// SeedProvider is one place models come from, written in the configuration
+// rather than typed into a screen.
+//
+// The key is deliberately NOT here. A configuration file is read by whatever
+// can read the disk and ends up in a GitOps repository; the key belongs in
+// KeyEnv, naming an environment variable, which is how a container and a
+// Kubernetes Secret already hand credentials to a process. A local inference
+// server needs none at all, which is the case this was written for.
+type SeedProvider struct {
+	// Name is what it will be called on the Models screen, and the identity
+	// this seeding is idempotent on.
+	Name string `yaml:"name"`
+	// Kind is "anthropic" or "openai-compatible". Ollama, LM Studio, vLLM and
+	// llama.cpp are all the second.
+	Kind string `yaml:"kind"`
+	// BaseURL is empty for Anthropic's own address and a URL for anything else.
+	BaseURL string `yaml:"base_url"`
+	// KeyEnv names the environment variable holding the key, if it needs one.
+	KeyEnv string `yaml:"key_env"`
+	// Models are what this provider offers, in the provider's own spelling.
+	Models []SeedModel `yaml:"models"`
+}
+
+// SeedModel is one model a seeded provider offers.
+type SeedModel struct {
+	// Name is what the provider knows it by — "qwen2.5:7b", "claude-opus-5".
+	Name string `yaml:"name"`
+	// Label is what a person reads on a screen. Empty shows the name.
+	Label string `yaml:"label"`
+}

@@ -327,7 +327,7 @@ where nothing can. The context space is created on first start.
 | **macOS** | **Desktop app** — the `darwin` zip on the [releases page](https://github.com/orkcom-tech/cogitorium/releases) · **Homebrew** — `brew install orkcom-tech/tap/cogitorium` · **Archive** — the `darwin` tarball · **Source** — `make build`, or `make desktop` for the window |
 | **Linux** | **Desktop app** — the `linux` tarball · **Homebrew** — the same formula · **deb / rpm** — on the releases page · **Archive** — the `linux` tarball · **Source** — `make build`, then `scripts/ci/install-contextd.sh` |
 | **Windows** | **Desktop app** — the `windows` zip · **Scoop** — `scoop install cogitorium`, after adding the bucket below · **Archive** — the `windows` zip |
-| **Docker** | `docker compose up --build`, or the published image `ghcr.io/orkcom-tech/cogitorium` — amd64 and arm64, public, no credentials needed |
+| **Docker** | `docker compose up --build`, or the **starter** below, which brings a model up with it · or the published image `ghcr.io/orkcom-tech/cogitorium` — amd64 and arm64, public, no credentials needed |
 | **Kubernetes** | `helm install` from `deploy/helm/cogitorium`; the chart's `appVersion` tracks the release |
 
 The commands for the common ones, in full:
@@ -352,6 +352,22 @@ scoop install cogitorium
 docker compose up --build
 ```
 
+**Docker — the starter**, if you have no provider yet. It brings up Cogitorium,
+an Ollama container to think with, and a one-shot job that pulls the model;
+when it settles, the provider is registered, the model is offered and the
+orchestrator already has one:
+
+```sh
+docker compose -f docker-compose.starter.yml up
+```
+
+It is an example, not a deployment — one machine, one volume, a small model
+chosen because it fits on a laptop. Read
+[`docker-compose.starter.yml`](docker-compose.starter.yml) and
+[`deploy/starter/cogitorium.yaml`](deploy/starter/cogitorium.yaml); both are
+short so that changing them is obvious. Point them at a bigger model, at a GPU
+box, or at Anthropic instead.
+
 Or the published image, which needs no build and no credentials:
 
 ```sh
@@ -373,6 +389,34 @@ it too.
 
 Then open `http://127.0.0.1:8688`. The first run asks you to choose a password
 for the `admin` account; after that, on your own machine, it remembers you.
+
+### What runs where
+
+Worth knowing before you size anything, because the answer is not what people
+usually assume.
+
+**An agent is not a process.** Every workspace is created with an orchestrator,
+and the agents you add beside it are rows with their own role, their own model
+and their own private memory. Cogitorium runs a turn for one when it has
+something to do; nothing sits idle in between. Two agents built from the same
+instruction are two separate agents — separate memory, separate turns,
+separate model calls, and neither can reach into the other's work. The only
+thing they can share is context, and only where somebody has said so.
+
+So twenty agents are twenty rows, not twenty containers, and one Cogitorium
+serves all of them. What **does** get a container of its own is agent-authored
+code: a gear runs in the sandbox, one container per run, thrown away
+afterwards. On Kubernetes that is one Job per run.
+
+**One Cogitorium.** Everything is stored in SQLite with a single writer, so the
+chart runs one replica and says so plainly — two pods on one volume corrupt the
+database. Horizontal scale needs a different store behind the same package,
+which is a project rather than a flag.
+
+**The inference server is what actually costs.** Every agent's turn is a
+request to a model, and they queue wherever that model lives. That is the
+number to raise when it feels slow, and it is why the starter keeps the model
+in a service of its own rather than buried inside the app.
 
 ## No telemetry
 
