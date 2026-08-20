@@ -103,13 +103,13 @@ helm install cogitorium ./deploy/helm/cogitorium \
 To run your own build instead, push it and name it:
 
 ```sh
-docker build -t <your-registry>/cogitorium:3.2.0 .
-docker push <your-registry>/cogitorium:3.2.0
+docker build -t <your-registry>/cogitorium:3.3.0 .
+docker push <your-registry>/cogitorium:3.3.0
 
 helm install cogitorium ./deploy/helm/cogitorium \
   --namespace cogitorium --create-namespace \
   --set image.repository=<your-registry>/cogitorium \
-  --set image.tag=3.2.0 \
+  --set image.tag=3.3.0 \
   --set auth.adminToken="$(openssl rand -hex 24)"
 ```
 

@@ -82,6 +82,15 @@ value of it: "needs the internet" is not something anybody can weigh, and
   worst direction for that to fail in. The profile is emptied now; the login
   shell stays.
 
+### Upgrading
+
+- Nothing to do. Both new things are opt-in: a bundle carries doors only when
+  you tick **include receivers**, and `requires` and `inlet_keys` do nothing
+  until a document or a configuration uses them.
+- The Helm chart is **0.5.0** and its `appVersion` is 3.3.0.
+- A bundle written by an older install imports unchanged — the new keys are
+  absent, which reads as "carries no doors and asks for nothing".
+
 ## v3.2.0
 
 **The release where the product was used rather than read.** Every screen was
