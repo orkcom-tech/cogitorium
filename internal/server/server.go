@@ -709,6 +709,9 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.page(mux, "POST /context/delete", s.handleDeleteContextForm)
 
 	s.page(mux, "GET /models", s.handleModelsPage)
+	// Before the {id} routes for readability only; Go's mux picks the literal
+	// over the wildcard whatever the order.
+	s.page(mux, "POST /models/orchestrator", s.handleOrchestratorModelForm)
 	s.page(mux, "POST /models/providers", s.handleCreateProviderForm)
 	s.page(mux, "POST /models/providers/{id}/delete", s.handleDeleteProviderForm)
 	s.page(mux, "POST /models/providers/{id}/test", s.handleTestProviderForm)

@@ -36,7 +36,7 @@ export const ACCENTS: { name: string; hex: string }[] = [
   // accent, and the only one besides amber that missed the line. Nine points
   // of green take it to 4.7 and nothing about the hue changes.
   { name: 'Green', hex: '#0a8624' },
-  { name: 'Teal', hex: '#0f766e' },
+  { name: 'Turquoise', hex: '#00807a' },
   { name: 'Blue', hex: '#2563c9' },
   { name: 'Indigo', hex: '#4f46e5' },
   { name: 'Violet', hex: '#7c3aed' },
@@ -48,12 +48,16 @@ export const ACCENTS: { name: string; hex: string }[] = [
   { name: 'Slate', hex: '#4a5568' },
 ]
 
-// Teal, not green. The colour is not only the accent — every neutral is mixed
+// Turquoise. The colour is not only the accent — every neutral is mixed
 // towards it — so the default decides whether a fresh install reads warm or
-// cool, and this one should read cool. It is also the most turquoise of the
-// eight and measures 5.47:1 carrying white text as a filled button, which is
-// comfortably past the 4.5 that stopped the old green being usable at all.
-export const DEFAULT_THEME: Theme = { mode: 'system', accent: '#0f766e' }
+// cool, and this one should read cool.
+//
+// #00807a rather than the teal that was here: fully saturated at hue 177, which
+// is the difference between a colour somebody calls turquoise and one they call
+// dark green-blue. It is as turquoise as the rule above allows — it carries
+// white text at 4.81:1 as a filled button, and the next step brighter (#0a8b82)
+// drops to 4.18 and fails.
+export const DEFAULT_THEME: Theme = { mode: 'system', accent: '#00807a' }
 
 const KEY = 'cogitorium.theme'
 const HEX = /^#[0-9a-f]{6}$/i

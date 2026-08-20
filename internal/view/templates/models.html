@@ -40,7 +40,59 @@
     <h3>Catalog</h3>
     {{template "cog.list.models" .}}
   </section>
+
+  {{template "cog.frag.orchestrator" .Orchestrator}}
 </main>
+{{end}}
+
+{{/*
+  The orchestrator, as a thing you can see.
+
+  It is the one agent this product makes by itself — every workspace is created
+  with one — and the only place that was ever visible was a picker on the
+  new-workspace form. Somebody looking for where an orchestrator comes from
+  found a catalogue of models, no orchestrator anywhere, and reasonably
+  concluded they were missing a step.
+
+  So: the role, in full, because an orchestrator is not a mystery box and the
+  fastest way to say what one IS is to let somebody read what it is told. And
+  one blank, which is the model.
+*/}}
+{{define "cog.frag.orchestrator"}}
+<section class="orchestrator">
+  <h3>The orchestrator</h3>
+  <p class="hint">
+    Every workspace is created with one. It is the operator's single point of contact — you talk to
+    it, and it delegates. This is the role it starts with, the same on every workspace; the only
+    thing it needs from you is a model to think with, and each workspace can edit its own copy
+    afterwards without touching this one.
+  </p>
+
+  {{if .Chosen}}<p class="hint">Right now: <strong>{{.Chosen}}</strong>. Every workspace made from
+    here on starts with it.</p>{{end}}
+
+  {{if .NoModels}}
+    <p class="hint">
+      Nothing to put in it yet — add a provider and offer one of its models above, and this becomes
+      one choice rather than a form somebody has to fill in for every workspace.
+    </p>
+  {{else}}
+    <form class="orchestrator-pick" method="post" action="/models/orchestrator">
+      <label>It thinks with
+        <select name="model_id">
+          <option value="">— ask me each time —</option>
+          {{range .Choices}}<option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Label}} — {{.Provider}}</option>{{end}}
+        </select>
+      </label>
+      <button type="submit" class="primary">Use it</button>
+    </form>
+  {{end}}
+
+  <details class="orchestrator-role">
+    <summary>What it is told</summary>
+    <pre>{{.Role}}</pre>
+  </details>
+</section>
 {{end}}
 
 {{define "cog.list.providers"}}<div id="providers" class="provider-list">

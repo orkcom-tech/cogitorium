@@ -3860,3 +3860,45 @@ button.big {
 .prompt-preview.diff .d-same {
   display: block;
 }
+
+/* The orchestrator, on the models screen.
+ *
+ * It reads as a card rather than a third list, because it is not a list: it is
+ * one preset with one blank in it, and the blank is the point. */
+.orchestrator {
+  margin-top: 2rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line, #3a3a3a);
+  border-radius: 0.5rem;
+  background: var(--raised, transparent);
+}
+.orchestrator h3 {
+  margin-top: 0;
+}
+.orchestrator-pick {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 0.75rem 0;
+}
+.orchestrator-pick label {
+  display: grid;
+  gap: 0.25rem;
+}
+.orchestrator-role summary {
+  cursor: pointer;
+  color: var(--ink-dim, inherit);
+}
+.orchestrator-role pre {
+  margin: 0.5rem 0 0;
+  padding: 0.75rem;
+  max-height: 22rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  border: 1px solid var(--line, #3a3a3a);
+  border-radius: 0.4rem;
+  background: var(--sunken, transparent);
+  font-size: 0.9em;
+  line-height: 1.5;
+}

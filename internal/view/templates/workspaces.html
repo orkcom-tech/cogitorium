@@ -27,9 +27,12 @@
         <label>Name <input name="name" required placeholder="research"></label>
         <label>Description <input name="description"
                 placeholder="drafting and checking the release notes"></label>
+        {{/* Opens on the house orchestrator's model when one is set — see the
+             Models screen. Still a picker, because a workspace is allowed to
+             differ; just not a question with no default. */}}
         <label>The orchestrator thinks with
           <select name="orchestrator_model_id" required>
-            {{range .Models}}<option value="{{.ID}}">{{.Label}} — {{.Provider}}</option>{{end}}
+            {{range .Orchestrator.Choices}}<option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Label}} — {{.Provider}}</option>{{end}}
           </select>
         </label>
         <button type="submit">create it</button>

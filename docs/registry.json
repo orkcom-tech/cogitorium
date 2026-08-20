@@ -1994,6 +1994,22 @@
         {
           "path": "Error",
           "type": "string"
+        },
+        {
+          "path": "Orchestrator.Role",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator.Choices",
+          "type": "[]OrchestratorChoice"
+        },
+        {
+          "path": "Orchestrator.Chosen",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator.NoModels",
+          "type": "bool"
         }
       ],
       "body": "\u003cp class=\"hint\"\u003e\nNothing here yet. Add a model from a provider above — until there is one, an agent has nothing to think with.\n\u003c/p\u003e",
@@ -2486,6 +2502,22 @@
         {
           "path": "Models",
           "type": "[]Model"
+        },
+        {
+          "path": "Orchestrator.Role",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator.Choices",
+          "type": "[]OrchestratorChoice"
+        },
+        {
+          "path": "Orchestrator.Chosen",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator.NoModels",
+          "type": "bool"
         },
         {
           "path": "Creating",
@@ -3160,6 +3192,29 @@
         }
       ],
       "body": "\u003cdetails class=\"new-context\"\u003e\n  \u003csummary\u003ewrite a document\u003c/summary\u003e\n  \u003cform method=\"post\" action=\"/context/save\"\u003e\n    \u003clabel\u003ePath \u003cinput name=\"path\" required placeholder=\"team/how-we-review.md\"\u003e\u003c/label\u003e\n    \u003clabel\u003eText \u003ctextarea name=\"text\" rows=\"8\" required placeholder=\"What it says. It is versioned by Contextverse from here on.\"\u003e\u003c/textarea\u003e\u003c/label\u003e\n    \u003cbutton type=\"submit\"\u003esave it\u003c/button\u003e\n  \u003c/form\u003e\n\u003c/details\u003e",
+      "appends": false
+    },
+    {
+      "name": "cog.frag.orchestrator",
+      "model": [
+        {
+          "path": "Role",
+          "type": "string"
+        },
+        {
+          "path": "Choices",
+          "type": "[]OrchestratorChoice"
+        },
+        {
+          "path": "Chosen",
+          "type": "string"
+        },
+        {
+          "path": "NoModels",
+          "type": "bool"
+        }
+      ],
+      "body": "\u003csection class=\"orchestrator\"\u003e\n  \u003ch3\u003eThe orchestrator\u003c/h3\u003e\n  \u003cp class=\"hint\"\u003e\n    Every workspace is created with one. It is the operator's single point of contact — you talk to\n    it, and it delegates. This is the role it starts with, the same on every workspace; the only\n    thing it needs from you is a model to think with, and each workspace can edit its own copy\n    afterwards without touching this one.\n  \u003c/p\u003e\n\n  {{if .Chosen}}\u003cp class=\"hint\"\u003eRight now: \u003cstrong\u003e{{.Chosen}}\u003c/strong\u003e. Every workspace made from\n    here on starts with it.\u003c/p\u003e{{end}}\n\n  {{if .NoModels}}\n    \u003cp class=\"hint\"\u003e\n      Nothing to put in it yet — add a provider and offer one of its models above, and this becomes\n      one choice rather than a form somebody has to fill in for every workspace.\n    \u003c/p\u003e\n  {{else}}\n    \u003cform class=\"orchestrator-pick\" method=\"post\" action=\"/models/orchestrator\"\u003e\n      \u003clabel\u003eIt thinks with\n        \u003cselect name=\"model_id\"\u003e\n          \u003coption value=\"\"\u003e— ask me each time —\u003c/option\u003e\n          {{range .Choices}}\u003coption value=\"{{.ID}}\"{{if .Selected}} selected{{end}}\u003e{{.Label}} — {{.Provider}}\u003c/option\u003e{{end}}\n        \u003c/select\u003e\n      \u003c/label\u003e\n      \u003cbutton type=\"submit\" class=\"primary\"\u003eUse it\u003c/button\u003e\n    \u003c/form\u003e\n  {{end}}\n\n  \u003cdetails class=\"orchestrator-role\"\u003e\n    \u003csummary\u003eWhat it is told\u003c/summary\u003e\n    \u003cpre\u003e{{.Role}}\u003c/pre\u003e\n  \u003c/details\u003e\n\u003c/section\u003e",
       "appends": false
     },
     {
@@ -4541,6 +4596,22 @@
         {
           "path": "Error",
           "type": "string"
+        },
+        {
+          "path": "Orchestrator.Role",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator.Choices",
+          "type": "[]OrchestratorChoice"
+        },
+        {
+          "path": "Orchestrator.Chosen",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator.NoModels",
+          "type": "bool"
         }
       ],
       "body": "\u003cdiv id=\"catalogue\" class=\"model-list\"\u003e\n{{if .Models}}\u003ctable\u003e\n  \u003cthead\u003e\u003ctr\u003e\u003cth\u003eModel\u003c/th\u003e\u003cth\u003eLabel\u003c/th\u003e\u003cth\u003eProvider\u003c/th\u003e\u003cth\u003e\u003c/th\u003e\u003c/tr\u003e\u003c/thead\u003e\n  \u003ctbody\u003e{{range .Models}}{{template \"cog.row.model\" .}}{{end}}\u003c/tbody\u003e\n\u003c/table\u003e{{else}}{{template \"cog.empty.models\" .}}{{end}}\n\u003c/div\u003e",
@@ -4941,6 +5012,22 @@
         {
           "path": "Error",
           "type": "string"
+        },
+        {
+          "path": "Orchestrator.Role",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator.Choices",
+          "type": "[]OrchestratorChoice"
+        },
+        {
+          "path": "Orchestrator.Chosen",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator.NoModels",
+          "type": "bool"
         }
       ],
       "body": "\u003cdiv id=\"providers\" class=\"provider-list\"\u003e\n{{if .Providers}}{{range .Providers}}{{template \"cog.row.provider\" .}}{{end}}{{else}}\u003cp class=\"hint\"\u003e\nNo providers yet. A provider is where models come from — Anthropic, or anything that speaks its\nOpenAI-compatible shape, which is how Ollama, LM Studio, vLLM and llama.cpp are reached.\n\u003c/p\u003e{{end}}\n\u003c/div\u003e",
@@ -5377,6 +5464,22 @@
         {
           "path": "Models",
           "type": "[]Model"
+        },
+        {
+          "path": "Orchestrator.Role",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator.Choices",
+          "type": "[]OrchestratorChoice"
+        },
+        {
+          "path": "Orchestrator.Chosen",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator.NoModels",
+          "type": "bool"
         },
         {
           "path": "Creating",
@@ -6012,9 +6115,25 @@
         {
           "path": "Error",
           "type": "string"
+        },
+        {
+          "path": "Orchestrator.Role",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator.Choices",
+          "type": "[]OrchestratorChoice"
+        },
+        {
+          "path": "Orchestrator.Chosen",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator.NoModels",
+          "type": "bool"
         }
       ],
-      "body": "\u003cmain class=\"page catalogue\"\u003e\n  \u003ch2\u003e{{.Ctx.T.Models}}\u003c/h2\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n\n  \u003csection\u003e\n    \u003ch3\u003eProviders\u003c/h3\u003e\n    \u003cdetails class=\"add-provider\"\u003e\n      \u003csummary\u003eAdd one\u003c/summary\u003e\n      \u003cform method=\"post\" action=\"/models/providers\"\u003e\n        \u003clabel\u003eName \u003cinput name=\"name\" required placeholder=\"What you will call it\"\u003e\u003c/label\u003e\n        \u003clabel\u003eKind\n          \u003cselect name=\"kind\"\u003e\n            \u003coption value=\"anthropic\"\u003eAnthropic\u003c/option\u003e\n            \u003coption value=\"openai-compatible\"\u003eOpenAI-compatible\u003c/option\u003e\n          \u003c/select\u003e\n        \u003c/label\u003e\n        \u003clabel\u003eAddress \u003cinput name=\"base_url\" placeholder=\"Empty for Anthropic's own; a URL for anything else\"\u003e\u003c/label\u003e\n        \u003clabel\u003eKey \u003cinput name=\"api_key\" type=\"password\" autocomplete=\"off\"\n                          placeholder=\"Stored, and never shown again\"\u003e\u003c/label\u003e\n        \u003cbutton type=\"submit\"\u003eAdd it\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/details\u003e\n    {{template \"cog.list.providers\" .}}\n  \u003c/section\u003e\n\n  \u003csection\u003e\n    \u003ch3\u003eCatalog\u003c/h3\u003e\n    {{template \"cog.list.models\" .}}\n  \u003c/section\u003e\n\u003c/main\u003e",
+      "body": "\u003cmain class=\"page catalogue\"\u003e\n  \u003ch2\u003e{{.Ctx.T.Models}}\u003c/h2\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n\n  \u003csection\u003e\n    \u003ch3\u003eProviders\u003c/h3\u003e\n    \u003cdetails class=\"add-provider\"\u003e\n      \u003csummary\u003eAdd one\u003c/summary\u003e\n      \u003cform method=\"post\" action=\"/models/providers\"\u003e\n        \u003clabel\u003eName \u003cinput name=\"name\" required placeholder=\"What you will call it\"\u003e\u003c/label\u003e\n        \u003clabel\u003eKind\n          \u003cselect name=\"kind\"\u003e\n            \u003coption value=\"anthropic\"\u003eAnthropic\u003c/option\u003e\n            \u003coption value=\"openai-compatible\"\u003eOpenAI-compatible\u003c/option\u003e\n          \u003c/select\u003e\n        \u003c/label\u003e\n        \u003clabel\u003eAddress \u003cinput name=\"base_url\" placeholder=\"Empty for Anthropic's own; a URL for anything else\"\u003e\u003c/label\u003e\n        \u003clabel\u003eKey \u003cinput name=\"api_key\" type=\"password\" autocomplete=\"off\"\n                          placeholder=\"Stored, and never shown again\"\u003e\u003c/label\u003e\n        \u003cbutton type=\"submit\"\u003eAdd it\u003c/button\u003e\n      \u003c/form\u003e\n    \u003c/details\u003e\n    {{template \"cog.list.providers\" .}}\n  \u003c/section\u003e\n\n  \u003csection\u003e\n    \u003ch3\u003eCatalog\u003c/h3\u003e\n    {{template \"cog.list.models\" .}}\n  \u003c/section\u003e\n\n  {{template \"cog.frag.orchestrator\" .Orchestrator}}\n\u003c/main\u003e",
       "appends": false
     },
     {
@@ -6871,6 +6990,22 @@
           "type": "[]Model"
         },
         {
+          "path": "Orchestrator.Role",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator.Choices",
+          "type": "[]OrchestratorChoice"
+        },
+        {
+          "path": "Orchestrator.Chosen",
+          "type": "string"
+        },
+        {
+          "path": "Orchestrator.NoModels",
+          "type": "bool"
+        },
+        {
           "path": "Creating",
           "type": "bool"
         },
@@ -6887,7 +7022,7 @@
           "type": "string"
         }
       ],
-      "body": "\u003cmain class=\"page workspaces\"\u003e\n  \u003cdiv class=\"row\"\u003e\n    \u003ch2\u003e{{.Ctx.T.Workspaces}}\u003c/h2\u003e\n    \u003cspan class=\"spacer\"\u003e\u003c/span\u003e\n    \u003ca class=\"action\" href=\"/workspaces?import=1\" title=\"Build a workspace from a bundle someone exported\"\u003eimport\u003c/a\u003e\n    \u003ca class=\"action is-primary\" href=\"/workspaces?new=1\"\u003e+ New workspace\u003c/a\u003e\n  \u003c/div\u003e\n\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{if .Notice}}\u003cp class=\"hint\"\u003e✓ {{.Notice}}\u003c/p\u003e{{end}}\n\n  {{if .Creating}}\n  \u003csection class=\"card\"\u003e\n    \u003ch3\u003eNew workspace\u003c/h3\u003e\n    {{if .Models}}\n      \u003cform method=\"post\" action=\"/workspaces\"\u003e\n        \u003clabel\u003eName \u003cinput name=\"name\" required placeholder=\"research\"\u003e\u003c/label\u003e\n        \u003clabel\u003eDescription \u003cinput name=\"description\"\n                placeholder=\"drafting and checking the release notes\"\u003e\u003c/label\u003e\n        \u003clabel\u003eThe orchestrator thinks with\n          \u003cselect name=\"orchestrator_model_id\" required\u003e\n            {{range .Models}}\u003coption value=\"{{.ID}}\"\u003e{{.Label}} — {{.Provider}}\u003c/option\u003e{{end}}\n          \u003c/select\u003e\n        \u003c/label\u003e\n        \u003cbutton type=\"submit\"\u003ecreate it\u003c/button\u003e\n        \u003ca class=\"action\" href=\"/workspaces\"\u003ecancel\u003c/a\u003e\n      \u003c/form\u003e\n    {{else}}\n      {{/* Offering an empty picker would let somebody fill in a name and then\n           discover there is nothing to think with. */}}\n      \u003cp class=\"hint\"\u003eThere are no models yet. A workspace needs one to think with —\n      add a provider and offer a model in the \u003ca href=\"/models\"\u003emodel catalog\u003c/a\u003e first.\u003c/p\u003e\n    {{end}}\n  \u003c/section\u003e\n  {{end}}\n\n  {{if .Importing}}\n  \u003csection class=\"card\"\u003e\n    \u003ch3\u003eImport a workspace\u003c/h3\u003e\n    \u003cform method=\"post\" action=\"/workspaces/import\" enctype=\"multipart/form-data\"\u003e\n      \u003clabel class=\"field\"\u003e\u003cspan class=\"muted\"\u003ethe bundle file\u003c/span\u003e\n        \u003cinput type=\"file\" name=\"bundle\" accept=\"application/json,.json\" required\u003e\u003c/label\u003e\n      \u003clabel class=\"field\"\u003ename\n        \u003cinput name=\"name\" placeholder=\"research\"\u003e\n        \u003cspan class=\"hint\"\u003eNames are unique here. Change it to import a bundle next to the workspace it came from.\u003c/span\u003e\n      \u003c/label\u003e\n      \u003clabel class=\"row\"\u003e\u003cinput type=\"checkbox\" name=\"gears\" value=\"on\" checked\u003e\n        bring its gears — they arrive unapproved, like anything else\u003c/label\u003e\n      \u003cbutton type=\"submit\"\u003eimport it\u003c/button\u003e\n      \u003ca class=\"action\" href=\"/workspaces\"\u003ecancel\u003c/a\u003e\n    \u003c/form\u003e\n  \u003c/section\u003e\n  {{end}}\n\n  {{template \"cog.list.workspaces\" .}}\n\u003c/main\u003e",
+      "body": "\u003cmain class=\"page workspaces\"\u003e\n  \u003cdiv class=\"row\"\u003e\n    \u003ch2\u003e{{.Ctx.T.Workspaces}}\u003c/h2\u003e\n    \u003cspan class=\"spacer\"\u003e\u003c/span\u003e\n    \u003ca class=\"action\" href=\"/workspaces?import=1\" title=\"Build a workspace from a bundle someone exported\"\u003eimport\u003c/a\u003e\n    \u003ca class=\"action is-primary\" href=\"/workspaces?new=1\"\u003e+ New workspace\u003c/a\u003e\n  \u003c/div\u003e\n\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{if .Notice}}\u003cp class=\"hint\"\u003e✓ {{.Notice}}\u003c/p\u003e{{end}}\n\n  {{if .Creating}}\n  \u003csection class=\"card\"\u003e\n    \u003ch3\u003eNew workspace\u003c/h3\u003e\n    {{if .Models}}\n      \u003cform method=\"post\" action=\"/workspaces\"\u003e\n        \u003clabel\u003eName \u003cinput name=\"name\" required placeholder=\"research\"\u003e\u003c/label\u003e\n        \u003clabel\u003eDescription \u003cinput name=\"description\"\n                placeholder=\"drafting and checking the release notes\"\u003e\u003c/label\u003e\n        {{/* Opens on the house orchestrator's model when one is set — see the\n             Models screen. Still a picker, because a workspace is allowed to\n             differ; just not a question with no default. */}}\n        \u003clabel\u003eThe orchestrator thinks with\n          \u003cselect name=\"orchestrator_model_id\" required\u003e\n            {{range .Orchestrator.Choices}}\u003coption value=\"{{.ID}}\"{{if .Selected}} selected{{end}}\u003e{{.Label}} — {{.Provider}}\u003c/option\u003e{{end}}\n          \u003c/select\u003e\n        \u003c/label\u003e\n        \u003cbutton type=\"submit\"\u003ecreate it\u003c/button\u003e\n        \u003ca class=\"action\" href=\"/workspaces\"\u003ecancel\u003c/a\u003e\n      \u003c/form\u003e\n    {{else}}\n      {{/* Offering an empty picker would let somebody fill in a name and then\n           discover there is nothing to think with. */}}\n      \u003cp class=\"hint\"\u003eThere are no models yet. A workspace needs one to think with —\n      add a provider and offer a model in the \u003ca href=\"/models\"\u003emodel catalog\u003c/a\u003e first.\u003c/p\u003e\n    {{end}}\n  \u003c/section\u003e\n  {{end}}\n\n  {{if .Importing}}\n  \u003csection class=\"card\"\u003e\n    \u003ch3\u003eImport a workspace\u003c/h3\u003e\n    \u003cform method=\"post\" action=\"/workspaces/import\" enctype=\"multipart/form-data\"\u003e\n      \u003clabel class=\"field\"\u003e\u003cspan class=\"muted\"\u003ethe bundle file\u003c/span\u003e\n        \u003cinput type=\"file\" name=\"bundle\" accept=\"application/json,.json\" required\u003e\u003c/label\u003e\n      \u003clabel class=\"field\"\u003ename\n        \u003cinput name=\"name\" placeholder=\"research\"\u003e\n        \u003cspan class=\"hint\"\u003eNames are unique here. Change it to import a bundle next to the workspace it came from.\u003c/span\u003e\n      \u003c/label\u003e\n      \u003clabel class=\"row\"\u003e\u003cinput type=\"checkbox\" name=\"gears\" value=\"on\" checked\u003e\n        bring its gears — they arrive unapproved, like anything else\u003c/label\u003e\n      \u003cbutton type=\"submit\"\u003eimport it\u003c/button\u003e\n      \u003ca class=\"action\" href=\"/workspaces\"\u003ecancel\u003c/a\u003e\n    \u003c/form\u003e\n  \u003c/section\u003e\n  {{end}}\n\n  {{template \"cog.list.workspaces\" .}}\n\u003c/main\u003e",
       "appends": false
     },
     {

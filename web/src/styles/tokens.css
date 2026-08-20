@@ -20,7 +20,7 @@
      neutral below is mixed TOWARDS it rather than being pure grey, which is
      what keeps a chosen accent from looking pasted onto somebody else's
      design: the ground, the surfaces and the borders all carry a little of it. */
-  --accent-chosen: #0f766e;
+  --accent-chosen: #00807a;
   --accent: var(--accent-chosen);
 
   /* The bezel and the hole in it. Measured, the dark pair separated by 1.08:1

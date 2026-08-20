@@ -1,18 +1,22 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/orkcom-tech/cogitorium/internal/settings"
 	"github.com/orkcom-tech/cogitorium/internal/view"
+	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
 
 // The model catalogue, served as a template.
 //
-// Two lists on one page because they are two decisions: where models come
-// from, and which of them this install offers an agent. A plugin can take over
-// either without touching the other.
+// Three sections on one page because they are three decisions: where models
+// come from, which of them this install offers an agent, and which one the
+// orchestrator this product makes on its own thinks with. A plugin can take
+// over any of them without touching the others.
 //
 // Every action is a form. A failure answers with the page, because the reason
 // belongs beside the form that produced it; a success sends the browser back
@@ -196,5 +200,102 @@ func (s *Server) renderModelsInto(w http.ResponseWriter, r *http.Request, proble
 		model.Providers = append(model.Providers, row)
 	}
 
+	model.Orchestrator = s.orchestratorTemplate(r, model.Models)
 	s.renderPage(w, r, "cog.page.models", fragment, "Model catalogue", model)
+}
+
+// The orchestrator, as a thing on a screen.
+//
+// It is the one agent this product makes by itself: every workspace is created
+// with one, bound to a model. That was only ever visible as a picker on the
+// new-workspace form labelled "the orchestrator thinks with", so somebody
+// looking for where an orchestrator comes from found a catalogue of models,
+// no orchestrator anywhere, and concluded there was a step they were missing.
+//
+// There was not. What was missing was the template being shown: a role this
+// product already wrote, with one blank in it. Fill in the model here and
+// every workspace made afterwards starts from that instead of a question.
+
+func (s *Server) orchestratorTemplate(r *http.Request, models []view.Model) view.OrchestratorTemplate {
+	t := view.OrchestratorTemplate{
+		// The instruction in full, because an orchestrator is not a mystery box
+		// and the fastest way to say what one IS is to let somebody read what
+		// it is told.
+		Role:     workspace.DefaultOrchestratorRole,
+		NoModels: len(models) == 0,
+	}
+	chosen := s.orchestratorModelID(r.Context())
+	for _, m := range models {
+		label := m.Label
+		if label == "" {
+			label = m.Name
+		}
+		c := view.OrchestratorChoice{
+			ID: m.ID, Label: label, Provider: m.Provider, Selected: m.ID == chosen,
+		}
+		if c.Selected {
+			t.Chosen = label + " — " + m.Provider
+		}
+		t.Choices = append(t.Choices, c)
+	}
+	return t
+}
+
+// orchestratorModelID is the house orchestrator's model, or 0.
+//
+// A stored id whose model has since been deleted answers 0 rather than a
+// dangling number: the screen then reads as "nobody has chosen", which is what
+// is true, instead of showing a picker with nothing marked in it.
+func (s *Server) orchestratorModelID(ctx context.Context) int64 {
+	raw, err := s.settings.Get(ctx, settings.OrchestratorModel)
+	if err != nil || strings.TrimSpace(raw) == "" {
+		return 0
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil {
+		return 0
+	}
+	if _, err := s.catalog.GetModel(ctx, id); err != nil {
+		return 0
+	}
+	return id
+}
+
+// handleOrchestratorModelForm fills in the blank.
+func (s *Server) handleOrchestratorModelForm(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.renderModels(w, r, "that form could not be read", nil)
+		return
+	}
+	raw := strings.TrimSpace(r.PostFormValue("model_id"))
+	if raw == "" {
+		// Clearing it is a decision too: the new-workspace form goes back to
+		// asking, which is where this started.
+		if err := s.settings.Set(r.Context(), settings.OrchestratorModel, ""); err != nil {
+			s.renderModels(w, r, err.Error(), nil)
+			return
+		}
+		s.done(w, r, "/models")
+		return
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		s.renderModels(w, r, "that is not a model", nil)
+		return
+	}
+	// Checked before it is stored. A setting pointing at a model this install
+	// does not have is a workspace that fails to create with a puzzle for a
+	// reason.
+	if _, err := s.catalog.GetModel(r.Context(), id); err != nil {
+		s.renderModels(w, r, "this install has no such model", nil)
+		return
+	}
+	if err := s.settings.Set(r.Context(), settings.OrchestratorModel, raw); err != nil {
+		s.renderModels(w, r, err.Error(), nil)
+		return
+	}
+	s.done(w, r, "/models")
 }

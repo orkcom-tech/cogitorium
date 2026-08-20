@@ -77,3 +77,16 @@ func (s *Store) Set(ctx context.Context, key, value string) error {
 // to "off" is how an operator who would rather type credentials themselves
 // says so.
 const OrchestratorSecrets = "orchestrator_secrets"
+
+// OrchestratorModel is the model a new workspace's orchestrator thinks with.
+//
+// Every workspace is created with an orchestrator — that is not optional — but
+// the only place that was visible was a picker on the new-workspace form, and
+// somebody looking for where an orchestrator comes from could not find one.
+// Setting this makes the answer a thing on a screen: the role the product
+// already wrote, with a model in it, and every workspace made afterwards
+// starting from that rather than from a question.
+//
+// Stored as the model's id in decimal. Absent means nobody has chosen, and the
+// new-workspace form asks as it always did.
+const OrchestratorModel = "orchestrator_model"

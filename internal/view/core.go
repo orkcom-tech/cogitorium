@@ -416,12 +416,13 @@ func CoreModels() Models {
 		"cog.row.contextfile": ContextFile{},
 		"cog.empty.context":   Context{Ctx: Ctx{T: DefaultStrings()}},
 
-		"cog.page.models":    ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
-		"cog.list.providers": ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
-		"cog.row.provider":   Provider{},
-		"cog.list.models":    ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
-		"cog.row.model":      Model{},
-		"cog.empty.models":   ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.page.models":       ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.list.providers":    ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.provider":      Provider{},
+		"cog.list.models":       ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.row.model":         Model{},
+		"cog.frag.orchestrator": OrchestratorTemplate{},
+		"cog.empty.models":      ModelCatalog{Ctx: Ctx{T: DefaultStrings()}},
 	}
 }
 
@@ -496,8 +497,13 @@ type Workspaces struct {
 	// Models are what an orchestrator can be given. Without one there is
 	// nothing to think with, and the form says so rather than offering an
 	// empty list.
-	Models   []Model
-	Creating bool
+	Models []Model
+	// Orchestrator carries which model the house orchestrator uses, so the
+	// picker opens on it instead of on whichever model happens to be first.
+	// Somebody who has said this once on the Models screen should not be asked
+	// again on every workspace they make.
+	Orchestrator OrchestratorTemplate
+	Creating     bool
 	// Importing is the bundle form, open. Its own state rather than a second
 	// page: importing is how a workspace arrives from somewhere else, and it
 	// belongs beside the list it will appear in.
@@ -1431,6 +1437,45 @@ type ModelCatalog struct {
 	Providers []Provider
 	Models    []Model
 	Error     string
+
+	// The house orchestrator: the one agent this product makes on its own, and
+	// the one nobody could see how to make.
+	//
+	// Every workspace is created with an orchestrator — that is not optional
+	// and never was — but the only trace of it was a picker on the new-workspace
+	// form labelled "the orchestrator thinks with". Somebody looking for where
+	// an orchestrator comes from found a catalogue of models and no orchestrator
+	// anywhere, and concluded there was a step they were missing.
+	//
+	// So it is shown here, as what it is: a role this product already wrote,
+	// with one blank in it. Fill in the model and every workspace made after
+	// that starts with it.
+	Orchestrator OrchestratorTemplate
+}
+
+// OrchestratorTemplate is the preset with one blank in it.
+type OrchestratorTemplate struct {
+	// Role is the instruction the product ships, shown in full. An orchestrator
+	// is not a mystery box, and the fastest way to say what one IS is to let
+	// somebody read what it is told.
+	Role string
+	// Choices are the models this install offers, each already knowing whether
+	// it is the one in effect — a template renders, it does not compare.
+	Choices []OrchestratorChoice
+	// Chosen is the model in effect, for the sentence above the picker. Empty
+	// when nobody has set one.
+	Chosen string
+	// NoModels is the case worth its own words: a template with a blank and
+	// nothing to put in it.
+	NoModels bool
+}
+
+// OrchestratorChoice is one model, and whether it is the house orchestrator's.
+type OrchestratorChoice struct {
+	ID       int64
+	Label    string
+	Provider string
+	Selected bool
 }
 
 // Instruction is one entry in the library, as a template sees it.
@@ -1632,7 +1677,7 @@ type LookMode struct {
 // these two lists ever part company.
 var Accents = []Accent{
 	{Name: "Green", Hex: "#0a8624"},
-	{Name: "Teal", Hex: "#0f766e"},
+	{Name: "Turquoise", Hex: "#00807a"},
 	{Name: "Blue", Hex: "#2563c9"},
 	{Name: "Indigo", Hex: "#4f46e5"},
 	{Name: "Violet", Hex: "#7c3aed"},
@@ -1818,7 +1863,18 @@ func Exemplars() Models {
 		"cog.list.models":    exampleModels(ctx),
 		"cog.row.provider":   exampleModels(ctx).Providers[0],
 		"cog.row.model":      exampleModels(ctx).Models[0],
-		"cog.empty.models":   ModelCatalog{Ctx: ctx},
+		"cog.frag.orchestrator": OrchestratorTemplate{
+			// Short, not the real role: an exemplar exists so an author can see
+			// their override render, and a page of prose in it would be a page
+			// of prose in every preview.
+			Role:   "You are the orchestrator of this workspace. Everything the operator wants done here goes through you.",
+			Chosen: "house — anthropic",
+			Choices: []OrchestratorChoice{
+				{ID: 1, Label: "house", Provider: "anthropic", Selected: true},
+				{ID: 2, Label: "local", Provider: "ollama"},
+			},
+		},
+		"cog.empty.models": ModelCatalog{Ctx: ctx},
 
 		"cog.page.people":     examplePeople(ctx),
 		"cog.page.account":    Account{Ctx: ctx, Name: "admin", IsAdmin: true},

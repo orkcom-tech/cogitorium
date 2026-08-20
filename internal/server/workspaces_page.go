@@ -32,6 +32,12 @@ func (s *Server) handleCreateWorkspaceForm(w http.ResponseWriter, r *http.Reques
 	}
 	modelID, err := strconv.ParseInt(r.PostFormValue("orchestrator_model_id"), 10, 64)
 	if err != nil {
+		// The house orchestrator's model, if somebody has set one on the Models
+		// screen. That is what setting it is FOR: a workspace should not have to
+		// be told the same answer every time it is made.
+		modelID = s.orchestratorModelID(r.Context())
+	}
+	if modelID == 0 {
 		s.renderWorkspaces(w, r, "a workspace needs a model for its orchestrator to think with", "")
 		return
 	}
@@ -176,6 +182,9 @@ func (s *Server) renderWorkspaces(w http.ResponseWriter, r *http.Request, proble
 			})
 		}
 	}
+	// The same template the Models screen shows, so the picker here opens on
+	// whatever was chosen there.
+	model.Orchestrator = s.orchestratorTemplate(r, model.Models)
 
 	teams, _ := s.identity.ListTeams(r.Context())
 	byID := map[int64]string{}
