@@ -21,6 +21,12 @@
 // Headless on purpose. An earlier attempt to grab these with a screen capture
 // caught a private window that happened to be open, which is exactly the kind
 // of mistake that only has to happen once.
+//
+// Shoot an install whose decisions were made by a neutral operator. A plugin
+// approved from the command line records $USER, and a picture of that screen
+// publishes whatever the shell was called on the machine that took it — which
+// is how a maintainer's own account name reached the documentation once.
+// Approve through the web as admin, or set COGITORIUM_OPERATOR first.
 
 import { chromium } from 'playwright'
 import { mkdir } from 'node:fs/promises'
