@@ -20,7 +20,7 @@
     carries can change this workspace.
   </p>
 
-  <form class="row" method="post" action="/receivers">
+  <form class="row" method="post" action="{{.CreateAction}}">
     <input name="address" required placeholder="tickets" aria-label="Address">
     <input name="description" placeholder="What posts to it" aria-label="Description">
     <button type="submit">add a receiver</button>

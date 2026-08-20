@@ -75,7 +75,17 @@
 {{if .Items}}{{range .Items}}{{template "cog.row.gear" .}}{{end}}{{else}}{{template "cog.empty.gears" .}}{{end}}
 </div>{{end}}
 
-{{define "cog.row.gear"}}<article class="card gear{{if .Open}} is-open{{end}}">
+{{/*
+  The card states what it is, so it can be picked up.
+
+  Dragging one onto the blueprint is how a gear is given to an agent, and it
+  stopped working when this became a template: the payload used to be attached
+  by the component that drew the card, and a template draws no handlers. The
+  workspace listens once on the container instead.
+*/}}
+{{define "cog.row.gear"}}<article class="card gear{{if .Open}} is-open{{end}}"
+  draggable="true" title="Drag onto the blueprint to give this to an agent"
+  data-gear-id="{{.ID}}" data-gear-name="{{.Name}}" data-gear-status="{{.Status}}">
   <header class="gear-head">
     <h3>{{.Name}} <span class="muted">v{{.Version}}</span></h3>
     {{if .Approved}}<span class="badge is-ok">{{.Status}}</span>{{else}}<span class="badge is-warn">{{.Status}}</span>{{end}}

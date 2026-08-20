@@ -25,7 +25,8 @@ func (s *Server) bundleStores() bundle.Stores {
 		Context:    s.context,
 		// Nil where external MCP servers are switched off, which the format
 		// reads as "this bundle carries none" rather than as a failure.
-		MCP: s.mcp,
+		MCP:        s.mcp,
+		Planboards: s.plans,
 	}
 }
 
@@ -53,9 +54,14 @@ func (s *Server) handleExportWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	withPlans, err := queryFlag(r, "planboards")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	b, err := bundle.Export(r.Context(), s.bundleStores(), id,
-		bundle.Options{Gears: gears, Context: withContext, MCP: withMCP})
+		bundle.Options{Gears: gears, Context: withContext, MCP: withMCP, Planboards: withPlans})
 	if err != nil {
 		failContext(w, r, err)
 		return
@@ -72,11 +78,12 @@ func (s *Server) handleExportWorkspace(w http.ResponseWriter, r *http.Request) {
 // no more privilege than creating one by hand, which is what it amounts to.
 func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Name           string        `json:"name"`
-		Bundle         bundle.Bundle `json:"bundle"`
-		IncludeGears   bool          `json:"include_gears"`
-		IncludeContext bool          `json:"include_context"`
-		IncludeMCP     bool          `json:"include_mcp"`
+		Name              string        `json:"name"`
+		Bundle            bundle.Bundle `json:"bundle"`
+		IncludeGears      bool          `json:"include_gears"`
+		IncludeContext    bool          `json:"include_context"`
+		IncludeMCP        bool          `json:"include_mcp"`
+		IncludePlanboards bool          `json:"include_planboards"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxBundleBytes)
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -92,11 +99,12 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	caller := callerFrom(r.Context())
 	res, err := bundle.Import(r.Context(), s.bundleStores(), in.Bundle, bundle.ImportOptions{
-		Name:           in.Name,
-		OwnerID:        caller.ID,
-		IncludeGears:   in.IncludeGears,
-		IncludeContext: in.IncludeContext,
-		IncludeMCP:     in.IncludeMCP,
+		Name:              in.Name,
+		OwnerID:           caller.ID,
+		IncludeGears:      in.IncludeGears,
+		IncludeContext:    in.IncludeContext,
+		IncludeMCP:        in.IncludeMCP,
+		IncludePlanboards: in.IncludePlanboards,
 	})
 	if err != nil {
 		// A malformed document is the caller's to fix, so it must not read as

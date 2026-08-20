@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 	"testing"
 
@@ -34,6 +35,9 @@ type promptFixture struct {
 	engine *Engine
 	ws     *workspace.Store
 	agent  workspace.Agent
+	// db, so a test can build a store the engine does not take in New —
+	// planboards are injected the way the clocks are.
+	db *sql.DB
 }
 
 func newPromptFixture(t *testing.T, avoid string) promptFixture {
@@ -79,7 +83,7 @@ func newPromptFixture(t *testing.T, avoid string) promptFixture {
 
 	// gearExec, the library, the searcher, the broker and the data directory
 	// take no part in assembling a prompt; passing them would only hide that.
-	return promptFixture{engine: New(ws, cat, cs, gears, nil, nil, nil, nil, work.NewStore(db), Budgets{}, ""), ws: ws, agent: agent}
+	return promptFixture{engine: New(ws, cat, cs, gears, nil, nil, nil, nil, work.NewStore(db), Budgets{}, ""), ws: ws, agent: agent, db: db}
 }
 
 func (f promptFixture) prompt(t *testing.T) string {

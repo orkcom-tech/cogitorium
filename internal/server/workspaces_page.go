@@ -280,6 +280,10 @@ func (s *Server) handleImportWorkspaceForm(w http.ResponseWriter, r *http.Reques
 		// checkbox decides whether they come at all, never whether they run.
 		IncludeGears:   r.PostFormValue("gears") == "on",
 		IncludeContext: true,
+		// The order a workflow runs in is the workflow, not an extra: an
+		// imported workspace whose plans stayed behind is a set of agents with
+		// nothing telling them what comes first.
+		IncludePlanboards: true,
 	})
 	if err != nil {
 		s.renderWorkspaces(w, r, err.Error(), "")

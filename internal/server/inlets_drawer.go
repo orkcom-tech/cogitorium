@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/orkcom-tech/cogitorium/internal/view"
@@ -20,9 +21,10 @@ import (
 
 func (s *Server) inletsModel(r *http.Request, wsID int64, problem, notice string, justIssued map[int64]string) view.Inlets {
 	model := view.Inlets{
-		Ctx:    s.viewCtx(r, callerFrom(r.Context())),
-		Error:  problem,
-		Notice: notice,
+		Ctx:          s.viewCtx(r, callerFrom(r.Context())),
+		Error:        problem,
+		Notice:       notice,
+		CreateAction: "/workspaces/" + strconv.FormatInt(wsID, 10) + "/receivers",
 	}
 	if s.inlets == nil {
 		model.Error = "this install serves no receivers"

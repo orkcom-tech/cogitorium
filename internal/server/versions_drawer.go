@@ -60,7 +60,7 @@ func (s *Server) versionsModel(r *http.Request, wsID int64, problem, notice stri
 }
 
 func (s *Server) workflowStores() workflow.Stores {
-	return workflow.Stores{Spaces: s.workspaces, Gears: s.gears, Schedules: s.schedules}
+	return workflow.Stores{Spaces: s.workspaces, Gears: s.gears, Schedules: s.schedules, Planboards: s.plans}
 }
 
 // handleSaveVersionForm records the workflow as it stands.

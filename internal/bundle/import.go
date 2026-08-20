@@ -10,6 +10,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
+	"github.com/orkcom-tech/cogitorium/internal/planboard"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
 
@@ -26,6 +27,10 @@ type ImportOptions struct {
 	OwnerID        int64
 	IncludeGears   bool
 	IncludeContext bool
+	// IncludePlanboards recreates the plans the bundle carried and attaches
+	// them as it says. Each begins at step one: where a plan had got to is a
+	// fact about a run on the exporting install.
+	IncludePlanboards bool
 	// IncludeMCP recreates the external MCP servers the bundle carried. Every
 	// one arrives PENDING with no credential resolved — see importMCP.
 	IncludeMCP bool
@@ -47,9 +52,13 @@ type Result struct {
 	ContextFiles  int                 `json:"context_files"`
 	// Reads is how many bindings were made, and ReadsSkipped the ones that
 	// named an agent this bundle does not have.
-	Reads            int               `json:"reads"`
-	ReadsSkipped     []SkippedGear     `json:"reads_skipped,omitempty"`
-	UnresolvedModels []UnresolvedModel `json:"unresolved_models"`
+	// PlanboardsImported is what was written and attached, and
+	// PlanboardsSkipped the ones a name collision or a missing agent stopped.
+	PlanboardsImported []string          `json:"planboards_imported,omitempty"`
+	PlanboardsSkipped  []SkippedGear     `json:"planboards_skipped,omitempty"`
+	Reads              int               `json:"reads"`
+	ReadsSkipped       []SkippedGear     `json:"reads_skipped,omitempty"`
+	UnresolvedModels   []UnresolvedModel `json:"unresolved_models"`
 }
 
 type SkippedGear struct {
@@ -174,6 +183,11 @@ func Import(ctx context.Context, s Stores, b Bundle, opts ImportOptions) (Result
 	}
 	if opts.IncludeMCP && s.MCP != nil {
 		if err := importMCP(ctx, s, b, ws, created, &res); err != nil {
+			return res, err
+		}
+	}
+	if opts.IncludePlanboards && s.Planboards != nil {
+		if err := importPlanboards(ctx, s, b, ws, created, &res); err != nil {
 			return res, err
 		}
 	}
@@ -423,6 +437,61 @@ func importMCP(ctx context.Context, s Stores, b Bundle, ws workspace.Workspace,
 		slog.Warn("a bundle brought external MCP servers; every one is PENDING and does nothing",
 			"workspace_id", ws.ID, "servers", res.MCPImported,
 			"note", "an approval never travels in a bundle: read what each one runs or calls before approving it")
+	}
+	return nil
+}
+
+// importPlanboards writes the plans a bundle carried and attaches them.
+//
+// A name already in the catalogue is left alone, exactly as a gear's is:
+// overwriting it would change the order some other workflow on this install
+// runs in, and attaching the local one instead would let a bundle adopt
+// whatever this install already has by naming it.
+//
+// Every imported plan starts at step one. The bundle carries no position, and
+// inventing one would start a workflow halfway through a plan it has never
+// run.
+func importPlanboards(ctx context.Context, s Stores, b Bundle, ws workspace.Workspace, created map[string]workspace.Agent, res *Result) error {
+	for _, p := range b.Planboards {
+		if _, err := s.Planboards.GetByName(ctx, p.Name); err == nil {
+			res.PlanboardsSkipped = append(res.PlanboardsSkipped, SkippedGear{
+				Name: p.Name,
+				Why:  "a plan with this name already exists in this install; it was left untouched and not attached to the imported workspace",
+			})
+			continue
+		} else if !errors.Is(err, planboard.ErrNotFound) {
+			return fmt.Errorf("workspace %q was created (id %d) but the plan catalogue could not be read: %w", ws.Name, ws.ID, err)
+		}
+
+		steps := make([]planboard.Step, 0, len(p.Steps))
+		for _, st := range p.Steps {
+			steps = append(steps, planboard.Step{Title: st.Title, Body: st.Body})
+		}
+		saved, err := s.Planboards.Save(ctx, p.Name, p.Description, nil, planboard.Mode(p.Mode), steps, ws.ID, 0)
+		if err != nil {
+			return fmt.Errorf("workspace %q was created (id %d) but its plan %q could not be: %w — delete the workspace and fix the bundle, or import it again without plans",
+				ws.Name, ws.ID, p.Name, err)
+		}
+
+		var agentID *int64
+		if p.BoundTo != "" {
+			agent, ok := created[p.BoundTo]
+			if !ok {
+				// Written, but attached to nothing: the plan is worth keeping
+				// and guessing which agent was meant is not.
+				res.PlanboardsSkipped = append(res.PlanboardsSkipped, SkippedGear{
+					Name: p.Name,
+					Why:  "it was attached to the agent " + p.BoundTo + ", which this bundle does not have; the plan was written but attached to nothing",
+				})
+				res.PlanboardsImported = append(res.PlanboardsImported, saved.Name)
+				continue
+			}
+			agentID = &agent.ID
+		}
+		if _, err := s.Planboards.Bind(ctx, saved.ID, ws.ID, agentID); err != nil {
+			return fmt.Errorf("workspace %q was created (id %d) but its plan %q could not be attached: %w", ws.Name, ws.ID, p.Name, err)
+		}
+		res.PlanboardsImported = append(res.PlanboardsImported, saved.Name)
 	}
 	return nil
 }

@@ -2,6 +2,9 @@ package server
 
 import (
 	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/orkcom-tech/cogitorium/internal/schedule"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
@@ -27,6 +30,12 @@ func (s *Server) envModel(r *http.Request, ws *int64, justSet string) view.Env {
 		Ctx:       s.viewCtx(r, callerFrom(r.Context())),
 		Workspace: ws != nil,
 		JustSet:   justSet,
+		SetAction: "/env",
+	}
+	// A workspace's drawer writes to that workspace, and the install's page
+	// writes to the install. One template, two destinations.
+	if ws != nil {
+		model.SetAction = "/workspaces/" + strconv.FormatInt(*ws, 10) + "/env"
 	}
 	if s.env == nil {
 		model.Error = "this install stores no named values"
@@ -55,6 +64,7 @@ func (s *Server) envModel(r *http.Request, ws *int64, justSet string) view.Env {
 			// not the one they set has to be able to see which.
 			Source:        sourceOf(v),
 			FromWorkspace: v.WorkspaceID != nil,
+			DeleteAction:  model.SetAction + "/" + url.PathEscape(v.Name) + "/delete",
 		})
 	}
 	return model
@@ -71,9 +81,19 @@ func sourceOf(v secrets.Record) string {
 // queueModel is what is waiting, and what will start on its own.
 func (s *Server) queueModel(r *http.Request, wsID int64, problem, notice string) view.Queue {
 	model := view.Queue{
-		Ctx:    s.viewCtx(r, callerFrom(r.Context())),
-		Error:  problem,
-		Notice: notice,
+		Ctx:          s.viewCtx(r, callerFrom(r.Context())),
+		Error:        problem,
+		Notice:       notice,
+		CreateAction: "/workspaces/" + strconv.FormatInt(wsID, 10) + "/schedules",
+	}
+
+	// What a clock can start. The form asks for one rather than the server
+	// guessing, and a workspace whose agents cannot be read simply offers an
+	// empty list instead of failing the whole panel.
+	if agents, err := s.workspaces.ListAgents(r.Context(), wsID); err == nil {
+		for _, a := range agents {
+			model.Targets = append(model.Targets, view.PlanTarget{ID: a.ID, Name: a.Name})
+		}
 	}
 
 	if s.queue != nil {
@@ -164,4 +184,86 @@ func queueTone(state, lastError string) string {
 		return "warn"
 	}
 	return ""
+}
+
+// The write half of the variables screen.
+//
+// One pair of handlers for both scopes: an id in the path means a workspace's
+// own value, no id means the install's. The screen is the same list either
+// way, and two nearly identical handlers would be two places for the rules to
+// drift apart.
+func (s *Server) handleSetVariableForm(w http.ResponseWriter, r *http.Request) {
+	ws, ok := s.variableScope(w, r)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.renderVariables(w, r, ws, "", "that form could not be read")
+		return
+	}
+	name := strings.TrimSpace(r.PostFormValue("name"))
+	if name == "" {
+		s.renderVariables(w, r, ws, "", "a value needs a name")
+		return
+	}
+	if _, err := s.env.Store().Set(r.Context(), ws, name,
+		r.PostFormValue("kind"), r.PostFormValue("value"), r.PostFormValue("description")); err != nil {
+		s.renderVariables(w, r, ws, "", err.Error())
+		return
+	}
+	// The name comes back so the screen can say it is set — and, for a secret,
+	// that this was the only time it will be shown anywhere.
+	s.renderVariables(w, r, ws, name, "")
+}
+
+func (s *Server) handleDeleteVariableForm(w http.ResponseWriter, r *http.Request) {
+	ws, ok := s.variableScope(w, r)
+	if !ok {
+		return
+	}
+	if err := s.env.Store().Delete(r.Context(), ws, r.PathValue("name")); err != nil {
+		s.renderVariables(w, r, ws, "", err.Error())
+		return
+	}
+	s.renderVariables(w, r, ws, "", "")
+}
+
+// variableScope reads which list is being written to, and refuses a caller who
+// may not write to it. The install's list reaches every workspace, so it is an
+// administrator's, on the same reasoning gear approval is.
+func (s *Server) variableScope(w http.ResponseWriter, r *http.Request) (*int64, bool) {
+	if s.env == nil {
+		http.Error(w, "this install stores no named values", http.StatusNotFound)
+		return nil, false
+	}
+	raw := r.PathValue("id")
+	if raw == "" {
+		if _, ok := requireAdmin(w, r); !ok {
+			return nil, false
+		}
+		return nil, true
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		http.Error(w, "that is not a workspace", http.StatusBadRequest)
+		return nil, false
+	}
+	// The same gate every other workspace-scoped write goes through, so a
+	// value cannot be written into a workspace the caller cannot reach.
+	if !s.requireWorkspace(w, r, id) {
+		return nil, false
+	}
+	return &id, true
+}
+
+func (s *Server) renderVariables(w http.ResponseWriter, r *http.Request, ws *int64, justSet, msg string) {
+	model := s.envModel(r, ws, justSet)
+	if msg != "" {
+		model.Error = msg
+	}
+	if ws != nil {
+		s.renderPage(w, r, "cog.drawer.variables", "cog.drawer.variables", "Variables", model)
+		return
+	}
+	s.renderPage(w, r, "cog.page.variables", "cog.page.variables", "Variables", model)
 }

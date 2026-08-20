@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"os"
@@ -242,15 +243,6 @@ func (s *Server) handleDeleteMCPServer(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleProbeMCPServer starts the server once and asks what it offers.
-//
-// This is the one place a pending server runs, and it is what an operator has
-// instead of source to read. It is given NO named values and no grant: the
-// question being asked is "what does this claim to be", and a server that needs
-// a credential to answer it is a server to be suspicious of.
-//
-// Every tool it reports arrives unapproved, including ones seen before that
-// have changed — so a server that grows a tool after approval has grown an
-// inert one.
 func (s *Server) handleProbeMCPServer(w http.ResponseWriter, r *http.Request) {
 	if s.mcpOff(w) {
 		return
@@ -262,60 +254,72 @@ func (s *Server) handleProbeMCPServer(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	srv, err := s.mcp.Get(r.Context(), id)
+	found, err := s.probeMCP(r.Context(), id)
 	if err != nil {
-		fail(w, r, err)
+		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	spec := mcpclient.Spec{
-		Name: srv.Name, Transport: srv.Transport, Timeout: 30 * time.Second,
+	writeJSON(w, http.StatusOK, map[string]any{
+		"tools": found.Tools,
+		// Said rather than silently applied: an operator who cannot see the tool
+		// they were looking for should know the list was cut.
+		"capped":     found.Capped,
+		"cap":        mcpstore.MaxToolsPerServer,
+		"identified": found.Server,
+	})
+}
+
+// probed is what asking a server what it offers came back with.
+type probed struct {
+	Server string
+	Tools  []mcpstore.Tool
+	Capped bool
+}
+
+// probeMCP contacts a server once and records what it says it can do.
+//
+// Shared by the JSON handler and the panel's own button, because the careful
+// part is not the request — it is what is deliberately NOT sent. A probe
+// carries no credentials and no headers: a server that will not say what it
+// offers without one is a server to be suspicious of, and finding out what
+// something is must not cost a token before the operator has agreed to
+// anything. Two copies of that rule would eventually be one copy of it.
+func (s *Server) probeMCP(ctx context.Context, id int64) (probed, error) {
+	srv, err := s.mcp.Get(ctx, id)
+	if err != nil {
+		return probed{}, err
 	}
+	spec := mcpclient.Spec{Name: srv.Name, Transport: srv.Transport, Timeout: 30 * time.Second}
 	if spec.Remote() {
 		slog.Warn("an operator is probing a remote MCP server: this install will contact it, unapproved",
 			"server", srv.Name, "url", srv.URL)
 		spec.URL = srv.URL
-		// Deliberately no headers: see above. A server that will not say what
-		// it offers without a credential is one to be suspicious of, and the
-		// answer to "what is this" must not cost a token before the operator
-		// has agreed to anything.
 		spec.Headers = map[string]string{}
 	} else {
 		slog.Warn("an operator is probing an external MCP server: it will run on this host, unapproved",
 			"server", srv.Name, "command", srv.Command)
 		spec.Command, spec.Args, spec.Dir = srv.Command, srv.Args, srv.Dir
-		// Deliberately nothing: see above.
 		spec.Env = map[string]string{"PATH": osPath(), "HOME": "/tmp"}
 	}
 
-	conn, err := mcpclient.Dial(r.Context(), spec)
+	conn, err := mcpclient.Dial(ctx, spec)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
-		return
+		return probed{}, err
 	}
 	defer conn.Close()
 
-	tools, capped, err := conn.Tools(r.Context(), mcpstore.MaxToolsPerServer)
+	tools, capped, err := conn.Tools(ctx, mcpstore.MaxToolsPerServer)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
-		return
+		return probed{}, err
 	}
-	if err := s.mcp.RecordTools(r.Context(), id, tools); err != nil {
-		fail(w, r, err)
-		return
+	if err := s.mcp.RecordTools(ctx, id, tools); err != nil {
+		return probed{}, err
 	}
-	recorded, err := s.mcp.Tools(r.Context(), id)
+	recorded, err := s.mcp.Tools(ctx, id)
 	if err != nil {
-		fail(w, r, err)
-		return
+		return probed{}, err
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"tools": recorded,
-		// Said rather than silently applied: an operator who cannot see the tool
-		// they were looking for should know the list was cut.
-		"capped":     capped,
-		"cap":        mcpstore.MaxToolsPerServer,
-		"identified": srv.Name,
-	})
+	return probed{Server: srv.Name, Tools: recorded, Capped: capped}, nil
 }
 
 func (s *Server) handleListMCPTools(w http.ResponseWriter, r *http.Request) {

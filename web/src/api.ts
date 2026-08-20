@@ -1006,6 +1006,20 @@ export const api = {
       }),
     unbind: (bindingId: number) => req<void>(`/api/v1/gear-bindings/${bindingId}`, { method: 'DELETE' }),
   },
+  // The order a workflow runs in. Attaching one to an agent is the same shape
+  // as granting it a gear, which is why it reads the same here.
+  planboards: {
+    bind: (wsId: number, planboardId: number, agentId: number | null) =>
+      req<PlanboardBinding>(`/api/v1/workspaces/${wsId}/planboards`, {
+        method: 'POST',
+        body: JSON.stringify({ planboard_id: planboardId, agent_id: agentId }),
+      }),
+    unbind: (wsId: number, planboardId: number, agentId: number | null) =>
+      req<void>(
+        `/api/v1/workspaces/${wsId}/planboards/${planboardId}${agentId === null ? '' : `?agent=${agentId}`}`,
+        { method: 'DELETE' },
+      ),
+  },
   // The named values a gear is given at run time. A gear is given NAMES and
   // reads the VALUES from its own environment; nothing here ever sends a
   // secret's value back, in either direction, after it has been set.
@@ -1581,6 +1595,15 @@ export type GearBinding = {
   gear_name: string
   workspace_id: number
   agent_id: number | null
+}
+
+export type PlanboardBinding = {
+  id: number
+  planboard_id: number
+  planboard: string
+  workspace_id: number
+  agent_id: number | null
+  agent: string
 }
 
 export type WSEvent = {

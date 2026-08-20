@@ -597,14 +597,38 @@ export default function WorkspacePage({ me }: { me: User }) {
                card states what it is in data attributes and this listens once
                on the container — the same delegation the clicks above use. */
             onDragStart={(e) => {
-              const card = (e.target as HTMLElement).closest('[data-instruction-id]')
-              if (!card) return
-              dragging({
-                kind: 'instruction',
-                id: Number(card.getAttribute('data-instruction-id')),
-                name: card.getAttribute('data-instruction-name') ?? '',
-                path: card.getAttribute('data-instruction-path') ?? '',
-              })(e)
+              const el = e.target as HTMLElement
+              const instruction = el.closest('[data-instruction-id]')
+              if (instruction) {
+                dragging({
+                  kind: 'instruction',
+                  id: Number(instruction.getAttribute('data-instruction-id')),
+                  name: instruction.getAttribute('data-instruction-name') ?? '',
+                  path: instruction.getAttribute('data-instruction-path') ?? '',
+                })(e)
+                return
+              }
+              // Gears and plans state themselves the same way. They were left
+              // out when this delegation was written, so two of the three
+              // drawers you can pick something up in did nothing at all.
+              const gear = el.closest('[data-gear-id]')
+              if (gear) {
+                dragging({
+                  kind: 'gear',
+                  id: Number(gear.getAttribute('data-gear-id')),
+                  name: gear.getAttribute('data-gear-name') ?? '',
+                  status: gear.getAttribute('data-gear-status') ?? '',
+                })(e)
+                return
+              }
+              const plan = el.closest('[data-planboard-id]')
+              if (plan) {
+                dragging({
+                  kind: 'planboard',
+                  id: Number(plan.getAttribute('data-planboard-id')),
+                  name: plan.getAttribute('data-planboard-name') ?? '',
+                })(e)
+              }
             }}
           />
         )}

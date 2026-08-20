@@ -7,6 +7,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/catalog"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
+	"github.com/orkcom-tech/cogitorium/internal/planboard"
 	"github.com/orkcom-tech/cogitorium/internal/schedule"
 	"github.com/orkcom-tech/cogitorium/internal/store"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
@@ -52,9 +53,10 @@ func newFixture(t *testing.T) fixture {
 
 	return fixture{
 		st: Stores{
-			Spaces:    spaces,
-			Gears:     gear.NewStore(db),
-			Schedules: schedule.NewStore(db),
+			Spaces:     spaces,
+			Gears:      gear.NewStore(db),
+			Schedules:  schedule.NewStore(db),
+			Planboards: planboard.NewStore(db),
 		},
 		vers:    NewStore(db),
 		wsID:    ws.ID,
@@ -211,3 +213,81 @@ func TestVersionNumbersOnlyGoUp(t *testing.T) {
 }
 
 func ptr(s string) *string { return &s }
+
+// A version restores the marker, not only the plan.
+//
+// This is the half that is easy to leave out and impossible to notice: the
+// steps come back, the workflow looks right, and it silently resumes from
+// wherever the run that went wrong had pushed it. A rollback that returns the
+// map and keeps the wrong pin on it is not a rollback.
+func TestARollbackPutsThePlanBackWhereItStood(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	runner, err := f.st.Spaces.CreateAgent(ctx, f.wsID, "runner", "you run the plan", f.modelID)
+	if err != nil {
+		t.Fatalf("agent: %v", err)
+	}
+	plan, err := f.st.Planboards.Save(ctx, "nightly", "", nil, planboard.ModeResume,
+		[]planboard.Step{{Title: "one"}, {Title: "two"}, {Title: "three"}}, 0, 0)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	binding, err := f.st.Planboards.Bind(ctx, plan.ID, f.wsID, &runner.ID)
+	if err != nil {
+		t.Fatalf("attach: %v", err)
+	}
+	// Two steps done, so the recorded position is somewhere in the middle
+	// rather than at either end where an off-by-one would hide.
+	for range 2 {
+		if _, err := f.st.Planboards.Done(ctx, binding.ID, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	saved, err := Take(ctx, f.st, f.wsID)
+	if err != nil {
+		t.Fatalf("take: %v", err)
+	}
+
+	// Now the workflow goes wrong in both ways a plan can: the marker moves,
+	// and something attaches a plan that was not there when the version was
+	// taken.
+	if _, err := f.st.Planboards.Seek(ctx, binding.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+	stray, err := f.st.Planboards.Save(ctx, "stray", "", nil, planboard.ModeResume,
+		[]planboard.Step{{Title: "not in the version"}}, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.st.Planboards.Bind(ctx, stray.ID, f.wsID, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	missing, err := Restore(ctx, f.st, f.wsID, saved)
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if len(missing) != 0 {
+		t.Fatalf("the restore could not finish: %v", missing)
+	}
+
+	back, err := f.st.Planboards.Bindings(ctx, f.wsID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(back) != 1 {
+		t.Fatalf("after the rollback %d plans are attached; the stray one should have gone with it", len(back))
+	}
+	if back[0].Planboard != "nightly" {
+		t.Fatalf("the wrong plan survived the rollback: %q", back[0].Planboard)
+	}
+	state, err := f.st.Planboards.State(ctx, back[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Step != 3 {
+		t.Fatalf("the plan came back on step %d, not where the version says it stood", state.Step)
+	}
+}

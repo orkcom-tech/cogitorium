@@ -1351,3 +1351,39 @@ button.danger:hover:not(:disabled),
 .card-head h3 {
   margin: 0;
 }
+
+/* A workspace card is a door, and on the screen the server renders it was not.
+ *
+ * The client's list styles `.ws-card`, including the whole-card cursor, hover
+ * and keyboard behaviour. The template draws `card workspace`, so none of it
+ * applied and only the NAME was a link — everything a person actually aims at,
+ * the description, the badges, the empty space, did nothing.
+ *
+ * The link is stretched over the card rather than the card being given a click
+ * handler: it stays a real link with a real href, so it works with JavaScript
+ * switched off, opens in a new tab on a middle click, and is announced as the
+ * one link it is. The controls inside sit above it — they are on the door, not
+ * the door.
+ */
+.card.workspace {
+  position: relative;
+}
+.card.workspace .ws-title::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.card.workspace:hover {
+  background: color-mix(in srgb, var(--text) 3%, var(--surface));
+}
+.card.workspace form,
+.card.workspace details,
+.card.workspace .share-row,
+.card.workspace .sel,
+.card.workspace button,
+.card.workspace select,
+.card.workspace input {
+  position: relative;
+  z-index: 1;
+}

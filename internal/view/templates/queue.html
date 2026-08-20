@@ -18,9 +18,17 @@
   </div>
 
   <h3>Schedules</h3>
-  <form class="row" method="post" action="/schedules">
+  {{/* What it starts and what it says are asked for, because a clock without
+       them is a timer going off in an empty room: a turn with an empty prompt,
+       against nobody. */}}
+  <form class="row" method="post" action="{{.CreateAction}}">
     <input name="name" required placeholder="morning sweep" aria-label="Name">
     <input name="spec" required placeholder="every 15m" aria-label="When">
+    <select name="agent" required aria-label="What it starts">
+      <option value="">which agent…</option>
+      {{range .Targets}}<option value="{{.Name}}">{{.Name}}</option>{{end}}
+    </select>
+    <input name="tell" required placeholder="what to say to it" aria-label="What to say when it fires">
     <input name="tz" placeholder="Europe/Berlin" aria-label="Timezone">
     <button type="submit">add it</button>
   </form>

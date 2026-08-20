@@ -714,6 +714,20 @@ export default function BlueprintEditor({
       const target = agentUnder(e.clientX, e.clientY)
       const where = target ? target.name : 'every agent here'
 
+      if (d.kind === 'planboard') {
+        // A plan on an agent is that agent's running order; on the canvas
+        // itself it is the workflow's, and every agent here shares one
+        // position. Both are ordinary, so a drop on empty space is not a miss.
+        api.planboards
+          .bind(wsId, d.id, target?.id ?? null)
+          .then(() => reloadGraph())
+          .then(() => setLanded({ text: `${d.name} → ${where}. It starts at step 1.` }))
+          .catch((err: unknown) =>
+            setLanded({ text: err instanceof Error ? err.message : `${d.name} could not be attached.` }),
+          )
+        return
+      }
+
       if (d.kind === 'gear') {
         if (bindings.some((b) => b.gear_id === d.id && b.agent_id === (target?.id ?? null))) {
           setLanded({ text: `${where} already has ${d.name}.` })

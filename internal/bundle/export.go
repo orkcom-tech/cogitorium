@@ -78,6 +78,12 @@ func Export(ctx context.Context, s Stores, wsID int64, opts Options) (Bundle, er
 			return Bundle{}, err
 		}
 	}
+	if opts.Planboards && s.Planboards != nil {
+		b.Planboards, err = exportPlanboards(ctx, s, wsID, nameOf)
+		if err != nil {
+			return Bundle{}, err
+		}
+	}
 	if opts.MCP && s.MCP != nil {
 		b.MCPServers, err = exportMCP(ctx, s, wsID, nameOf)
 		if err != nil {
@@ -283,6 +289,37 @@ func exportReads(ctx context.Context, s Stores, wsID int64, branch string, nameO
 			r.Agent = name
 		}
 		out = append(out, r)
+	}
+	return out, nil
+}
+
+// exportPlanboards carries the plans this workspace follows.
+//
+// The steps and who follows them; never the position. A plan is global in the
+// catalogue and attached per workspace, so what belongs in a workspace's
+// bundle is the attachment — and the plan itself, because on the far side
+// there is no catalogue entry to attach to.
+func exportPlanboards(ctx context.Context, s Stores, wsID int64, nameOf map[int64]string) ([]Planboard, error) {
+	bindings, err := s.Planboards.Bindings(ctx, wsID)
+	if err != nil {
+		return nil, fmt.Errorf("export workspace %d: %w", wsID, err)
+	}
+	out := make([]Planboard, 0, len(bindings))
+	for _, b := range bindings {
+		plan, err := s.Planboards.Get(ctx, b.PlanboardID)
+		if err != nil {
+			return nil, fmt.Errorf("export workspace %d: %w", wsID, err)
+		}
+		entry := Planboard{
+			Name: plan.Name, Description: plan.Description, Mode: string(plan.Mode),
+		}
+		for _, st := range plan.Steps {
+			entry.Steps = append(entry.Steps, PlanStep{Title: st.Title, Body: st.Body})
+		}
+		if b.AgentID != nil {
+			entry.BoundTo = nameOf[*b.AgentID]
+		}
+		out = append(out, entry)
 	}
 	return out, nil
 }

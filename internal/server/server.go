@@ -468,6 +468,9 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.route(mux, "GET /api/v1/gears/{id}/approvals", s.handleListGearApprovals)
 	s.routeIn(mux, "PATCH /api/v1/gears/{id}", s.handleSetGearStatus, SetGearStatusBody{})
 	s.route(mux, "DELETE /api/v1/gears/{id}", s.handleDeleteGear)
+	s.route(mux, "GET /api/v1/workspaces/{id}/planboards", s.handleListWorkspacePlanboards)
+	s.route(mux, "POST /api/v1/workspaces/{id}/planboards", s.handleCreatePlanboardBinding)
+	s.route(mux, "DELETE /api/v1/workspaces/{id}/planboards/{planboard}", s.handleDeletePlanboardBinding)
 	s.route(mux, "GET /api/v1/workspaces/{id}/gears", s.handleListGearBindings)
 	s.route(mux, "POST /api/v1/workspaces/{id}/gears", s.handleCreateGearBinding)
 	s.route(mux, "DELETE /api/v1/gear-bindings/{id}", s.handleDeleteGearBinding)
@@ -638,6 +641,13 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.page(mux, "POST /gears/{id}/delete", s.handleDeleteGearForm)
 
 	s.page(mux, "GET /env", s.handleVariablesPage)
+	// The write half of the variables screen. It had none: the form posted to
+	// /env, which the application owns as a client route, so a browser landed
+	// on the app shell and nothing was ever stored.
+	s.page(mux, "POST /env", s.handleSetVariableForm)
+	s.page(mux, "POST /env/{name}/delete", s.handleDeleteVariableForm)
+	s.page(mux, "POST /workspaces/{id}/env", s.handleSetVariableForm)
+	s.page(mux, "POST /workspaces/{id}/env/{name}/delete", s.handleDeleteVariableForm)
 	s.page(mux, "GET /context", s.handleContextPage)
 	s.page(mux, "POST /context/save", s.handleSaveContextForm)
 	s.page(mux, "POST /context/delete", s.handleDeleteContextForm)
@@ -649,6 +659,17 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.page(mux, "POST /models/providers/{id}/models", s.handleCreateModelForm)
 	s.page(mux, "POST /models/{id}/delete", s.handleDeleteModelForm)
 
+	// The write halves of three panels that had none. Every one of these was a
+	// button posting to a path nothing served — see inlets_forms.go.
+	s.page(mux, "POST /workspaces/{id}/receivers", s.handleCreateInletForm)
+	s.page(mux, "POST /receivers/{id}/key", s.handleRotateInletKeyForm)
+	s.page(mux, "POST /receivers/{id}/delete", s.handleDeleteInletForm)
+	s.page(mux, "POST /mcp", s.handleCreateMCPServerForm)
+	s.page(mux, "POST /mcp/{id}/probe", s.handleProbeMCPServerForm)
+	s.page(mux, "POST /mcp/{id}/delete", s.handleDeleteMCPServerForm)
+	s.page(mux, "POST /mcp/tools/{id}/approve", s.handleApproveMCPToolForm)
+	s.page(mux, "POST /workspaces/{id}/schedules", s.handleCreateScheduleForm)
+	s.page(mux, "POST /schedules/{id}/toggle", s.handleToggleScheduleForm)
 	s.page(mux, "GET /planboards", s.handlePlanboardsPage)
 	s.page(mux, "POST /planboards", s.handleSavePlanboardForm)
 	s.page(mux, "POST /planboards/{id}/delete", s.handleDeletePlanboardForm)

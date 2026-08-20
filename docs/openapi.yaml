@@ -1628,6 +1628,42 @@ paths:
       responses:
         default:
           description: see the reference
+  "/api/v1/workspaces/{id}/planboards":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      summary: "Read workspaces/{id}/planboards"
+      responses:
+        default:
+          description: see the reference
+    post:
+      summary: "Create workspaces/{id}/planboards"
+      responses:
+        default:
+          description: see the reference
+  "/api/v1/workspaces/{id}/planboards/{planboard}":
+    parameters:
+      - name: "id"
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: "planboard"
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      summary: "Delete workspaces/{id}/planboards/{planboard}"
+      responses:
+        default:
+          description: see the reference
   "/api/v1/workspaces/{id}/queue":
     parameters:
       - name: "id"

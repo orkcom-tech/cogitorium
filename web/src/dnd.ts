@@ -20,11 +20,13 @@ export type Dragged =
   | { kind: 'gear'; id: number; name: string; status: string }
   | { kind: 'instruction'; id: number; name: string; path: string }
   | { kind: 'mcp'; id: number; name: string; status: string }
+  | { kind: 'planboard'; id: number; name: string }
 
 const TYPE = {
   gear: 'application/x-cogitorium-gear',
   instruction: 'application/x-cogitorium-instruction',
   mcp: 'application/x-cogitorium-mcp',
+  planboard: 'application/x-cogitorium-planboard',
 } as const
 
 /** Handler for onDragStart on whatever is being offered. */
@@ -45,6 +47,7 @@ export function draggedKind(e: DragEvent): Dragged['kind'] | null {
   if (types.includes(TYPE.gear)) return 'gear'
   if (types.includes(TYPE.instruction)) return 'instruction'
   if (types.includes(TYPE.mcp)) return 'mcp'
+  if (types.includes(TYPE.planboard)) return 'planboard'
   return null
 }
 
@@ -57,7 +60,7 @@ export function draggedKind(e: DragEvent): Dragged['kind'] | null {
  * may become an action here.
  */
 export function readDragged(e: DragEvent): Dragged | null {
-  for (const kind of ['gear', 'instruction', 'mcp'] as const) {
+  for (const kind of ['gear', 'instruction', 'mcp', 'planboard'] as const) {
     const raw = e.dataTransfer.getData(TYPE[kind])
     if (!raw) continue
     try {

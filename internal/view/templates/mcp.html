@@ -21,6 +21,9 @@
       <input name="name" required placeholder="jira" aria-label="Name">
       <input name="description" placeholder="our tickets" aria-label="Description">
       <input name="command" placeholder="npx" aria-label="Command">
+      {{/* One per line: a single string would have to be split, and splitting
+           is a shell's opinion about quoting rather than the author's. */}}
+      <textarea name="args" rows="2" placeholder="one argument per line" aria-label="Arguments"></textarea>
       <input name="address" placeholder="https://mcp.example.com/mcp" aria-label="Address">
       <input name="secrets" placeholder="JIRA_TOKEN" aria-label="Named values it is handed">
       <button type="submit">add it</button>

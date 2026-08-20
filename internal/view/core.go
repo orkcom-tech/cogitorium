@@ -956,11 +956,23 @@ type Inlets struct {
 	Agents []string
 	Error  string
 	Notice string
+	// CreateAction is where the "add a receiver" form posts.
+	//
+	// Built here because a receiver belongs to a workspace and this panel is
+	// always inside one. The form used to post to a bare /receivers, which
+	// named no workspace and which nothing served — so the button answered 404.
+	CreateAction string
+	// JustIssued is a key that was created a moment ago, shown once. Empty on
+	// every other render, which is what "once" means.
+	JustIssued string
 }
 
 // EnvName is one named value a gear can be given.
 type EnvName struct {
 	Name string
+	// DeleteAction is where this row's remove button posts. Same reason
+	// Env.SetAction exists.
+	DeleteAction string
 	// Kind is "variable" or "secret". A variable's value is shown afterwards;
 	// a secret's is not, and the difference is the whole reason the two are
 	// separate words rather than a flag.
@@ -994,6 +1006,14 @@ type Env struct {
 	// only time it appears anywhere.
 	JustSet string
 	Error   string
+	// SetAction is where this list's form posts.
+	//
+	// Built here rather than in the template because the same list is two
+	// screens: the install's page and a workspace's drawer, writing to two
+	// different places. The template had one hardcoded path, which was the
+	// install's — and which the application already owns as a client route, so
+	// the form posted into the app shell and nothing was written at all.
+	SetAction string
 }
 
 // Unit is one piece of work on the queue.
@@ -1037,6 +1057,14 @@ type Queue struct {
 	Schedules []Schedule
 	Error     string
 	Notice    string
+	// CreateAction is where the "add it" form posts, for the same reason
+	// Inlets.CreateAction exists: a clock belongs to a workspace.
+	CreateAction string
+	// Targets is what a clock can start. A schedule with no target is a clock
+	// that fires into nothing, so the form asks for one rather than the server
+	// guessing — and the form had no such field at all, which is part of why
+	// nothing behind it was ever written.
+	Targets []PlanTarget
 }
 
 // GearFile is one file of a gear's source.

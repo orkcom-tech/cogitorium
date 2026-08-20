@@ -22,6 +22,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/contextstore"
 	"github.com/orkcom-tech/cogitorium/internal/gear"
 	"github.com/orkcom-tech/cogitorium/internal/mcpstore"
+	"github.com/orkcom-tech/cogitorium/internal/planboard"
 	"github.com/orkcom-tech/cogitorium/internal/secrets"
 	"github.com/orkcom-tech/cogitorium/internal/workspace"
 )
@@ -80,6 +81,35 @@ type Bundle struct {
 	// Absent in a bundle written before this field existed, which is why
 	// nothing depends on it being there.
 	Reads []Reading `json:"reads,omitempty"`
+
+	// Planboards is the order the workflow runs in, and who follows it.
+	//
+	// The steps travel and the POSITION does not. A bundle crosses a machine
+	// boundary: "step 3 of 7" is a fact about a run that happened on the
+	// exporting install, and carrying it would start the receiving install
+	// halfway through a plan it has never run. An imported plan begins at step
+	// one, which is the only honest place for it to begin.
+	//
+	// Absent in a bundle written before this field existed.
+	Planboards []Planboard `json:"planboards,omitempty"`
+}
+
+// Planboard is one written order of work, with its steps and who follows it.
+type Planboard struct {
+	Name        string     `json:"name"`
+	Description string     `json:"description,omitempty"`
+	Mode        string     `json:"mode,omitempty"`
+	Steps       []PlanStep `json:"steps"`
+	// BoundTo is the agent that follows it, or empty for the attachment the
+	// whole workspace shares.
+	BoundTo string `json:"bound_to,omitempty"`
+}
+
+// PlanStep is one step, in the order it is done. The order is the order of
+// this list; a step carrying its own number could disagree with where it sits.
+type PlanStep struct {
+	Title string `json:"title"`
+	Body  string `json:"body,omitempty"`
 }
 
 // Reading is one document an agent reads.
@@ -219,6 +249,9 @@ type Stores struct {
 	Catalog    *catalog.Store
 	Gears      *gear.Store
 	Context    *contextstore.Store
+	// Planboards is nil on an install that has none, and a nil store means a
+	// bundle simply carries no plans rather than failing to export.
+	Planboards *planboard.Store
 	// MCP is nil on an install where external MCP servers are switched off,
 	// and a nil store means a bundle simply carries none — not an error, and
 	// not a reason an export fails.
@@ -232,6 +265,9 @@ type Stores struct {
 type Options struct {
 	Gears   bool
 	Context bool
+	// Planboards carries the plans this workspace follows, with their steps —
+	// never where a plan had got to. See the Planboard comment.
+	Planboards bool
 	// MCP carries the SHAPE of any external MCP server this workspace granted:
 	// what it runs or what it calls, and the names of the values it wants.
 	// Never a credential and never an approval — see the MCPServer comment.

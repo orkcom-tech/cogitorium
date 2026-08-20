@@ -296,3 +296,85 @@ var (
 type errPlain string
 
 func (e errPlain) Error() string { return string(e) }
+
+// The API a canvas uses.
+//
+// The screen's own controls post forms and get a page back; the blueprint is a
+// drawn surface that has to say "this plan, that agent" and then redraw
+// itself, so it needs an answer in JSON rather than a document.
+
+func (s *Server) handleListWorkspacePlanboards(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.workspaceScoped(w, r)
+	if !ok {
+		return
+	}
+	bindings, err := s.plans.Bindings(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	type row struct {
+		planboard.Binding
+		State planboard.State `json:"state"`
+	}
+	out := make([]row, 0, len(bindings))
+	for _, b := range bindings {
+		st, err := s.plans.State(r.Context(), b.ID)
+		if err != nil {
+			fail(w, r, err)
+			return
+		}
+		out = append(out, row{Binding: b, State: st})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"bindings": out})
+}
+
+func (s *Server) handleCreatePlanboardBinding(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.workspaceScoped(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		PlanboardID int64  `json:"planboard_id"`
+		AgentID     *int64 `json:"agent_id"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if _, err := s.plans.Get(r.Context(), in.PlanboardID); err != nil {
+		fail(w, r, err)
+		return
+	}
+	b, err := s.plans.Bind(r.Context(), in.PlanboardID, id, in.AgentID)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, b)
+}
+
+func (s *Server) handleDeletePlanboardBinding(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.workspaceScoped(w, r)
+	if !ok {
+		return
+	}
+	planID, err := strconv.ParseInt(r.PathValue("planboard"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "that is not a plan")
+		return
+	}
+	var agentID *int64
+	if raw := r.URL.Query().Get("agent"); raw != "" {
+		parsed, convErr := strconv.ParseInt(raw, 10, 64)
+		if convErr != nil {
+			writeError(w, http.StatusBadRequest, "that is not an agent")
+			return
+		}
+		agentID = &parsed
+	}
+	if err := s.plans.Unbind(r.Context(), planID, id, agentID); err != nil {
+		fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
