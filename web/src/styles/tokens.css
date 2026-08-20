@@ -1235,7 +1235,16 @@ a[role='tab'].is-current {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--s5);
+  /* The BOX that scrolls is the whole cavity width, so its scrollbar sits at
+     the edge of the screen where a scrollbar belongs. The column of text keeps
+     its measure — it was the reading column that scrolled, which put the bar
+     two hundred pixels short of the edge, floating in the middle of the page.
+     The centring is padding rather than a margin for the same reason. */
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding-block: var(--s5);
+  padding-inline: max(var(--s5), calc((100% - 1100px) / 2));
 }
 
 /* Where an attached plan stands.
