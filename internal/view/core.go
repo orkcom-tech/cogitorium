@@ -365,6 +365,7 @@ func CoreModels() Models {
 		"cog.list.catalog":    Plugins{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.catalogitem": CatalogRow{},
 		"cog.empty.plugins":   Plugins{Ctx: Ctx{T: DefaultStrings()}},
+		"cog.page.pluginact":  PluginAct{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.drawer.terminal": Terminal{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.stage.chat":      Transcript{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.list.messages":   Transcript{Ctx: Ctx{T: DefaultStrings()}},
@@ -750,6 +751,64 @@ type CatalogUpdateRow struct {
 	Available string
 }
 
+// PluginAct is the question asked before the plugin set changes.
+//
+// One screen for one plugin and for twenty, because it is the same question
+// either way and two screens would drift into two answers. It is reached by
+// pressing Disable or Remove on a row exactly as it is reached by picking
+// several and using the bar — the row's button simply arrives here with one id
+// selected.
+//
+// The reason it exists at all is the restart. Almost nothing needs one now —
+// the interface is recomposed in place — but a plugin with a backend still
+// does, and "do you want the server restarted afterwards" is a question with
+// consequences: a restart drops every open connection, including the terminal
+// somebody left running. So it is asked rather than assumed, and asked here
+// rather than as a checkbox nobody reads on a row.
+type PluginAct struct {
+	Ctx Ctx
+	// The verb, and the same verb as three booleans because a template cannot
+	// compare strings and deciding on the model is where that decision belongs.
+	Do      string
+	Disable bool
+	Remove  bool
+	Update  bool
+
+	Items []PluginActRow
+	// Count is len(Items), on the model because the template cannot count. A
+	// sentence that has to say how many is a sentence somebody reads before
+	// pressing a button they cannot undo.
+	Count int
+	// One is the ordinary case and reads differently from several: "Remove
+	// Radar?" rather than "Remove 1 plugin?".
+	Single bool
+	// Only is that one plugin, for the sentence above. Empty when several.
+	Only string
+
+	// NeedsRestart is whether any of these leaves something running that
+	// recomposing cannot reach — a backend. It decides whether the box starts
+	// ticked, and it is why the screen can be honest instead of cautious.
+	NeedsRestart bool
+	// CanRestart is whether this build can restart itself at all. Windows
+	// cannot: there, the answer is to close it and start it again.
+	CanRestart bool
+	Error      string
+}
+
+// PluginActRow is one plugin about to be acted on.
+type PluginActRow struct {
+	ID      string
+	Name    string
+	Version string
+	// Backend is whether this one carries code that keeps running — the only
+	// reason a restart is ever owed.
+	Backend bool
+	// Note is why this one is not quite like the others: nothing newer to
+	// update to, already switched off, gone from disk. Said before the button
+	// rather than discovered after it.
+	Note string
+}
+
 // Terminal is the gate around a shell, which is all of a terminal a template
 // can render.
 //
@@ -765,9 +824,12 @@ type Terminal struct {
 	// not in the words the server already uses.
 	Available bool
 	Reason    string
-	// Started is whether the client has a session open, in which case the gate
-	// stands aside.
-	Started bool
+	// Host is whether the shell is this machine's, as the account the server
+	// runs as, rather than a sandbox. The difference is the whole difference:
+	// one can be thrown away, the other is the operator's own computer, and a
+	// panel that does not say which is lying by omission to whoever types in
+	// it.
+	Host bool
 }
 
 // Attachment is a file that travelled with a message.
@@ -1779,6 +1841,13 @@ func Exemplars() Models {
 		"cog.row.plugin":   examplePlugins(ctx).Items[0],
 		"cog.list.names":   NameList{Label: "Overrides", Names: []string{"cog.row.gear"}},
 		"cog.list.catalog": examplePlugins(ctx),
+		"cog.page.pluginact": PluginAct{
+			Ctx: ctx, Do: "remove", Remove: true, CanRestart: true, NeedsRestart: true, Count: 2,
+			Items: []PluginActRow{
+				{ID: "release-radar", Name: "Release Radar", Version: "1.2.0"},
+				{ID: "midnight", Name: "Midnight", Version: "0.4.1", Backend: true},
+			},
+		},
 		"cog.row.catalogitem": CatalogRow{ID: "release-radar", Name: "Release Radar",
 			Author: "someone", Description: "Watches releases.", Unchecked: true},
 		"cog.empty.plugins": Plugins{Ctx: ctx},

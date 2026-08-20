@@ -109,11 +109,19 @@ type Config struct {
 	// own defaults, which is usually a LimitRange or nothing at all.
 	KubeCPU    string `yaml:"kube_cpu"`
 	KubeMemory string `yaml:"kube_memory"`
-	// Terminal opens a shell in the UI. Off by default: it is interactive
-	// code execution over HTTP, so switching it on is a deliberate act. It
-	// also requires a sandbox — without one the request is refused rather
-	// than served with the server's own file access.
-	Terminal bool `yaml:"terminal"`
+	// Terminal opens a shell in the UI, ON by default.
+	//
+	// It was off, and required a sandbox: without one the request was refused
+	// rather than served with this server's own file access. That is the right
+	// default for a server somebody else operates and the wrong one for the
+	// ordinary case, which is a person running this on their own machine and
+	// wanting the terminal their editor would have given them.
+	//
+	// With a sandbox the shell runs in it, as before. Without one it is a
+	// shell on THIS machine as the account this process belongs to — which is
+	// the same reach the operator already has by sitting at it. Set
+	// `terminal: false` to refuse it entirely; on a shared install, do.
+	Terminal *bool `yaml:"terminal"`
 
 	// MetricsListen is where the Prometheus endpoint listens, e.g.
 	// "127.0.0.1:9090". EMPTY MEANS OFF, and off is the default.
@@ -340,6 +348,7 @@ func Defaults() Config {
 		// spike waits rather than being refused, and small enough that fifty
 		// file deliveries' bytes are a size an operator can reason about.
 		QueueMaxPerWorkspace: 50,
+		Terminal:             boolPtr(true),
 	}
 }
 
@@ -435,7 +444,7 @@ func Load(path, dataDirOverride string) (Config, error) {
 		cfg.KubeMemory = v
 	}
 	if v := os.Getenv("COGITORIUM_TERMINAL"); v != "" {
-		cfg.Terminal = v == "1" || strings.EqualFold(v, "true")
+		cfg.Terminal = boolPtr(v == "1" || strings.EqualFold(v, "true"))
 	}
 	if v := os.Getenv("COGITORIUM_METRICS_LISTEN"); v != "" {
 		cfg.MetricsListen = v
@@ -554,3 +563,12 @@ func (c Config) SlogLevel() slog.Level {
 		return slog.LevelInfo
 	}
 }
+
+// boolPtr is for a setting whose DEFAULT is true: a plain bool cannot tell
+// "the operator wrote false" apart from "the operator wrote nothing", and the
+// two mean opposite things here.
+func boolPtr(v bool) *bool { return &v }
+
+// TerminalOn reports whether the terminal is offered. Unset means yes; see the
+// field's own comment for why the default moved.
+func (c Config) TerminalOn() bool { return c.Terminal == nil || *c.Terminal }

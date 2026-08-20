@@ -374,7 +374,7 @@ func (rt *pluginRuntime) pageAuth(path string) (string, bool) {
 // is a mistake rather than an invitation to serve something close to it.
 func (s *Server) pluginHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rt := s.plugins
+		rt := s.pluginRT()
 		if rt == nil {
 			http.NotFound(w, r)
 			return
@@ -760,7 +760,7 @@ func (s *Server) pluginView(in plugin.Installed, caps plugin.Capabilities) Plugi
 	res := plugin.Resolve(m, caps)
 	v.Tier, v.Available, v.Refusal = string(res.Tier), res.Available, res.Refusal
 
-	rt := s.plugins
+	rt := s.pluginRT()
 	if rt == nil {
 		return v
 	}
@@ -840,7 +840,7 @@ func (s *Server) handleRail(w http.ResponseWriter, r *http.Request) {
 	// place too. It sends its own, because the browser's URL is the only thing
 	// that knows.
 	at := r.URL.Query().Get("at")
-	nav := s.plugins.navFor(at, caller.IsAdmin())
+	nav := s.pluginRT().navFor(at, caller.IsAdmin())
 
 	out := make([]item, 0, len(nav))
 	for _, n := range nav {
@@ -862,3 +862,69 @@ func (s *Server) handleRail(w http.ResponseWriter, r *http.Request) {
 
 // lookOf is look(), named for callers outside this file.
 func lookOf(r *http.Request) (mode, accent string) { return look(r) }
+
+// pluginRT is the composed interface as it stands right now.
+//
+// Never held across a request boundary and never cached in a struct: a handler
+// keeping one would go on rendering the plugins somebody just removed.
+func (s *Server) pluginRT() *pluginRuntime { return s.plugins.Load() }
+
+// recomposePlugins rebuilds the interface from what is on disk now.
+//
+// Composition used to happen once, at boot, so every plugin change was owed a
+// restart before anything on screen moved — and removing a plugin left the
+// entry it added to the menu sitting there through a reload, which reads as the
+// removal having silently failed. Everything a plugin contributes to the
+// INTERFACE — its template overrides, its rail entries, its mounts, its pages
+// and assets — is a pure function of the store on disk, so it can be rebuilt
+// and swapped in while the server runs.
+//
+// What cannot: a backend. Its HTTP routes are attached to the mux at boot and
+// Go's mux has no way to take one back, so a plugin that declares a runtime
+// still owes a restart. That is now the ONLY thing that does — see
+// needsRestart.
+//
+// A composition that fails leaves the previous one in place. The alternative
+// is an install with no interface at all because a plugin somebody was removing
+// happened to break on the way out.
+func (s *Server) recomposePlugins() {
+	rt, err := loadPlugins(s.dataDir)
+	if err != nil {
+		slog.Error("the interface could not be recomposed after a plugin change, so what is on "+
+			"screen is still the previous composition", "err", err)
+		return
+	}
+	s.plugins.Store(rt)
+	slog.Info("interface recomposed", "plugins", len(rt.report.Loaded))
+}
+
+// needsRestart reports whether a change to this plugin leaves something
+// running that recomposing cannot reach.
+//
+// Only a backend does. A plugin with no `needs:` is templates and assets, and
+// those are live the moment the interface is recomposed — telling somebody to
+// restart for one would be asking them to reboot a machine to change a menu.
+func (s *Server) needsRestart(id string) bool {
+	if s.backends != nil {
+		if _, running := s.backends.tier[id]; running {
+			return true
+		}
+	}
+	store, err := plugin.Open(s.dataDir)
+	if err != nil {
+		// Unknown rather than no: better a restart nobody needed than a
+		// backend that quietly did not change.
+		return true
+	}
+	all, err := store.List()
+	if err != nil {
+		return true
+	}
+	for _, in := range all {
+		if in.ID == id {
+			return strings.TrimSpace(in.Manifest.Needs) != ""
+		}
+	}
+	// Gone from disk and not running a backend: nothing is left to restart for.
+	return false
+}

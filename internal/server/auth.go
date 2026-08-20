@@ -81,11 +81,11 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			// would leave an open page rendering unstyled with nothing to
 			// explain it. Only what a manifest named is reachable — never the
 			// bundle directory.
-			if s.plugins.isAsset(r.URL.Path) {
+			if s.pluginRT().isAsset(r.URL.Path) {
 				next.ServeHTTP(w, r)
 				return
 			}
-			auth, declared := s.plugins.pageAuth(r.URL.Path)
+			auth, declared := s.pluginRT().pageAuth(r.URL.Path)
 			if !declared {
 				// Not a page anybody declared. A 404 here rather than a walk
 				// through the credential machinery, so an unknown plugin path

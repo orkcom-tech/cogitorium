@@ -244,9 +244,6 @@ export default function WorkspacePage({ me }: { me: User }) {
   const agentsPanel = useHtmx<HTMLDivElement>(`agents-${wsId}-${selectedAgent?.id ?? 0}`)
   const overlayPanel = useHtmx<HTMLDivElement>(`overlay-${wsId}-${overlay}-${reviewGear ?? 0}`)
   const memoryPanel = useHtmx<HTMLDivElement>(`memory-${wsId}-${selectedAgent?.id ?? 0}`)
-  // Whether the operator has asked for a shell IN THIS SESSION. Never
-  // persisted: a shell is not reconnected, and the gate says so.
-  const [shell, setShell] = useState(false)
 
   // Opening a file goes to the workbench, which is the view a file lives in.
   //
@@ -571,28 +568,30 @@ export default function WorkspacePage({ me }: { me: User }) {
             sandbox="allow-scripts allow-same-origin"
           />
         )}
-        {overlay === 'terminal' &&
-          (shell ? (
-            <div className="dk-body">
-              <TerminalPage workspaceId={wsId} />
-            </div>
-          ) : (
-            /* The gate is the server's, the session is the socket's. What a
-               template can render here is why there is or is not a shell and
-               what starting one costs — including the case the client never
-               showed: an install with no sandbox, which says so instead of
-               offering a button that fails. */
+        {overlay === 'terminal' && (
+          /* Opening the panel IS starting the shell. It used to be a button,
+             and the panel behind it explained that the session would not come
+             back — both of which were describing a limitation rather than a
+             design. The session outlives the panel now, so there is nothing
+             left to ask permission for.
+
+             The description above it is still the server's, through the same
+             composed stack as every other drawer: it says which machine is on
+             the other end, or why there is nothing there, and a plugin
+             overriding cog.drawer.terminal changes it. The socket below it is
+             the client's, because a live PTY is not a thing a template can
+             render. */
+          <div className="dk-body">
             <div
               key="terminal-gate"
               ref={terminalGate}
               hx-get={`/workspaces/${wsId}/drawers/terminal`}
               hx-trigger="load"
               hx-swap="innerHTML"
-              onClick={(e) => {
-                if ((e.target as HTMLElement).closest('[data-start-shell]')) setShell(true)
-              }}
             />
-          ))}
+            <TerminalPage workspaceId={wsId} described />
+          </div>
+        )}
         {/* Three panels the SERVER renders now, swapped in by htmx.
             This is the seam the conversion is happening on: the workspace —
             its chat, its blueprint, its editor — is still the client's, and

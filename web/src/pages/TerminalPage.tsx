@@ -7,9 +7,18 @@ import { session } from '../session'
 import { PanelTitle } from '../deck/Drawer'
 import StageSlot from '../StageSlot'
 
-// A shell, running in the same sandbox gears run in — not on the server.
-// The server refuses to open one without that sandbox, so what you get here
-// cannot read the database or the provider keys in it.
+// A shell.
+//
+// Where there is a sandbox it runs inside it, next to where gears run. Where
+// there is not — the ordinary case of somebody running this on their own
+// machine — it is that machine, as the account this server runs as. The status
+// line says which, every time, because the two are not the same thing to type
+// `rm` into and nobody should have to guess.
+//
+// It opens with the panel and it stays open. The session lives on the server
+// and outlives this socket, so leaving the screen and coming back returns to
+// the same shell, in the same directory, with what it printed while you were
+// gone — the way the terminal in an editor behaves.
 
 /**
  * The terminal's colours, taken from the page rather than assumed.
@@ -61,7 +70,19 @@ function isLight(color: string): boolean {
   // The text is what was measured, so a LIGHT text means a dark ground.
   return 0.2126 * r + 0.7152 * g + 0.0722 * b < 128
 }
-export default function TerminalPage({ workspaceId }: { workspaceId?: number }) {
+/**
+ * `described` means something above this already says what the shell is and
+ * why it might not be here — the workspace drawer renders the server's own
+ * panel for exactly that. Saying it twice, in two sets of words, is how two
+ * descriptions start disagreeing.
+ */
+export default function TerminalPage({
+  workspaceId,
+  described,
+}: {
+  workspaceId?: number
+  described?: boolean
+}) {
   const [status, setStatus] = useState<TerminalStatus | null>(null)
   const [connected, setConnected] = useState(false)
   const holder = useRef<HTMLDivElement>(null)
@@ -148,6 +169,8 @@ export default function TerminalPage({ workspaceId }: { workspaceId?: number }) 
   }, [allowed, workspaceId])
 
   if (status && !allowed) {
+    // The drawer's own panel already said this, in the server's words.
+    if (described) return null
     return (
       <div className="page">
         <StageSlot screen="terminal" />
@@ -155,26 +178,36 @@ export default function TerminalPage({ workspaceId }: { workspaceId?: number }) 
         <div className="card">
           <p>A terminal is not available here.</p>
           <p className="error">{blockedReason}</p>
-          <p className="hint">
-            Gear execution backend: <code>{status.backend}</code>. The terminal runs in that same sandbox — the
-            server refuses to open a shell that would hold its own file access.
-          </p>
         </div>
       </div>
     )
   }
+
+  // Where the other end is, for THIS terminal. `host` is the machine the
+  // server runs on, as the account it runs as; anything else is the sandbox
+  // gears run in, which has no network and nothing of the server's mounted.
+  // The two scopes can differ, so the scope decides which field to read.
+  const onHost = (workspaceId ? status?.backend : status?.global_backend) === 'host'
 
   return (
     <div className={workspaceId ? 'terminal-embedded' : 'page terminal-page'}>
       <div className="row">
         {!workspaceId && <PanelTitle>Terminal</PanelTitle>}
         <span className="muted">
-          {connected ? 'connected' : 'connecting…'} · sandboxed, no network, nothing of the server's mounted
+          {connected ? 'connected' : 'connecting…'}
+          {described
+            ? ''
+            : onHost
+              ? " · this machine, as this server's user"
+              : " · sandboxed, no network, nothing of the server's mounted"}
           {/* "a copy of", not "this workspace's files". The container gets a
-              copy and nothing is carried back out, so a file written here is
+              copy and nothing is carried back out, so a file written there is
               gone when the session ends. Saying otherwise is how someone loses
-              an hour's work and only finds out afterwards. */}
-          {workspaceId ? " · a copy of this workspace's files, not carried back" : ''}
+              an hour's work and only finds out afterwards. A host shell is the
+              real directory, so this warning would be a lie there. */}
+          {workspaceId && !onHost && !described
+            ? " · a copy of this workspace's files, not carried back"
+            : ''}
         </span>
       </div>
       <div className="terminal-holder" ref={holder} />

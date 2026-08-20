@@ -116,10 +116,11 @@ func newInstallWithSandbox(t *testing.T, listen string, searcher *websearch.Sear
 		// nothing is what proves the 403 came from the role check rather than
 		// from a machine that happens to have no contextd either way.
 		ContextdPath: filepath.Join(dir, "no-such-contextd"),
-		// The terminal must be switched on, or every terminal request is
-		// refused for being disabled and an admin-only test would pass
+		// Said out loud rather than left to the default, which is also on: if
+		// the default ever moves, every terminal request here would be refused
+		// for being switched off and the admin-only test below would pass
 		// without an admin check existing at all.
-		Terminal: true,
+		Terminal: terminalOn,
 	}
 	if tweak != nil {
 		tweak(&cfg)
@@ -950,3 +951,7 @@ func TestEgressGrantNeedsASignedInOperator(t *testing.T) {
 		t.Fatalf("grant was not stored: %+v err=%v", grants, err)
 	}
 }
+
+// terminalOn is config.Config.Terminal said explicitly. The field is a *bool
+// so that "false" and "unset" can differ; a fixture that wants it on says so.
+var terminalOn = func() *bool { on := true; return &on }()

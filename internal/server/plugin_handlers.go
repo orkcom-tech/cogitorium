@@ -23,12 +23,17 @@ import (
 // Changing the plugin set from the browser.
 //
 // Every verb here answers with whether a restart is actually needed, and the
-// answer is computed rather than assumed. Installing does not need one: a new
-// plugin arrives switched off, so nothing that is running has changed.
-// Enabling, disabling, reordering and removing something that was live all do.
+// answer is computed rather than assumed. Saying "restart required" after every
+// action would be easier and would teach an operator to ignore it, which is the
+// same as not saying it.
 //
-// Saying "restart required" after every action would be easier and would teach
-// an operator to ignore it, which is the same as not saying it.
+// Almost nothing needs one now. The interface is recomposed in place after each
+// of these — see recomposePlugins — so enabling, disabling, reordering and
+// removing all take effect on the next page, which is what somebody who just
+// removed a plugin and reloaded expects to see. What a recomposition cannot
+// reach is a backend: its routes were attached to the mux at boot and Go's mux
+// cannot take one back. So the restart line is for exactly those plugins, and
+// needsRestart is the one place that decides it.
 
 // maxPluginUpload bounds an uploaded bundle. Generous next to what a template
 // plugin weighs, and far under what the unpacker will refuse.
@@ -179,18 +184,28 @@ func (s *Server) pluginSwitch(w http.ResponseWriter, r *http.Request, on bool) {
 		return
 	}
 	in.Enabled, in.Order = positionIn(after, id)
-	v := s.pluginView(in, s.pluginCaps())
 
+	// Recomposed BEFORE the card is built, because the card reports whether the
+	// plugin is LIVE and that is read from the composed stack. Built first, a
+	// plugin somebody just enabled came back labelled "on, not loading" — which
+	// is the screen's word for broken.
 	changed := !sameOrder(before, after)
+	if changed {
+		s.recomposePlugins()
+	}
+	v := s.pluginView(in, s.pluginCaps())
 	verb := "disabled"
 	if on {
 		verb = "enabled"
 	}
 	slog.Info("plugin "+verb, "plugin", id, "by", callerFrom(r.Context()).Name)
+	// A restart only for what recomposing cannot reach: see needsRestart. The
+	// templates and the rail are already current by the time this answers.
+	restart := changed && s.needsRestart(id)
 	writeJSON(w, http.StatusOK, pluginActionResult{
-		Restart: changed,
+		Restart: restart,
 		Plugin:  &v,
-		Message: restartLine(fmt.Sprintf("%s %s.", in.Manifest.Name, verb), changed),
+		Message: restartLine(fmt.Sprintf("%s %s.", in.Manifest.Name, verb), restart),
 	})
 }
 
@@ -223,11 +238,16 @@ func (s *Server) handleOrderPlugins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	changed := !sameOrder(before, in.Order)
+	if changed {
+		// Precedence decides which plugin's version of a name renders, and
+		// that is entirely a property of the composed stack — so a reorder
+		// takes effect immediately and owes nobody a restart.
+		s.recomposePlugins()
+	}
 	slog.Info("plugin order set", "order", strings.Join(in.Order, ","),
 		"by", callerFrom(r.Context()).Name)
 	writeJSON(w, http.StatusOK, pluginActionResult{
-		Restart: changed,
-		Message: restartLine("Order saved.", changed),
+		Message: "Order saved.",
 	})
 }
 
@@ -241,24 +261,32 @@ func (s *Server) handleRemovePlugin(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 
-	// Whether it was live decides whether anything running changes. Asked
-	// before the removal, because afterwards there is nothing to ask.
+	// Whether it was live decides whether anything changes at all. Asked
+	// before the removal, because afterwards there is nothing to ask — and so
+	// is whether a backend of its own is left running, which is the only thing
+	// removal cannot take away by itself.
 	wasLive := false
-	if s.plugins != nil {
-		for _, loaded := range s.plugins.report.Loaded {
+	if rt := s.pluginRT(); rt != nil {
+		for _, loaded := range rt.report.Loaded {
 			if loaded == id {
 				wasLive = true
 			}
 		}
 	}
+	restart := wasLive && s.needsRestart(id)
+
 	if err := store.Remove(id); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Everything it contributed to the interface goes now, rather than at the
+	// next restart. A removal that leaves its menu entry sitting there through
+	// a reload reads as a removal that did not work.
+	s.recomposePlugins()
 	slog.Info("plugin removed", "plugin", id, "by", callerFrom(r.Context()).Name)
 	writeJSON(w, http.StatusOK, pluginActionResult{
-		Restart: wasLive,
-		Message: restartLine(fmt.Sprintf("%s removed.", id), wasLive),
+		Restart: restart,
+		Message: restartLine(fmt.Sprintf("%s removed.", id), restart),
 	})
 }
 
@@ -282,14 +310,14 @@ func (s *Server) handlePreviewPlugin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "which name?")
 		return
 	}
-	if s.plugins == nil || s.plugins.set == nil {
+	if rt := s.pluginRT(); rt == nil || rt.set == nil {
 		writeError(w, http.StatusServiceUnavailable, "nothing is composed on this install")
 		return
 	}
 	// Only what this plugin actually contributes. Otherwise this is a way to
 	// render any template with any exemplar through an id in a URL.
 	owns := false
-	for _, e := range s.plugins.set.Ledger().For(id) {
+	for _, e := range s.pluginRT().set.Ledger().For(id) {
 		if e.Name == name {
 			owns = true
 		}
@@ -300,7 +328,7 @@ func (s *Server) handlePreviewPlugin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	html, err := view.Preview(s.plugins.set, name)
+	html, err := view.Preview(s.pluginRT().set, name)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -371,21 +399,23 @@ func (s *Server) handleRevokePlugin(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
 	wasLive := false
-	if s.plugins != nil {
-		for _, loaded := range s.plugins.report.Loaded {
+	if rt := s.pluginRT(); rt != nil {
+		for _, loaded := range rt.report.Loaded {
 			if loaded == id {
 				wasLive = true
 			}
 		}
 	}
+	restart := wasLive && s.needsRestart(id)
 	if err := store.Revoke(id); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	s.recomposePlugins()
 	slog.Warn("a plugin's approval was withdrawn", "plugin", id, "by", caller.Name)
 	writeJSON(w, http.StatusOK, pluginActionResult{
-		Restart: wasLive,
-		Message: restartLine(fmt.Sprintf("%s is no longer approved and has been disabled.", id), wasLive),
+		Restart: restart,
+		Message: restartLine(fmt.Sprintf("%s is no longer approved and has been disabled.", id), restart),
 	})
 }
 

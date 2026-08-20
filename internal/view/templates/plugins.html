@@ -49,6 +49,21 @@
              aria-label="Search plugins">
     </form>
     {{template "cog.list.plugins" .}}
+
+    {{/* The bar, after the list rather than before it, because that is what
+         lets it appear on its own: `.plugin-list:has(:checked) + .plugin-bulk`
+         is a CSS sibling rule, and nothing here needs a script to know that
+         something is ticked.
+
+         Its buttons and the rows' checkboxes are joined by the form= attribute
+         rather than by nesting, because every row already contains forms of its
+         own and a form inside a form is not a thing HTML has. */}}
+    <form class="plugin-bulk" id="plugin-bulk" method="post" action="/plugins/act">
+      <span class="bulk-label">With the ticked plugins:</span>
+      <button type="submit" name="do" value="disable">Switch off</button>
+      <button type="submit" name="do" value="update">Update</button>
+      <button type="submit" name="do" value="remove" class="danger">Remove</button>
+    </form>
   {{end}}
 </main>
 {{end}}
@@ -59,6 +74,12 @@
 
 {{define "cog.row.plugin"}}<section class="card">
   <header class="plugin-head">
+    {{/* Joined to the bar below the list by form=, not by nesting: this row
+         already contains forms of its own. */}}
+    <label class="pick" title="Select {{.Name}}">
+      <input type="checkbox" name="ids" value="{{.ID}}" form="plugin-bulk"
+             aria-label="Select {{.Name}}">
+    </label>
     <h3>{{.Name}} <span class="hint">{{.Version}}</span></h3>
     {{if .StateTone}}<span class="badge is-{{.StateTone}}">{{.State}}</span>{{else}}<span class="badge">{{.State}}</span>{{end}}
   </header>
@@ -108,7 +129,13 @@
       {{if .Pending}}
         <form method="post" action="/plugins/{{.ID}}/approve"><button type="submit">Approve</button></form>
       {{else if .Enabled}}
-        <form method="post" action="/plugins/{{.ID}}/disable"><button type="submit">Disable</button></form>
+        {{/* Through the same question the bar asks, with this one plugin
+             selected. One screen decides what happens and whether to restart,
+             whether it is one plugin or twenty. */}}
+        <form method="post" action="/plugins/act">
+          <input type="hidden" name="ids" value="{{.ID}}">
+          <button type="submit" name="do" value="disable">Disable</button>
+        </form>
         {{if .CanMoveUp}}<form method="post" action="/plugins/{{.ID}}/up">
           <button type="submit" title="Earlier layer">↑</button></form>{{end}}
         <form method="post" action="/plugins/{{.ID}}/down">
@@ -120,9 +147,9 @@
         <button type="submit" title="Withdraw the approval and switch it off">Withdraw approval</button>
       </form>{{end}}
     {{end}}
-    <form method="post" action="/plugins/{{.ID}}/remove"
-          hx-confirm="Remove {{.Name}}? Its files go; anything it wrote stays.">
-      <button type="submit" class="danger">Remove</button>
+    <form method="post" action="/plugins/act">
+      <input type="hidden" name="ids" value="{{.ID}}">
+      <button type="submit" name="do" value="remove" class="danger">Remove</button>
     </form>
     {{if .Docs}}<a class="action" href="{{.Docs}}" target="_blank" rel="noreferrer noopener">Documentation</a>{{end}}
     {{if .Source}}<a class="action" href="{{.Source}}" target="_blank" rel="noreferrer noopener">Source</a>{{end}}
@@ -202,3 +229,83 @@
     <span class="hint">Arrives switched off. You approve it after reading it, like anything else.</span>
   </div>
 </section>{{end}}
+
+{{/*
+  The question before the plugin set changes.
+
+  One screen for one plugin and for twenty. The row's own Disable and Remove
+  buttons arrive here with a single id selected, and the bar at the bottom of
+  the list arrives here with whatever is ticked — so there is one place that
+  asks, one place that explains what a restart costs, and no chance of the two
+  paths giving different answers.
+*/}}
+{{define "cog.page.pluginact"}}
+<main class="page plugin-act">
+  <h2>
+    {{if .Single}}
+      {{if .Remove}}Remove {{.Only}}?{{end}}
+      {{if .Disable}}Switch {{.Only}} off?{{end}}
+      {{if .Update}}Update {{.Only}}?{{end}}
+    {{else}}
+      {{if .Remove}}Remove {{.Count}} plugins?{{end}}
+      {{if .Disable}}Switch {{.Count}} plugins off?{{end}}
+      {{if .Update}}Update {{.Count}} plugins?{{end}}
+    {{end}}
+  </h2>
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+
+  {{if .Remove}}<p class="hint">
+    Their files go. Anything they wrote — rows in the database, files in a workspace — stays, because
+    it was never theirs to take back.
+  </p>{{end}}
+  {{if .Disable}}<p class="hint">
+    They stay installed and stay approved. Switching one back on is one press and needs no restart.
+  </p>{{end}}
+  {{if .Update}}<p class="hint">
+    Each is replaced by the version the catalog lists, and arrives switched off — an update is new
+    code, and new code is approved after it is read, like anything else.
+  </p>{{end}}
+
+  <ul class="act-list">
+    {{range .Items}}<li>
+      <strong>{{.Name}}</strong> <span class="hint">{{.Version}}</span>
+      {{if .Backend}}<span class="badge is-warn">runs code</span>{{end}}
+      {{if .Note}}<span class="hint">— {{.Note}}</span>{{end}}
+    </li>{{end}}
+  </ul>
+
+  <form method="post" action="/plugins/act/run" class="act-form">
+    <input type="hidden" name="do" value="{{.Do}}">
+    {{range .Items}}<input type="hidden" name="ids" value="{{.ID}}">{{end}}
+
+    {{/* The one question this screen exists to ask. Ticked by default only
+         when something here actually needs it, because a box that is always
+         ticked is a box nobody reads. */}}
+    {{if .CanRestart}}
+      <label class="act-restart">
+        <input type="checkbox" name="restart" value="1"{{if .NeedsRestart}} checked{{end}}>
+        Restart Cogitorium afterwards
+      </label>
+      {{if .NeedsRestart}}<p class="hint">
+        One of these runs code of its own, and code that is already running cannot be taken out from
+        under itself. Without a restart the screens change and that code keeps going.
+      </p>{{else}}<p class="hint">
+        Not needed for these — what they contribute is rebuilt on the spot. Ticking it drops every
+        open connection, including any terminal you have running.
+      </p>{{end}}
+    {{else if .NeedsRestart}}
+      <p class="hint">
+        One of these runs code of its own, and this build cannot restart itself. Close Cogitorium and
+        start it again when you are ready.
+      </p>
+    {{end}}
+
+    <div class="act-actions">
+      <button type="submit" class="{{if .Remove}}danger{{else}}primary{{end}}">
+        {{if .Remove}}Remove{{end}}{{if .Disable}}Switch off{{end}}{{if .Update}}Update{{end}}
+      </button>
+      <a class="action" href="/plugins">Cancel</a>
+    </div>
+  </form>
+</main>
+{{end}}

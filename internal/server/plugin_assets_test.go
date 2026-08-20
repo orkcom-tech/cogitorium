@@ -154,7 +154,7 @@ func TestThePluginViewReportsUndeclaredOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.plugins = &pluginRuntime{set: set, report: report}
+	s.plugins.Store(&pluginRuntime{set: set, report: report})
 
 	v := s.pluginView(in, plugin.Capabilities{})
 	if !v.Live {
@@ -192,7 +192,7 @@ func TestAnEnabledButBrokenPluginIsNotLive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.plugins = &pluginRuntime{set: set, report: report}
+	s.plugins.Store(&pluginRuntime{set: set, report: report})
 
 	v := s.pluginView(in, plugin.Capabilities{})
 	if v.Live {

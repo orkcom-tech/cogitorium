@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -13,11 +14,16 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/workdir"
 )
 
-// The terminal is deliberately hard to switch on. It is interactive code
-// execution reachable over HTTP, so it requires all three of: the operator
-// turning it on in configuration, an admin caller, and a working sandbox.
-// Without the sandbox it would be a shell with the server's own file
-// access — which is exactly the hole that made sandboxing necessary.
+// The terminal is on by default, and is the shell of the machine this server
+// runs on, as the account it runs as — the terminal a desktop application would
+// have given you. That is the same reach the operator already has by sitting at
+// the machine. Where it is NOT that is one case, and onThisMachine is where it
+// is decided.
+//
+// Two gates remain, and they are the ones that matter: `terminal: false`
+// refuses it outright, for an install other people can reach, and the
+// server-wide shell is an administrator's. Everything else about a terminal —
+// where it starts, what it remembers — belongs to the person using it.
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
@@ -46,22 +52,58 @@ func sameHost(origin, host string) bool {
 // may use that workspace.
 func (s *Server) handleTerminalStatus(w http.ResponseWriter, r *http.Request) {
 	caller := callerFrom(r.Context())
-	reason := ""
-	switch {
-	case !s.terminalEnabled:
-		reason = "disabled in configuration (set terminal: true to enable)"
-	case s.interactive == nil:
-		reason = "no sandbox available — a terminal would run with this server's file access, so it stays off"
-	}
+	reason := s.terminalRefusal()
 	writeJSON(w, http.StatusOK, map[string]any{
-		// Workspace terminals need only a working sandbox; the caller's
-		// access to the workspace itself is checked when one is opened.
+		// A workspace terminal is open to whoever may use the workspace; that
+		// is checked when one is opened, not here.
 		"available":        reason == "",
 		"global_available": reason == "" && caller.IsAdmin(),
 		"reason":           reason,
 		"global_reason":    globalReason(reason, caller.IsAdmin()),
-		"backend":          s.gearExec.Backend(),
+		// Two answers, because the two shells can land on different machines:
+		// see onThisMachine. One field would have to pick a scope and be wrong
+		// on the other screen.
+		"backend":        s.terminalBackend(true),
+		"global_backend": s.terminalBackend(false),
 	})
+}
+
+// onThisMachine decides which machine a terminal opens on.
+//
+// The answer people expect, and the one asked for, is THIS machine — the
+// server's own shell, as the account it runs as, the way the terminal in an
+// editor works. A terminal that silently lands in a container because Docker
+// happens to be installed is a terminal whose `ls` shows somebody else's
+// filesystem.
+//
+// The one exception is a workspace terminal on an install other people can
+// reach. A workspace is open to its members, and a member is not the operator:
+// handing them the server's own shell would hand them its database and the
+// provider keys in it. So on a shared install they get the sandbox, which is
+// what they had before and what a workspace terminal was always for. On a
+// local install — one person, their own machine — that distinction is between
+// somebody and themselves, and it buys nothing.
+func (s *Server) onThisMachine(workspaceScoped bool) bool {
+	switch {
+	case s.hostShell == nil:
+		return false // nothing of this machine's to open
+	case s.interactive == nil:
+		return true // nothing else to open
+	case !workspaceScoped:
+		return true // the server-wide shell is an admin's, and IS this machine
+	default:
+		return s.localInstall
+	}
+}
+
+// terminalBackend names where a shell would run, because "a terminal" means
+// two different things here and somebody about to type into one deserves to
+// know which they have: a container they can throw away, or their computer.
+func (s *Server) terminalBackend(workspaceScoped bool) string {
+	if s.onThisMachine(workspaceScoped) {
+		return "host"
+	}
+	return s.gearExec.Backend()
 }
 
 func globalReason(reason string, admin bool) string {
@@ -83,14 +125,17 @@ func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requireAdmin(w, r); !ok {
 		return
 	}
-	s.serveTerminal(w, r, "", "cogitorium")
+	s.serveTerminal(w, r, "", "cogitorium", false)
 }
 
-// handleWorkspaceTerminal is the shell for one workspace, open to whoever
-// may use that workspace. It grants nothing new: anyone who can reach a
-// workspace can already run code in this same sandbox by writing a gear and
-// dry-running it. Scoping the shell to the workspace makes that capability
-// visible and bounded instead of tacit.
+// handleWorkspaceTerminal is the shell for one workspace, open to whoever may
+// use that workspace.
+//
+// On a shared install it grants nothing new: anyone who can reach a workspace
+// can already run code in that same sandbox by writing a gear and dry-running
+// it, and scoping the shell to the workspace makes that capability visible and
+// bounded instead of tacit. On a one-person install it is that person's own
+// machine, in that workspace's directory — see onThisMachine.
 func (s *Server) handleWorkspaceTerminal(w http.ResponseWriter, r *http.Request) {
 	if !s.terminalReady(w, r) {
 		return
@@ -104,7 +149,7 @@ func (s *Server) handleWorkspaceTerminal(w http.ResponseWriter, r *http.Request)
 		fail(w, r, err)
 		return
 	}
-	s.serveTerminal(w, r, s.workspaceDir(id), ws.Name)
+	s.serveTerminal(w, r, s.workspaceDir(id), ws.Name, true)
 }
 
 // workspaceDir is the per-workspace scratch directory copied into the
@@ -117,22 +162,33 @@ func (s *Server) workspaceDir(wsID int64) string {
 }
 
 func (s *Server) terminalReady(w http.ResponseWriter, r *http.Request) bool {
-	if !s.terminalEnabled {
-		writeError(w, http.StatusForbidden, "the terminal is disabled in this server's configuration")
-		return false
-	}
-	if s.interactive == nil {
-		writeError(w, http.StatusForbidden,
-			"no sandbox available: a terminal would run with this server's file access, so it is refused")
+	if reason := s.terminalRefusal(); reason != "" {
+		writeError(w, http.StatusForbidden, "there is no terminal here: "+reason)
 		return false
 	}
 	return true
 }
 
-// serveTerminal upgrades to a WebSocket and joins it to a shell running in
-// the sandbox. Messages are text frames: keystrokes as-is, and a resize as
-// a JSON object, which is the only structured message the protocol needs.
-func (s *Server) serveTerminal(w http.ResponseWriter, r *http.Request, dir, label string) {
+// terminalRefusal is why there is no terminal, or "" when there is one.
+//
+// One sentence in one place, because three surfaces ask this question — the
+// status the app reads, the panel the workspace drawer renders, and the socket
+// itself — and three separate answers is how an install ends up telling
+// somebody two different stories about why their shell will not open.
+func (s *Server) terminalRefusal() string {
+	switch {
+	case !s.terminalEnabled:
+		return "switched off in this server's configuration (terminal: false)"
+	case s.interactive == nil && s.hostShell == nil:
+		return "there is no sandbox to host a shell, and this platform has none of its own to offer"
+	}
+	return ""
+}
+
+// serveTerminal upgrades to a WebSocket and joins it to a shell. Messages are
+// text frames: keystrokes as-is, and a resize as a JSON object, which is the
+// only structured message the protocol needs.
+func (s *Server) serveTerminal(w http.ResponseWriter, r *http.Request, dir, label string, workspaceScoped bool) {
 	caller := callerFrom(r.Context())
 
 	rows := uint16(parseUint(r.URL.Query().Get("rows"), 24))
@@ -151,50 +207,73 @@ func (s *Server) serveTerminal(w http.ResponseWriter, r *http.Request, dir, labe
 	}
 	defer conn.Close()
 
-	session, err := s.interactive.Start(r.Context(), sandbox.ShellSpec(rows, cols, dir, label))
+	// THE session for this person and this place, not A session.
+	//
+	// Every upgrade used to start a fresh shell and kill it on disconnect, so
+	// walking to another screen and coming back lost the directory you were in
+	// and everything you had run. That is not a terminal; a terminal is a place
+	// you leave and come back to. So the shell outlives the connection, and
+	// reattaching replays what it printed while nobody was watching.
+	key := caller.Name + "\x00" + label
+	onHost := s.onThisMachine(workspaceScoped)
+	session, fresh, err := s.terminals.attach(key, func() (sandbox.Session, error) {
+		// WithoutCancel in both: the request ends when this browser goes away,
+		// and the shell must not end with it.
+		if onHost {
+			return s.hostShell.Session(context.WithoutCancel(r.Context()), rows, cols, dir)
+		}
+		return s.interactive.Start(context.WithoutCancel(r.Context()), sandbox.ShellSpec(rows, cols, dir, label))
+	})
 	if err != nil {
 		slog.Error("terminal could not start", "user", caller.Name, "scope", label, "err", err)
 		conn.WriteMessage(websocket.TextMessage, []byte("could not start a terminal: "+err.Error()+"\r\n"))
 		return
 	}
-	defer session.Close()
-	_ = session.Resize(rows, cols)
-	slog.Info("terminal opened", "user", caller.Name, "scope", label, "rows", rows, "cols", cols)
-	defer slog.Info("terminal closed", "user", caller.Name, "scope", label)
+	_ = session.resize(rows, cols)
+	slog.Info("terminal attached", "user", caller.Name, "scope", label,
+		"backend", s.terminalBackend(workspaceScoped), "new", fresh, "rows", rows, "cols", cols)
+	defer slog.Info("terminal detached", "user", caller.Name, "scope", label)
 
-	// Container output to the browser.
+	out, history := session.take()
+	defer session.release(out)
+	if len(history) > 0 {
+		// What happened while nobody was here, before anything new — so coming
+		// back looks like returning to a window rather than opening one.
+		if err := conn.WriteMessage(websocket.TextMessage, history); err != nil {
+			return
+		}
+	}
+
+	// The shell's output to this browser.
 	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, err := session.Read(buf)
-			if n > 0 {
-				if err := conn.WriteMessage(websocket.TextMessage, buf[:n]); err != nil {
-					return
-				}
-			}
-			if err != nil {
-				conn.WriteMessage(websocket.TextMessage, []byte("\r\n[session ended]\r\n"))
-				conn.WriteControl(websocket.CloseMessage,
-					websocket.FormatCloseMessage(websocket.CloseNormalClosure, "session ended"),
-					time.Now().Add(time.Second))
+		for chunk := range out {
+			if err := conn.WriteMessage(websocket.TextMessage, chunk); err != nil {
 				return
 			}
 		}
+		// The channel closes when the shell ends OR when another connection
+		// took the session over. Only the first is worth saying out loud.
+		if session.done() {
+			conn.WriteMessage(websocket.TextMessage, []byte("\r\n[session ended]\r\n"))
+			conn.WriteControl(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseNormalClosure, "session ended"),
+				time.Now().Add(time.Second))
+		}
 	}()
 
-	// Browser input to the container.
+	// The browser's keystrokes to the shell.
 	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
 			return
 		}
 		if resize, ok := asResize(data); ok {
-			if err := session.Resize(resize.Rows, resize.Cols); err != nil {
+			if err := session.resize(resize.Rows, resize.Cols); err != nil {
 				slog.Debug("terminal resize failed", "err", err)
 			}
 			continue
 		}
-		if _, err := session.Write(data); err != nil {
+		if err := session.write(data); err != nil {
 			return
 		}
 	}
@@ -226,4 +305,14 @@ func parseUint(s string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+// workspaceShellNote is the second half of the startup warning: the server-wide
+// shell is always this machine, and a workspace's may not be. Saying which
+// costs one line at start and saves an operator working it out from behaviour.
+func workspaceShellNote(s *Server) string {
+	if s.onThisMachine(true) {
+		return "also this machine"
+	}
+	return "sandboxed — this install is reachable by other people"
 }

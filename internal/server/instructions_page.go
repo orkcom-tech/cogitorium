@@ -164,7 +164,7 @@ func (s *Server) instructionsModel(r *http.Request, problem string) view.Instruc
 // and wrapping that piece in a whole document would make the browser parse a
 // page to use one div of it.
 func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, page, fragment, title string, model any) {
-	rt := s.plugins
+	rt := s.pluginRT()
 	if rt == nil || rt.set == nil {
 		http.Error(w, "this install has no composed templates", http.StatusInternalServerError)
 		return

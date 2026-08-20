@@ -176,20 +176,16 @@ func humanBytes(n int64) string {
 
 // terminalModel is the gate around a shell.
 //
-// The same refusal the status endpoint gives, in the same words: a terminal
-// stays off without a sandbox because it would otherwise run with this
-// server's own file access, and an operator who presses start and gets nothing
-// learns only that something is broken. The reason is the part they can act
-// on.
+// The same refusal the status endpoint gives, in the same words: an operator
+// who opens a terminal and finds nothing learns only that something is broken,
+// and the reason is the part they can act on.
 func (s *Server) terminalModel(r *http.Request) view.Terminal {
 	model := view.Terminal{Ctx: s.viewCtx(r, callerFrom(r.Context()))}
-	switch {
-	case !s.terminalEnabled:
-		model.Reason = "disabled in configuration (set terminal: true to enable)"
-	case s.interactive == nil:
-		model.Reason = "no sandbox available — a terminal would run with this server's file access, so it stays off"
-	default:
-		model.Available = true
+	if model.Reason = s.terminalRefusal(); model.Reason != "" {
+		return model
 	}
+	model.Available = true
+	// Which shell this is, so the panel can say it. See view.Terminal.Host.
+	model.Host = s.onThisMachine(true)
 	return model
 }

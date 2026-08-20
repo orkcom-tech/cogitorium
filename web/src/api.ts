@@ -1584,7 +1584,15 @@ export type TerminalStatus = {
   global_available: boolean
   reason: string
   global_reason: string
+  /**
+   * Where a shell would run: `host` is the machine this server is on, as the
+   * account it runs as; anything else names the sandbox. The two scopes can
+   * differ — a workspace terminal on a shared install is sandboxed while the
+   * server-wide one is the machine — so there is one answer per scope rather
+   * than a single field that has to be wrong on one of the two screens.
+   */
   backend: string
+  global_backend: string
 }
 
 export type GearRunResult = {

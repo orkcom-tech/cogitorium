@@ -1227,11 +1227,11 @@
           "type": "string"
         },
         {
-          "path": "Started",
+          "path": "Host",
           "type": "bool"
         }
       ],
-      "body": "\u003cdiv class=\"dk-gate\"\u003e\n  {{if .Available}}\n    \u003cp class=\"hint\"\u003e\n      A shell is not reconnected automatically. Opening this again brings the panel back, not the\n      session — the previous one is gone, along with its scrollback and working directory.\n    \u003c/p\u003e\n    \u003cbutton class=\"primary\" data-start-shell\u003estart a shell\u003c/button\u003e\n  {{else}}\n    {{/* Said rather than shown as a button that fails. An operator who presses\n         start and gets nothing learns only that something is broken; the\n         reason is the thing they can act on. */}}\n    \u003cp class=\"hint\"\u003eThere is no terminal on this install.\u003c/p\u003e\n    \u003cp class=\"error\"\u003e{{.Reason}}\u003c/p\u003e\n  {{end}}\n\u003c/div\u003e",
+      "body": "\u003cdiv class=\"dk-gate\"\u003e\n  {{if .Available}}\n    {{if .Host}}\n      \u003cp class=\"hint\"\u003e\n        A shell on this machine, as the account this server runs as — the same reach you have\n        sitting at it — opened in this workspace's own directory, where what you write stays.\n        Closing this panel leaves the session running; opening it again comes back to it.\n      \u003c/p\u003e\n    {{else}}\n      \u003cp class=\"hint\"\u003e\n        A shell in the sandbox gears run in: no network, and nothing of this server's mounted. It\n        has a COPY of this workspace's files and nothing is carried back out, so a file written\n        here is gone when the session ends. Closing this panel leaves the session running.\n      \u003c/p\u003e\n    {{end}}\n  {{else}}\n    {{/* Said rather than shown as a control that fails. Somebody who opens a\n         terminal and finds nothing learns only that something is broken; the\n         reason is the thing they can act on. */}}\n    \u003cp class=\"hint\"\u003eThere is no terminal on this install.\u003c/p\u003e\n    \u003cp class=\"error\"\u003e{{.Reason}}\u003c/p\u003e\n  {{end}}\n\u003c/div\u003e",
       "appends": false
     },
     {
@@ -6355,6 +6355,141 @@
       "appends": false
     },
     {
+      "name": "cog.page.pluginact",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Do",
+          "type": "string"
+        },
+        {
+          "path": "Disable",
+          "type": "bool"
+        },
+        {
+          "path": "Remove",
+          "type": "bool"
+        },
+        {
+          "path": "Update",
+          "type": "bool"
+        },
+        {
+          "path": "Items",
+          "type": "[]PluginActRow"
+        },
+        {
+          "path": "Count",
+          "type": "int"
+        },
+        {
+          "path": "Single",
+          "type": "bool"
+        },
+        {
+          "path": "Only",
+          "type": "string"
+        },
+        {
+          "path": "NeedsRestart",
+          "type": "bool"
+        },
+        {
+          "path": "CanRestart",
+          "type": "bool"
+        },
+        {
+          "path": "Error",
+          "type": "string"
+        }
+      ],
+      "body": "\u003cmain class=\"page plugin-act\"\u003e\n  \u003ch2\u003e\n    {{if .Single}}\n      {{if .Remove}}Remove {{.Only}}?{{end}}\n      {{if .Disable}}Switch {{.Only}} off?{{end}}\n      {{if .Update}}Update {{.Only}}?{{end}}\n    {{else}}\n      {{if .Remove}}Remove {{.Count}} plugins?{{end}}\n      {{if .Disable}}Switch {{.Count}} plugins off?{{end}}\n      {{if .Update}}Update {{.Count}} plugins?{{end}}\n    {{end}}\n  \u003c/h2\u003e\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n\n  {{if .Remove}}\u003cp class=\"hint\"\u003e\n    Their files go. Anything they wrote — rows in the database, files in a workspace — stays, because\n    it was never theirs to take back.\n  \u003c/p\u003e{{end}}\n  {{if .Disable}}\u003cp class=\"hint\"\u003e\n    They stay installed and stay approved. Switching one back on is one press and needs no restart.\n  \u003c/p\u003e{{end}}\n  {{if .Update}}\u003cp class=\"hint\"\u003e\n    Each is replaced by the version the catalog lists, and arrives switched off — an update is new\n    code, and new code is approved after it is read, like anything else.\n  \u003c/p\u003e{{end}}\n\n  \u003cul class=\"act-list\"\u003e\n    {{range .Items}}\u003cli\u003e\n      \u003cstrong\u003e{{.Name}}\u003c/strong\u003e \u003cspan class=\"hint\"\u003e{{.Version}}\u003c/span\u003e\n      {{if .Backend}}\u003cspan class=\"badge is-warn\"\u003eruns code\u003c/span\u003e{{end}}\n      {{if .Note}}\u003cspan class=\"hint\"\u003e— {{.Note}}\u003c/span\u003e{{end}}\n    \u003c/li\u003e{{end}}\n  \u003c/ul\u003e\n\n  \u003cform method=\"post\" action=\"/plugins/act/run\" class=\"act-form\"\u003e\n    \u003cinput type=\"hidden\" name=\"do\" value=\"{{.Do}}\"\u003e\n    {{range .Items}}\u003cinput type=\"hidden\" name=\"ids\" value=\"{{.ID}}\"\u003e{{end}}\n\n    {{/* The one question this screen exists to ask. Ticked by default only\n         when something here actually needs it, because a box that is always\n         ticked is a box nobody reads. */}}\n    {{if .CanRestart}}\n      \u003clabel class=\"act-restart\"\u003e\n        \u003cinput type=\"checkbox\" name=\"restart\" value=\"1\"{{if .NeedsRestart}} checked{{end}}\u003e\n        Restart Cogitorium afterwards\n      \u003c/label\u003e\n      {{if .NeedsRestart}}\u003cp class=\"hint\"\u003e\n        One of these runs code of its own, and code that is already running cannot be taken out from\n        under itself. Without a restart the screens change and that code keeps going.\n      \u003c/p\u003e{{else}}\u003cp class=\"hint\"\u003e\n        Not needed for these — what they contribute is rebuilt on the spot. Ticking it drops every\n        open connection, including any terminal you have running.\n      \u003c/p\u003e{{end}}\n    {{else if .NeedsRestart}}\n      \u003cp class=\"hint\"\u003e\n        One of these runs code of its own, and this build cannot restart itself. Close Cogitorium and\n        start it again when you are ready.\n      \u003c/p\u003e\n    {{end}}\n\n    \u003cdiv class=\"act-actions\"\u003e\n      \u003cbutton type=\"submit\" class=\"{{if .Remove}}danger{{else}}primary{{end}}\"\u003e\n        {{if .Remove}}Remove{{end}}{{if .Disable}}Switch off{{end}}{{if .Update}}Update{{end}}\n      \u003c/button\u003e\n      \u003ca class=\"action\" href=\"/plugins\"\u003eCancel\u003c/a\u003e\n    \u003c/div\u003e\n  \u003c/form\u003e\n\u003c/main\u003e",
+      "appends": false
+    },
+    {
       "name": "cog.page.plugins",
       "model": [
         {
@@ -6510,7 +6645,7 @@
           "type": "string"
         }
       ],
-      "body": "\u003cmain class=\"page\"\u003e\n  \u003ch2\u003e{{.Ctx.T.Plugins}}\u003c/h2\u003e\n\n  {{if .RestartOwed}}\u003cp class=\"banner\"\u003e\n    Restart Cogitorium to apply your changes — what is running has not changed yet.\n    {{if .CanRestart}}\u003cform method=\"post\" action=\"/plugins/restart\" class=\"inline\"\u003e\n      \u003cbutton type=\"submit\" class=\"banner-act\"\u003eRestart now\u003c/button\u003e\n    \u003c/form\u003e{{end}}\n  \u003c/p\u003e{{end}}\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{if .Notice}}\u003cp class=\"hint\"\u003e{{.Notice}}\u003c/p\u003e{{end}}\n\n  {{/* Dropping a bundle stays above both views and visible in both. It is how\n       you install something the catalog does not list, and putting it behind a\n       tab would make that the advanced path rather than an ordinary one. */}}\n  \u003cform class=\"plugin-drop\" method=\"post\" action=\"/plugins\" enctype=\"multipart/form-data\"\u003e\n    \u003cinput type=\"file\" name=\"bundle\" accept=\".zip,application/zip\" required\u003e\n    \u003cbutton type=\"submit\"\u003einstall it\u003c/button\u003e\n    \u003cspan class=\"hint\"\u003eDrop a plugin bundle here, or choose one. It arrives switched off.\u003c/span\u003e\n  \u003c/form\u003e\n\n  \u003cdiv class=\"plugin-views\" role=\"tablist\"\u003e\n    \u003ca role=\"tab\" href=\"/plugins\" class=\"{{if .Library}}{{else}}is-current{{end}}\"\u003eInstalled\u003c/a\u003e\n    \u003ca role=\"tab\" href=\"/plugins?view=library\" class=\"{{if .Library}}is-current{{end}}\"\u003eLibrary\u003c/a\u003e\n  \u003c/div\u003e\n\n  {{if .Library}}{{template \"cog.list.catalog\" .}}{{else}}\n    \u003cform class=\"plugin-filters\" method=\"get\" action=\"/plugins\"\n          hx-get=\"/plugins\" hx-target=\"#plugin-list\" hx-swap=\"outerHTML\"\n          hx-trigger=\"submit, input from:input[name='q'] delay:250ms\"\u003e\n      \u003cinput type=\"search\" name=\"q\" value=\"{{.Query}}\"\n             placeholder=\"Search by name, id, or a template it overrides\"\n             aria-label=\"Search plugins\"\u003e\n    \u003c/form\u003e\n    {{template \"cog.list.plugins\" .}}\n  {{end}}\n\u003c/main\u003e",
+      "body": "\u003cmain class=\"page\"\u003e\n  \u003ch2\u003e{{.Ctx.T.Plugins}}\u003c/h2\u003e\n\n  {{if .RestartOwed}}\u003cp class=\"banner\"\u003e\n    Restart Cogitorium to apply your changes — what is running has not changed yet.\n    {{if .CanRestart}}\u003cform method=\"post\" action=\"/plugins/restart\" class=\"inline\"\u003e\n      \u003cbutton type=\"submit\" class=\"banner-act\"\u003eRestart now\u003c/button\u003e\n    \u003c/form\u003e{{end}}\n  \u003c/p\u003e{{end}}\n  {{if .Error}}\u003cp class=\"error\"\u003e{{.Error}}\u003c/p\u003e{{end}}\n  {{if .Notice}}\u003cp class=\"hint\"\u003e{{.Notice}}\u003c/p\u003e{{end}}\n\n  {{/* Dropping a bundle stays above both views and visible in both. It is how\n       you install something the catalog does not list, and putting it behind a\n       tab would make that the advanced path rather than an ordinary one. */}}\n  \u003cform class=\"plugin-drop\" method=\"post\" action=\"/plugins\" enctype=\"multipart/form-data\"\u003e\n    \u003cinput type=\"file\" name=\"bundle\" accept=\".zip,application/zip\" required\u003e\n    \u003cbutton type=\"submit\"\u003einstall it\u003c/button\u003e\n    \u003cspan class=\"hint\"\u003eDrop a plugin bundle here, or choose one. It arrives switched off.\u003c/span\u003e\n  \u003c/form\u003e\n\n  \u003cdiv class=\"plugin-views\" role=\"tablist\"\u003e\n    \u003ca role=\"tab\" href=\"/plugins\" class=\"{{if .Library}}{{else}}is-current{{end}}\"\u003eInstalled\u003c/a\u003e\n    \u003ca role=\"tab\" href=\"/plugins?view=library\" class=\"{{if .Library}}is-current{{end}}\"\u003eLibrary\u003c/a\u003e\n  \u003c/div\u003e\n\n  {{if .Library}}{{template \"cog.list.catalog\" .}}{{else}}\n    \u003cform class=\"plugin-filters\" method=\"get\" action=\"/plugins\"\n          hx-get=\"/plugins\" hx-target=\"#plugin-list\" hx-swap=\"outerHTML\"\n          hx-trigger=\"submit, input from:input[name='q'] delay:250ms\"\u003e\n      \u003cinput type=\"search\" name=\"q\" value=\"{{.Query}}\"\n             placeholder=\"Search by name, id, or a template it overrides\"\n             aria-label=\"Search plugins\"\u003e\n    \u003c/form\u003e\n    {{template \"cog.list.plugins\" .}}\n\n    {{/* The bar, after the list rather than before it, because that is what\n         lets it appear on its own: `.plugin-list:has(:checked) + .plugin-bulk`\n         is a CSS sibling rule, and nothing here needs a script to know that\n         something is ticked.\n\n         Its buttons and the rows' checkboxes are joined by the form= attribute\n         rather than by nesting, because every row already contains forms of its\n         own and a form inside a form is not a thing HTML has. */}}\n    \u003cform class=\"plugin-bulk\" id=\"plugin-bulk\" method=\"post\" action=\"/plugins/act\"\u003e\n      \u003cspan class=\"bulk-label\"\u003eWith the ticked plugins:\u003c/span\u003e\n      \u003cbutton type=\"submit\" name=\"do\" value=\"disable\"\u003eSwitch off\u003c/button\u003e\n      \u003cbutton type=\"submit\" name=\"do\" value=\"update\"\u003eUpdate\u003c/button\u003e\n      \u003cbutton type=\"submit\" name=\"do\" value=\"remove\" class=\"danger\"\u003eRemove\u003c/button\u003e\n    \u003c/form\u003e\n  {{end}}\n\u003c/main\u003e",
       "appends": false
     },
     {
@@ -7506,7 +7641,7 @@
           "type": "bool"
         }
       ],
-      "body": "\u003csection class=\"card\"\u003e\n  \u003cheader class=\"plugin-head\"\u003e\n    \u003ch3\u003e{{.Name}} \u003cspan class=\"hint\"\u003e{{.Version}}\u003c/span\u003e\u003c/h3\u003e\n    {{if .StateTone}}\u003cspan class=\"badge is-{{.StateTone}}\"\u003e{{.State}}\u003c/span\u003e{{else}}\u003cspan class=\"badge\"\u003e{{.State}}\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n\n  {{/* When it is off, this is history rather than a current fault — and it is\n       exactly what somebody needs to read before switching it back on. */}}\n  {{if .Problem}}\u003cp class=\"error\"\u003e{{.Problem}}\u003c/p\u003e{{end}}\n  {{if .Refusal}}\u003cp class=\"error\"\u003e{{.Refusal}}\u003c/p\u003e{{end}}\n\n  {{if .Pending}}\u003cp class=\"hint\"\u003e{{.Pending}}\u003c/p\u003e{{end}}\n  {{if .ApprovedBy}}\u003cp class=\"hint\"\u003e\n    Approved by {{.ApprovedBy}}{{if .ApprovedAt}} on {{.ApprovedAt}}{{end}} — for this exact build.\n    Rebuild it and it comes back here.\n  \u003c/p\u003e{{end}}\n\n  {{if .Enabled}}\u003cp class=\"hint\"\u003e\n    Layer {{.Order}} — a plugin later in the order renders instead of an earlier one when both\n    define the same name.\n  \u003c/p\u003e{{end}}\n\n  {{range .Names}}{{template \"cog.list.names\" .}}{{end}}\n\n  {{/* The author's own pictures. Theirs to choose and yours to judge — the\n       product does not draw a preview of somebody else's work, it shows what\n       they shipped and lets you decide. */}}\n  {{if .Media}}\u003cdiv class=\"plugin-media\"\u003e\n    {{range .Media}}\u003cfigure\u003e\n      {{if .Video}}\u003cvideo src=\"{{.Src}}\" controls preload=\"metadata\"\u003e\u003c/video\u003e\n      {{else}}\u003cimg src=\"{{.Src}}\" alt=\"{{.Caption}}\" loading=\"lazy\"\u003e{{end}}\n      {{if .Caption}}\u003cfigcaption\u003e{{.Caption}}\u003c/figcaption\u003e{{end}}\n    \u003c/figure\u003e{{end}}\n  \u003c/div\u003e{{end}}\n\n  {{if .Pages}}\u003cdiv class=\"plugin-rows\"\u003e\n    \u003cspan class=\"muted\"\u003ePages\u003c/span\u003e\n    {{range .Pages}}\u003cspan\u003e\n      {{if .Live}}\u003ca href=\"{{.Path}}\"\u003e{{.Path}}\u003c/a\u003e{{else}}\u003cspan\u003e{{.Path}}\u003c/span\u003e{{end}}\n      \u003cspan class=\"muted\"\u003e{{.Auth}}\u003c/span\u003e\n    \u003c/span\u003e{{end}}\n  \u003c/div\u003e{{end}}\n\n\n  \u003cdiv class=\"plugin-actions\"\u003e\n    {{/* An unreadable directory has no manifest anybody could trust, so the\n         only thing offered is taking it away. */}}\n    {{if .Readable}}\n      {{if .Pending}}\n        \u003cform method=\"post\" action=\"/plugins/{{.ID}}/approve\"\u003e\u003cbutton type=\"submit\"\u003eApprove\u003c/button\u003e\u003c/form\u003e\n      {{else if .Enabled}}\n        \u003cform method=\"post\" action=\"/plugins/{{.ID}}/disable\"\u003e\u003cbutton type=\"submit\"\u003eDisable\u003c/button\u003e\u003c/form\u003e\n        {{if .CanMoveUp}}\u003cform method=\"post\" action=\"/plugins/{{.ID}}/up\"\u003e\n          \u003cbutton type=\"submit\" title=\"Earlier layer\"\u003e↑\u003c/button\u003e\u003c/form\u003e{{end}}\n        \u003cform method=\"post\" action=\"/plugins/{{.ID}}/down\"\u003e\n          \u003cbutton type=\"submit\" title=\"Later layer\"\u003e↓\u003c/button\u003e\u003c/form\u003e\n      {{else}}\n        \u003cform method=\"post\" action=\"/plugins/{{.ID}}/enable\"\u003e\u003cbutton type=\"submit\"\u003eEnable\u003c/button\u003e\u003c/form\u003e\n      {{end}}\n      {{if .ApprovedBy}}\u003cform method=\"post\" action=\"/plugins/{{.ID}}/revoke\"\u003e\n        \u003cbutton type=\"submit\" title=\"Withdraw the approval and switch it off\"\u003eWithdraw approval\u003c/button\u003e\n      \u003c/form\u003e{{end}}\n    {{end}}\n    \u003cform method=\"post\" action=\"/plugins/{{.ID}}/remove\"\n          hx-confirm=\"Remove {{.Name}}? Its files go; anything it wrote stays.\"\u003e\n      \u003cbutton type=\"submit\" class=\"danger\"\u003eRemove\u003c/button\u003e\n    \u003c/form\u003e\n    {{if .Docs}}\u003ca class=\"action\" href=\"{{.Docs}}\" target=\"_blank\" rel=\"noreferrer noopener\"\u003eDocumentation\u003c/a\u003e{{end}}\n    {{if .Source}}\u003ca class=\"action\" href=\"{{.Source}}\" target=\"_blank\" rel=\"noreferrer noopener\"\u003eSource\u003c/a\u003e{{end}}\n  \u003c/div\u003e\n\u003c/section\u003e",
+      "body": "\u003csection class=\"card\"\u003e\n  \u003cheader class=\"plugin-head\"\u003e\n    {{/* Joined to the bar below the list by form=, not by nesting: this row\n         already contains forms of its own. */}}\n    \u003clabel class=\"pick\" title=\"Select {{.Name}}\"\u003e\n      \u003cinput type=\"checkbox\" name=\"ids\" value=\"{{.ID}}\" form=\"plugin-bulk\"\n             aria-label=\"Select {{.Name}}\"\u003e\n    \u003c/label\u003e\n    \u003ch3\u003e{{.Name}} \u003cspan class=\"hint\"\u003e{{.Version}}\u003c/span\u003e\u003c/h3\u003e\n    {{if .StateTone}}\u003cspan class=\"badge is-{{.StateTone}}\"\u003e{{.State}}\u003c/span\u003e{{else}}\u003cspan class=\"badge\"\u003e{{.State}}\u003c/span\u003e{{end}}\n  \u003c/header\u003e\n\n  {{/* When it is off, this is history rather than a current fault — and it is\n       exactly what somebody needs to read before switching it back on. */}}\n  {{if .Problem}}\u003cp class=\"error\"\u003e{{.Problem}}\u003c/p\u003e{{end}}\n  {{if .Refusal}}\u003cp class=\"error\"\u003e{{.Refusal}}\u003c/p\u003e{{end}}\n\n  {{if .Pending}}\u003cp class=\"hint\"\u003e{{.Pending}}\u003c/p\u003e{{end}}\n  {{if .ApprovedBy}}\u003cp class=\"hint\"\u003e\n    Approved by {{.ApprovedBy}}{{if .ApprovedAt}} on {{.ApprovedAt}}{{end}} — for this exact build.\n    Rebuild it and it comes back here.\n  \u003c/p\u003e{{end}}\n\n  {{if .Enabled}}\u003cp class=\"hint\"\u003e\n    Layer {{.Order}} — a plugin later in the order renders instead of an earlier one when both\n    define the same name.\n  \u003c/p\u003e{{end}}\n\n  {{range .Names}}{{template \"cog.list.names\" .}}{{end}}\n\n  {{/* The author's own pictures. Theirs to choose and yours to judge — the\n       product does not draw a preview of somebody else's work, it shows what\n       they shipped and lets you decide. */}}\n  {{if .Media}}\u003cdiv class=\"plugin-media\"\u003e\n    {{range .Media}}\u003cfigure\u003e\n      {{if .Video}}\u003cvideo src=\"{{.Src}}\" controls preload=\"metadata\"\u003e\u003c/video\u003e\n      {{else}}\u003cimg src=\"{{.Src}}\" alt=\"{{.Caption}}\" loading=\"lazy\"\u003e{{end}}\n      {{if .Caption}}\u003cfigcaption\u003e{{.Caption}}\u003c/figcaption\u003e{{end}}\n    \u003c/figure\u003e{{end}}\n  \u003c/div\u003e{{end}}\n\n  {{if .Pages}}\u003cdiv class=\"plugin-rows\"\u003e\n    \u003cspan class=\"muted\"\u003ePages\u003c/span\u003e\n    {{range .Pages}}\u003cspan\u003e\n      {{if .Live}}\u003ca href=\"{{.Path}}\"\u003e{{.Path}}\u003c/a\u003e{{else}}\u003cspan\u003e{{.Path}}\u003c/span\u003e{{end}}\n      \u003cspan class=\"muted\"\u003e{{.Auth}}\u003c/span\u003e\n    \u003c/span\u003e{{end}}\n  \u003c/div\u003e{{end}}\n\n\n  \u003cdiv class=\"plugin-actions\"\u003e\n    {{/* An unreadable directory has no manifest anybody could trust, so the\n         only thing offered is taking it away. */}}\n    {{if .Readable}}\n      {{if .Pending}}\n        \u003cform method=\"post\" action=\"/plugins/{{.ID}}/approve\"\u003e\u003cbutton type=\"submit\"\u003eApprove\u003c/button\u003e\u003c/form\u003e\n      {{else if .Enabled}}\n        {{/* Through the same question the bar asks, with this one plugin\n             selected. One screen decides what happens and whether to restart,\n             whether it is one plugin or twenty. */}}\n        \u003cform method=\"post\" action=\"/plugins/act\"\u003e\n          \u003cinput type=\"hidden\" name=\"ids\" value=\"{{.ID}}\"\u003e\n          \u003cbutton type=\"submit\" name=\"do\" value=\"disable\"\u003eDisable\u003c/button\u003e\n        \u003c/form\u003e\n        {{if .CanMoveUp}}\u003cform method=\"post\" action=\"/plugins/{{.ID}}/up\"\u003e\n          \u003cbutton type=\"submit\" title=\"Earlier layer\"\u003e↑\u003c/button\u003e\u003c/form\u003e{{end}}\n        \u003cform method=\"post\" action=\"/plugins/{{.ID}}/down\"\u003e\n          \u003cbutton type=\"submit\" title=\"Later layer\"\u003e↓\u003c/button\u003e\u003c/form\u003e\n      {{else}}\n        \u003cform method=\"post\" action=\"/plugins/{{.ID}}/enable\"\u003e\u003cbutton type=\"submit\"\u003eEnable\u003c/button\u003e\u003c/form\u003e\n      {{end}}\n      {{if .ApprovedBy}}\u003cform method=\"post\" action=\"/plugins/{{.ID}}/revoke\"\u003e\n        \u003cbutton type=\"submit\" title=\"Withdraw the approval and switch it off\"\u003eWithdraw approval\u003c/button\u003e\n      \u003c/form\u003e{{end}}\n    {{end}}\n    \u003cform method=\"post\" action=\"/plugins/act\"\u003e\n      \u003cinput type=\"hidden\" name=\"ids\" value=\"{{.ID}}\"\u003e\n      \u003cbutton type=\"submit\" name=\"do\" value=\"remove\" class=\"danger\"\u003eRemove\u003c/button\u003e\n    \u003c/form\u003e\n    {{if .Docs}}\u003ca class=\"action\" href=\"{{.Docs}}\" target=\"_blank\" rel=\"noreferrer noopener\"\u003eDocumentation\u003c/a\u003e{{end}}\n    {{if .Source}}\u003ca class=\"action\" href=\"{{.Source}}\" target=\"_blank\" rel=\"noreferrer noopener\"\u003eSource\u003c/a\u003e{{end}}\n  \u003c/div\u003e\n\u003c/section\u003e",
       "appends": false
     },
     {

@@ -122,7 +122,7 @@ func (s *Server) pluginRow(in plugin.Installed, caps plugin.Capabilities) view.P
 	// What the author ships to show what this does. From the runtime rather
 	// than the manifest, because the runtime is what actually declared the
 	// files and therefore what will actually serve them.
-	if rt := s.plugins; rt != nil {
+	if rt := s.pluginRT(); rt != nil {
 		row.Media = rt.media[v.ID]
 	}
 
@@ -248,10 +248,21 @@ func (s *Server) pluginAction(w http.ResponseWriter, r *http.Request,
 		s.renderPlugins(w, r, err.Error(), "")
 		return
 	}
-	notice, restart, err := do(store, r.PathValue("id"))
+	id := r.PathValue("id")
+	notice, restart, err := do(store, id)
 	if err != nil {
 		s.renderPlugins(w, r, err.Error(), "")
 		return
+	}
+	// The interface, rebuilt from what is on disk now — so the page that comes
+	// back is already without what was just removed, or already with what was
+	// just enabled. This is what makes the reload after a removal show the
+	// removal.
+	s.recomposePlugins()
+	// And a restart only if something recomposing cannot reach actually
+	// changed. Every one of these actions used to claim one.
+	if restart {
+		restart = s.needsRestart(id)
 	}
 	if restart {
 		// Carried in the URL rather than held here: a restart is owed by the
@@ -285,18 +296,6 @@ func (s *Server) handleRevokePluginForm(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleEnablePluginForm(w http.ResponseWriter, r *http.Request) {
 	s.pluginAction(w, r, func(st *plugin.Store, id string) (string, bool, error) {
 		return "", true, st.Enable(id)
-	})
-}
-
-func (s *Server) handleDisablePluginForm(w http.ResponseWriter, r *http.Request) {
-	s.pluginAction(w, r, func(st *plugin.Store, id string) (string, bool, error) {
-		return "", true, st.Disable(id)
-	})
-}
-
-func (s *Server) handleRemovePluginForm(w http.ResponseWriter, r *http.Request) {
-	s.pluginAction(w, r, func(st *plugin.Store, id string) (string, bool, error) {
-		return "", true, st.Remove(id)
 	})
 }
 

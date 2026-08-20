@@ -3671,6 +3671,96 @@ button.big {
   margin-left: auto;
 }
 
+/* Selecting several plugins, and the bar that acts on them.
+ *
+ * The bar exists in the page from the start and shows itself when something is
+ * ticked — a CSS sibling rule on :has(), so nothing here needs a script and the
+ * page behaves the same with JavaScript off. It sits at the bottom of the
+ * viewport rather than at the top of the list, because the thing you look at
+ * while ticking boxes is the list. */
+.plugin-head .pick {
+  display: flex;
+  align-items: center;
+  margin-right: 0.25rem;
+}
+.plugin-head .pick input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent, #4a7bd0);
+  cursor: pointer;
+}
+/* The name takes the room the checkbox does not, so the badge stays at the end
+   of the row where it was. */
+.plugin-head h3 {
+  margin-right: auto;
+}
+
+.plugin-bulk {
+  display: none;
+}
+.plugin-list:has(input[name='ids']:checked) + .plugin-bulk {
+  display: flex;
+  position: sticky;
+  bottom: 1rem;
+  z-index: 5;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line, #3a3a3a);
+  border-radius: 0.5rem;
+  background: var(--raised, var(--bg, #1b1b1b));
+  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.35);
+}
+.plugin-bulk .bulk-label {
+  margin-right: auto;
+  color: var(--ink-dim, inherit);
+}
+
+/* The question asked before the plugin set changes. A short screen on purpose:
+   what is about to happen, to what, and the one decision worth making. */
+.plugin-act .act-list {
+  margin: 0.75rem 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+.plugin-act .act-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line, #3a3a3a);
+  border-radius: 0.4rem;
+}
+.plugin-act .act-form {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line, #3a3a3a);
+  border-radius: 0.5rem;
+}
+.plugin-act .act-restart {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+.plugin-act .act-restart input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent, #4a7bd0);
+}
+.plugin-act .act-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
 /* A plugin's panel. It is an iframe, so it needs a box rather than styling —
    what is inside is the plugin's own page and its styles are its own. */
 .plugin-panel {

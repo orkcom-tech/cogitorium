@@ -81,7 +81,7 @@ func hostOf(url string) string {
 // At boot rather than on the first request, so a module that will not load is
 // a line in the startup log rather than a page that fails the first time
 // somebody visits it.
-func startBackends(ctx context.Context, rt *pluginRuntime, enabled []plugin.Installed, dataDir string,
+func startBackends(ctx context.Context, rt func() *pluginRuntime, enabled []plugin.Installed, dataDir string,
 	sb sandbox.Runner, db *sql.DB, cfg map[string]map[string]any, gate *gearnet.Gate,
 	queue *work.Store) *backends {
 	b := &backends{tier: map[string]plugin.Tier{}, dirOf: map[string]string{}}

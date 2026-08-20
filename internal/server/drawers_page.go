@@ -120,7 +120,7 @@ func (s *Server) handleWorkspaceDrawer(w http.ResponseWriter, r *http.Request) {
 // Always a fragment: a drawer is never a document, so there is no shell branch
 // here and no way for one to be added by accident.
 func (s *Server) renderDrawer(w http.ResponseWriter, r *http.Request, name string, model func() any) {
-	rt := s.plugins
+	rt := s.pluginRT()
 	if rt == nil || rt.set == nil {
 		http.Error(w, "this install has no composed templates", http.StatusInternalServerError)
 		return

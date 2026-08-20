@@ -109,7 +109,13 @@ type Server struct {
 	// plugins is the composed interface: the template set every page renders
 	// through, and the pages the enabled plugins declared. Nil only if
 	// composition failed, which is fatal at startup rather than survivable.
-	plugins *pluginRuntime
+	//
+	// Swapped rather than fixed, because it is recomposed while the server is
+	// running. Removing a plugin used to leave everything it contributed on
+	// screen until somebody restarted the install — the entry it added to the
+	// menu was still there after a reload, which reads as the removal having
+	// failed. Read it through pluginRT and never hold the result.
+	plugins atomic.Pointer[pluginRuntime]
 	// publicURL is how this install is reachable from outside, used to put
 	// fetchable links to a run's files in its callback. Empty simply leaves
 	// them out.
@@ -149,7 +155,13 @@ type Server struct {
 	// no terminal is possible, and that is a refusal rather than a fallback.
 	interactive     sandbox.Interactive
 	terminalEnabled bool
-	dataDir         string
+	// hostShell is set when there is no sandbox to host a terminal: the shell
+	// then runs on this machine, as this server's own user. See sandbox.Host.
+	hostShell *sandbox.Host
+	// terminals are the live sessions, which outlive their connections so a
+	// terminal is a place you can leave and come back to.
+	terminals *terminals
+	dataDir   string
 
 	// The internet gate. searcher is nil unless the master switch is on and a
 	// credential was supplied; broker holds the single pending approval;
@@ -202,14 +214,9 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		slog.Warn("this image carries plugins that cannot be read as this user, so none of them "+
 			"are installed", "err", err, "uid", os.Getuid())
 	}
-	// Compiled at boot rather than on the first request, so a module that will
-	// not load is a line in the startup log rather than a page that fails the
-	// first time somebody visits it.
-	// Before the backends, because a plugin's cog.enqueue goes on this queue
-	// and the gateway is built with it.
+	// The queue a plugin's cog.enqueue goes on. Built before the backends,
+	// because the gateway is built with it.
 	queue := work.NewStore(db)
-	pluginBackends := startBackends(context.Background(), plugins, plugins.live, cfg.DataDir,
-		sb, db, cfg.Plugins, gate, queue)
 
 	cat := catalog.NewStore(db)
 	ws := workspace.NewStore(db)
@@ -239,8 +246,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		queueMax = config.Defaults().QueueMaxPerWorkspace
 	}
 	s := &Server{
-		plugins:    plugins,
-		backends:   pluginBackends,
+
 		sandbox:    sb,
 		db:         db,
 		catalog:    cat,
@@ -272,7 +278,7 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 		callbackHosts:       cfg.CallbackHosts,
 		publicURL:           strings.TrimSuffix(cfg.PublicURL, "/"),
 		localInstall:        isLoopbackListen(cfg.Listen),
-		terminalEnabled:     cfg.Terminal,
+		terminalEnabled:     cfg.TerminalOn(),
 		dataDir:             cfg.DataDir,
 		searcher:            searcher,
 		broker:              broker,
@@ -285,6 +291,20 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 			return cs.CheckStatus(ctx).Version
 		}),
 	}
+	s.plugins.Store(plugins)
+
+	// Plugin backends, compiled at boot rather than on the first request, so a
+	// module that will not load is a line in the startup log rather than a page
+	// that fails the first time somebody visits it.
+	//
+	// After the server exists, because the gateway renders templates on a
+	// plugin's behalf and must render through whatever is composed NOW. Handed
+	// the accessor rather than the composition: given the value, a plugin's
+	// cog.render would go on drawing the interface as it stood at boot, which
+	// is the same staleness recomposing exists to end.
+	s.backends = startBackends(context.Background(), s.pluginRT, plugins.live, cfg.DataDir,
+		sb, db, cfg.Plugins, gate, queue)
+
 	// The workers, started here rather than in Serve.
 	//
 	// A pool that only ran while the HTTP listener did would leave queued work
@@ -339,9 +359,33 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	if i, ok := sb.(sandbox.Interactive); ok && sb != nil {
 		s.interactive = i
 	}
-	if cfg.Terminal && s.interactive == nil {
-		slog.Warn("terminal requested but no sandbox can host one; it stays disabled")
+	// Without a sandbox the terminal is a shell on THIS machine, as the
+	// account this process runs as. Said out loud at start, every time,
+	// because it is the one capability here whose reach is the operator's own
+	// and somebody reading the log should not have to infer it.
+	// A terminal on THIS machine, whether or not there is a sandbox — because
+	// "open a terminal" means the machine you are on, and one that quietly
+	// landed in a container because Docker happened to be installed would be a
+	// terminal whose `ls` shows somebody else's filesystem. Which shell a given
+	// terminal actually gets is decided per scope, in onThisMachine.
+	if cfg.TerminalOn() && sandbox.HostTerminals() {
+		s.hostShell = &sandbox.Host{}
 	}
+	if cfg.TerminalOn() {
+		switch {
+		case s.hostShell == nil && s.interactive == nil:
+			slog.Warn("no terminal: there is no sandbox to host one, and this platform " +
+				"has no shell of its own to offer")
+		case s.hostShell != nil:
+			// Said at every start. It is the one capability here whose reach is
+			// the operator's own, and somebody reading the log should not have
+			// to infer it.
+			slog.Warn("the terminal opens a shell on this machine, as this server's own user. "+
+				"Set terminal: false to refuse it",
+				"listen", cfg.Listen, "workspace_terminals", workspaceShellNote(s))
+		}
+	}
+	s.terminals = newTerminals()
 
 	mux := http.NewServeMux()
 	s.route(mux, "GET /health", s.handleHealth)
@@ -616,6 +660,11 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.page(mux, "GET /plugins", s.handlePluginsPage)
 	s.page(mux, "POST /plugins", s.handleUploadPluginForm)
 	s.page(mux, "POST /plugins/restart", s.handleRestartFromPluginsForm)
+	// Everything destructive, one plugin or twenty, goes through the same
+	// question. See plugin_act.go: a row's Disable and Remove arrive here with
+	// one id ticked, and the bar under the list with however many.
+	s.page(mux, "POST /plugins/act", s.handleActOnPluginsForm)
+	s.page(mux, "POST /plugins/act/run", s.handleRunPluginActForm)
 	// Its own path space rather than under /plugins/, for the same reason the
 	// API's is: /plugins/catalog/{id} and /plugins/{id}/approve both match
 	// /plugins/catalog/approve and neither is more specific. Go's mux refuses
@@ -625,10 +674,8 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	s.page(mux, "POST /plugins/{id}/approve", s.handleApprovePluginForm)
 	s.page(mux, "POST /plugins/{id}/revoke", s.handleRevokePluginForm)
 	s.page(mux, "POST /plugins/{id}/enable", s.handleEnablePluginForm)
-	s.page(mux, "POST /plugins/{id}/disable", s.handleDisablePluginForm)
 	s.page(mux, "POST /plugins/{id}/up", s.handlePluginUpForm)
 	s.page(mux, "POST /plugins/{id}/down", s.handlePluginDownForm)
-	s.page(mux, "POST /plugins/{id}/remove", s.handleRemovePluginForm)
 
 	s.page(mux, "GET /workspaces", s.handleWorkspacesPage)
 	s.page(mux, "POST /workspaces", s.handleCreateWorkspaceForm)
@@ -701,8 +748,8 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// can never do. Going through authenticate would mean either minting a
 	// token for a call that never leaves this process, or teaching the
 	// middleware a second way in.
-	if pluginBackends != nil {
-		pluginBackends.attachAPI(mux)
+	if s.backends != nil {
+		s.backends.attachAPI(mux)
 	}
 
 	s.http = &http.Server{
@@ -833,6 +880,12 @@ func (s *Server) Run(ctx context.Context) error {
 // a caller that has both a Serve and a defer should not have to know which of
 // them got there first.
 func (s *Server) Close() {
+	// Before the guard below, because a terminal is a real shell — often a
+	// process on this machine — and one whose server has gone is a process
+	// nobody can reach to close.
+	if s.terminals != nil {
+		s.terminals.closeAll(context.Background())
+	}
 	if s.stopPool == nil {
 		return
 	}
@@ -1122,7 +1175,7 @@ func (s *Server) indexWithPlugins(dist fs.FS) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := s.plugins.Contribution()
+	c := s.pluginRT().Contribution()
 	// Mounts are counted here too. They were not, and a plugin whose whole
 	// contribution is a workspace panel — no rail entry, no stylesheet, no
 	// script — took this early return and never reached the document, so its

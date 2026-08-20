@@ -48,7 +48,10 @@ type hostGateway struct {
 	// rt is the composed layer stack, so a plugin rendering a fragment goes
 	// through the same machinery a page does — including other plugins'
 	// overrides of the name it asked for.
-	rt *pluginRuntime
+	// A getter, not the composition: the interface is recomposed while the
+	// server runs, and a gateway holding the value would go on rendering the
+	// layer stack as it stood when it was built.
+	rt func() *pluginRuntime
 	// handler is this server's own mux, so a plugin's API call goes through
 	// the same handlers a network request does rather than a second
 	// implementation that drifts from them.
@@ -69,7 +72,7 @@ type hostGateway struct {
 	rand func(max int64) int64
 }
 
-func newHostGateway(grants map[string]plugin.Grants, db *sql.DB, rt *pluginRuntime,
+func newHostGateway(grants map[string]plugin.Grants, db *sql.DB, rt func() *pluginRuntime,
 	cfg map[string]map[string]any, gate *gearnet.Gate, q *work.Store) *hostGateway {
 	return &hostGateway{
 		grants: grants, db: db, rt: rt, config: cfg, gate: gate, work: q,
@@ -443,7 +446,8 @@ func (g *hostGateway) render(id string, input json.RawMessage) abi.HostReply {
 	if err := json.Unmarshal(input, &in); err != nil {
 		return abi.HostReply{Err: "render needs a template name"}
 	}
-	if g.rt == nil || g.rt.set == nil {
+	rt := g.rt()
+	if rt == nil || rt.set == nil {
 		return abi.HostReply{Err: "no templates are composed on this install"}
 	}
 
@@ -467,7 +471,7 @@ func (g *hostGateway) render(id string, input json.RawMessage) abi.HostReply {
 		}
 	}
 	var out bytes.Buffer
-	if err := g.rt.set.Execute(&out, in.Template, model); err != nil {
+	if err := rt.set.Execute(&out, in.Template, model); err != nil {
 		return abi.HostReply{Err: err.Error()}
 	}
 	return reply(map[string]any{"html": out.String()})

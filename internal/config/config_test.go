@@ -9,15 +9,14 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/update"
 )
 
-// Neither dangerous capability had a regression test on its default. Both are
-// off-by-default by ABSENCE from Defaults(), which is exactly the kind of
-// property that a well-meaning "let's fill in every field" refactor flips
-// without anyone noticing.
+// These capabilities are off-by-default by ABSENCE from Defaults(), which is
+// exactly the kind of property that a well-meaning "let's fill in every field"
+// refactor flips without anyone noticing.
+//
+// The terminal used to be in this list and is deliberately no longer: it is on
+// by default, and its own test below is the one that guards it.
 func TestDangerousCapabilitiesAreOffByDefault(t *testing.T) {
 	d := Defaults()
-	if d.Terminal {
-		t.Error("the terminal defaults to on: that is interactive code execution over HTTP")
-	}
 	if d.Egress {
 		t.Error("egress defaults to on: agents could reach the internet on a fresh install")
 	}
@@ -37,6 +36,45 @@ func TestDangerousCapabilitiesAreOffByDefault(t *testing.T) {
 	if d.UpdateCheck != update.ModeAsk {
 		t.Errorf("update_check defaults to %q; it must be %q, or a fresh install talks to GitHub "+
 			"without anybody having agreed to it", d.UpdateCheck, update.ModeAsk)
+	}
+}
+
+// The terminal is on by default and `terminal: false` must switch it off.
+//
+// The second half is the one worth having. The field is a *bool precisely
+// because a plain bool cannot tell "the operator wrote false" from "the
+// operator wrote nothing", and those mean opposite things here: somebody
+// running a shared install writes `terminal: false` once and has every right
+// to expect it holds. If this ever passes only its first half, that operator
+// has a shell on their machine they explicitly refused.
+func TestTheTerminalIsOnUnlessSomebodySaysOtherwise(t *testing.T) {
+	if !Defaults().TerminalOn() {
+		t.Error("the terminal defaults to off; it is meant to be there like the one in an editor")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cogitorium.yaml")
+	if err := os.WriteFile(path, []byte("terminal: false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path, "")
+	if err != nil {
+		t.Fatalf("loading a configuration that switches the terminal off: %v", err)
+	}
+	if cfg.TerminalOn() {
+		t.Fatal("`terminal: false` was read as if nothing had been written: this install offers a " +
+			"shell its operator refused")
+	}
+
+	// And the same through the environment, which is how a container is
+	// configured and therefore how most shared installs will say it.
+	t.Setenv("COGITORIUM_TERMINAL", "0")
+	cfg, err = Load("", "")
+	if err != nil {
+		t.Fatalf("loading with COGITORIUM_TERMINAL=0: %v", err)
+	}
+	if cfg.TerminalOn() {
+		t.Error("COGITORIUM_TERMINAL=0 left the terminal on")
 	}
 }
 

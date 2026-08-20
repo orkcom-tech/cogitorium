@@ -1,25 +1,38 @@
 {{/*
-  The gate around a shell — which is all of a terminal a template can render.
+  The panel around a shell — which is all of a terminal a template can render.
 
   The session itself is a live PTY over a socket, redrawn as bytes arrive. A
   template renders a thing that exists at a moment, and a terminal is the
   opposite of that.
 
-  What IS renderable is everything around it: why there is or is not one, what
-  starting it costs, and what closing it loses. That is the half somebody reads
-  before deciding, and it is the half worth being able to override.
+  What IS renderable is everything around it: whether there is one, and what
+  kind of machine is on the other end. That is the half somebody reads before
+  they type, and it is the half worth being able to override.
+
+  There is no start button any more. A terminal that has to be started is a
+  terminal you notice; this one opens with the panel and keeps its shell when
+  you walk away, so what a plugin overrides here is a description rather than a
+  control.
 */}}
 
 {{define "cog.drawer.terminal"}}<div class="dk-gate">
   {{if .Available}}
-    <p class="hint">
-      A shell is not reconnected automatically. Opening this again brings the panel back, not the
-      session — the previous one is gone, along with its scrollback and working directory.
-    </p>
-    <button class="primary" data-start-shell>start a shell</button>
+    {{if .Host}}
+      <p class="hint">
+        A shell on this machine, as the account this server runs as — the same reach you have
+        sitting at it — opened in this workspace's own directory, where what you write stays.
+        Closing this panel leaves the session running; opening it again comes back to it.
+      </p>
+    {{else}}
+      <p class="hint">
+        A shell in the sandbox gears run in: no network, and nothing of this server's mounted. It
+        has a COPY of this workspace's files and nothing is carried back out, so a file written
+        here is gone when the session ends. Closing this panel leaves the session running.
+      </p>
+    {{end}}
   {{else}}
-    {{/* Said rather than shown as a button that fails. An operator who presses
-         start and gets nothing learns only that something is broken; the
+    {{/* Said rather than shown as a control that fails. Somebody who opens a
+         terminal and finds nothing learns only that something is broken; the
          reason is the thing they can act on. */}}
     <p class="hint">There is no terminal on this install.</p>
     <p class="error">{{.Reason}}</p>

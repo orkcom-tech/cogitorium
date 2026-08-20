@@ -34,16 +34,22 @@ func (s *Server) handleRestart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Warn("restarting on request", "by", caller.Name)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"restarting": true,
 		"message":    "Restarting. This page will reconnect on its own.",
 	})
+	s.restartSoon(caller.Name)
+}
 
-	// Answered first, then done. A caller whose connection is replaced by the
-	// exec before the response is written sees a network error and cannot tell
-	// "it is restarting" from "it died", which is exactly the distinction
-	// somebody pressing this button needs.
+// restartSoon replaces this process a moment from now.
+//
+// Answered first, then done: a caller whose connection is replaced by the exec
+// before the response is written sees a network error and cannot tell "it is
+// restarting" from "it died", which is exactly the distinction somebody who
+// asked for a restart needs. So every caller writes its page or its JSON and
+// then calls this.
+func (s *Server) restartSoon(by string) {
+	slog.Warn("restarting on request", "by", by)
 	go func() {
 		// Long enough for the response to be flushed and short enough that
 		// nobody wonders whether the button worked. Not a guess about how long
@@ -52,7 +58,7 @@ func (s *Server) handleRestart(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(restartGrace)
 		if err := reexec(); err != nil {
 			// Reached only if exec failed, because a successful one never
-			// returns. Worth being loud about: the operator pressed restart
+			// returns. Worth being loud about: the operator asked for a restart
 			// and is now looking at a server that did not.
 			slog.Error("the restart failed and this process is still the old one", "err", err)
 		}
