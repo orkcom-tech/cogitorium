@@ -151,13 +151,27 @@ func (s *Server) renderWorkspaces(w http.ResponseWriter, r *http.Request, proble
 		Importing: r.URL.Query().Get("import") != "",
 	}
 
+	// Somebody was sent here from a screen or a control that is an
+	// administrator's. Saying which one, and saying it FIRST, so a complaint
+	// this list happens to have of its own cannot be mistaken for the answer.
+	if refused := refusedScreen(r.URL.Query().Get("refused")); refused != "" && model.Error == "" {
+		model.Error = refused
+	}
+
 	// What an orchestrator could think with. Offered rather than assumed: a
 	// form with an empty picker lets somebody fill in a name and discover
 	// afterwards that there is nothing to run it.
 	if models, err := s.catalog.ListModels(r.Context()); err == nil {
 		for _, m := range models {
+			// A model need not have a label, and most do not. Showing the
+			// label alone rendered the option as "— house": the provider, a
+			// dash, and no sign of WHICH model it was.
+			label := m.Label
+			if strings.TrimSpace(label) == "" {
+				label = m.ModelName
+			}
 			model.Models = append(model.Models, view.Model{
-				ID: m.ID, Name: m.ModelName, Label: m.Label,
+				ID: m.ID, Name: m.ModelName, Label: label,
 				Provider: m.ProviderName, Kind: m.ProviderType,
 			})
 		}
@@ -321,4 +335,31 @@ func importNotes(res bundle.Result) []string {
 			u.Agent, u.ProviderType, u.ModelName))
 	}
 	return notes
+}
+
+// refusedScreen turns the segment a refusal came from into a sentence.
+//
+// A closed list rather than the raw path: what arrives here is a URL segment,
+// and a URL segment reflected into a page is a way to write a sentence on
+// somebody else's screen.
+func refusedScreen(segment string) string {
+	switch segment {
+	case "/people":
+		return "People is an administrator's screen: accounts, roles and teams reach every workspace on this install."
+	case "/plugins":
+		return "Plugins is an administrator's screen: a plugin runs code and can take over any screen in the product."
+	case "/context":
+		return "Context is an administrator's screen: it reads and writes every document on this install. What your agents read is Memory, on each agent."
+	case "/env":
+		return "Named values are an administrator's: one name here reaches every workspace on this install."
+	case "/terminal":
+		return "The terminal is an administrator's: it is a shell on the machine this server runs on."
+	case "/gears":
+		return "Writing a gear is an administrator's: a gear is code that runs on this machine. You can read the catalogue and use what is approved."
+	case "/models":
+		return "The model catalog is an administrator's: it holds the credentials this install talks to providers with."
+	case "":
+		return ""
+	}
+	return "That is an administrator's screen."
 }

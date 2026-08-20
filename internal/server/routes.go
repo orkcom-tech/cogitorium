@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 )
@@ -175,11 +176,21 @@ func firstSegment(path string) string {
 // sent them rather than shown an error object. The client router does exactly
 // this, and the two have to agree or converting a screen changes who can see
 // it.
+// pageAdmin sends a member away from an administrator's screen, and says so.
+//
+// It used to redirect in silence. Somebody pressing "add a user" or "write a
+// gear" without the right simply arrived on another screen with no word about
+// what had happened — and if the workspace list had a complaint of its own
+// showing, that complaint became the answer: "add a user" once replied "a
+// workspace needs a model for its orchestrator to think with".
+//
+// What was refused travels in the URL so the destination can name it, because
+// "you may not" is only useful when it says what.
 func (s *Server) pageAdmin(w http.ResponseWriter, r *http.Request) bool {
 	if callerFrom(r.Context()).IsAdmin() {
 		return true
 	}
-	http.Redirect(w, r, "/workspaces", http.StatusSeeOther)
+	http.Redirect(w, r, "/workspaces?refused="+url.QueryEscape(firstSegment(r.URL.Path)), http.StatusSeeOther)
 	return false
 }
 

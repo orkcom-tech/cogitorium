@@ -1217,9 +1217,15 @@ function NewAgentForm({
         />
       </label>
       <div className="row spread">
+        {/* Why the button is grey, rather than leaving somebody to guess.
+            It was disabled with nothing said, so filling in a name and a role
+            and pressing it read as the form being broken. */}
         <span className="hint">
-          It arrives unwired: nothing may delegate to it and it may delegate to nothing until you draw an edge. That is
-          the point of the canvas — a new agent is a node with no capabilities, not a member of the team.
+          {!name.trim()
+            ? 'Give it a name, and a model to think with.'
+            : modelId === ''
+              ? 'Pick a model for it to think with.'
+              : 'It arrives unwired: nothing may delegate to it and it may delegate to nothing until you draw an edge. That is the point of the canvas — a new agent is a node with no capabilities, not a member of the team.'}
         </span>
         <button className="primary" type="submit" disabled={busy || !name.trim() || clash || modelId === ''}>
           add to the canvas

@@ -54,7 +54,13 @@ func (s *Store) binding(ctx context.Context, planboardID, wsID int64, agentID *i
 	}
 	b, err := scanBinding(s.db.QueryRowContext(ctx, q, args...))
 	if errors.Is(err, sql.ErrNoRows) {
-		return Binding{}, fmt.Errorf("planboard %d is not bound here: %w", planboardID, ErrNotFound)
+		// By name, because the person reading this is looking at a name. An id
+		// is this package's business and means nothing on a screen.
+		var name string
+		if lookupErr := s.db.QueryRowContext(ctx, `SELECT name FROM planboards WHERE id = ?`, planboardID).Scan(&name); lookupErr != nil || name == "" {
+			return Binding{}, fmt.Errorf("that plan is not attached here: %w", ErrNotFound)
+		}
+		return Binding{}, fmt.Errorf("%q is not attached here: %w", name, ErrNotFound)
 	}
 	return b, err
 }

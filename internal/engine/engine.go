@@ -524,6 +524,18 @@ func (e *Engine) modelTurn(ctx context.Context, wsID int64, agent workspace.Agen
 	}
 	slog.Info("model turn finished", "workspace_id", wsID, "agent", agent.Name, "stop_reason", res.StopReason, "tool_calls", len(res.ToolCalls))
 	e.recordUsage(ctx, wsID, agent, res.Usage)
+
+	// Nothing said and nothing to do is not an answer.
+	//
+	// A provider that replies in a shape this client cannot read — the wrong
+	// streaming format, a body with no choices — produces exactly this: no
+	// text, no tool calls, and no error anywhere. The turn was recorded as a
+	// success and the person was shown a blank bubble with nothing to act on.
+	// Saying so costs one sentence and turns a mystery into a fixable fact.
+	if strings.TrimSpace(res.Text) == "" && len(res.ToolCalls) == 0 {
+		return llm.Result{}, fmt.Errorf("%s answered with nothing at all — no text and no tool call. "+
+			"That usually means the provider replied in a shape this build cannot read; check the provider's address and kind in the model catalog", model.ModelName)
+	}
 	return res, nil
 }
 

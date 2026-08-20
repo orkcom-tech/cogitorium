@@ -1081,6 +1081,16 @@ function Composer({
           value={input}
           disabled={busy}
           onChange={(e) => setInput(e.target.value)}
+          // Enter sends. The form's own implicit submission already does this
+          // for an ordinary keyboard; saying it here as well costs nothing and
+          // covers the two cases implicit submission gets wrong — a keystroke
+          // that is part of composing a character, which must not send, and
+          // Shift+Enter, which is left alone for anybody whose habit it is.
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return
+            e.preventDefault()
+            e.currentTarget.form?.requestSubmit()
+          }}
         />
         {busy ? (
           <button type="button" onClick={onStop}>

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/orkcom-tech/cogitorium/internal/llm"
 	"github.com/orkcom-tech/cogitorium/internal/planboard"
 )
 
@@ -188,5 +189,24 @@ func TestNamingThePlanIsOptionalUntilThereAreTwo(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "nightly") || !strings.Contains(err.Error(), "weekly") {
 		t.Fatalf("the refusal does not list what it could have meant: %v", err)
+	}
+}
+
+// A provider that answers in a shape this client cannot read used to produce a
+// blank bubble and a 200: the turn was recorded as a success, the assistant
+// message was empty, and nothing anywhere said why. This is that case.
+func TestAnAnswerWithNothingInItIsReportedRatherThanStored(t *testing.T) {
+	t.Parallel()
+	f := newPromptFixture(t, "")
+
+	_, err := f.engine.modelTurn(context.Background(), f.agent.WorkspaceID, f.agent,
+		[]llm.Turn{{Role: "user", Text: "hello"}}, func(Event) {})
+	if err == nil {
+		t.Fatal("a turn against an unreachable provider was reported as a success")
+	}
+	// Not the point of this test, but worth stating: whatever went wrong, the
+	// person is told something rather than shown an empty answer.
+	if err.Error() == "" {
+		t.Fatal("the failure has nothing to say")
 	}
 }

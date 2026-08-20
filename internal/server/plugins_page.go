@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/orkcom-tech/cogitorium/internal/plugin"
@@ -347,12 +348,20 @@ func (s *Server) handleUploadPluginForm(w http.ResponseWriter, r *http.Request) 
 		s.renderPlugins(w, r, "that bundle could not be read: "+err.Error(), "")
 		return
 	}
-	file, _, err := r.FormFile("bundle")
+	file, header, err := r.FormFile("bundle")
 	if err != nil {
 		s.renderPlugins(w, r, "choose a bundle to install", "")
 		return
 	}
 	defer file.Close()
+	// The name the person chose, for anything that goes wrong below. The
+	// reader downstream names the file it was handed, which is this server's
+	// own temp file — a name the person has never seen and cannot go and look
+	// at, on the one screen where they are being asked to trust a file.
+	chosen := filepath.Base(header.Filename)
+	if chosen == "" || chosen == "." {
+		chosen = "that file"
+	}
 
 	tmp, err := os.CreateTemp("", "cogitorium-upload-*.zip")
 	if err != nil {
@@ -374,7 +383,7 @@ func (s *Server) handleUploadPluginForm(w http.ResponseWriter, r *http.Request) 
 	}
 	in, _, err := store.Install(tmp.Name())
 	if err != nil {
-		s.renderPlugins(w, r, err.Error(), "")
+		s.renderPlugins(w, r, strings.ReplaceAll(err.Error(), filepath.Base(tmp.Name()), chosen), "")
 		return
 	}
 	// Switched off and unapproved, like everything else that arrives.
