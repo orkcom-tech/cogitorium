@@ -22,7 +22,14 @@
 // collapse to a header rather than closing, so the arrangement has no state
 // worth naming or saving.
 
-export type ViewId = 'chat' | 'blueprint' | 'workbench'
+/** A view in the workspace.
+ *
+ * `plugin:<id>` is a view a plugin contributed at the workspace.stage mount
+ * point. It is a ViewId like any other: the deck keeps every cell mounted, and
+ * a plugin's view has the same right to stay alive across a switch as the
+ * terminal does.
+ */
+export type ViewId = 'chat' | 'blueprint' | 'workbench' | `plugin:${string}`
 export type OverlayId =
   | 'agents'
   | 'agent'
@@ -41,6 +48,9 @@ export type OverlayId =
 // The order is the rail's order, and the track slides in it: going down the
 // capsule sends the work down. Changing one without the other makes a
 // button in the middle of the column jump the content past two views.
+/** The host's own views, in the order the rail shows them. Anything a plugin
+ *  adds comes after, because a plugin adding a view is adding to this
+ *  workspace rather than rearranging it. */
 export const VIEW_ORDER: ViewId[] = ['chat', 'blueprint', 'workbench']
 export const OVERLAY_ORDER: OverlayId[] = [
   'agents',
@@ -106,7 +116,17 @@ export function parseDeck(raw: unknown): Deck {
   const out = defaultDeck()
   if (!raw || typeof raw !== 'object') return out
   const src = raw as Record<string, unknown>
-  if (typeof src.view === 'string' && (VIEW_ORDER as string[]).includes(src.view)) out.view = src.view as ViewId
+  // A plugin's view is remembered too: coming back to a workspace and finding
+  // yourself on a different view than you left is the same bug whether the
+  // view was the product's or somebody else's. An id for a plugin that is no
+  // longer installed falls back to the default, because the deck asks for the
+  // view by id and would otherwise show an empty cell.
+  if (
+    typeof src.view === 'string' &&
+    ((VIEW_ORDER as string[]).includes(src.view) || src.view.startsWith('plugin:'))
+  ) {
+    out.view = src.view as ViewId
+  }
   if (typeof src.files === 'boolean') out.files = src.files
   if (typeof src.terminal === 'boolean') out.terminal = src.terminal
   const num = (v: unknown, lo: number, d: number) =>

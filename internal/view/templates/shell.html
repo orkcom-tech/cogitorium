@@ -66,3 +66,18 @@
   point has to exist before anybody can extend it.
 */}}
 {{define "cog.slot.head"}}{{end}}
+
+{{/*
+  A strip above whatever the APPLICATION is drawing — the blueprint, the
+  editor, the map, the terminal.
+
+  Those four are not templates and cannot honestly become ones: a template
+  renders a thing that exists at a moment, and a canvas and a socket exist in
+  motion. What a plugin can be given instead is the space around them, and this
+  is it. Empty by default, like every other slot, so an install with no plugins
+  is unchanged by its existence.
+
+  It is given which screen is asking, so one override can behave differently on
+  the blueprint and on the map without guessing from a URL.
+*/}}
+{{define "cog.slot.stagehead"}}{{end}}

@@ -7,40 +7,40 @@ import (
 	"testing"
 )
 
-// This product renders half its screens as documents and half in the browser,
-// and each half draws its own rail. That is a fact about a conversion in
-// progress, not a design — and it means every difference between the two shows
-// up to somebody as "why does this screen behave differently".
+// This product draws the same rail twice: into a document, by the templates,
+// and into a live page, by the application. Two renderers is a fact about the
+// runtimes. Two LISTS was a fact about nobody having joined them up — and
+// every difference between them reached somebody as "why is this screen
+// different from that one": a logo on half the screens, destinations on the
+// other half, Plugins drawn twice where the two overlapped.
 //
-// The two renderers stay. What must not differ is WHAT IS IN THE RAIL, so the
-// lists are checked against each other here: same destinations, same order.
-func TestTheRailsCarryTheSameDestinations(t *testing.T) {
+// There is one list now, HostNav, and the application asks for it. This test
+// is what stops a second one growing back: it fails if Rail.tsx starts naming
+// destinations of its own.
+func TestTheApplicationDoesNotKeepItsOwnRail(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "web", "src", "Rail.tsx"))
 	if err != nil {
 		t.Skipf("the frontend source is not present: %v", err)
 	}
-	block := regexp.MustCompile(`(?s)const DESTINATIONS[^\[]*\[(.*?)\n\]`).FindStringSubmatch(string(b))
-	if block == nil {
-		t.Fatal("DESTINATIONS is no longer a list in Rail.tsx — this test reads it, so it has to be found")
-	}
-	client := regexp.MustCompile(`href:\s*"([^"]+)"`).FindAllStringSubmatch(block[1], -1)
+	src := string(b)
 
-	// The host's own rail, as an administrator sees it: the client filters the
-	// admin-only entries in the browser, so both lists are compared whole.
-	var server []string
+	// Formatting-insensitive: prettier writes `api\n  .rail(...)` when the
+	// chain is long enough, and a test that only knows one spelling of the
+	// call is a test that fails for the wrong reason.
+	if !regexp.MustCompile(`\.rail\(`).MatchString(src) {
+		t.Error("Rail.tsx no longer asks the server what is in the rail — the list would then exist twice")
+	}
+
+	// Every host destination, as a literal href. One of these in the
+	// application's source means the list is being restated there.
 	for _, item := range HostNav("", true) {
-		// Account is the viewer's own and is drawn differently on each side.
-		if item.Href == "/account" {
+		if item.Href == "/workspaces" {
+			// The brand links there, and so does the way out of a workspace.
+			// Neither is a destination list.
 			continue
 		}
-		server = append(server, item.Href)
-	}
-	if len(client) != len(server) {
-		t.Fatalf("the application offers %d destinations and this server offers %d", len(client), len(server))
-	}
-	for i := range server {
-		if client[i][1] != server[i] {
-			t.Errorf("destination %d: the application goes to %s, this server goes to %s", i+1, client[i][1], server[i])
+		if regexp.MustCompile(`href[=:]\s*"` + regexp.QuoteMeta(item.Href) + `"`).MatchString(src) {
+			t.Errorf("Rail.tsx names %q itself; the rail is described by the server so that it is one list", item.Href)
 		}
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/orkcom-tech/cogitorium/internal/channel"
 	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/plugin"
+	"github.com/orkcom-tech/cogitorium/internal/update"
 	"github.com/orkcom-tech/cogitorium/internal/view"
 )
 
@@ -794,3 +795,53 @@ func (s *Server) pluginView(in plugin.Installed, caps plugin.Capabilities) Plugi
 	}
 	return v
 }
+
+// handleRail is the rail, as data.
+//
+// The product renders half its screens as documents and half in the browser,
+// and each half drew its own rail — so the two lists of destinations lived in
+// two files and every difference between them reached somebody as "why is this
+// screen different". A test kept them in step, which is a way of noticing the
+// drift rather than a way of not having it.
+//
+// One definition now: HostNav, here, asked for by the application. The two
+// renderers remain, because one of them draws into a document and the other
+// into a live page, and that is a fact about the runtimes rather than about
+// the rail.
+func (s *Server) handleRail(w http.ResponseWriter, r *http.Request) {
+	caller := callerFrom(r.Context())
+	type item struct {
+		Label   string `json:"label"`
+		Href    string `json:"href"`
+		Icon    string `json:"icon"`
+		Foot    bool   `json:"foot"`
+		Current bool   `json:"current"`
+		// From names the plugin that contributed it, empty for the host's own.
+		From string `json:"from,omitempty"`
+	}
+	// The path the application is on, so "you are here" is decided in one
+	// place too. It sends its own, because the browser's URL is the only thing
+	// that knows.
+	at := r.URL.Query().Get("at")
+	nav := s.plugins.navFor(at, caller.IsAdmin())
+
+	out := make([]item, 0, len(nav))
+	for _, n := range nav {
+		out = append(out, item{
+			Label: n.Label, Href: n.Href, Icon: n.Icon,
+			Foot: n.Foot, Current: n.Current, From: n.From,
+		})
+	}
+	look, _ := lookOf(r)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items": out,
+		"look":  look,
+		// What the foot has to say, from what the checker already knows. Never
+		// a request: drawing a rail must not depend on reaching the internet.
+		"update_waiting": s.updates != nil && s.updates.Report().Any(),
+		"update_unasked": s.updates != nil && caller.IsAdmin() && s.updates.Report().Mode == update.ModeAsk,
+	})
+}
+
+// lookOf is look(), named for callers outside this file.
+func lookOf(r *http.Request) (mode, accent string) { return look(r) }

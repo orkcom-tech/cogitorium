@@ -302,6 +302,12 @@ func CoreModels() Models {
 		"cog.shell.body":     shell,
 		"cog.slot.head":      shell,
 		"cog.slot.rail":      shell,
+		// The one place a plugin can reach the screens the APPLICATION draws:
+		// a strip above the blueprint, the editor, the map or the terminal.
+		// Those four are canvases and a socket rather than templates — a
+		// template renders a thing that exists at a moment and they exist in
+		// motion — so what is offered is the space around them.
+		"cog.slot.stagehead": Slot{Ctx: Ctx{T: DefaultStrings()}},
 		"cog.row.nav":        NavItem{},
 		"cog.action.button":  Action{},
 		"cog.list.actions":   []Action{},
@@ -1622,6 +1628,23 @@ func (s Shell) NextLookName() string {
 	return "whatever this machine is set to"
 }
 
+// Slot is what a slot template is given.
+//
+// A slot is a place in a screen the product draws where a plugin may put
+// something, and it renders NOTHING by default — an empty definition, exactly
+// as cog.slot.rail and cog.slot.head are. That is what makes it free to exist:
+// an install with no plugins is unchanged by it.
+//
+// Screen names which screen is asking, so one override can behave differently
+// on the blueprint and on the map without a plugin having to guess from a URL.
+type Slot struct {
+	Ctx Ctx
+	// Screen is "chat", "blueprint", "workbench", "map" or "terminal".
+	Screen string
+	// Workspace is which one, where there is one. Zero elsewhere.
+	Workspace int64
+}
+
 // HostNav is the product's own rail, as the server knows it.
 //
 // Here rather than only in the client so a page this shell serves looks like
@@ -1708,6 +1731,7 @@ func Exemplars() Models {
 		"cog.shell.body":     shell,
 		"cog.slot.head":      shell,
 		"cog.slot.rail":      shell,
+		"cog.slot.stagehead": Slot{Ctx: ctx, Screen: "blueprint", Workspace: 1},
 		"cog.row.nav":        shell.Nav[1],
 		"cog.action.button":  actions[0],
 		"cog.list.actions":   actions,

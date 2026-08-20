@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { api, contributions, type PluginNavItem, type User, type Workspace } from "./api";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import {useLocation, useNavigate} from "react-router-dom";
+import { api, type RailDescription, type User, type Workspace } from "./api";
 import { COG_MARK, DOCS_URL, ORKCOM_URL, ORK_MARK } from "./styles/brand";
 import ThemeMenu from "./pages/ThemeMenu";
 import UpdateNotice from "./pages/UpdateNotice";
@@ -120,49 +120,31 @@ const I = {
   ),
 };
 
-/** pluginNav is what the plugins contributed, filtered to this viewer.
- *
- * The `when` test happens here rather than on the server for one reason: the
- * server would have to render a different document per role, and a cached
- * document that leaked an admin's entries to everybody else is a worse failure
- * than a filter that runs in the browser.
- */
-function pluginNav(user: User): PluginNavItem[] {
-  return contributions().nav.filter((n) => {
-    switch (n.when) {
-      case "admin":
-        return user.role === "admin"
-      case "workspace":
-      case "always":
-      case undefined:
-      case "":
-        return true
-      default:
-        // A `when` this build does not know is not shown. A rail entry whose
-        // condition nobody can evaluate is one nobody decided to show.
-        return false
-    }
-  })
-}
 
-/** Where you can go from a screen that offers nothing of its own.
+/** The server's glyph names, in this application's shapes.
  *
- * The same list, in the same order, that the server draws on the screens it
- * renders — see HostNav in internal/view. TestTheRailsAgree keeps them from
- * parting company.
+ * The rail is described once, by the server, and it names its icons the way
+ * `view.glyphs` does — `grid`, `text`, `steps`. This file has always called the
+ * same shapes `workspaces`, `instructions`, `planboards`. Two vocabularies for
+ * one set of pictures, so the lookup has to be explicit: without it every
+ * destination fell through to its label and the rail rendered as a column of
+ * words.
+ *
+ * A name this build has never heard of draws its label instead, which is what
+ * the templates do with a plugin's unknown icon for the same reason.
  */
-const DESTINATIONS: { label: string; href: string; icon: keyof typeof I; admin?: boolean }[] = [
-  { label: "Workspaces", href: "/workspaces", icon: "workspaces" },
-  { label: "Map", href: "/map", icon: "map" },
-  { label: "Gears", href: "/gears", icon: "gears" },
-  { label: "Models", href: "/models", icon: "models" },
-  { label: "Instructions", href: "/instructions", icon: "instructions" },
-  { label: "Planboards", href: "/planboards", icon: "planboards" },
-  { label: "Context", href: "/context", icon: "context" },
-  { label: "Plugins", href: "/plugins", icon: "plugins" },
-  { label: "People", href: "/people", icon: "people", admin: true },
-  { label: "Terminal", href: "/terminal", icon: "terminal", admin: true },
-]
+const GLYPH: Record<string, ReactNode> = {
+  grid: I.workspaces,
+  map: I.map,
+  gear: I.gears,
+  model: I.models,
+  text: I.instructions,
+  steps: I.planboards,
+  layers: I.context,
+  plug: I.plugins,
+  people: I.people,
+  terminal: I.terminal,
+}
 
 export default function Rail({
   user,
@@ -174,10 +156,30 @@ export default function Rail({
   onSignOut: () => void;
 }) {
   const [menu, setMenu] = useState<null | "more" | "account" | "dests">(null);
+  // The rail's own contents, from the server — one definition, drawn here and
+  // by the templates. Null until it answers; the rail draws its own groups
+  // meanwhile rather than flashing an empty column.
+  const [rail, setRail] = useState<RailDescription | null>(null);
   const [changingPassword, setChangingPassword] = useState(false);
   const [menuTop, setMenuTop] = useState(0);
   const box = useRef<HTMLElement>(null);
   const loc = useLocation();
+  useEffect(() => {
+    let live = true;
+    api
+      .rail(loc.pathname)
+      .then((r) => {
+        if (live) setRail(r);
+      })
+      .catch(() => {
+        // A rail that could not be described is not a reason to show none:
+        // what this component draws of its own — the stages, the drawers, the
+        // account — is what the screen needs to work at all.
+      });
+    return () => {
+      live = false;
+    };
+  }, [loc.pathname]);
   const nav = useNavigate();
   // Leaving for a screen the SERVER renders. The client router would push the
   // path and render nothing, because the app has no route for it — which is
@@ -297,25 +299,24 @@ export default function Rail({
        * `back` is the test rather than the stages: the map publishes stages of
        * its own and is still not a workspace. Only a workspace sets back.
        */}
-      {!shell?.back && (
+      {!shell?.back && rail && rail.items.some((d) => !d.foot) && (
         <div className="rail-group">
-          {DESTINATIONS.filter((d) => !d.admin || user.role === "admin").map((d) => {
-            const on = loc.pathname === d.href
-            return (
+          {rail.items
+            .filter((d) => !d.foot)
+            .map((d) => (
               <a
                 key={d.href}
                 data-own
-                className={`rail-btn ${on ? "on" : ""}`}
+                className={`rail-btn ${d.current ? "on" : ""}`}
                 href={d.href}
-                aria-current={on ? "page" : undefined}
+                aria-current={d.current ? "page" : undefined}
                 onMouseEnter={hover(d.label)}
                 onMouseLeave={unhover}
               >
-                {I[d.icon]}
+                {GLYPH[d.icon] ?? <span className="rail-label">{d.label}</span>}
                 <span className="sr-only">{d.label}</span>
               </a>
-            )
-          })}
+            ))}
         </div>
       )}
 
@@ -484,19 +485,21 @@ export default function Rail({
       {menu === "more" && (
         <div className="rail-menu" style={{ top: menuTop }} role="menu">
           <span className="rail-menu-label">the install</span>
-          {/* Anchors for the two the server renders, a Link for the one the
-              client still owns: People is a drawn access map. */}
-          <a href="/models">Models</a>
-          {user.role === "admin" && <Link to="/people">People</Link>}
-          {user.role === "admin" && <a href="/context">Context</a>}
-          {pluginNav(user).map((n) => (
-            /* A plain anchor rather than a Link: a plugin's page is served by
-               the server, not by the client router, so routing to it in the
-               browser would land on a screen this app does not have. */
-            <a key={`${n.from}-${n.href}`} href={n.href}>
-              {n.label}
-            </a>
-          ))}
+          {/* From the one description, plugins included. It used to name three
+              of them here by hand — Models, People, Context — which is how a
+              rail comes to say different things in different places: this menu
+              was a third partial copy of a list that already existed twice.
+
+              Plain anchors: every one of these is a document the server
+              renders, so routing to it in the browser would land on a screen
+              this application does not have. */}
+          {(rail?.items ?? [])
+            .filter((d) => !d.foot)
+            .map((d) => (
+              <a key={d.href} href={d.href}>
+                {d.label}
+              </a>
+            ))}
           <hr />
           <a href={DOCS_URL} target="_blank" rel="noreferrer">
             Documentation

@@ -104,7 +104,8 @@
           "point": {
             "description": "The only mount points that exist. An unknown one is refused at install rather than ignored.",
             "enum": [
-              "workspace.drawer"
+              "workspace.drawer",
+              "workspace.stage"
             ]
           },
           "title": {

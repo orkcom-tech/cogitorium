@@ -27,7 +27,11 @@ import {
  * track needs no such trick: an off-screen cell is still a full-size cell.
  */
 export function Deck({ view, views }: { view: ViewId; views: { id: ViewId; node: ReactNode }[] }) {
-  const at = VIEW_ORDER.indexOf(view)
+  // The track is as long as the views it was GIVEN, in that order — it used to
+  // be the host's three, which left no room for a view a plugin contributed.
+  // Every cell is still mounted for its whole life, which is the invariant
+  // above and the reason this is a track rather than a switch.
+  const at = views.findIndex((v) => v.id === view)
   return (
     <div className="dk-viewport">
       {/* VERTICALLY, because the control that moves it is a vertical rail.
@@ -35,14 +39,11 @@ export function Deck({ view, views }: { view: ViewId; views: { id: ViewId; node:
           from below; going back up reverses it. A horizontal slide driven by a
           vertical column reads as two unrelated motions. */}
       <div className="dk-track" style={{ transform: `translateY(${-Math.max(0, at) * 100}%)` }}>
-        {VIEW_ORDER.map((id) => {
-          const v = views.find((x) => x.id === id)
-          return (
-            <Slide key={id} live={id === view}>
-              {v?.node}
-            </Slide>
-          )
-        })}
+        {views.map((v) => (
+          <Slide key={v.id} live={v.id === view}>
+            {v.node}
+          </Slide>
+        ))}
       </div>
     </div>
   )
@@ -78,10 +79,13 @@ export function Workbench({
   deck,
   files,
   editor,
+  slot,
 }: {
   deck: DeckApi
   files: ReactNode
   editor: ReactNode
+  /** The strip a plugin may put above this screen. See StageSlot. */
+  slot?: ReactNode
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const d = deck.deck
@@ -119,7 +123,10 @@ export function Workbench({
         />
       )}
 
-      <section className="dk-part dk-centre">{editor}</section>
+      <section className="dk-part dk-centre">
+        {slot}
+        {editor}
+      </section>
 
     </div>
   )

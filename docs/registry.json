@@ -8696,6 +8696,105 @@
       "appends": true
     },
     {
+      "name": "cog.slot.stagehead",
+      "model": [
+        {
+          "path": "Ctx.Viewer.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Viewer.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Viewer.IsAdmin",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Viewer.SignedIn",
+          "type": "bool"
+        },
+        {
+          "path": "Ctx.Workspace.ID",
+          "type": "int64"
+        },
+        {
+          "path": "Ctx.Workspace.Name",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.InstallMode",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Path",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Theme",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Accent",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.Lang",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.RequestToken",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Navigation",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Instructions",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Models",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Context",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Gears",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Workspaces",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Variables",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.Plugins",
+          "type": "string"
+        },
+        {
+          "path": "Ctx.T.People",
+          "type": "string"
+        },
+        {
+          "path": "Screen",
+          "type": "string"
+        },
+        {
+          "path": "Workspace",
+          "type": "int64"
+        }
+      ],
+      "body": "",
+      "appends": true
+    },
+    {
       "name": "cog.stage.chat",
       "model": [
         {

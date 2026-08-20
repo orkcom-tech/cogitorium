@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/orkcom-tech/cogitorium/internal/view"
 	"net/http"
 	"strconv"
 )
@@ -130,4 +131,36 @@ func (s *Server) renderDrawer(w http.ResponseWriter, r *http.Request, name strin
 		// status. The log is where this is answered.
 		return
 	}
+}
+
+// handleStageSlot renders the strip a plugin may put above a canvas.
+//
+// The blueprint, the editor, the map and the terminal are the four screens
+// this server does not render — they are drawn surfaces and a socket, and a
+// template renders a thing that exists at a moment. This is how a plugin
+// reaches them anyway: not by replacing them, which would be a lie, but by
+// being given the space around them.
+//
+// Empty unless a plugin overrides cog.slot.stagehead, so an install with no
+// plugins pays one request that returns nothing.
+func (s *Server) handleStageSlot(w http.ResponseWriter, r *http.Request) {
+	screen := r.URL.Query().Get("screen")
+	// A closed list: this reaches a template as data, and a template is the one
+	// place a stray value becomes markup on somebody else's screen.
+	switch screen {
+	case "chat", "blueprint", "workbench", "map", "terminal":
+	default:
+		screen = ""
+	}
+	wsID, _ := strconv.ParseInt(r.URL.Query().Get("ws"), 10, 64)
+	if wsID != 0 && !s.requireWorkspace(w, r, wsID) {
+		return
+	}
+	s.renderDrawer(w, r, "cog.slot.stagehead", func() any {
+		return view.Slot{
+			Ctx:       s.viewCtx(r, callerFrom(r.Context())),
+			Screen:    screen,
+			Workspace: wsID,
+		}
+	})
 }

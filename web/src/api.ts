@@ -1006,6 +1006,14 @@ export const api = {
       }),
     unbind: (bindingId: number) => req<void>(`/api/v1/gear-bindings/${bindingId}`, { method: 'DELETE' }),
   },
+  // The rail, as the server describes it.
+  //
+  // Asked for rather than restated here, because this product draws the same
+  // rail twice — once into a document and once into a live page — and the
+  // list of what is in it lived in two files. One definition now; two
+  // renderers, which is a fact about the runtimes and not about the rail.
+  rail: (at: string) => req<RailDescription>(`/api/v1/rail?at=${encodeURIComponent(at)}`),
+
   // The order a workflow runs in. Attaching one to an agent is the same shape
   // as granting it a gear, which is why it reads the same here.
   planboards: {
@@ -1595,6 +1603,22 @@ export type GearBinding = {
   gear_name: string
   workspace_id: number
   agent_id: number | null
+}
+
+export type RailItem = {
+  label: string
+  href: string
+  icon: string
+  foot: boolean
+  current: boolean
+  from?: string
+}
+
+export type RailDescription = {
+  items: RailItem[]
+  look: string
+  update_waiting: boolean
+  update_unasked: boolean
 }
 
 export type PlanboardBinding = {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type GraphData, type Workspace } from '../api'
 import { hueOf } from './hue'
 import { usePublishShell } from '../shell'
+import StageSlot from '../StageSlot'
 
 /**
  * The install, as a map.
@@ -121,6 +122,7 @@ export default function InstallMap() {
 
   return (
     <div className="imap">
+      <StageSlot screen="map" />
       <Canvas
         layout={layout}
         openWs={openWs}

@@ -5,6 +5,7 @@ import '@xterm/xterm/css/xterm.css'
 import { api, type TerminalStatus } from '../api'
 import { session } from '../session'
 import { PanelTitle } from '../deck/Drawer'
+import StageSlot from '../StageSlot'
 
 // A shell, running in the same sandbox gears run in — not on the server.
 // The server refuses to open one without that sandbox, so what you get here
@@ -149,6 +150,7 @@ export default function TerminalPage({ workspaceId }: { workspaceId?: number }) 
   if (status && !allowed) {
     return (
       <div className="page">
+        <StageSlot screen="terminal" />
         <PanelTitle>Terminal</PanelTitle>
         <div className="card">
           <p>A terminal is not available here.</p>

@@ -430,6 +430,8 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// like its health. Asking, and deciding whether this server may ask at all,
 	// are an administrator's: both are outbound requests on behalf of everybody
 	// on the install rather than a preference one person holds.
+	// The rail, as data, so the application and the templates draw one list.
+	s.route(mux, "GET /api/v1/rail", s.handleRail)
 	s.route(mux, "GET /api/v1/updates", s.handleUpdateStatus)
 	s.route(mux, "POST /api/v1/updates/check", s.handleUpdateCheckNow)
 	s.routeIn(mux, "PUT /api/v1/updates/mode", s.handleSetUpdateMode, UpdateModeBody{})
@@ -579,6 +581,10 @@ func New(cfg config.Config, db *sql.DB, sb sandbox.Runner, searcher *websearch.S
 	// something inside a workspace is overridable before the workspace itself
 	// has to be.
 	s.page(mux, "GET /workspaces/{id}/drawers/{name}", s.handleWorkspaceDrawer)
+	// The one slot inside the screens the application draws. See
+	// handleStageSlot: it is how a plugin reaches a canvas without anybody
+	// pretending a canvas is a template.
+	s.page(mux, "GET /cog/slot/stage-head", s.handleStageSlot)
 	s.page(mux, "GET /workspaces/{id}/transcript", s.handleTranscript)
 	s.page(mux, "POST /messages/{id}/forget", s.handleForgetMessageForm)
 	s.page(mux, "POST /memory/save", s.handleSaveMemoryForm)
@@ -1004,8 +1010,15 @@ func (s *Server) uiHandler() http.Handler {
 // converted screen went out as a correct document with no styling at all,
 // which reads as a broken product rather than as a missing link tag.
 //
-// Links only, never the scripts. The application's module in a server-rendered
-// page would boot the single-page app on top of the page it is inside.
+// The stylesheets AND the module. The module used to be left out, because the
+// application's entry mounted the whole app and would have booted it on top of
+// the page it is inside — so it now looks for the application's own root and,
+// on a page that has none, mounts exactly one thing: the rail. See main.tsx.
+//
+// That is what makes the frame the same on every screen. Before it, the rail
+// was written twice — once here as a template and once in the browser — and
+// the two differed in a dozen small ways, each of which reached somebody as
+// "why is this screen not like that one".
 //
 // Computed once and cached, because it is the same answer for the life of the
 // process: the file is embedded in the binary.
@@ -1029,6 +1042,15 @@ func (s *Server) appHead() template.HTML {
 			// the one thing a preview must not be.
 			b.Write(crossorigin.ReplaceAll(m, nil))
 		}
+		// The application's own module, so a server-rendered page gets the one
+		// rail. Its entry mounts nothing else here — see main.tsx.
+		//
+		// crossorigin is dropped for the same reason it is dropped from the
+		// stylesheets: the preview frame is sandboxed, its origin is opaque,
+		// and a CORS request from it fails.
+		for _, m := range appModule.FindAll(raw, -1) {
+			b.Write(crossorigin.ReplaceAll(m, nil))
+		}
 		s.appHeadHTML = template.HTML(b.String())
 
 	})
@@ -1042,6 +1064,10 @@ func (s *Server) appHead() template.HTML {
 // CSS — visibly wrong, and caught by the test that reads the served document
 // for it.
 var stylesheetLink = regexp.MustCompile(`(?i)<link[^>]+rel="stylesheet"[^>]*>`)
+
+// appModule is the application's own entry, and only that: htmx is already in
+// the shell's head and a second copy would process every node twice.
+var appModule = regexp.MustCompile(`(?i)<script[^>]+type="module"[^>]*></script>`)
 
 // crossorigin is that attribute, with the space before it.
 var crossorigin = regexp.MustCompile(`(?i)\s+crossorigin(="[^"]*")?`)

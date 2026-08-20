@@ -998,6 +998,12 @@ paths:
       responses:
         default:
           description: see the reference
+  "/api/v1/rail":
+    get:
+      summary: "Read rail"
+      responses:
+        default:
+          description: see the reference
   "/api/v1/restart":
     post:
       summary: "Create restart"

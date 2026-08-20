@@ -1911,3 +1911,20 @@ textarea::placeholder {
     animation: none !important;
   }
 }
+
+/* The strip a plugin may put above a canvas.
+ *
+ * It occupies nothing when it is empty, which is the ordinary case: an install
+ * with no plugins must not gain a gap because a slot exists. `:has()` is what
+ * makes that true without JavaScript deciding whether to render the container
+ * — the container is always there, and htmx fills it or does not.
+ */
+.stage-slot:empty {
+  display: none;
+}
+.stage-slot {
+  flex: none;
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}

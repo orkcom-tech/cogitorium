@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useHtmx } from '../htmx'
+import StageSlot from '../StageSlot'
 import { dragging } from '../dnd'
 import BlueprintEditor from './BlueprintEditor'
 import TerminalPage from './TerminalPage'
@@ -214,6 +215,13 @@ export default function WorkspacePage({ me }: { me: User }) {
     () => contributions().mounts.filter((m) => m.point === 'workspace.drawer'),
     [],
   )
+  // A view a plugin contributed. A drawer is consulted while you work; a stage
+  // IS the work, so it belongs on the track beside chat, the blueprint and the
+  // editor rather than crawling out over them.
+  const stageMounts = useMemo(
+    () => contributions().mounts.filter((m) => m.point === 'workspace.stage'),
+    [],
+  )
   const openMount = typeof overlay === 'string' && overlay.startsWith('plugin:')
     ? mounts.find((m) => `plugin:${m.from}` === overlay)
     : undefined
@@ -338,6 +346,13 @@ export default function WorkspacePage({ me }: { me: User }) {
                 { id: 'chat', title: 'Chat', icon: STAGE_ICON.chat },
                 { id: 'blueprint', title: 'Blueprint', icon: STAGE_ICON.blueprint },
                 { id: 'workbench', title: 'Editor', icon: STAGE_ICON.workbench },
+                // After the host's own, because a plugin adding a view is
+                // adding to this workspace rather than rearranging it.
+                ...stageMounts.map((m) => ({
+                  id: `plugin:${m.from}` as ViewId,
+                  title: m.title,
+                  icon: STAGE_ICON.workbench,
+                })),
               ],
               current: deck.deck.view,
               go: (id: string) => deck.go(id as ViewId),
@@ -364,7 +379,7 @@ export default function WorkspacePage({ me }: { me: User }) {
             },
           }
         : null,
-    [workspace?.name, workspace?.description, busy, deck.deck.view, overlay, mounts],
+    [workspace?.name, workspace?.description, busy, deck.deck.view, overlay, mounts, stageMounts],
   )
 
   if (!workspace) {
@@ -426,6 +441,7 @@ export default function WorkspacePage({ me }: { me: User }) {
             id: 'chat',
             node: (
               <div className="dk-body chat-body">
+                <StageSlot screen="chat" wsId={wsId} />
                 <Timeline messages={messages} streams={streams} agentName={agentName} busy={busy} onForget={forget} />
                 <Composer
                   busy={busy}
@@ -440,6 +456,7 @@ export default function WorkspacePage({ me }: { me: User }) {
             id: 'blueprint',
             node: (
               <div className="dk-body">
+                <StageSlot screen="blueprint" wsId={wsId} />
                 <BlueprintEditor
                   wsId={wsId}
                   agents={agents}
@@ -476,6 +493,7 @@ export default function WorkspacePage({ me }: { me: User }) {
             id: 'workbench',
             node: (
               <Workbench
+                slot={<StageSlot screen="workbench" wsId={wsId} />}
                 deck={deck}
                 /* No padded, scrolling wrapper. It inset the tree eight pixels
                    from the cavity's own rounded corner — two edges in the one
@@ -503,6 +521,24 @@ export default function WorkspacePage({ me }: { me: User }) {
               />
             ),
           },
+          // After the host's three, in the same order the rail lists them —
+          // the track slides through this array, so a rail that said one order
+          // and a track that moved in another would send the work the wrong way.
+          ...stageMounts.map((m) => ({
+            id: `plugin:${m.from}` as ViewId,
+            node: (
+              /* The plugin's own page at its own URL, in a frame — the same
+                 decision the mounted drawer makes, and for the same reasons:
+                 one implementation, one thing to test, and styles that cannot
+                 leak into the workspace around them. */
+              <iframe
+                className="dk-body plugin-stage"
+                src={m.page}
+                title={m.title}
+                sandbox="allow-scripts allow-same-origin"
+              />
+            ),
+          })),
         ]}
       />
 

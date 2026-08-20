@@ -201,7 +201,8 @@ func (n Native) Target() string {
 // drifts into a second, undocumented layout system, and every point is a
 // promise the host has to keep rendering somewhere.
 type Mount struct {
-	// Point is where it appears. Only "workspace.drawer" for now.
+	// Point is where it appears: "workspace.drawer" for a panel that crawls out
+	// over the work, "workspace.stage" for a view that IS the work.
 	Point string `yaml:"point"`
 	// Title is the label on the button that opens it.
 	Title string `yaml:"title"`
@@ -540,7 +541,18 @@ var knownArch = map[string]bool{"amd64": true, "arm64": true}
 
 // mountPoints is the closed set. Named here so an unknown one is refused with
 // the list rather than accepted and never rendered.
-var mountPoints = map[string]bool{"workspace.drawer": true}
+//
+// A drawer crawls out over the work and is consulted; a stage IS the work and
+// replaces the view. Both are the plugin's own page at its own URL, so a panel
+// and a full view of the same thing are one implementation — see Mount.Page.
+var mountPoints = map[string]bool{
+	"workspace.drawer": true,
+	"workspace.stage":  true,
+}
+
+// MountPoints is the same set, in the order the documentation lists them, for
+// an error message and for the schema.
+var MountPoints = []string{"workspace.drawer", "workspace.stage"}
 
 func (m Manifest) validateMounts(add func(string, string, ...any)) {
 	paths := map[string]bool{}
@@ -550,7 +562,7 @@ func (m Manifest) validateMounts(add func(string, string, ...any)) {
 	for i, mt := range m.Mounts {
 		f := fmt.Sprintf("mounts[%d]", i)
 		if !mountPoints[mt.Point] {
-			add(f+".point", "must be workspace.drawer, got %q", mt.Point)
+			add(f+".point", "must be one of %s, got %q", strings.Join(MountPoints, ", "), mt.Point)
 		}
 		if mt.Title == "" {
 			add(f+".title", "is required — it is the label on the button that opens it")
