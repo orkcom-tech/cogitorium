@@ -256,11 +256,30 @@ jobs:
             fi
             echo "ok: refused $1"
           }
-          refuse "--set config.terminal=true"
-          # A terminal is an interactive attachment and a gear Job is
-          # run-to-completion, so it stays refused on kubernetes too — for a
-          # different reason than it used to be.
-          refuse "--set config.terminal=true --set config.sandbox=subprocess"
+          # The terminal is no longer refused, on either sandbox. It used to be,
+          # because a terminal needed a sandbox to contain it and a gear Job is
+          # run-to-completion. It is a shell in this pod now: it works, and
+          # refusing it was the chart deciding something the operator is
+          # entitled to decide. The default is still false — asserted below,
+          # because a default that quietly flips is the whole risk here.
+          allow() {
+            helm template cog deploy/helm/cogitorium --set auth.adminToken="$TOK" $1 >/dev/null || {
+              echo "FAIL: the chart refused $1"; exit 1
+            }
+            echo "ok: rendered $1"
+          }
+          allow "--set config.terminal=true"
+          allow "--set config.terminal=true --set config.sandbox=subprocess"
+          helm template cog deploy/helm/cogitorium --set auth.adminToken="$TOK" \
+            | grep -q "terminal: false" || {
+              echo "FAIL: the chart does not write terminal: false by default"; exit 1
+            }
+          echo "ok: the terminal is off unless asked for"
+          helm template cog deploy/helm/cogitorium --set auth.adminToken="$TOK" --set config.terminal=true \
+            | grep -q "terminal: true" || {
+              echo "FAIL: config.terminal=true did not reach the ConfigMap"; exit 1
+            }
+          echo "ok: asking for it reaches the server"
           # Egress is no longer refused in-cluster: gears run as Jobs, so there
           # IS a sandbox. It is still refused where there is not one.
           refuse "--set config.egress=true --set config.sandbox=subprocess"

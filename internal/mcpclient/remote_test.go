@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -363,7 +364,24 @@ func TestAnUnknownTransportIsRefused(t *testing.T) {
 // it is missing. It must NOT appear on anything else, because there is no body
 // field for the server to compare it with.
 func TestMcpNameIsSentExactlyWhereItBelongs(t *testing.T) {
+	// Guarded, because the handler runs on the server's goroutine and this test
+	// reads what it recorded from its own. The calls below have returned by
+	// then, but the streamable transport can still have a request in flight —
+	// a notification, or the stream it opened — and the race detector caught
+	// exactly that on CI while passing everywhere else. A flaky red build is
+	// worse than a slow one.
+	var mu sync.Mutex
 	seen := map[string]string{}
+	note := func(method, name string) {
+		mu.Lock()
+		defer mu.Unlock()
+		seen[method] = name
+	}
+	got := func(method string) string {
+		mu.Lock()
+		defer mu.Unlock()
+		return seen[method]
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -372,7 +390,7 @@ func TestMcpNameIsSentExactlyWhereItBelongs(t *testing.T) {
 		m := rpc(t, r)
 		method, _ := m["method"].(string)
 		if method != "" {
-			seen[method] = r.Header.Get("Mcp-Name")
+			note(method, r.Header.Get("Mcp-Name"))
 		}
 		if m["id"] == nil {
 			w.WriteHeader(http.StatusAccepted)
@@ -405,13 +423,13 @@ func TestMcpNameIsSentExactlyWhereItBelongs(t *testing.T) {
 		t.Fatalf("call: %v", err)
 	}
 
-	if seen["tools/call"] != "search" {
-		t.Fatalf("tools/call carried Mcp-Name %q; a validating server would refuse it", seen["tools/call"])
+	if got("tools/call") != "search" {
+		t.Fatalf("tools/call carried Mcp-Name %q; a validating server would refuse it", got("tools/call"))
 	}
 	// Nothing else may carry it: there would be no body field to match.
 	for _, m := range []string{"initialize", "tools/list"} {
-		if seen[m] != "" {
-			t.Fatalf("%s carried Mcp-Name %q, which the body has nothing to match", m, seen[m])
+		if got(m) != "" {
+			t.Fatalf("%s carried Mcp-Name %q, which the body has nothing to match", m, got(m))
 		}
 	}
 }
@@ -434,6 +452,9 @@ func TestAnUnsafeNameTravelsEncoded(t *testing.T) {
 // x-mcp-header: a conforming client MUST mirror annotated parameters, and MUST
 // exclude a tool whose annotation breaks the rules rather than calling it.
 func TestAnnotatedParametersAreMirroredIntoHeaders(t *testing.T) {
+	// Guarded for the same reason as the test above: the handler writes on the
+	// server's goroutine and this test reads on its own.
+	var mu sync.Mutex
 	var region, missing string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -463,8 +484,10 @@ func TestAnnotatedParametersAreMirroredIntoHeaders(t *testing.T) {
 				}},
 			}})
 		default:
+			mu.Lock()
 			region = r.Header.Get("Mcp-Param-Region")
 			missing = r.Header.Get("Mcp-Param-Page")
+			mu.Unlock()
 			answerJSON(w, idOf(m), map[string]any{"content": []any{}})
 		}
 	}))
@@ -491,11 +514,14 @@ func TestAnnotatedParametersAreMirroredIntoHeaders(t *testing.T) {
 	if _, err := c.CallTool(t.Context(), "run_sql", json.RawMessage(`{"region":"us-west1","query":"select 1"}`)); err != nil {
 		t.Fatalf("call: %v", err)
 	}
-	if region != "us-west1" {
-		t.Fatalf("Mcp-Param-Region was %q", region)
+	mu.Lock()
+	sentRegion, sentPage := region, missing
+	mu.Unlock()
+	if sentRegion != "us-west1" {
+		t.Fatalf("Mcp-Param-Region was %q", sentRegion)
 	}
-	if missing != "" {
-		t.Fatalf("Mcp-Param-Page was sent as %q for an argument that was not supplied", missing)
+	if sentPage != "" {
+		t.Fatalf("Mcp-Param-Page was sent as %q for an argument that was not supplied", sentPage)
 	}
 }
 
