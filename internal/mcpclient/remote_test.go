@@ -147,16 +147,75 @@ func TestStreamableHTTPWithAnSSEAnswer(t *testing.T) {
 	}
 }
 
+// What a test collects FROM the server's goroutine, and reads on its own.
+//
+// Every test in this file that records what the server saw has this shape, and
+// every one of them was a data race: the handler appends, the assertions read,
+// and although the calls have returned by then the streamable transport can
+// still have a request in flight — a notification, or the stream it opened.
+// The detector caught two of them on CI while they passed everywhere else,
+// which is the worst kind of red, so the idiom is named rather than fixed
+// case by case.
+type notes struct {
+	mu sync.Mutex
+	v  []string
+}
+
+func (n *notes) add(s string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.v = append(n.v, s)
+}
+
+// all is a copy, so the caller can range over it while the server is still
+// running.
+func (n *notes) all() []string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return append([]string(nil), n.v...)
+}
+
+func (n *notes) at(i int) string {
+	all := n.all()
+	if i >= len(all) {
+		return ""
+	}
+	return all[i]
+}
+
+func (n *notes) len() int { return len(n.all()) }
+
+// tally is notes keyed by something, for "what did the server see on THIS
+// method".
+type tally struct {
+	mu sync.Mutex
+	v  map[string]string
+}
+
+func newTally() *tally { return &tally{v: map[string]string{}} }
+
+func (t *tally) put(k, v string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.v[k] = v
+}
+
+func (t *tally) get(k string) string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.v[k]
+}
+
 // The headers the transport requires. A gateway in front of a real server
 // rejects the request without them, and the failure reads as the server being
 // broken.
 func TestTheRequiredHeadersAreSent(t *testing.T) {
-	var accept, version, method, session []string
+	var accept, version, method, session notes
 	srv := streamable(t, false, func(r *http.Request) {
-		accept = append(accept, r.Header.Get("Accept"))
-		version = append(version, r.Header.Get("MCP-Protocol-Version"))
-		method = append(method, r.Header.Get("Mcp-Method"))
-		session = append(session, r.Header.Get("Mcp-Session-Id"))
+		accept.add(r.Header.Get("Accept"))
+		version.add(r.Header.Get("MCP-Protocol-Version"))
+		method.add(r.Header.Get("Mcp-Method"))
+		session.add(r.Header.Get("Mcp-Session-Id"))
 	})
 	c, err := Dial(t.Context(), Spec{
 		Name: "remote", Transport: TransportStreamableHTTP, URL: srv.URL,
@@ -171,31 +230,31 @@ func TestTheRequiredHeadersAreSent(t *testing.T) {
 		t.Fatalf("tools: %v", err)
 	}
 
-	for i, a := range accept {
+	for i, a := range accept.all() {
 		if !strings.Contains(a, "application/json") || !strings.Contains(a, "text/event-stream") {
 			t.Fatalf("request %d accepted %q; the server chooses either shape per request", i, a)
 		}
 	}
-	for i, v := range version {
+	for i, v := range version.all() {
 		if v == "" {
 			t.Fatalf("request %d carried no MCP-Protocol-Version", i)
 		}
 	}
-	if method[0] != "initialize" {
-		t.Fatalf("the first request's Mcp-Method was %q", method[0])
+	if method.at(0) != "initialize" {
+		t.Fatalf("the first request's Mcp-Method was %q", method.at(0))
 	}
 	// The session the server assigned at initialize has to come back on
 	// everything after it, or a server that uses sessions answers 404 and it
 	// reads like a wrong URL.
-	if len(session) < 2 || session[1] != "sess-1" {
-		t.Fatalf("the session was not echoed after initialize: %q", session)
+	if session.len() < 2 || session.at(1) != "sess-1" {
+		t.Fatalf("the session was not echoed after initialize: %q", session.all())
 	}
 }
 
 // A granted credential must actually reach the far end, on every request.
 func TestGrantedHeadersAreSentOnEveryRequest(t *testing.T) {
-	var auth []string
-	srv := streamable(t, false, func(r *http.Request) { auth = append(auth, r.Header.Get("Authorization")) })
+	var auth notes
+	srv := streamable(t, false, func(r *http.Request) { auth.add(r.Header.Get("Authorization")) })
 	c, err := Dial(t.Context(), Spec{
 		Name: "remote", Transport: TransportStreamableHTTP, URL: srv.URL,
 		Headers: map[string]string{"Authorization": "Bearer opaque"},
@@ -208,7 +267,7 @@ func TestGrantedHeadersAreSentOnEveryRequest(t *testing.T) {
 	if _, _, err := c.Tools(t.Context(), 10); err != nil {
 		t.Fatalf("tools: %v", err)
 	}
-	for i, a := range auth {
+	for i, a := range auth.all() {
 		if a != "Bearer opaque" {
 			t.Fatalf("request %d carried Authorization %q", i, a)
 		}
@@ -364,24 +423,7 @@ func TestAnUnknownTransportIsRefused(t *testing.T) {
 // it is missing. It must NOT appear on anything else, because there is no body
 // field for the server to compare it with.
 func TestMcpNameIsSentExactlyWhereItBelongs(t *testing.T) {
-	// Guarded, because the handler runs on the server's goroutine and this test
-	// reads what it recorded from its own. The calls below have returned by
-	// then, but the streamable transport can still have a request in flight —
-	// a notification, or the stream it opened — and the race detector caught
-	// exactly that on CI while passing everywhere else. A flaky red build is
-	// worse than a slow one.
-	var mu sync.Mutex
-	seen := map[string]string{}
-	note := func(method, name string) {
-		mu.Lock()
-		defer mu.Unlock()
-		seen[method] = name
-	}
-	got := func(method string) string {
-		mu.Lock()
-		defer mu.Unlock()
-		return seen[method]
-	}
+	seen := newTally()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -390,7 +432,7 @@ func TestMcpNameIsSentExactlyWhereItBelongs(t *testing.T) {
 		m := rpc(t, r)
 		method, _ := m["method"].(string)
 		if method != "" {
-			note(method, r.Header.Get("Mcp-Name"))
+			seen.put(method, r.Header.Get("Mcp-Name"))
 		}
 		if m["id"] == nil {
 			w.WriteHeader(http.StatusAccepted)
@@ -423,13 +465,13 @@ func TestMcpNameIsSentExactlyWhereItBelongs(t *testing.T) {
 		t.Fatalf("call: %v", err)
 	}
 
-	if got("tools/call") != "search" {
-		t.Fatalf("tools/call carried Mcp-Name %q; a validating server would refuse it", got("tools/call"))
+	if seen.get("tools/call") != "search" {
+		t.Fatalf("tools/call carried Mcp-Name %q; a validating server would refuse it", seen.get("tools/call"))
 	}
 	// Nothing else may carry it: there would be no body field to match.
 	for _, m := range []string{"initialize", "tools/list"} {
-		if got(m) != "" {
-			t.Fatalf("%s carried Mcp-Name %q, which the body has nothing to match", m, got(m))
+		if seen.get(m) != "" {
+			t.Fatalf("%s carried Mcp-Name %q, which the body has nothing to match", m, seen.get(m))
 		}
 	}
 }
