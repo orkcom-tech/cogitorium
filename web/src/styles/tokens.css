@@ -1552,3 +1552,34 @@ button.danger:hover:not(:disabled),
 .sel-caret {
   flex: none;
 }
+
+/* A field has to look like somewhere you type.
+ *
+ * Its fill is one step from the surface it sits on, and its border is the same
+ * hairline every surface uses — which is enough on a card and not enough
+ * inside a panel, where the two surfaces are already close. On a drawer the
+ * boxes simply disappeared: a form read as a column of labels with gaps.
+ *
+ * The border is the part that carries it, because a fill strong enough to be
+ * seen on every surface would be a fill that shouts on the ones where it was
+ * already fine.
+ */
+input,
+textarea,
+select,
+.sel-btn {
+  border-color: var(--border-strong);
+}
+input:hover:not(:disabled),
+textarea:hover:not(:disabled),
+select:hover:not(:disabled),
+.sel-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+}
+/* Placeholder text is a hint, and it was as quiet as the border: two faint
+   things together read as an empty rectangle rather than as a box to fill. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-dim);
+  opacity: 1;
+}

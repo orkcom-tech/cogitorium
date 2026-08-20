@@ -100,6 +100,7 @@ export default function BlueprintEditor({
   onOpenMemory,
   onOpenClocks,
   onError,
+  wiringVersion,
 }: {
   wsId: number
   agents: Agent[]
@@ -118,6 +119,12 @@ export default function BlueprintEditor({
   /** Open the clocks. Same reason. */
   onOpenClocks: () => void
   onError: (msg: string) => void
+  /** Bumped when something OUTSIDE this canvas changes the wiring — granting a
+   *  gear or binding a document from the agent panel. The canvas reloaded only
+   *  on its own actions and when the agent list changed, so a gear granted in
+   *  the panel beside it did not appear until something else happened to
+   *  refresh the page. */
+  wiringVersion: number
 }) {
   // Which agent each memory node belongs to, kept for the double click: the
   // nodes are rebuilt on every structural change and the handler is not.
@@ -203,7 +210,7 @@ export default function BlueprintEditor({
   // agents or forged a gear mid-turn.
   useEffect(() => {
     void reloadGraph()
-  }, [reloadGraph, agents])
+  }, [reloadGraph, agents, wiringVersion])
 
   const gearById = useMemo(() => new Map(catalog.map((g) => [g.id, g])), [catalog])
   // A stored position wins; everything else is laid out by the wires. See

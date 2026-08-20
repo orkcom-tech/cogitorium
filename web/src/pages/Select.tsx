@@ -230,6 +230,12 @@ export function Select({
             role="listbox"
             ref={list}
             tabIndex={-1}
+            // This list is on <body>, not inside whatever opened it. Anything
+            // that closes itself when clicked outside — a drawer, a menu — has
+            // to be able to tell "outside" from "a piece of me that had to be
+            // rendered elsewhere". Choosing an option used to shut the whole
+            // agent panel before the choice could be acted on.
+            data-portal="select"
             style={{ left: at.left, top: at.top, minWidth: at.width }}
           >
             {options.map((o, i) => (

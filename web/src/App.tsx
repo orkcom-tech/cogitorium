@@ -20,6 +20,31 @@ type Health = { status: string; version: string }
  * route for a server template, so it renders nothing and the person is left
  * looking at an empty frame with a working rail around it.
  */
+/**
+ * A path this application does not own.
+ *
+ * It asks the server for it, which is what should have happened in the first
+ * place — and remembers it tried, so a path neither side serves says so
+ * instead of reloading for ever.
+ */
+function Elsewhere() {
+  const path = window.location.pathname + window.location.search
+  const tried = sessionStorage.getItem(RETRIED) === path
+  useEffect(() => {
+    if (tried) return
+    sessionStorage.setItem(RETRIED, path)
+    window.location.replace(path)
+  }, [tried, path])
+  if (!tried) return null
+  return (
+    <p className="hint">
+      There is no screen at <code>{path}</code>. <a href="/workspaces">Back to your workspaces</a>.
+    </p>
+  )
+}
+
+const RETRIED = 'cogitorium.retried'
+
 function Leave({ to }: { to: string }) {
   useEffect(() => {
     window.location.replace(to)
@@ -137,6 +162,15 @@ export default function App() {
             <Route path="/people" element={user.role === 'admin' ? <AdminPage /> : <Leave to="/workspaces" />} />
             <Route path="/terminal" element={user.role === 'admin' ? <TerminalPage /> : <Leave to="/workspaces" />} />
             <Route path="/workspaces/:id" element={<WorkspacePage me={user} />} />
+            {/* Anything else here is a screen the SERVER renders, and the only
+                way this router is looking at one is history: pressing Back out
+                of a workspace restores this application at /workspaces without
+                a request, and React Router — correctly — matches nothing. The
+                result was a blank cavity and no way out but the address bar.
+
+                So: fetch it properly, once. The guard is what keeps it from
+                becoming a loop on a path nothing serves. */}
+            <Route path="*" element={<Elsewhere />} />
           </Routes>
           </main>
         </div>

@@ -84,6 +84,15 @@ func TestTheDeclaredRoutesMatchTheApplication(t *testing.T) {
 		declared[r] = true
 	}
 	for _, m := range re.FindAllStringSubmatch(string(b), -1) {
+		// The catch-all is not a screen. It is what the application says when
+		// the router is looking at a path this server renders — which happens
+		// on Back out of a workspace, where history restores the application
+		// without a request. It asks the server for that path rather than
+		// showing an empty cavity, so requiring the server to "serve *" would
+		// be requiring a route for the absence of one.
+		if m[1] == "*" {
+			continue
+		}
 		// react-router writes :id; the server matches any single segment.
 		want := regexp.MustCompile(`:[A-Za-z0-9_]+`).ReplaceAllString(m[1], ":")
 		if !declared[want] {

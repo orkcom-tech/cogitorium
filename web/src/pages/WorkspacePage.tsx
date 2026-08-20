@@ -221,6 +221,11 @@ export default function WorkspacePage({ me }: { me: User }) {
   // the gear list — today, the note a blueprint drop leaves when the gear that
   // landed has never been approved. It opens the card; it approves nothing.
   const [reviewGear, setReviewGear] = useState<number | null>(null)
+  // Bumped when the agent panel changes wiring, so the canvas beside it
+  // redraws. Granting a gear there used to leave the blueprint showing the
+  // workspace as it was before the grant.
+  const [wiringVersion, setWiringVersion] = useState(0)
+  const wiringChanged = useCallback(() => setWiringVersion((v) => v + 1), [])
 
   // Every panel below whose body the server renders. React mounts the
   // container and htmx scans the document only once, at load — so without
@@ -457,6 +462,7 @@ export default function WorkspacePage({ me }: { me: User }) {
                     setOverlay('memory')
                   }}
                   onOpenClocks={() => setOverlay('queue')}
+                  wiringVersion={wiringVersion}
                   onReviewGear={(id) => {
                     setReviewGear(id)
                     setOverlay('gears')
@@ -670,6 +676,7 @@ export default function WorkspacePage({ me }: { me: User }) {
               wsId={wsId}
               status={statuses.get(selectedAgent.id)}
               onClose={() => setSelectedAgent(null)}
+              onWiringChanged={wiringChanged}
               onChanged={(a) => {
                 setSelectedAgent(a)
                 void reloadAgents()
@@ -1148,6 +1155,7 @@ function AgentPanel({
   status,
   onClose,
   onChanged,
+  onWiringChanged,
   onError,
 }: {
   agent: Agent
@@ -1156,6 +1164,10 @@ function AgentPanel({
   status?: AgentStatus
   onClose: () => void
   onChanged: (a: Agent) => void
+  /** Something this panel did changed the wiring — a gear granted, a document
+   *  bound. The canvas beside it draws that wiring and has no other way to
+   *  hear about it. */
+  onWiringChanged: () => void
   onError: (msg: string) => void
 }) {
   const agentMemory = useHtmx<HTMLDivElement>(`agent-memory-${agent.id}`)
@@ -1341,7 +1353,7 @@ function AgentPanel({
                     .unbind(b.id)
                     .then(() => {
                       setPrompt(null)
-                      return reloadBindings()
+                      return reloadBindings().then(onWiringChanged).then(onWiringChanged)
                     })
                     .catch((e: Error) => onError(e.message))
                 }
@@ -1386,6 +1398,7 @@ function AgentPanel({
                       api.gears
                         .unbind(b.id)
                         .then(reloadGears)
+                        .then(onWiringChanged)
                         .catch((e: Error) => onError(e.message))
                     }
                   >
@@ -1400,6 +1413,7 @@ function AgentPanel({
                 api.gears
                   .bind(wsId, gearId, scope === 'agent' ? agent.id : null)
                   .then(reloadGears)
+                  .then(onWiringChanged)
                   .catch((e: Error) => onError(e.message))
               }
             />

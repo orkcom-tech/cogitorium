@@ -176,6 +176,11 @@ export function Drawer({
       // The rail button that owns this drawer handles its own click; closing
       // here as well would toggle it shut and straight back open.
       if (t.closest?.('.rail')) return
+      // A control inside this drawer may render part of itself on <body> — a
+      // dropdown's list is fixed to the viewport because the panel it sits in
+      // clips. That is not somebody clicking away: picking a gear to grant used
+      // to close the whole panel before the grant could be pressed.
+      if (t.closest?.('[data-portal]')) return
       onClose()
     }
     const key = (e: KeyboardEvent) => {
