@@ -52,19 +52,23 @@ func sameHost(origin, host string) bool {
 // may use that workspace.
 func (s *Server) handleTerminalStatus(w http.ResponseWriter, r *http.Request) {
 	caller := callerFrom(r.Context())
-	reason := s.terminalRefusal()
+	// Per scope, because the two can differ: a workspace terminal needs a
+	// sandbox on an install other people can reach, and the server-wide one is
+	// an administrator's and is always this machine.
+	reason := s.terminalRefusalFor(r.Context(), true)
+	globally := s.terminalRefusalFor(r.Context(), false)
 	writeJSON(w, http.StatusOK, map[string]any{
 		// A workspace terminal is open to whoever may use the workspace; that
 		// is checked when one is opened, not here.
 		"available":        reason == "",
-		"global_available": reason == "" && caller.IsAdmin(),
+		"global_available": globally == "" && caller.IsAdmin(),
 		"reason":           reason,
-		"global_reason":    globalReason(reason, caller.IsAdmin()),
+		"global_reason":    globalReason(globally, caller.IsAdmin()),
 		// Two answers, because the two shells can land on different machines:
 		// see onThisMachine. One field would have to pick a scope and be wrong
 		// on the other screen.
-		"backend":        s.terminalBackend(true),
-		"global_backend": s.terminalBackend(false),
+		"backend":        s.terminalBackend(r.Context(), true),
+		"global_backend": s.terminalBackend(r.Context(), false),
 	})
 }
 
@@ -83,24 +87,46 @@ func (s *Server) handleTerminalStatus(w http.ResponseWriter, r *http.Request) {
 // what they had before and what a workspace terminal was always for. On a
 // local install — one person, their own machine — that distinction is between
 // somebody and themselves, and it buys nothing.
-func (s *Server) onThisMachine(workspaceScoped bool) bool {
+//
+// This used to short-circuit to the host shell whenever there was no sandbox at
+// all, which quietly undid the exception in exactly the deployments where it
+// mattered most: an install listening on a routable address with no Docker, and
+// the Kubernetes backend, which runs a gear as a Job and is NOT Interactive. On
+// both, a workspace member opening a terminal was handed a shell as this
+// server's user — past the approval gate that makes a gear safe to grant. That
+// case is refused now rather than downgraded; see terminalRefusalFor.
+func (s *Server) onThisMachine(ctx context.Context, workspaceScoped bool) bool {
 	switch {
 	case s.hostShell == nil:
 		return false // nothing of this machine's to open
-	case s.interactive == nil:
-		return true // nothing else to open
 	case !workspaceScoped:
 		return true // the server-wide shell is an admin's, and IS this machine
+	case s.onePerson(ctx):
+		return true // nobody else is here: the distinction buys nothing
 	default:
-		return s.localInstall
+		// Somebody else can be here: the sandbox, or nothing at all.
+		return false
 	}
+}
+
+// onePerson reports whether anybody other than the operator can be on this
+// install.
+//
+// The listen address alone was the first answer and it is wrong in a container:
+// a Docker install listens on 0.0.0.0 because it must, and that says nothing
+// about who can reach the published port — the starter compose file publishes
+// it on loopback. So an install with exactly ONE account is one person's too,
+// whatever it binds. Add a second account and the question has a different
+// answer, which is exactly when it should.
+func (s *Server) onePerson(ctx context.Context) bool {
+	return s.localInstall || s.identity.OnlyOne(ctx)
 }
 
 // terminalBackend names where a shell would run, because "a terminal" means
 // two different things here and somebody about to type into one deserves to
 // know which they have: a container they can throw away, or their computer.
-func (s *Server) terminalBackend(workspaceScoped bool) string {
-	if s.onThisMachine(workspaceScoped) {
+func (s *Server) terminalBackend(ctx context.Context, workspaceScoped bool) string {
+	if s.onThisMachine(ctx, workspaceScoped) {
 		return "host"
 	}
 	return s.gearExec.Backend()
@@ -119,7 +145,7 @@ func globalReason(reason string, admin bool) string {
 // handleTerminal is the server-wide shell: it belongs to nobody's workspace
 // and therefore to nobody but an administrator.
 func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
-	if !s.terminalReady(w, r) {
+	if !s.terminalReady(w, r, false) {
 		return
 	}
 	if _, ok := requireAdmin(w, r); !ok {
@@ -131,13 +157,14 @@ func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
 // handleWorkspaceTerminal is the shell for one workspace, open to whoever may
 // use that workspace.
 //
-// On a shared install it grants nothing new: anyone who can reach a workspace
-// can already run code in that same sandbox by writing a gear and dry-running
-// it, and scoping the shell to the workspace makes that capability visible and
+// With a sandbox it grants nothing new: anyone who can reach a workspace can
+// already run code in that same sandbox by writing a gear and dry-running it,
+// and scoping the shell to the workspace makes that capability visible and
 // bounded instead of tacit. On a one-person install it is that person's own
-// machine, in that workspace's directory — see onThisMachine.
+// machine, in that workspace's directory. On a shared install with no sandbox
+// it is refused — see terminalRefusalFor and onThisMachine.
 func (s *Server) handleWorkspaceTerminal(w http.ResponseWriter, r *http.Request) {
-	if !s.terminalReady(w, r) {
+	if !s.terminalReady(w, r, true) {
 		return
 	}
 	id, ok := s.workspaceScoped(w, r)
@@ -161,8 +188,8 @@ func (s *Server) workspaceDir(wsID int64) string {
 	return workdir.Dir(s.dataDir, wsID)
 }
 
-func (s *Server) terminalReady(w http.ResponseWriter, r *http.Request) bool {
-	if reason := s.terminalRefusal(); reason != "" {
+func (s *Server) terminalReady(w http.ResponseWriter, r *http.Request, workspaceScoped bool) bool {
+	if reason := s.terminalRefusalFor(r.Context(), workspaceScoped); reason != "" {
 		writeError(w, http.StatusForbidden, "there is no terminal here: "+reason)
 		return false
 	}
@@ -181,6 +208,27 @@ func (s *Server) terminalRefusal() string {
 		return "switched off in this server's configuration (terminal: false)"
 	case s.interactive == nil && s.hostShell == nil:
 		return "there is no sandbox to host a shell, and this platform has none of its own to offer"
+	}
+	return ""
+}
+
+// terminalRefusalFor is terminalRefusal for one scope.
+//
+// A workspace terminal on an install other people can reach needs a sandbox,
+// and there is no sandbox on every backend: the Kubernetes one runs a gear as a
+// Job and cannot attach to one, and an install with no Docker has none at all.
+// Where that meets a shared install, the answer is no — not "here is the host
+// shell instead", which is what it used to be and which handed a workspace
+// member a shell as this server's user, past the approval gate that is the
+// whole reason a gear is safe to grant.
+func (s *Server) terminalRefusalFor(ctx context.Context, workspaceScoped bool) string {
+	if reason := s.terminalRefusal(); reason != "" {
+		return reason
+	}
+	if workspaceScoped && !s.onePerson(ctx) && s.interactive == nil {
+		return "a workspace terminal needs a sandbox on an install other people can reach, and " +
+			"this one has none — a member is not the operator, and a shell as this server's user " +
+			"would be one. The server-wide terminal is still open to an administrator"
 	}
 	return ""
 }
@@ -215,7 +263,7 @@ func (s *Server) serveTerminal(w http.ResponseWriter, r *http.Request, dir, labe
 	// you leave and come back to. So the shell outlives the connection, and
 	// reattaching replays what it printed while nobody was watching.
 	key := caller.Name + "\x00" + label
-	onHost := s.onThisMachine(workspaceScoped)
+	onHost := s.onThisMachine(r.Context(), workspaceScoped)
 	session, fresh, err := s.terminals.attach(key, func() (sandbox.Session, error) {
 		// WithoutCancel in both: the request ends when this browser goes away,
 		// and the shell must not end with it.
@@ -231,7 +279,7 @@ func (s *Server) serveTerminal(w http.ResponseWriter, r *http.Request, dir, labe
 	}
 	_ = session.resize(rows, cols)
 	slog.Info("terminal attached", "user", caller.Name, "scope", label,
-		"backend", s.terminalBackend(workspaceScoped), "new", fresh, "rows", rows, "cols", cols)
+		"backend", s.terminalBackend(r.Context(), workspaceScoped), "new", fresh, "rows", rows, "cols", cols)
 	defer slog.Info("terminal detached", "user", caller.Name, "scope", label)
 
 	out, history := session.take()
@@ -311,7 +359,7 @@ func parseUint(s string, fallback int) int {
 // shell is always this machine, and a workspace's may not be. Saying which
 // costs one line at start and saves an operator working it out from behaviour.
 func workspaceShellNote(s *Server) string {
-	if s.onThisMachine(true) {
+	if s.onThisMachine(context.Background(), true) {
 		return "also this machine"
 	}
 	return "sandboxed — this install is reachable by other people"

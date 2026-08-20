@@ -2,7 +2,7 @@
 layout: default
 title: Writing a plugin
 permalink: /plugins/
-description: How to write a Cogitorium plugin — the manifest, the five tiers, the nine host calls, overriding a screen that shipped, the four SDKs, and how to list yours in the shared catalog.
+description: How to write a Cogitorium plugin — the manifest, the five tiers, the nine host calls, overriding a screen that shipped, the SDKs, and how to list yours in the shared catalog.
 ---
 
 # Writing a plugin

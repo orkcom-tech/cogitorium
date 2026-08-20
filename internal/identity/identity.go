@@ -639,3 +639,22 @@ func tokenSource(generated bool) string {
 	}
 	return "seeded from the environment"
 }
+
+// OnlyOne reports whether this install has exactly one account.
+//
+// It answers "can anybody other than the operator be on this server", which is
+// a question the listen address only approximates: a container listens on
+// 0.0.0.0 because it has to, and that says nothing about who can reach the
+// published port. One account means one person, whatever the address.
+//
+// A database that cannot answer says no. This gates a capability, and a
+// capability that opens because a query failed is a capability that opens when
+// something is already wrong.
+func (s *Store) OnlyOne(ctx context.Context) bool {
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&n); err != nil {
+		slog.Error("counting the accounts on this install", "err", err)
+		return false
+	}
+	return n == 1
+}

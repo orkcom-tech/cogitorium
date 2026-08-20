@@ -94,6 +94,14 @@ services:
     environment:
       OLLAMA_HOST: "http://ollama:11434"
     entrypoint: ["/bin/sh", "-c"]
+    # ONE argument to `sh -c`, which is why this is a list with a single block
+    # scalar in it. Written as `command: >` it was a plain string, and compose
+    # splits a string command on whitespace — so the container ran
+    # `sh -c until ollama list ...`, the script was the word `until`, it exited
+    # with a syntax error, and `service_completed_successfully` never came true.
+    # Cogitorium then never started at all, which is the whole of what this file
+    # is for.
+    #
     # qwen2.5:7b — about 4.7 GB, and chosen because it calls tools reliably.
     # Tool calling is not optional here: delegation, gears and planboards are
     # all tool calls, and a model that cannot make one can only chat. Swap it
@@ -101,9 +109,10 @@ services:
     # (qwen2.5:0.5b is ~400 MB and still calls tools) or something bigger if
     # you have the memory — and change the model name in
     # deploy/starter/cogitorium.yaml to match.
-    command: >
-      until ollama list >/dev/null 2>&1; do echo "waiting for ollama"; sleep 1; done;
-      ollama pull qwen2.5:7b
+    command:
+      - |
+        until ollama list >/dev/null 2>&1; do echo "waiting for ollama"; sleep 1; done
+        ollama pull qwen2.5:7b
     restart: "no"
 
 volumes:

@@ -50,7 +50,8 @@ Two properties this chart cannot deliver on its own, stated rather than assumed:
 `sandbox: subprocess` is still available for a cluster whose policy forbids the
 Role above, and on it a gear runs as a child of the server with the server's own
 file access — approving one grants it everything the server has, and the outward
-gate stays refused. Note also that this image carries no
+gate stays refused (the terminal is not — see `config.terminal`). Note also
+that this image carries no
 `python3`, `node` or `bash`: on that setting only a `binary` gear can run at all.
 
 **The terminal is available in-cluster, and it is a shell in this pod.** It used
@@ -62,8 +63,12 @@ can open the interface is this pod's filesystem, including the database and the
 provider keys in it. The default is `false` and this chart no longer refuses the
 other value — that is your decision, not the chart's.
 
-A *workspace* terminal on this install stays sandboxed, because a workspace
-member is not the operator.
+A **workspace** terminal is a different question, and nothing in a cluster can
+sandbox one: only the Docker backend hosts an interactive shell, and `sandbox:
+kubernetes` runs a gear as a Job rather than attaching to one. So it depends on
+how many people are here. On an install with **one account** it is a shell in
+this pod, like the administrator's. With **two or more** it is refused — a
+workspace member is not the operator, and there is no sandbox to put them in.
 
 ## Credentials
 

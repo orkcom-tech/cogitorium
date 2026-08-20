@@ -78,7 +78,8 @@ Two things about this deployment that are not preferences:
      You set sandbox: subprocess, so gears run as a child of the server with
      the server's own file access — the database and the provider keys in it.
      Approving a gear here grants it everything the server has, and the
-     terminal and the outward gate stay refused.
+     outward gate stays refused. The terminal is not refused by the sandbox
+     any more — see config.terminal, which is false unless you set it.
 
      This image also carries no python3, node or bash, so on this setting only
      a "binary" gear can run at all.

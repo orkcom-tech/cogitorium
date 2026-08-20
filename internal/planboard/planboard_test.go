@@ -156,11 +156,12 @@ func TestResumeCarriesThePositionAndRestartDoesNot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The next run begins.
-	if err := pb.BeginRun(ctx, rb.ID); err != nil {
-		t.Fatal(err)
-	}
-	if err := pb.BeginRun(ctx, cb.ID); err != nil {
+	// The next run begins — through the door the SERVER uses, not by calling
+	// BeginRun per binding. That distinction is the whole of this: BeginRun
+	// existed and had no caller outside this file, so `restart` was `resume`
+	// with a different word on the card. BeginRunFor is what the engine calls,
+	// and if it ever stops calling it this test is what says so.
+	if err := pb.BeginRunFor(ctx, ws, agent); err != nil {
 		t.Fatal(err)
 	}
 

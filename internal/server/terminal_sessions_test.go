@@ -2,13 +2,16 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/orkcom-tech/cogitorium/internal/identity"
 	"github.com/orkcom-tech/cogitorium/internal/sandbox"
+	"github.com/orkcom-tech/cogitorium/internal/store"
 )
 
 // What makes a terminal a terminal, tested at the layer that decides it.
@@ -264,14 +267,16 @@ func waitForScrollback(t *testing.T, s *terminalSession, want string) string {
 
 // Which machine a terminal opens on.
 //
-// The row that matters is the last one: a workspace on an install other people
-// can reach. A member is not the operator, and the server's own shell would
-// hand them its database and every provider key in it. Everything else lands
-// on the machine, because that is what somebody who opens a terminal means.
+// The row that matters is the last one: a workspace on an install somebody else
+// can be on. A member is not the operator, and the server's own shell would hand
+// them its database and every provider key in it. Everything else lands on the
+// machine, because that is what somebody who opens a terminal means.
 func TestWhichMachineATerminalOpensOn(t *testing.T) {
 	t.Parallel()
 	host := &sandbox.Host{}
 	docker := &sandbox.Docker{Image: "cogitorium-tests-never-run-this"}
+	alone, crowded := oneAccount(t), twoAccounts(t)
+	ctx := t.Context()
 
 	for _, c := range []struct {
 		name      string
@@ -279,25 +284,57 @@ func TestWhichMachineATerminalOpensOn(t *testing.T) {
 		workspace bool
 		want      bool
 	}{
-		{"no sandbox, the server-wide shell", &Server{hostShell: host}, false, true},
-		{"no sandbox, a workspace shell", &Server{hostShell: host}, true, true},
+		{"no sandbox, the server-wide shell", &Server{hostShell: host, identity: crowded}, false, true},
+		{
+			"no sandbox and nobody else is here, a workspace shell",
+			&Server{hostShell: host, identity: alone}, true, true,
+		},
+		{
+			// The case that used to short-circuit to the host shell, which is
+			// how a workspace member on a shared install was handed a shell as
+			// this server's user. It is refused now — see the test below.
+			"no sandbox and somebody else can be here, a workspace shell",
+			&Server{hostShell: host, identity: crowded}, true, false,
+		},
 		{
 			"a sandbox exists, but the server-wide shell is an admin's and is this machine",
-			&Server{hostShell: host, interactive: docker}, false, true,
+			&Server{hostShell: host, interactive: docker, identity: crowded}, false, true,
 		},
 		{
 			"a sandbox exists and this install is one person's",
-			&Server{hostShell: host, interactive: docker, localInstall: true}, true, true,
+			&Server{hostShell: host, interactive: docker, identity: alone}, true, true,
 		},
 		{
-			"a sandbox exists and other people can reach this install",
-			&Server{hostShell: host, interactive: docker}, true, false,
+			"a sandbox exists and somebody else can be here",
+			&Server{hostShell: host, interactive: docker, identity: crowded}, true, false,
 		},
-		{"nothing of this machine's to open", &Server{interactive: docker}, false, false},
+		{"nothing of this machine's to open", &Server{interactive: docker, identity: alone}, false, false},
 	} {
-		if got := c.srv.onThisMachine(c.workspace); got != c.want {
+		if got := c.srv.onThisMachine(ctx, c.workspace); got != c.want {
 			t.Errorf("%s: opened on %s, wanted %s", c.name, machine(got), machine(c.want))
 		}
+	}
+}
+
+// The listen address is not the question. A container binds 0.0.0.0 because it
+// has to, and the starter compose file publishes that port on loopback — so
+// deciding by address alone took the workspace terminal away from every Docker
+// install, which is the ordinary way to run this.
+func TestOneAccountIsOnePersonWhateverItBindsTo(t *testing.T) {
+	t.Parallel()
+	inContainer := &Server{
+		hostShell: &sandbox.Host{},
+		identity:  oneAccount(t),
+		// listening on 0.0.0.0, as a container must
+		localInstall: false,
+	}
+	if !inContainer.onThisMachine(t.Context(), true) {
+		t.Error("an install with one account was treated as shared because of its listen address")
+	}
+
+	withCompany := &Server{hostShell: &sandbox.Host{}, identity: twoAccounts(t)}
+	if withCompany.onThisMachine(t.Context(), true) {
+		t.Error("a second account did not change the answer")
 	}
 }
 
@@ -306,4 +343,77 @@ func machine(onHost bool) string {
 		return "this machine"
 	}
 	return "the sandbox"
+}
+
+// oneAccount and twoAccounts are identity stores with exactly that many people
+// on them — the thing onePerson actually asks.
+func oneAccount(t *testing.T) *identity.Store {
+	t.Helper()
+	return accounts(t, 0)
+}
+
+func twoAccounts(t *testing.T) *identity.Store {
+	t.Helper()
+	return accounts(t, 1)
+}
+
+func accounts(t *testing.T, extra int) *identity.Store {
+	t.Helper()
+	db, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	users := identity.NewStore(db)
+	if _, _, err := users.Bootstrap(t.Context(), identity.Seeds{}); err != nil {
+		t.Fatalf("bootstrap admin: %v", err)
+	}
+	for i := range extra {
+		if _, _, err := users.CreateUser(t.Context(), fmt.Sprintf("member%d", i), "member", ""); err != nil {
+			t.Fatalf("create member: %v", err)
+		}
+	}
+	return users
+}
+
+// A workspace terminal that cannot be sandboxed on a shared install is REFUSED,
+// not quietly downgraded to a shell on the machine.
+//
+// This is the one that mattered. A workspace is open to its members; a member
+// is not the operator; and a gear — the other way a member runs code — needs an
+// administrator's approval first. Handing them a shell as this server's user
+// walks past that gate, and it happened on two ordinary deployments: an install
+// with more than one account and no Docker, and the Kubernetes backend, which
+// runs a gear as a Job and cannot attach to one.
+func TestAWorkspaceTerminalIsRefusedRatherThanDowngraded(t *testing.T) {
+	t.Parallel()
+	host := &sandbox.Host{}
+	docker := &sandbox.Docker{Image: "cogitorium-tests-never-run-this"}
+	ctx := t.Context()
+
+	shared := &Server{terminalEnabled: true, hostShell: host, identity: twoAccounts(t)}
+	if reason := shared.terminalRefusalFor(ctx, true); reason == "" {
+		t.Error("a workspace terminal with no sandbox on a shared install was allowed; " +
+			"that hands a member a shell as this server's user")
+	} else if !strings.Contains(reason, "sandbox") {
+		t.Errorf("the refusal does not say what is missing: %q", reason)
+	}
+	// The administrator's own terminal is untouched: it is not a workspace's,
+	// and an admin can already reconfigure this install.
+	if reason := shared.terminalRefusalFor(ctx, false); reason != "" {
+		t.Errorf("the server-wide terminal was refused as well: %q", reason)
+	}
+
+	// And the two installs where a workspace terminal is fine.
+	alone := &Server{terminalEnabled: true, hostShell: host, identity: oneAccount(t)}
+	if reason := alone.terminalRefusalFor(ctx, true); reason != "" {
+		t.Errorf("one person's own install refused them a workspace terminal: %q", reason)
+	}
+	sandboxed := &Server{terminalEnabled: true, hostShell: host, interactive: docker, identity: twoAccounts(t)}
+	if reason := sandboxed.terminalRefusalFor(ctx, true); reason != "" {
+		t.Errorf("a shared install WITH a sandbox refused a workspace terminal: %q", reason)
+	}
+	if sandboxed.onThisMachine(ctx, true) {
+		t.Error("a workspace terminal on a shared install opened on the machine rather than the sandbox")
+	}
 }

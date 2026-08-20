@@ -113,9 +113,9 @@ workflow, so you can get back to it after an afternoon of changing your mind.
   it, and it is a shell on the machine this server runs on, as the account it
   runs as. Leave the screen and come back and it is the same shell: same
   directory, same history, and what it printed while you were away replayed into
-  it. On an install other people can reach, a *workspace* terminal is sandboxed
-  instead — a member is not the operator — and `terminal: false` refuses it
-  outright.
+  it. As soon as a second account exists, a *workspace* terminal is sandboxed
+  instead — a member is not the operator — or refused where there is no sandbox.
+  `terminal: false` switches the whole thing off.
   [→](https://orkcom-tech.github.io/cogitorium/guide/#terminal)
 - ⌨️ **A command line over the same API** — `cogitorium gears run`,
   `receivers deliver`, `queue cancel`, `workspaces export | import`. It exits
@@ -154,8 +154,10 @@ workflow, so you can get back to it after an afternoon of changing your mind.
   renders is a template addressable by name, so overriding one is a file rather
   than a fork; the four that are drawn rather than rendered — the blueprint, the
   map, the editor, the terminal — get a strip above them instead of a pretence.
-  Installing, enabling or removing one **takes effect on the next page**: only a
-  plugin with a backend of its own asks for a restart. Five tiers — templates, WebAssembly, a fetched interpreter, a container, a native
+  Enabling, disabling or removing one **takes effect on the next page** —
+  installing does not, because a plugin arrives switched off and stays there
+  until somebody reads it and approves it. Only a plugin with a backend of its
+  own asks for a restart. Five tiers — templates, WebAssembly, a fetched interpreter, a container, a native
   binary — and the author declares a technology while the host picks the lane.
   Nine host calls, identical on every tier. SDKs for Python, Go and Rust — and
   the Go one takes TinyGo unchanged; `needs: js` needs no SDK at all. It arrives switched off, and approval
@@ -194,7 +196,7 @@ people already run. Each row is a structural difference, not a feature tick.
 |---|---|---|---|---|
 | **What you install** | one Go binary with the interface inside it | a pnpm workspace of Workers | an npm package, Node 22+ | containers, with Postgres and Redis beside them |
 | **Where it actually runs** | your laptop, your Docker, your cluster | Cloudflare Workers and Durable Objects; `workerd` locally | one Node process on your machine | your host, plus its datastores |
-| **Who may change the interface** | anyone — a plugin installs into a running server and is rendering on the next page, no restart, and every screen the server renders is a template it can take over by name | whoever owns the deployment repository | anyone — the UI is itself a swappable plugin row | node and component authors, through a review you do not control |
+| **Who may change the interface** | anyone — a plugin installs into a running server and, once read and approved, is rendering on the next page with no restart; every screen the server renders is a template it can take over by name | whoever owns the deployment repository | anyone — the UI is itself a swappable plugin row | node and component authors, through a review you do not control |
 | **What isolates a third party's code** | tiered and running: WebAssembly, a fetched interpreter, a container, or native with no isolation and said so in red | Workers isolates; agent frames with outbound networking off | nothing — plugins mount in-process with full host rights | nothing to partial, depending on product and mode |
 | **Before an extension runs** | approval bound to the sha256 of the bytes on disk; a new build drops back to pending | review of the deployment repository | no manifest, no prompt, no signature | install and it runs |
 | **Code an agent wrote for itself** | will not execute until a person approves that exact version | gadgets run in sandboxed frames | registered by a plugin, runs unsandboxed | executes when saved |

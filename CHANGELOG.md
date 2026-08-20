@@ -38,9 +38,11 @@ whoever runs next picks up the step the last one left.
 
 The orchestrator can write, attach, move and delete them, like everything else
 in a workflow. A worker cannot: it follows a plan, it does not rewrite one. And
-a saved version carries the **position** as well as the steps — restoring the
-steps while leaving the marker where the run that went wrong pushed it would be
-a rollback that returns the map and keeps the wrong pin on it.
+a saved version records which plans were attached here and the **position**
+each had reached — not the plan's own steps, which stay in the catalogue and are
+shared. Restoring the wiring while leaving the marker where the run that went
+wrong pushed it would be a rollback that returns the map and keeps the wrong pin
+on it.
 
 ### A terminal that behaves like a terminal
 
@@ -57,10 +59,17 @@ writes it once and it holds.
 Docker happened to be installed is a terminal whose `ls` shows somebody else's
 filesystem. It is a shell on the machine this server runs on, as the account it
 runs as — the same reach the operator already has by sitting at it, said out
-loud in the log at every start. One exception, and it is the one that matters: a
-**workspace** terminal on an install other people can reach runs in the sandbox
-instead, because a workspace is open to its members and a member is not the
-operator.
+loud in the log at every start.
+
+One exception, and it is the one that matters: as soon as this install has **more
+than one account**, a *workspace* terminal runs in the sandbox instead, because a
+workspace is open to its members and a member is not the operator. Where there is
+no sandbox to put them in — no Docker, or the Kubernetes backend, which runs a
+gear as a Job and cannot attach to one — it is **refused** rather than downgraded
+to the machine, because that would be a shell as this server's user handed past
+the approval that makes a gear safe to grant. The count of accounts is the
+question rather than the listen address, which a container settles for reasons
+that have nothing to do with who can reach the port.
 
 **It stays where you left it.** Every connection used to start a fresh shell and
 kill it on disconnect, so walking to another screen and coming back lost the
@@ -234,8 +243,8 @@ believes it took effect.
   provider replying in a shape this build cannot read produced exactly that: a
   turn recorded as a success, an empty bubble, and nothing anywhere to act on.
 - **A gear granted in the agent panel now appears on the canvas.** The blueprint
-  redrew on its own actions and nothing else, so the thing you just did was
-  simply not there.
+  redrew on its own actions and when the agent list changed, and nothing else —
+  so the thing you just did was simply not there.
 - **Choosing from a dropdown inside a drawer closed the drawer.** The list is
   rendered on `<body>` because the panel clips, so the drawer's own
   click-outside saw a click on an option as a click away.

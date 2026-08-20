@@ -314,3 +314,27 @@ func (s *Store) SetState(ctx context.Context, bindingID int64, step, cycle int) 
 		step, cycle, now(), bindingID)
 	return err
 }
+
+// BeginRunFor applies the mode of every plan in front of this agent.
+//
+// This is what a "run" means to a planboard: the unattended work the queue
+// starts, not every message somebody types. A conversation is one continuous
+// thing — resetting the position because the operator sent another sentence
+// would make `restart` mean "restart constantly" — and an unattended run is the
+// thing that happens again tomorrow night with nobody watching.
+//
+// It exists because BeginRun did not: the mode was stored, the screen offered
+// it, and nothing in the server ever applied it, so `restart` was `resume` with
+// a different word on the card.
+func (s *Store) BeginRunFor(ctx context.Context, wsID, agentID int64) error {
+	active, err := s.Active(ctx, wsID, agentID)
+	if err != nil {
+		return err
+	}
+	for _, a := range active {
+		if err := s.BeginRun(ctx, a.Binding.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}

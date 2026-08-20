@@ -127,10 +127,11 @@ on, and a gear Job mounts that same claim at its own subPath.
 | `terminal` | `COGITORIUM_TERMINAL` | **on** | A shell in the UI. |
 
 It is on, and it is a shell on the machine this server runs on, as the account
-it runs as — the same reach you already have by sitting at that machine, and
-the terminal an editor would have given you. The exception is a workspace
-terminal on an install other people can reach: a member is not the operator, so
-there they get the sandbox instead.
+it runs as — the same reach you already have by sitting at that machine, and the
+terminal an editor would have given you. The exception is a **workspace**
+terminal on an install with more than one account: a member is not the operator,
+so there they get the sandbox instead, and where there is no sandbox to put them
+in they are refused rather than handed the machine.
 
 `terminal: false` refuses it entirely, and on a shared install it should. The
 setting distinguishes "written false" from "not written", so writing it once

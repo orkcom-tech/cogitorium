@@ -75,6 +75,23 @@ func (e *Engine) RunUnattended(ctx context.Context, wsID int64, agentName, task 
 	e.setStatus(agent.ID, "working", "an inlet delivery", discard)
 	defer e.setStatus(agent.ID, "idle", "", discard)
 
+	// A plan in `restart` mode starts at step one. THIS is what a run means to a
+	// planboard — the unattended work the queue starts, not every sentence
+	// somebody types in a conversation, which is one continuous thing.
+	//
+	// It was missing entirely: the mode was stored, the screen offered it, and
+	// nothing ever applied it, so `restart` was `resume` with a different word
+	// on the card. A failure here is logged rather than fatal — the plan is the
+	// order of the work, and refusing to run because the marker could not be
+	// moved would turn a plan into a way for a workflow to stop.
+	if e.plans != nil {
+		if err := e.plans.BeginRunFor(ctx, wsID, agent.ID); err != nil {
+			slog.Error("a planboard's mode could not be applied at the start of this run; "+
+				"a restart plan will continue where it was rather than beginning again",
+				"workspace_id", wsID, "agent", agent.Name, "err", err)
+		}
+	}
+
 	slog.Info("unattended run started", "workspace_id", wsID, "agent", agent.Name, "task_len", len(task))
 	answer, runErr := e.runAgent(ctx, wsID, agent, nil, task, discard)
 

@@ -40,8 +40,9 @@ gaps between them, answering four questions:
 2. **what is the hole showing** — outside a workspace, the destinations:
    Workspaces, Map, Gears, Models, Instructions, Planboards, Context, People,
    Terminal. Inside one, the stages: Chat, Blueprint, Editor;
-3. **what can crawl out over it** — the drawers: Agents, Gears, Instructions,
-   Planboards, Memory, Receivers, Queue, Variables, Terminal;
+3. **what can crawl out over it** — the drawers: Agents, Gears, MCP servers,
+   Instructions, Planboards, Memory, Receivers, Queue, Variables, Versions,
+   Terminal, and Context for an administrator;
 4. **the rest** — More, Appearance, updates, plugins, and your account.
 
 Nothing is written on the rail. Each button is an icon that raises its name
@@ -372,9 +373,10 @@ Three **stages** on a track that slides vertically — **Chat**, **Blueprint**,
 other two are not unmounted: they stay off-screen at full size, which is why a
 running shell and a laid-out canvas survive you moving away and back.
 
-Eight **drawers** open from the third group — **Agents**, **Gears**,
-**Instructions**, **Memory**, **Receivers**, **Queue**, **Variables**,
-**Terminal**. One at a time. A drawer is the frame growing inward rather than a
+Eleven **drawers** open from the third group — **Agents**, **Gears**, **MCP
+servers**, **Instructions**, **Planboards**, **Memory**, **Receivers**,
+**Queue**, **Variables**, **Versions** and **Terminal**, plus **Context** for an
+administrator, and whatever a plugin mounts after them. One at a time. A drawer is the frame growing inward rather than a
 window over the work: it comes out of an edge, the hole shrinks to make room,
 and nothing you were doing ends up underneath it. Dock it to any of the four
 edges from the buttons in its head, and drag the edge facing the work to resize
@@ -711,12 +713,19 @@ This shell is **open to anyone who can reach the workspace**, and it is not the
 server-wide [Terminal](#terminal). Where it runs depends on who else can reach
 this install:
 
-- **On a shared install** it runs in the sandbox gears run in: no network,
-  nothing of the server's mounted, and **a copy of this workspace's files that
-  is not carried back**. A file written there is gone when the session ends. A
-  workspace member is not the operator, which is the whole reason.
-- **On a loopback install** — one person, their own machine — it is that
-  machine, opened in this workspace's real directory, and what you write stays.
+- **One account on this install** — one person — and it is that machine, opened
+  in this workspace's real directory, and what you write stays.
+- **More than one account, with a sandbox**, and it runs in the sandbox gears run
+  in: no network, nothing of the server's mounted, and **a copy of this
+  workspace's files that is not carried back**. A file written there is gone when
+  the session ends. A workspace member is not the operator, which is the whole
+  reason.
+- **More than one account, with no sandbox** — no Docker, or the Kubernetes
+  backend, which runs a gear as a Job and cannot attach to one — and it is
+  **refused**, and says so. The alternative would be a shell as this server's
+  user handed to somebody who is not the operator, past the approval that makes a
+  gear safe to grant. The server-wide terminal is unaffected: it is an
+  administrator's.
 
 The status line above it says which, every time, rather than leaving you to find
 out by writing a file.
@@ -1637,9 +1646,9 @@ like any other, and there is no key written in a config file anywhere. See
 [The orchestrator](#the-orchestrator) below and
 [Configuration](/cogitorium/configuration/).
 
-**test / list models** on a provider card asks it what it has and offers each
-one as a button; the ones already in the catalog are ticked and disabled. For a
-server that cannot list its own, **add a model by name**:
+**Test the connection** on a provider card asks it what it has and prints the
+list on the card. Offering one to agents is the field beside it — the model's
+own name, and a label you will read on a screen. Or by API:
 
 ```bash
 curl -X POST http://127.0.0.1:8688/api/v1/models -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"provider_id":1,"model_name":"qwen2.5:0.5b","label":"local / tiny"}'
@@ -1929,12 +1938,16 @@ have by sitting at that machine, and it is what makes the terminal useful: your
 prompt, your `PATH`, your files.
 
 There is one exception, and it is the one that matters. A **workspace** terminal
-on an install other people can reach runs in the sandbox instead, because a
-workspace is open to its members and a member is not the operator — handing them
-the server's own shell would hand them its database and the provider keys in it.
-On a one-person install that distinction is between somebody and themselves, so
-there the workspace terminal is the machine too, opened in that workspace's own
-directory.
+runs in the sandbox instead as soon as this install has **more than one
+account**, because a workspace is open to its members and a member is not the
+operator — handing them the server's own shell would hand them its database and
+the provider keys in it. Where there is no sandbox to run it in, that terminal is
+**refused** rather than downgraded to the machine.
+
+One account means one person, so there the workspace terminal is the machine
+too, opened in that workspace's own directory. The count is the question rather
+than the listen address, because a container binds `0.0.0.0` whether or not
+anybody else can reach the port.
 
 The status line says which, every time: `connected · this machine, as this
 server's user`, or `connected · sandboxed, no network, nothing of the server's
@@ -2774,7 +2787,7 @@ than counted, because a bundle whose gears were all skipped imports
 approving gears. Those are decisions made while looking at a canvas or a source
 listing, and a flag is a worse place to make them than a screen that shows what
 is being decided. Everything the command line does, it does over the same HTTP
-API described in [openapi.yaml](openapi.yaml) — 97 path items and 130
+API described in [openapi.yaml](openapi.yaml) — 116 path items and 154
 operations — so anything missing here is one `curl` away, not blocked.
 
 ### Letting an agent search the web

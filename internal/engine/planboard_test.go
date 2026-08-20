@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/orkcom-tech/cogitorium/internal/catalog"
 	"github.com/orkcom-tech/cogitorium/internal/llm"
 	"github.com/orkcom-tech/cogitorium/internal/planboard"
 )
@@ -208,5 +209,82 @@ func TestAnAnswerWithNothingInItIsReportedRatherThanStored(t *testing.T) {
 	// person is told something rather than shown an empty answer.
 	if err.Error() == "" {
 		t.Fatal("the failure has nothing to say")
+	}
+}
+
+// The mode is applied when a RUN begins, and the run is what the queue starts.
+//
+// This is the link that was missing entirely. BeginRun existed, `restart` was
+// offered on the screen and stored in the row, and nothing in the server ever
+// called it — so a restart plan carried its position exactly like a resume one
+// and the difference was a word on a card. The engine applies it now, before
+// anything reaches a model, and this is the test that says so: the run below
+// fails at the provider on purpose, and the position has already moved.
+func TestARunAppliesThePlansModeBeforeItReachesAModel(t *testing.T) {
+	t.Parallel()
+	f := newPromptFixture(t, "")
+	ctx := context.Background()
+	plans, binding := planned(t, f, planboard.ModeRestart, "first", "second", "third")
+
+	// Last night stopped at step two.
+	if _, err := plans.Done(ctx, binding, ""); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := plans.State(ctx, binding); st.Step != 2 {
+		t.Fatalf("the fixture is not where this test needs it: step %d", st.Step)
+	}
+
+	// Tonight. The agent is moved onto a provider nothing listens on, so the
+	// run fails immediately and offline — what is under test happens first.
+	deadEnd(t, f)
+	if _, err := f.engine.RunUnattended(ctx, f.agent.WorkspaceID, f.agent.Name, "do the thing"); err == nil {
+		t.Fatal("a run against a dead provider reported success; this test proves nothing")
+	}
+
+	st, err := plans.State(ctx, binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Step != 1 {
+		t.Fatalf("a restart plan began its run at step %d rather than at the top — "+
+			"the mode is stored and shown but nothing applies it", st.Step)
+	}
+}
+
+// And the other half: resume must NOT be reset by the same code path.
+func TestARunLeavesAResumePlanWhereItWas(t *testing.T) {
+	t.Parallel()
+	f := newPromptFixture(t, "")
+	ctx := context.Background()
+	plans, binding := planned(t, f, planboard.ModeResume, "first", "second", "third")
+
+	if _, err := plans.Done(ctx, binding, ""); err != nil {
+		t.Fatal(err)
+	}
+	deadEnd(t, f)
+	f.engine.RunUnattended(ctx, f.agent.WorkspaceID, f.agent.Name, "do the thing")
+
+	if st, _ := plans.State(ctx, binding); st.Step != 2 {
+		t.Fatalf("a resume plan was pulled back to step %d; the point of resume is that "+
+			"tonight continues last night", st.Step)
+	}
+}
+
+// deadEnd points the fixture's agent at a provider nothing answers on, so a run
+// fails without leaving this machine.
+func deadEnd(t *testing.T, f promptFixture) {
+	t.Helper()
+	ctx := context.Background()
+	cat := catalog.NewStore(f.db)
+	p, err := cat.CreateProvider(ctx, "nowhere", llm.TypeOpenAICompatible, "http://127.0.0.1:1/v1", "")
+	if err != nil {
+		t.Fatalf("create the dead provider: %v", err)
+	}
+	m, err := cat.CreateModel(ctx, p.ID, "nothing", "")
+	if err != nil {
+		t.Fatalf("create the dead model: %v", err)
+	}
+	if _, err := f.ws.UpdateAgent(ctx, f.agent.ID, nil, nil, &m.ID); err != nil {
+		t.Fatalf("point the agent at it: %v", err)
 	}
 }

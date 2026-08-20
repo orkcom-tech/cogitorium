@@ -181,11 +181,12 @@ func humanBytes(n int64) string {
 // and the reason is the part they can act on.
 func (s *Server) terminalModel(r *http.Request) view.Terminal {
 	model := view.Terminal{Ctx: s.viewCtx(r, callerFrom(r.Context()))}
-	if model.Reason = s.terminalRefusal(); model.Reason != "" {
+	// The workspace scope, because this panel is only ever rendered inside one.
+	if model.Reason = s.terminalRefusalFor(r.Context(), true); model.Reason != "" {
 		return model
 	}
 	model.Available = true
 	// Which shell this is, so the panel can say it. See view.Terminal.Host.
-	model.Host = s.onThisMachine(true)
+	model.Host = s.onThisMachine(r.Context(), true)
 	return model
 }

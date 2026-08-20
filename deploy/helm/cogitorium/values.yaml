@@ -130,9 +130,10 @@ config:
   # as a child of the server, holding the server's own file access. It is still
   # here because a cluster whose policy forbids the Role above has to be able to
   # deploy — but on that setting, approving a gear grants it everything the
-  # server has, and the terminal and the outward gate stay refused. Note also
-  # that this image carries no python3, node or bash — they belong to the gear's
-  # own container — so on "subprocess" only a "binary" gear can run at all.
+  # server has, and the outward gate stays refused. The terminal is no longer
+  # refused by the sandbox — see config.terminal below. Note also that this
+  # image carries no python3, node or bash — they belong to the gear's own
+  # container — so on "subprocess" only a "binary" gear can run at all.
   # ───────────────────────────────────────────────────────────────────────────
   sandbox: kubernetes
 
@@ -161,8 +162,17 @@ config:
   # "written false" from "not written", so this holds whatever the binary's
   # default becomes.
   #
-  # A workspace terminal on this install is sandboxed rather than in-pod, since
-  # a member is not the operator — see the guide's Terminal section.
+  # A WORKSPACE terminal is a different question here, and the answer depends on
+  # how many people are on this install. Nothing in a cluster can sandbox one:
+  # only the Docker backend can host an interactive shell, and `sandbox:
+  # kubernetes` runs a gear as a Job rather than attaching to one. So:
+  #
+  #   - one account  — it is a shell in this pod, like the administrator's;
+  #   - two or more  — it is REFUSED, because a workspace member is not the
+  #                    operator and there is no sandbox to put them in.
+  #
+  # Which means: on a cluster where other people have accounts, config.terminal
+  # true gives an administrator a pod shell and gives them nothing.
   terminal: false
 
   # May this install ask GitHub whether a newer Cogitorium or Contextverse has

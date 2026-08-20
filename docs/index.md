@@ -632,18 +632,26 @@ difference is whose position it is: an agent's plan is that agent's running
 order; a workspace's is the workflow's, whoever runs next.
 
 ```bash
-curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/planboards -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"planboard":"research-then-write"}'
+# to the whole workspace
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/planboards -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"planboard_id": 1}'
+
+# or to one agent
+curl -X POST http://127.0.0.1:8688/api/v1/workspaces/1/planboards -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"planboard_id": 1, "agent_id": 4}'
 ```
+
+`agent_id` absent or null is the workspace's own binding — the two are different
+rows, and a plan can be bound both ways at once.
 
 The orchestrator has `planboard_list`, `planboard_create`, `planboard_attach`,
 `planboard_detach`, `planboard_move` and `planboard_delete`. A worker has only
 the two that move its own position: an agent that could rewrite its plan would
 be an agent with no plan.
 
-A saved [version](/cogitorium/guide/#versions) carries the **position** as well
-as the steps. Restoring the steps and leaving the marker where the run that went
-wrong pushed it would be a rollback that returns the map and keeps the wrong pin
-on it.
+A saved [version](/cogitorium/guide/#versions) records which plans were attached
+here and the **position** each had reached — not the plan's own steps, which
+stay in the catalogue and are shared between workspaces. Restoring the wiring
+and leaving the marker where the run that went wrong pushed it would be a
+rollback that returns the map and keeps the wrong pin on it.
 [→](/cogitorium/guide/#planboards)
 
 ---
@@ -702,7 +710,7 @@ first turn.
 ## The API description
 
 [`docs/openapi.yaml`](https://github.com/orkcom-tech/cogitorium/blob/main/docs/openapi.yaml)
-is an OpenAPI 3.1 document listing every endpoint this server has: 97 path
+is an OpenAPI 3.1 document listing every endpoint this server has: 116 path
 items carrying 154 operations, their path parameters, and which credential
 opens each — a user's token, a receiver's own key, or nothing.
 
@@ -1574,7 +1582,7 @@ The four capsules, in order down the rail:
 |---|---|
 | **Where am I** | the brand, and — inside a workspace — the way back out |
 | **What is the cavity showing** | outside a workspace, the destinations: Workspaces, Map, Gears, Models, Instructions, Planboards, Context, People, Terminal. Inside one, the stages: Chat, Blueprint, Editor |
-| **What can crawl out over it** | the drawers: Agents, Gears, Instructions, Memory, Receivers, Queue, Variables, Terminal |
+| **What can crawl out over it** | the drawers: Agents, Gears, MCP servers, Instructions, Planboards, Memory, Receivers, Queue, Variables, Versions, Terminal — and Context for an administrator |
 | **The rest** | More, Appearance, updates, plugins, and the account |
 
 Nothing is written on the rail. Each button is an icon that raises its name on
@@ -1663,14 +1671,16 @@ close it.
 beside it — it slides off screen and stays alive, mounted and streaming, so a
 turn you started is still running and still there when you slide back.
 
-**The shell never starts by itself.** It is behind a button that says why: a
-fresh shell is started per connection with no resume, so a stage that opened
-one on mount would spawn a container on every page load and then show a shell
-with none of the scrollback, working directory or running process the operator
-expects. Four reloads, four containers — measured, not theorised. This is the
-per-workspace shell, scoped to that workspace's directory and open to anyone
-who can reach it; the server-wide Terminal under More is a different thing and
-is an administrator's alone.
+**The shell starts when you open it**, and there is no button. There used to be
+one, because a fresh shell was started per connection with no resume — four
+reloads, four containers — so opening one on mount would have shown a shell with
+none of the scrollback, working directory or running process the operator
+expected. The session outlives the connection now, so opening the drawer is
+starting the shell, and coming back is coming back to it.
+
+That is the **workspace** terminal — a drawer, scoped to that workspace's
+directory, open to anyone who can reach the workspace. The server-wide Terminal
+is a different thing and is an administrator's alone.
 
 ![The Editor stage: the tree flush to the frame, the file filling the rest](assets/05-editor.png)
 
@@ -1928,12 +1938,13 @@ for a person on their own laptop.
 
 There are two of them, and only one is an administrator's.
 
-- **A workspace's own shell** lives in the Editor view, is scoped to that
-  workspace's directory, and is open to **anyone who can reach the workspace**.
-  On an install other people can reach it runs in the **sandbox** instead of on
-  the machine — a workspace member is not the operator — and gets a copy of the
-  workspace's files that is not carried back out. On a loopback install it is
-  the machine, in that workspace's real directory.
+- **A workspace's own shell** is a drawer inside the workspace, scoped to that
+  workspace's directory, and open to **anyone who can reach the workspace**. As
+  soon as this install has **more than one account** it runs in the **sandbox**
+  instead of on the machine — a workspace member is not the operator — and gets a
+  copy of the workspace's files that is not carried back out. With no sandbox to
+  put them in it is refused rather than downgraded. On a one-account install it
+  is the machine, in that workspace's real directory.
 - **The server-wide Terminal** is **admin-only**. It is not scoped to anything,
   which is the whole of the reason, and it is always the machine.
 
